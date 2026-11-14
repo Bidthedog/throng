@@ -90,6 +90,9 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
 - **Terminals outlive the window.** A background service owns them, so closing throng leaves them
   running; reopen it and they reattach with their scrollback. Closing asks what to do with any still
   busy.
+- **Remember the last running command** on a terminal panel to run it again when the terminal next
+  starts. For Claude Code it remembers the command that resumes the exact session that was running,
+  keeping your other options, so the conversation picks up where it left off.
 - **Paths and links are clickable.** A compiler's `src/foo.ts:42:7`, Claude Code's
   `src/foo.ts:42-50`, a URL, a hyperlink a program prints — **Ctrl+click** follows it (a project file opens in throng at that line; a web address in
   your browser), and **right-click** offers every other place it could open. Nothing is ever run by
@@ -112,6 +115,11 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
 - **Find in the scrollback** with **Ctrl+F**; it searches read-only and never types at the shell.
 - **Something wrong?** A terminal that cannot start says why on the panel and offers **Try again**;
   if the background service stops, a **↻** in the status bar restarts it.
+- **Notices** appear as toasts that leave after a few seconds unless the pointer or focus is on them.
+  Each also stays in the **Notifications panel** at the bottom of the right pane until you dismiss it,
+  naming the project, tab and panel it is about; click it to go there. A count beside the panel's title,
+  and below **File Explorer & Notifications** when the right pane is collapsed, shows how many are waiting, and both side
+  panels can be minimised. Which notices go where is under [Notifications](preferences.md#notifications).
 
 ## 4. Edit files
 
@@ -177,7 +185,11 @@ can keep browsing or press **F2** to rename the file.
   `![[flow.mmd]]` or `![Flow](flow.mmd)`; a plain link to it stays a link. Give an inline diagram a
   fixed height with ```` ```mermaid height=300 ```` or `![[flow.mmd|300]]`.
 - In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and
-  `[[wikilinks]]` follow like any other link.
+  Obsidian-style `[[wikilinks]]` follow like any other link, including vault-root ones such as
+  `[[Docs/Guide]]`; hover one to see its target. Images embed with `![[diagram.png]]`, with
+  `![[diagram.png|300]]` for a width or `![[diagram.png|300x200]]` for both sides — a Markdown image
+  takes the same size as `![alt](diagram.png|300)` or `![alt|300](diagram.png)`; hover an image to
+  see its alt text and where it comes from.
 - **Back** and **Forward** (**Alt+Left** / **Alt+Right**) step through the files a panel has shown.
 
 ### Files and your operating system

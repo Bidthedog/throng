@@ -21,6 +21,7 @@ never picks up the identity of the throng that hosts it.
 | `THRONG_PING_TIMEOUT_MS` | How long the app waits for the daemon to answer a health-check ping. | `2000` |
 | `THRONG_ATTACH_TIMEOUT_MS` | How long the app waits for a terminal to attach — sized for launching an interactive shell. | `15000` |
 | `THRONG_SHUTDOWN_DRAIN_TIMEOUT_MS` | On close, the longest the app waits for a window to confirm its pending writes are done, so an unresponsive window cannot hold the app open. | `5000` |
+| `CLAUDE_CONFIG_DIR` | Where the daemon looks for Claude Code's per-process session records, to remember the resume command of a terminal running Claude Code. Claude Code's own variable; throng only reads it. | `~/.claude` |
 | `THRONG_AGENT_CONNECT_TIMEOUT_MS` / `THRONG_AGENT_READY_TIMEOUT_MS` | How long an elevated daemon waits for its de-elevated terminal agent to connect, then to report ready. | `15000` / `15000` |
 
 ### Where an instance lives — development and testing only
@@ -61,6 +62,7 @@ They are set by throng; each only mirrors a preference, so change the preference
 | `THRONG_LOCK_DIR` | Tells the helper process that holds a project's root folder open which folder to hold. |
 | `THRONG_RESTORE_TARGET` | The original path of a file being restored from the Recycle Bin by an undo. |
 | `THRONG_START_DIR` | The start folder handed to a shell whose launcher cannot start in it directly (Git Bash); the shell moves there and unsets it. |
+| `THRONG_LOG_SALT` | The per-install key the app hands the daemon and the collector, so every process gives the same value the same token in the anonymised [diagnostic log](preferences.md#logging). Kept in `anon-salt` in the user data folder, outside the log folder, and created on first run. |
 | `THRONG_VERSION` | The product version the app hands the daemon it starts, recorded in the daemon's crash report; `unknown` for a daemon started by hand. |
 | `PORTABLE_EXECUTABLE_DIR` / `PORTABLE_EXECUTABLE_FILE` | Set by the portable build's launcher. throng reads them only to name the portable copy by where the user put it, rather than its temporary unpack folder; the portable build shares the user's pipe like every other copy. |
 
@@ -130,6 +132,8 @@ launches.
 | `THRONG_E2E_ATTENTION_OS_LOG` | Where the recorders write; read only when `THRONG_E2E_ATTENTION_OS` is `record`. | `attention-os.jsonl` in the app's user data folder |
 | `THRONG_E2E_FOREGROUND_HANDOFF` | `1` re-enables the terminal foreground hand-off, which a test run otherwise turns off; set by the one spec that covers it. | unset |
 | `THRONG_TEST_SHELL_HISTORY` | `off` makes every shell a test run opens keep no history; the harness sets it. See [global OS resources](../.claude/skills/throng-testing/references/global-os-resources.md). | unset |
+| `THRONG_E2E_TOAST_MS` | How long a toast stays, in milliseconds, overriding [`notifications.toastDurationMs`](preferences.md#notifications) in every window; the harness sets `10000`. | unset |
+| `THRONG_E2E_TOAST_HOLD` | `off` stops the pointer holding a toast on screen (keyboard focus still does), so a click whose target a toast covers can land; the harness sets it. | unset |
 | `THRONG_PREFS_SECTIONS_OPEN` | `1` makes Preferences sections start unfolded, as before 056 FR-016; the harness sets it. | unset |
 | `THRONG_TEST_RUN_DIR` | The one scratch folder a test run and all its workers write into. See [temp files](../.claude/skills/throng-testing/references/temp-files.md). | created per run |
 | `THRONG_TEST_RUN_OWNED_DIR` | Set by Playwright's global setup when it created the run folder, so teardown removes it. | set internally |

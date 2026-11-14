@@ -378,6 +378,17 @@ survive a UI restart and reattach with their scrollback.
 - Main: `terminal-ipc.ts`, `terminal-reconnect.ts`, `attach-serializer.ts`,
   `shell-detection-service.ts`.
 - Renderer: `renderer/terminal/`, xterm.js 6 with the fit and search add-ons.
+
+**Resuming Claude Code.** When command observation sees Claude Code in the foreground, the daemon's
+`claude-session-resolver.ts` (behind core's `IClaudeSessionResolver` port) reads Claude Code's own
+per-process record, `sessions/<pid>.json` under `CLAUDE_CONFIG_DIR` (default `~/.claude`), for its
+session id. It checks the record against the process — the pid, then its start time from
+`/proc/<pid>/stat` on Linux or the record's own start time against the process table's on Windows — and
+recovers the original arguments (a NUL-split `/proc/<pid>/cmdline`, or the Windows command line split
+by core's `splitWindowsCommandLine`). Core's `claudeResumeCommand` then builds `claude --resume <id>`
+with the user's other flags kept, and the command notification carries it as `memoryCommand` beside the
+plain command. The renderer stores it only for a panel that remembers its last running command. The read
+is time-bounded and never touches the terminal; a miss is a debug line in `daemon.log`, never a notice.
 - Core: `core/src/terminal/`, the flavour-agnostic terminal state and the terminal panel type.
 
 **Two PTY hosts.** node-pty loads in the daemon (and the agent), never in Electron. The daemon holds
@@ -699,6 +710,12 @@ only a preview panel id, never a folder, and containment is checked twice: once 
 spelling, and again on the realpath'd file and root, so a symlink or junction cannot reach outside
 the project.
 
+**Wikilinks and embeds** are resolved by main in one batch per render (`resolveWikiTargets`): each
+target's candidates, from the document's folder then the project root, come from core's
+`wikiCandidates`, and the first that exists wins. That one answer governs the link's click, hover text,
+context menu and readout, and an `![[image.png]]` embed's source. A candidate that leaves the project is
+never probed.
+
 ### Adding a preview provider
 
 A preview provider is two files and two registration lines. Nothing else in the codebase names a
@@ -845,12 +862,30 @@ reported once, from the supervisor's state, not once for every call that failed.
 action defeated share a notice when their error is the same: the same cause, or with no cause, the
 same message. A different error raises a notice of its own (`core/src/notice/grouping.ts`).
 
+**Toasts and the Notifications panel.** Every notice is a toast in the window that raised it, timed by
+one duration that pauses under the pointer or focus. A notice whose type is set to *Toast and keep in
+panel* is also sent to main's `notification-store.ts`, which holds the panel's entries, their order, the
+limit warning's state in `notifications.json` under the user data folder, written atomically. The
+count the badges show is every entry not yet dismissed, derived from the entries rather than stored. A
+notice that relates to a panel carries that panel as its origin: the toast and the entry name its project,
+tab and panel, and activating either goes to it. `notifications-ipc.ts` serves it to every window and broadcasts each change, so a notice
+kept in Preferences or a sub-workspace reaches the main window's panel. The ordering and limit rules
+are core's `notice/notification-entries.ts`. A corrupt file is set aside and the store starts empty.
+
 **The log.** Every process writes its own durable log into the one logs folder main opens from the
 cog menu: `main.log`, `daemon.log`, and one session-named file per PTY agent and resource collector.
 Main passes the folder down as `THRONG_LOG_DIR`; the de-elevated PTY agent, whose launch drops the
 environment, gets it as an argument instead. The daemon's output from before its logger starts goes to
 `daemon-startup.log`. A log rolls over at a size and the folder keeps the last few days throng ran,
 under a total cap; a live file is never deleted (`core/src/diagnostics/rotation.ts`).
+
+**Anonymised.** Every line passes core's anonymiser (`core/src/diagnostics/anonymise.ts`) inside the
+file log's `emit`, and crash reports and the startup log pass it too. Known values — project roots and
+names, the home, user data and install folders, the user and host names — become tokens, a project as
+`<project:ID>` by its internal id; a pattern pass catches any other path or account. Tokens are keyed
+hashes (`platform-node/src/machine-identity.ts`, HMAC with a per-install salt kept in the user data folder, never in the logs folder a user shares),
+so the same value gives the same token in every process and every run. Main hands the salt to the
+daemon and the collector as `THRONG_LOG_SALT`, and to the PTY agent as an argument.
 
 **Nothing fails silently.** `console` is the logging seam in every process: main, the daemon, the agent
 and the collector route it into their file, and main forwards the renderer's. A caught error goes

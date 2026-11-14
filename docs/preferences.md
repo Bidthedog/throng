@@ -251,7 +251,7 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 | Show terminal status bar | `terminals.showStatusBar` | on | on · off | The status bar along the bottom of each terminal panel. |
 | Shell integration | `terminals.shellIntegration` | on | on · off | Ask shells that cannot be observed from outside (PowerShell) to report their working directory, so terminals reopen where you left them. Installs a prompt function that defers to any prompt you already have — switch it off if it disagrees with a custom prompt. |
 | Reload terminals when a project opens | `terminals.reloadMode` | `automatic` | `automatic` · `manual` | Automatic starts every terminal in every tab as a project opens. Manual starts none: each panel waits with a **Reload** action. |
-| Remember the last running command by default | `terminals.defaultRememberCommand` | off | on · off | Ticks **Remember the last running command** on new terminal panels: a command running when the terminal closes runs again next time. A panel keeps its own choice. |
+| Remember the last running command by default | `terminals.defaultRememberCommand` | off | on · off | Ticks **Remember the last running command** on new terminal panels: a command running when the terminal closes runs again next time. A running Claude Code session is remembered as a resume of that session, not a fresh start. A panel keeps its own choice. |
 | Reopen in the last directory by default | `terminals.defaultRememberDirectory` | on | on · off | Ticks **Reopen in the last directory** on new terminal panels. A directory that has gone away falls back to the project root. |
 | Run as administrator by default (Windows only) | `terminals.defaultRunAsAdmin` | off | on · off | Ticks **Run as administrator** on new terminal panels. Whether a terminal can be elevated still depends on throng itself running elevated; this never elevates anything on its own. |
 | Command tracking interval | `terminals.commandPollMs` | 1,000 | 250 – 5,000 ms, step 250 | How often throng checks which command a terminal is running, while it has input or output. A quiet terminal is checked ten times less often. Lower notices a new command sooner; higher does less work. |
@@ -349,24 +349,41 @@ on Windows and for a portable or archive copy.
 | Excluded from search | `search.inFiles.excludeGlobs` | the File Explorer's defaults, then `**/dist`, `**/build`, `**/out`, `**/coverage`, `**/.claude`, `**/.vscode`, `**/.idea`, `**/log`, `**/logs`, `**/*.log`, `**/.remember`, `**/.cache`, `**/.turbo`, `**/.next`, `**/.nuxt`, `**/target`, `**/bin`, `**/obj`, `**/.venv`, `**/__pycache__`, `**/*.min.js`, `**/*.map`, `**/package-lock.json`, `**/pnpm-lock.yaml`, `**/yarn.lock` | A list of root-relative glob patterns; may be empty | What Find in Files skips. Separate from the File Explorer's excluded globs. A panel's exclusions toggle switches it off for that panel; a project's own *Hidden to Find & Replace* list always applies. |
 | New panels use the exclusions | `search.inFiles.useExcludeGlobs` | on | on · off | Whether a new Find in Files panel starts with its exclusions toggle on. |
 | Ask before a replace that cannot be undone | `search.inFiles.warnIrreversibleCommit` | on | on · off | Confirm before writing replacements throng cannot take back, such as into files with no open editor. |
-| Replace summary notices | `search.inFiles.summaryNoticeMode` | `dismiss` | `never` (Never display) · `timed` (Display for) · `dismiss` (Dismiss only) | Whether the notice reporting what a replace changed stays until dismissed, disappears on its own, or never shows. Choosing *Never display* asks you to confirm first. |
-| Replace summary notice duration | `search.inFiles.summaryNoticeTimeoutMs` | 5,000 | 3,000 – 30,000 ms, step 500 | How long that notice stays when the mode is *Display for*; greyed out otherwise. |
+| Replace summary notices | `search.inFiles.summaryNoticeMode` | `panel` | `never` (Never display) · `toast` (Toast only) · `panel` (Toast and keep in panel) | Whether the notice reporting what a replace changed is never shown, shown as a toast, or shown as a toast and kept in the [Notifications panel](#notifications). Choosing *Never display* asks you to confirm first. The toast leaves after the [toast duration](#notifications). |
 
-**The replace-summary pair governs that notice whether the replace succeeded, partly succeeded or
+**The replace-summary mode governs that notice whether the replace succeeded, partly succeeded or
 failed**, and the [Notifications](#notifications) settings are not consulted for it at all — so a
-global preference that errors stay until dismissed does not reach it. The control sits beside the
+global preference that errors are kept in the panel does not reach it. The control sits beside the
 thing it overrides it for. *Never display* is confirmed first because this notice is also how a
 failed write reports itself; whatever the mode, the outcome is still written to the log.
 
 ## Notifications
 
-One row per notification type, each holding three settings on one line: a display mode, its duration
-(used only under *Display for*), and *OS Notify*, which raises a Windows notification whatever the mode —
-but only while throng is not focused; while it is, the in-app notice and its mode decide. One switch above
-the rows stops anything reaching Windows, and greys out every OS Notify while it is off, keeping their
-settings. *Never display* for errors or warnings
-asks you to confirm first, because it means a failure reports nothing on screen. Whatever the mode, the
-event is still written to the log. A row's Reset and Revert act on all three of its settings.
+Every notice appears as a toast in the corner of the window that raised it, with a close control, a
+copy control and a link to what it is about. **Every toast leaves after one toast duration** unless
+the pointer is over it or keyboard focus is inside it; it leaves the full duration after both have
+gone. Four toasts stay until you act on them: a paste in progress (its Cancel), a different copy of
+throng, a newly installed version, and the warning that the Notifications panel is full.
+
+Each notification type has three checkboxes, in any combination: **Toast**, **Panel** and *OS Notify*.
+**Panel** keeps the notice in the **Notifications panel** at the bottom of the right pane until you
+dismiss it there, with or without a toast; closing the toast does not remove it from the panel. With
+neither **Toast** nor **Panel** ticked, the notice is shown nowhere in throng. A notice kept from another
+window — Preferences, the Resource Monitor, a sub-workspace — joins the main window's panel, which
+flashes. The panel's entries survive a restart; each can be copied or dismissed, and the panel lists
+them oldest first, newest first, or by priority (error, warning, attention, information, success)
+either way. **Dismiss all** clears the panel but never an attention mark. A count beside the panel's
+title, and below **File Explorer & Notifications** while the right pane is collapsed, shows how many entries are waiting,
+in throng's highlight colour; only dismissing entries lowers it. The panel can be minimised like the
+Projects panel. Every toast and entry names the project, tab and panel it is about, and clicking it goes
+there.
+
+*OS Notify* raises an OS notification whatever **Toast** and **Panel** say — but only while throng is
+not focused; while it is, **Toast** and **Panel** decide. One switch above the rows stops anything
+reaching the OS, and greys out every OS Notify while it is off, keeping their settings. For errors or
+warnings, clearing the last of **Toast** and **Panel** asks you to confirm first, because it means a
+failure reports nothing on screen. Whatever they say, the event is still written to the log. A row's
+Reset and Revert act on all three of its settings.
 
 The Attention row announces [attention marks](#attention), Attention and Failed alike; a Failed mark keeps
 the error colour and icon. A mark is announced once: a later signal on a panel still marked updates its
@@ -374,29 +391,36 @@ toast, if one is showing, and raises nothing new.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Operating system notifications | `notifications.os` | on | on · off | Allow throng to send Windows notifications at all. Off, nothing reaches Windows and every OS Notify is unavailable, though each keeps its setting. |
-| Error notices | `notifications.error.mode` | `dismiss` | `never` (Never display) · `timed` (Display for) · `dismiss` (Dismiss only) | Whether error notices stay until dismissed, disappear on their own, or never show. |
-| Error notice duration | `notifications.error.timeoutMs` | 5,000 | 3,000 – 30,000 ms, step 500 | How long an error notice stays under *Display for*. |
-| Error: OS Notify | `notifications.error.os` | off | on · off | Raise a Windows notification for an error notice, whatever its mode, while throng is not focused. |
-| Warning notices | `notifications.warning.mode` | `dismiss` | as above | The same, for warnings — typically a partly-failed operation. |
-| Warning notice duration | `notifications.warning.timeoutMs` | 5,000 | 3,000 – 30,000 ms, step 500 | |
+| Operating system notifications | `notifications.os` | on | on · off | Allow throng to send OS notifications at all. Off, nothing reaches the OS and every OS Notify is unavailable, though each keeps its setting. |
+| Toast duration | `notifications.toastDurationMs` | 3,000 | 1,000 – 30,000 ms, step 500 | How long every toast stays on screen. A toast stays while the pointer is over it or focus is inside it. |
+| Toast width | `notifications.toastWidthPx` | 520 | 300 – 800 px, step 10 | How wide every toast is, and never wider than half the window. A toast shows at most three lines of text and cuts the rest with an ellipsis; hovering a cut-off toast shows all of it in a popover. The Notifications panel always shows a notification whole, with the date and time it was first raised. |
+| Confirm before dismissing all notifications | `notifications.confirmDismissAll` | on | on · off | Ask before **Dismiss all** clears the Notifications panel. |
+| Notifications panel limit | `notifications.panelLimit` | 100 | 20 – 500, step 10 | The most entries the panel keeps. Past it the oldest are dropped, and a warning — once, until you dismiss it — suggests turning notifications down, with a link to this section. |
+| Error: Toast | `notifications.error.toast` | on | on · off | Show error notices as a toast. |
+| Error: Panel | `notifications.error.panel` | on | on · off | Keep error notices in the Notifications panel until dismissed, with or without a toast. |
+| Error: OS Notify | `notifications.error.os` | off | on · off | Raise an OS notification for an error notice, whatever Toast and Panel say, while throng is not focused. |
+| Warning: Toast | `notifications.warning.toast` | on | on · off | The same, for warnings — typically a partly-failed operation. |
+| Warning: Panel | `notifications.warning.panel` | on | on · off | |
 | Warning: OS Notify | `notifications.warning.os` | off | on · off | |
-| Information notices | `notifications.info.mode` | `timed` | as above | Ordinary progress and status messages. |
-| Information notice duration | `notifications.info.timeoutMs` | 10,000 | 3,000 – 30,000 ms, step 500 | |
+| Information: Toast | `notifications.info.toast` | on | on · off | Ordinary progress and status messages. |
+| Information: Panel | `notifications.info.panel` | on | on · off | |
 | Information: OS Notify | `notifications.info.os` | off | on · off | |
-| Success notices | `notifications.success.mode` | `timed` | as above | Confirmations of an operation that worked — the safest to shorten or switch off. |
-| Success notice duration | `notifications.success.timeoutMs` | 5,000 | 3,000 – 30,000 ms, step 500 | |
+| Success: Toast | `notifications.success.toast` | on | on · off | Confirmations of an operation that worked — the safest to switch off. |
+| Success: Panel | `notifications.success.panel` | on | on · off | |
 | Success: OS Notify | `notifications.success.os` | off | on · off | |
-| Attention notices | `notifications.attention.mode` | `timed` | as above | Whether a mark's toast stays until dismissed, disappears on its own, or never shows. The mark itself is raised whatever you choose. |
-| Attention notice duration | `notifications.attention.timeoutMs` | 10,000 | 3,000 – 30,000 ms, step 500 | |
-| Attention: OS Notify | `notifications.attention.os` | on | on · off | Raise a Windows notification for a mark, whatever its mode, while throng is not focused; clicking it goes to the panel. |
+| Attention: Toast | `notifications.attention.toast` | on | on · off | Whether a mark is announced by a toast. The mark itself is raised whatever you choose. |
+| Attention: Panel | `notifications.attention.panel` | on | on · off | Whether a mark is kept in the Notifications panel until it clears or you dismiss it. |
+| Attention: OS Notify | `notifications.attention.os` | on | on · off | Raise an OS notification for a mark, whatever Toast and Panel say, while throng is not focused; clicking it goes to the panel. |
 
 ## Logging
 
 Logs and crash reports are written to a `logs` folder under the user-data directory —
 `%APPDATA%\throng\logs` when installed, `%APPDATA%\throng-dev\logs` for a dev run — so a crash that
 closes the window leaves evidence behind. The daemon and its terminal agent write beside the app.
-Logs never leave the machine.
+Logs never leave the machine, and they are anonymised before they are written: paths, user and machine
+names become short tokens — the same value gives the same token in every log — and a project is named
+by its internal id, shown when you hover a project's path in the Projects panel. Every notice is
+logged, with the number of entries pending in the Notifications panel at the time.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
