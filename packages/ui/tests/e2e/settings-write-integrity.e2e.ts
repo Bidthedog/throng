@@ -9,10 +9,10 @@
  * watcher's broadcast — so a write issued from one window inside that refresh gap reverts every key
  * the other window just changed.
  *
- * Concretely, and this is the whole test: change `notifications.error.mode` in Preferences, then
+ * Concretely, and this is the whole test: change `notifications.error.panel` in Preferences, then
  * create a project in the main window before the broadcast lands. `persistLastProjectFolder`
  * (`projects-panel.tsx:207`) serialises the whole settings document from the main window's stale
- * React copy, and the notification mode goes back to what it was.
+ * React copy, and the notification Panel setting goes back to what it was.
  *
  * ══ WHY THE TIMING IS THE TEST, AND WHY `createProject()` CANNOT BE USED ══
  *
@@ -120,8 +120,8 @@ test('a Preferences change survives a project created in the main window (FR-001
       await settle(win);
       const prefs = await openSettings(app, win);
 
-      const mode = prefs.getByTestId('control-notifications.error.mode');
-      await expect(mode).toHaveValue('dismiss'); // the shipped default
+      const panel = prefs.getByTestId('control-notifications.error.panel');
+      await expect(panel).toBeChecked(); // the shipped default (068 FR-092)
 
       // ── Arm the main window's write FIRST. The form is filled but NOT submitted, so the only
       //    thing left between the preference change and `persistLastProjectFolder` is one click.
@@ -131,10 +131,10 @@ test('a Preferences change survives a project created in the main window (FR-001
       await win.getByTestId('project-name-input').fill('Clobber');
 
       // ── The user's change.
-      await mode.selectOption('timed');
+      await panel.uncheck();
 
       // ── Immediately: the main window writes the whole settings document from its own copy, which
-      //    at this instant still says `dismiss`. No wait here — a wait is what hides the defect.
+      //    at this instant still says `panel`. No wait here — a wait is what hides the defect.
       await win.getByTestId('project-save').click();
       await expect(win.locator('.project-item').filter({ hasText: 'Clobber' }).first()).toBeVisible();
 
@@ -142,20 +142,20 @@ test('a Preferences change survives a project created in the main window (FR-001
       expect(readSettings(cfgRoot)?.newProject?.lastProjectFolder).toBeTruthy();
 
       // ── …and the user's preference is still what they chose. On master it has reverted to
-      //    'dismiss', with nothing on screen to say so.
+      //    ticked, with nothing on screen to say so.
       await expect
-        .poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: 5_000 })
-        .toBe('timed');
+        .poll(() => readSettings(cfgRoot)?.notifications?.error?.panel, { timeout: 5_000 })
+        .toBe(false);
 
       // ── And it is not merely on disk: the window the notice would be raised in agrees.
       await expect
         .poll(async () =>
           win.evaluate(async () => {
             const payload = await window.throng?.config?.get?.();
-            return (payload?.settings as any)?.notifications?.error?.mode;
+            return (payload?.settings as any)?.notifications?.error?.panel;
           }),
         )
-        .toBe('timed');
+        .toBe(false);
 
       /*
        * ── CROSS-WINDOW CONVERGENCE (G3's second half, FR-003).
@@ -169,7 +169,7 @@ test('a Preferences change survives a project created in the main window (FR-001
        * and the new one in the other — which is the same complaint as the revert, arriving by a
        * different route.
        */
-      await expect(mode, 'the window that issued the change must still show it').toHaveValue('timed');
+      await expect(panel, 'the window that issued the change must still show it').not.toBeChecked();
 
       // ── The main window's copy converged on the same value, without either window rewriting the
       //    other's key. `lastProjectFolder` is the main window's own key and must have survived too.

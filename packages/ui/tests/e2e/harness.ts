@@ -654,6 +654,18 @@ async function launchApp(opts: AppOptions): Promise<{
         // did before FR-016, with no per-spec Expand All. The shipped default is proven at the
         // component layer instead (research R10).
         THRONG_PREFS_SECTIONS_OPEN: '1',
+        // 068 research D11 — toasts leave after 3 s for a real user (FR-021), but many specs assert a
+        // toast after async work that can outlast that on a loaded runner. Main passes this to every
+        // window as `?toastMs=`; the shipped duration and its pointer/focus pause are proven at the
+        // component layer. A spec that tests expiry itself overrides it through `opts.env`.
+        //
+        // 10 s, the longest a timed toast stayed before 068: 30 s outlasted a click's retries when a
+        // startup notice covered its target (gate run 43340046866).
+        THRONG_E2E_TOAST_MS: '10000',
+        // …and the POINTER does not hold a toast here: Playwright retries a click by moving the pointer
+        // onto its target, so a toast covering the target held itself for the whole retry. Focus still
+        // holds. See `toastPointerHoldEnabled` in renderer/common/toast-duration.ts.
+        THRONG_E2E_TOAST_HOLD: 'off',
         // When the app spawns its own daemon, point that daemon at this run's DB
         // (the daemon inherits the app's env) so we never touch the real store.
         ...(opts.skipDaemon ? { THRONG_DATABASE_PATH: join(dataDir, 'throng.db') } : {}),

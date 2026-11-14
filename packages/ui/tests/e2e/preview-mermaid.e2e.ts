@@ -16,7 +16,7 @@
  *
  * One shared app: nothing here is seeded before launch, and each test opens its own preview.
  */
-import { copyFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +33,15 @@ test.beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'throng-preview-mermaid-'));
   writeFileSync(join(root, 'diagram.md'), `# Diagram doc\n\n\`\`\`mermaid\n${FLOW}\`\`\`\n`);
   writeFileSync(join(root, 'flow.mmd'), FLOW);
+  // 068 MT-01: a note whose diagrams and embeds sit BELOW its heading, reached through a vault link.
+  // The maintainer's shape: a short head, the heading EARLY, and every diagram and embed BELOW it — so before they
+  // draw the document is too short for the heading to reach the top, and a jump made then clamps and lands short.
+  const head = '# Platform\n\n| | |\n|---|---|\n| **Status** | Draft |\n| **Owner** | Platform |\n\n## 1. Summary\n\nThe platform takes an order from checkout to delivery.\n\n- Checkout p99 under 400 ms\n- No lost orders\n\n';
+  // Large real diagrams (the maintainer's fixture): they take real time to lay out and draw, as theirs do.
+  const large = readFileSync(fileURLToPath(new URL('./fixtures/mermaid-order-platform.mmd', import.meta.url)), 'utf8');
+  const fence = (_n: number): string => `\`\`\`mermaid\n${large}\n\`\`\`\n`;
+  writeFileSync(join(root, 'sysctx.md'), `${head}## 2. System Context\n\n${fence(1)}\n${fence(2)}\n${fence(3)}\n![[flow.mmd|300]]\n\n![Flow](flow.mmd)\n\n![[missing.mmd]]\n`);
+  writeFileSync(join(root, 'nav.md'), '# Nav\n\n[[sysctx#2. System Context]]\n');
   writeFileSync(join(root, 'broken.mmd'), 'graph TD\n  A -->\n');
   // MT-05: the maintainer's file, byte for byte, under a folder whose name has a space and capitals.
   mkdirSync(join(root, 'UPPER TEST'));
@@ -130,6 +139,34 @@ test('MT-05: a large real-world flowchart in a folder with a space and capitals 
   await expect(svg).toBeVisible({ timeout: 15_000 });
   await expect(svg).toContainText('Catalog Service');
   await expect(win.getByTestId(`diagram-notice-${id}-diagram-0`)).toHaveCount(0);
+});
+
+test('MT-01: a followed #heading below drawing diagrams ends at the top of the body once they have drawn', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+  const win = shared!.win;
+  const id = await previewFromEditor(win, 'nav.md', 'Nav');
+  const body = win.getByTestId(`preview-body-${id}`);
+  await body.locator('a').first().click({ modifiers: ['Control'] }); // the note's one link: [[sysctx#2. System Context]]
+  const heading = body.locator('h2', { hasText: 'System Context' });
+  await expect(heading).toBeVisible({ timeout: 10_000 });
+  // Every diagram has drawn: three fences and two embeds.
+  for (let n = 0; n < 5; n += 1) await expect(win.getByTestId(`diagram-frame-${id}-diagram-${n}`).locator('svg').first()).toBeVisible({ timeout: 15_000 });
+  const offset = (): Promise<number> => win.evaluate(
+    ([bodyId]) => {
+      const host = document.querySelector(`[data-testid="${bodyId}"]`)!;
+      const h = [...host.querySelectorAll('h2')].find((el) => el.textContent?.includes('System Context'))!;
+      return h.getBoundingClientRect().top - host.getBoundingClientRect().top;
+    },
+    [`preview-body-${id}`],
+  );
+  // Let layout from the late draws settle, then measure; the numbers are printed on every run.
+  const samples: number[] = [];
+  for (let n = 0; n < 15; n += 1) {
+    await win.evaluate(() => new Promise<void>((done) => setTimeout(done, 200)));
+    samples.push(await offset());
+  }
+  const measured = samples[samples.length - 1]!;
+  console.log(`MT-01 heading offset from the body's top, every 200ms after the last diagram drew: ${samples.map((s) => s.toFixed(1)).join(' ')} px`);
+  expect(Math.abs(measured)).toBeLessThanOrEqual(2);
 });
 
 test('a Mermaid source that does not parse shows the inline notice instead of a drawing', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
