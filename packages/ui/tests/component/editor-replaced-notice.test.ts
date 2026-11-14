@@ -117,6 +117,10 @@ describe('the replaced notice (052 T020)', () => {
  */
 describe('the replaced state is persisted (052 T024)', () => {
   const stub = { replaced: true };
+  // The layout write rides the workspace store's 400 ms autosave debounce: measured at 414 ms here on
+  // an idle workstation, so waitFor's 1 s default is crossed on a loaded CI runner. 3 s, as
+  // `editor-moved-out.test.ts` waits for the same write.
+  const SAVED = { timeout: 3000 };
 
   it('MovedPathSync writes it from the relay and removes it when the state clears', async () => {
     const h = mountEditor({
@@ -128,10 +132,10 @@ describe('the replaced state is persisted (052 T024)', () => {
     await waitFor(() => expect(h.view().state.doc.toString()).toBe('MINE\n'));
 
     act(() => h.pushSync(stub));
-    await waitFor(() => expect(h.savedPanelConfig()?.replaced).toBe(true));
+    await waitFor(() => expect(h.savedPanelConfig()?.replaced).toBe(true), SAVED);
 
     act(() => h.pushSync({ replaced: false }));
-    await waitFor(() => expect(h.savedPanelConfig()?.replaced).toBeUndefined());
+    await waitFor(() => expect(h.savedPanelConfig()?.replaced).toBeUndefined(), SAVED);
   });
 
   it('a remount from a layout carrying it shows the notice, restores the unsaved text and does not plain-save', async () => {
@@ -165,7 +169,7 @@ describe('the replaced state is persisted (052 T024)', () => {
     });
     await waitFor(() => expect(h.view().state.doc.toString()).toBe('FROM-DISK\n'));
     expect(h.calls.register).not.toHaveBeenCalledWith(expect.objectContaining({ replaced: true }));
-    await waitFor(() => expect(h.savedPanelConfig()).toBeDefined());
+    await waitFor(() => expect(h.savedPanelConfig()).toBeDefined(), SAVED);
     expect(h.savedPanelConfig()?.replaced).toBeUndefined();
     expect(screen.queryByTestId(`panel-failure-${PANEL}`)).toBeNull();
   });
