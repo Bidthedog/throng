@@ -44,12 +44,12 @@ test('a persistent error notice wins the hit-test over what it covers (#313, sup
     const notice = win.getByTestId('project-error');
     await expect(notice).toBeVisible();
     /*
-     * It is an ERROR under the shipped default (`dismiss`): it waits for the user rather than timing
-     * out while they read it. That `NotificationProvider` arms no timer at all for `mode: 'dismiss'`
-     * — at any severity, for any duration, an hour included — is proven with a fake clock in
-     * `packages/ui/tests/component/notice-display-override.test.ts` ("Dismiss only never arms a timer,
-     * whatever the severity", 034 FR-045/SC-008). This spec no longer waits real seconds to gesture at
-     * the same fact; it keeps the part only Electron can prove — the hit-test below.
+     * It is an ERROR under the shipped default (`panel`): a toast that leaves after the toast duration
+     * (068 FR-021) and stays in the Notifications panel. The harness stretches the duration to 10 s
+     * (`THRONG_E2E_TOAST_MS`), so the card is still up for the hit-test below. The timer and its
+     * pointer/focus pause are proven with a fake clock in
+     * `packages/ui/tests/component/notice-toast-timer.test.ts`; this spec keeps the part only Electron
+     * can prove — the hit-test below.
      */
 
     // Whatever the card is sitting on top of, the card is what a click at that point hits.

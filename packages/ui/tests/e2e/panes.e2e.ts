@@ -143,7 +143,7 @@ test('right pane: rail only while collapsed; expand reveals the explorer', { tag
   await expect(win.getByTestId('pane-rail-right')).toBeVisible();
   // 046 FR-001 — the rail names the pane, and its own button explains the gesture; neither still
   // says "Files & Folders" (app.tsx :1003/:1012).
-  await expect(win.getByTestId('pane-rail-right')).toHaveText('File Explorer');
+  await expect(win.getByTestId('pane-rail-right')).toHaveText('File Explorer & Notifications'); // 068 FR-068
   await expect(win.getByTestId('pane-show-right')).toHaveAttribute('title', 'Show File Explorer');
   const collapsed = await buttonGeom(win, 'pane-show-right', 'right');
 
@@ -199,7 +199,8 @@ test('the three pane headers share a bottom border line (#6); resize handles dra
   };
   const projects = await bottom('[data-testid="projects-panel"] .panel__header');
   const tabs = await bottom('.tab-strip');
-  const files = await bottom('[data-testid="file-explorer-pane"] .panel__header');
+  // 068: the pane is now a stack (File Explorer, then Notifications); the first header is the one aligned.
+  const files = await bottom('[data-testid="file-explorer-pane"] .panel__header >> nth=0');
 
   expect(Math.abs(projects - tabs)).toBeLessThan(2);
   expect(Math.abs(files - tabs)).toBeLessThan(2);

@@ -135,7 +135,9 @@ test('a displayed error notice writes a record at ERROR carrying its severity an
       expect(record).toMatch(/\bERROR\b/);
       // FR-007: the message the user read, verbatim, not a paraphrase composed for the log.
       expect(record).toContain('could not be found');
-      expect(record).toContain('loggedone');
+      // 068 FR-034a/FR-034f (#623): the project is named by token, never by its name or path.
+      expect(record).not.toMatch(/loggedone/i);
+      expect(record).toMatch(/<(project:[^>]+|name-[0-9a-f]{8}|path-[0-9a-f]{8})>/);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
