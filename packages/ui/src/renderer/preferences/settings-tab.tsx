@@ -625,6 +625,7 @@ export function SettingsTab({
                 options={dynamicOptions(d, themes, detected)}
                 optionLabels={dynamicOptionLabels(d, detected)}
                 disabled={isInert(d)}
+                asks={(v) => silenceConfirmation(d, v, settings) !== null}
                 onCommit={(v) => commit(d, v)}
               />
             </div>
@@ -673,6 +674,7 @@ export function SettingsTab({
           options={dynamicOptions(d, themes, detected)}
           optionLabels={dynamicOptionLabels(d, detected)}
           disabled={isInert(d)}
+          asks={(v) => silenceConfirmation(d, v, settings) !== null}
           onCommit={(v) => commit(d, v)}
         />
       </div>
