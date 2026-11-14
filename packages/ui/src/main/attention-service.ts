@@ -1,6 +1,7 @@
 import {
   AttentionModel,
   badgeSummary,
+  collectPanels,
   kindLabel,
   notificationText,
   formatSubject,
@@ -25,6 +26,8 @@ import {
   TERMINAL_ATTENTION_SYNC_METHOD,
   TERMINAL_ATTENTION_FOCUS_METHOD,
   type TerminalAttentionLedgerResult,
+  WORKSPACE_LOAD_METHOD,
+  type WorkspaceLoadResultDto,
 } from '@throng/ipc-contract';
 
 /**
@@ -334,13 +337,71 @@ export class AttentionService {
       this.dismiss(panelId);
       return;
     }
+    this.navigate(panelId, mark.projectId);
+  }
+
+  /** Raise the window that hosts the panel (a sub-workspace's, else the main window) and tell it to focus it. */
+  private navigate(panelId: string, projectId: string): void {
     const hostingWindow = [...this.reports.values()].find(
       (r) => r.windowId !== this.deps.windows.mainId() && r.hostedPanels.some((h) => h.panelId === panelId),
     )?.windowId;
     const target = hostingWindow ?? this.deps.windows.mainId() ?? this.deps.windows.ids()[0];
     if (target === undefined) return;
     this.deps.windows.raise(target);
-    this.deps.windows.send(target, ATTENTION_FOCUS_PANEL_CHANNEL, { panelId, projectId: mark.projectId });
+    this.deps.windows.send(target, ATTENTION_FOCUS_PANEL_CHANNEL, { panelId, projectId });
+  }
+
+  /** The panel as some window reports hosting it (the active project's layout, or a sub-workspace's), if any does. */
+  private reportedPanel(panelId: string): { projectId: string } | undefined {
+    for (const report of this.reports.values()) {
+      const hosted = report.hostedPanels.find((h) => h.panelId === panelId);
+      if (hosted) return { projectId: hosted.projectId };
+    }
+    return undefined;
+  }
+
+  /** Whether `projectId`'s SAVED layout holds the panel: how main knows a panel in a project no window shows. */
+  private async savedLayoutHolds(projectId: string, panelId: string): Promise<boolean> {
+    try {
+      const { layout } = await this.deps.daemon.call<WorkspaceLoadResultDto>(WORKSPACE_LOAD_METHOD, { projectId });
+      return layout.tabs.some((tab) => collectPanels(tab.root).some((p) => p.id === panelId));
+    } catch (err) {
+      this.log('[attention] reading a project layout to find a panel failed:', err);
+      return false;
+    }
+  }
+
+  /**
+   * 068 FR-063 — the link a NOTICE carries: take the user to the panel it relates to, WITH OR WITHOUT an attention
+   * mark. The panel is found where a window reports it, else in its project's saved layout; one that is in neither
+   * no longer exists, and nothing navigates (the notification, if any, goes). The project is the origin's, else the
+   * mark's, else the reporting window's. `false` when nothing was navigated.
+   */
+  async goToPanel(origin: { panelId: string; projectId?: string }): Promise<boolean> {
+    const { panelId } = origin;
+    const mark = this.model.marks().find((m) => m.panelId === panelId);
+    const reported = this.reportedPanel(panelId);
+    const projectId = origin.projectId ?? mark?.projectId ?? reported?.projectId;
+    if (!mark && !reported && (projectId === undefined || !(await this.savedLayoutHolds(projectId, panelId)))) {
+      this.dismiss(panelId);
+      return false;
+    }
+    this.navigate(panelId, projectId ?? '');
+    return true;
+  }
+
+  /** Which of these panels still exist, by the same test {@link goToPanel} applies, without navigating. */
+  async existingPanels(panels: readonly { panelId: string; projectId?: string }[]): Promise<Set<string>> {
+    const found = new Set<string>();
+    await Promise.all(
+      panels.map(async ({ panelId, projectId }) => {
+        const mark = this.model.marks().find((m) => m.panelId === panelId);
+        const reported = this.reportedPanel(panelId);
+        const project = projectId ?? mark?.projectId ?? reported?.projectId;
+        if (mark || reported || (project !== undefined && (await this.savedLayoutHolds(project, panelId)))) found.add(panelId);
+      }),
+    );
+    return found;
   }
 
   dispose(): void {

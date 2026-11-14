@@ -103,7 +103,7 @@ export function TerminalInputs({
       </label>
       <label
         className="panel-type-form__check"
-        title="When the terminal ends with a command still running, save that command as this panel's Startup Command"
+        title="When the terminal ends with a command still running, save that command as this panel's Startup Command. A running Claude Code session is remembered as a resume of that session."
       >
         <input
           type="checkbox"

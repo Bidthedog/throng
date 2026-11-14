@@ -89,16 +89,16 @@ describe('what startup reads from a config root', () => {
     const root = tempRoot();
     const first = new FileConfigStore(root);
     await readConfigOnce(first); // first run seeds the shipped documents, as a first launch does
-    expect((await readConfigOnce(first)).payload.settings.notifications.error.mode).toBe('dismiss');
+    expect((await readConfigOnce(first)).payload.settings.notifications.error.panel).toBe(true);
 
     await writeConfigPatch(first, { kind: 'settings' }, [
-      { path: ['notifications', 'error', 'mode'], value: 'timed' },
+      { path: ['notifications', 'error', 'panel'], value: false },
     ]);
 
     // A restart: a second store over the same root.
     const { payload, settingsUnreadable } = await readConfigOnce(new FileConfigStore(root));
     expect(settingsUnreadable).toBe(false);
-    expect(payload.settings.notifications.error.mode).toBe('timed');
+    expect(payload.settings.notifications.error.panel).toBe(false);
   });
 
   it('a settings file with no notifications section resolves to the shipped defaults and keeps the user’s own values (FR-014, SC-014)', async () => {

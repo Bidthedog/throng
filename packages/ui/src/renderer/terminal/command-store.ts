@@ -23,6 +23,11 @@ const commands = new Map<string, string | null>();
  */
 const archs = new Map<string, string>();
 /**
+ * 068 FR-041 — the command to REMEMBER where it differs from the one shown: for Claude Code, the command that
+ * resumes its session. Absent for every other program, whose remembered command is the observed one.
+ */
+const memoryCommands = new Map<string, string>();
+/**
  * 053 FR-003 `{title}` — the window title each panel's shell showed at its last prompt (the last
  * observation of nothing running). A shell's title is not a program's; see {@link peekProgramTitle}.
  */
@@ -58,7 +63,7 @@ function ensureBridge(): void {
   if (unsubscribeBridge) return;
   unsubscribeBridge =
     // `arch` is absent while the OS gave none, and from a command that has gone.
-    window.throng?.terminal?.onCommand?.((e) => record(e.panelId, e.command, e.arch ?? undefined, e.observedAt)) ?? null;
+    window.throng?.terminal?.onCommand?.((e) => record(e.panelId, e.command, e.arch ?? undefined, e.observedAt, e.memoryCommand)) ?? null;
 }
 
 /**
@@ -69,8 +74,8 @@ function ensureBridge(): void {
  * the program's own title was never shown (053 FR-003; a program titling itself once as it starts lost it 1 run in 9).
  * Such a title leaves the previous snapshot in place.
  */
-function record(panelId: string, command: string | null, arch: string | undefined, observedAt?: number): void {
-  if (commands.get(panelId) === command && archs.get(panelId) === arch) return;
+function record(panelId: string, command: string | null, arch: string | undefined, observedAt?: number, memoryCommand?: string): void {
+  if (commands.get(panelId) === command && archs.get(panelId) === arch && memoryCommands.get(panelId) === memoryCommand) return;
   if (command === null) {
     const atPrompt = getTerminalTitle(panelId);
     const arrivedAfterReading = observedAt !== undefined && (getTerminalTitleSetAt(panelId) ?? 0) > observedAt;
@@ -80,6 +85,8 @@ function record(panelId: string, command: string | null, arch: string | undefine
   commands.set(panelId, command);
   if (arch === undefined) archs.delete(panelId);
   else archs.set(panelId, arch);
+  if (memoryCommand === undefined) memoryCommands.delete(panelId);
+  else memoryCommands.set(panelId, memoryCommand);
   emit();
 }
 
@@ -88,8 +95,13 @@ function record(panelId: string, command: string | null, arch: string | undefine
  * the `terminal.command` notification carried, which a mounting view dropped and the daemon will not
  * send again while it is unchanged.
  */
-export function reportTerminalCommand(panelId: string, command: string | null, arch?: string | null): void {
-  record(panelId, command, arch ?? undefined);
+export function reportTerminalCommand(
+  panelId: string,
+  command: string | null,
+  arch?: string | null,
+  memoryCommand?: string,
+): void {
+  record(panelId, command, arch ?? undefined, undefined, memoryCommand);
 }
 
 /**
@@ -108,6 +120,30 @@ export function useTerminalCommand(panelId: string): string | null | undefined {
     () => commands.get(panelId),
     () => undefined,
   );
+}
+
+/**
+ * What command memory should persist for this panel (068 FR-041): the resume command for a Claude Code session,
+ * else the observed command. Same `undefined` / null meaning as {@link useTerminalCommand}.
+ */
+export function useTerminalMemoryCommand(panelId: string): string | null | undefined {
+  return useSyncExternalStore(
+    (notify) => {
+      ensureBridge();
+      listeners.add(notify);
+      return () => {
+        listeners.delete(notify);
+      };
+    },
+    () => memoryCommands.get(panelId) ?? commands.get(panelId),
+    () => undefined,
+  );
+}
+
+/** {@link useTerminalMemoryCommand}, read without subscribing — what an end promotes (068 FR-041, FR-045). */
+export function peekTerminalMemoryCommand(panelId: string): string | null | undefined {
+  ensureBridge();
+  return memoryCommands.get(panelId) ?? commands.get(panelId);
 }
 
 /**
@@ -131,7 +167,8 @@ export function peekTerminalCommand(panelId: string): string | null | undefined 
 export function forgetTerminalCommand(panelId: string): void {
   // A name already showing the old command re-renders to the new terminal's: FR-016.
   const had = commands.delete(panelId);
-  if (archs.delete(panelId) || had) emit();
+  const hadMemory = memoryCommands.delete(panelId);
+  if (archs.delete(panelId) || had || hadMemory) emit();
 }
 
 

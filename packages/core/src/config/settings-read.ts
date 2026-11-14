@@ -14,6 +14,7 @@
 import { DEFAULT_APP_SETTINGS, parseAppSettings, type AppSettings } from './app-settings.js';
 import { applyDeclaredBounds, type CorrectionOutcome } from './bounds-guard.js';
 import { SETTINGS_METADATA } from './settings-metadata.js';
+import { upgradeNotificationDocument } from '../notice/display-mode.js';
 
 /**
  * Parse raw settings JSON, clamping every declared bound first.
@@ -23,10 +24,18 @@ import { SETTINGS_METADATA } from './settings-metadata.js';
  * guard and a churn machine.
  */
 export function parseSettingsGuarded(raw: unknown): CorrectionOutcome<AppSettings> {
-  const guarded = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
+  /*
+   * 068 ORDER TRAP: the notification upgrade (`dismiss`/`timed` -> `panel`/`toast`, `timeoutMs`
+   * dropped) runs on the RAW document first. The bounds guard resets a value outside a descriptor's
+   * allowed set to the default, so a stored `dismiss` would otherwise be lost before it was mapped.
+   * A document the upgrade changed is reported corrected, so startup writes it back once.
+   */
+  const upgradedRaw = upgradeNotificationDocument(raw);
+  const upgraded = upgradedRaw !== raw && JSON.stringify(upgradedRaw) !== JSON.stringify(raw);
+  const guarded = applyDeclaredBounds(upgradedRaw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
   return {
     value: parseAppSettings(guarded.value),
-    corrected: guarded.corrected,
+    corrected: guarded.corrected || upgraded,
     corrections: guarded.corrections,
     /*
      * UNREADABLE, reported without changing the value (032, FR-008).

@@ -45,7 +45,7 @@ export function useElevatedDropNotice(): void {
         notify({
           severity: 'info',
           message:
-            'Windows blocks files dragged into throng while it runs as administrator. Paste still works: copy the files, then paste them into a folder here.',
+            'The OS blocks files dragged into throng while it runs as administrator. Paste still works: copy the files, then paste them into a folder here.',
           subject: { kind: 'none' },
           testId: 'explorer-elevated-drop',
         });

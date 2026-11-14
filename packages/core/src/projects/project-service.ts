@@ -43,6 +43,11 @@ export interface ProjectServiceDeps {
   newId: () => string;
   /** Returns an ISO-8601 timestamp. */
   now: () => string;
+  /**
+   * 068 FR-034a: told of every project the service reads or writes, so the diagnostic log can name a
+   * project by its internal id instead of its root or name. Never changes what the service returns.
+   */
+  onProjectsKnown?: (projects: readonly Project[]) => void;
 }
 
 /**
@@ -63,7 +68,11 @@ export class ProjectService {
     // the default must exist before the read — a store the schema guard healed has none, and
     // `ProjectDto.categoryId` promises never to be ''. Idempotent: an existing default is kept.
     this.ensureDefaultCategory(owner);
-    return this.deps.store.list(owner);
+    // 068 FR-034e: a project with no internal id is given one the first time it is read, and keeps it.
+    this.deps.store.assignMissingIds(owner, this.deps.newId);
+    const projects = this.deps.store.list(owner);
+    this.deps.onProjectsKnown?.(projects);
+    return projects;
   }
 
   create(input: ProjectInput): Project {
@@ -82,6 +91,7 @@ export class ProjectService {
       categoryId: this.ensureDefaultCategory(owner, now),
     });
     this.deps.store.insert(project);
+    this.deps.onProjectsKnown?.([project]);
     if (isFirst) {
       this.deps.store.setActiveExclusive(owner, project.id);
     }
@@ -97,6 +107,7 @@ export class ProjectService {
     }
     const updated = applyProjectUpdate(existing, patch, this.deps.now());
     this.deps.store.update(updated);
+    this.deps.onProjectsKnown?.([updated]);
     return updated;
   }
 

@@ -20,6 +20,7 @@ import {
   type IPathForms,
   type IPlatformInfo,
   type IProcessCwd,
+  type IProcessIdentity,
   type IProcessMetrics,
   type IPtyHost,
   type IRefusedUriSchemes,
@@ -45,6 +46,7 @@ import {
   LinuxPathForms,
   LinuxPlatformInfo,
   LinuxProcessCwd,
+  LinuxProcessIdentity,
   LinuxProcessMetrics,
   LinuxPtyHost,
   LinuxRefusedUriSchemes,
@@ -108,6 +110,7 @@ export interface PlatformServices {
   readonly elevation: () => IElevationState;
   readonly deElevatedLauncher: () => DeElevatedLauncher;
   readonly processCwd: () => IProcessCwd;
+  readonly processIdentity: () => IProcessIdentity;
   readonly processMetrics: () => IProcessMetrics;
   readonly orphanProcesses: () => IOrphanProcesses;
   readonly foregroundHandoff: () => IForegroundHandoff;
@@ -151,6 +154,8 @@ const WINDOWS: PlatformServices = {
   elevation: () => new WindowsElevation(),
   deElevatedLauncher: () => new WindowsDeElevatedLauncher(),
   processCwd: () => new WindowsProcessCwd(),
+  // Windows reports no argv or start marker beyond the process table's; the resolver splits the command line (068 FR-043).
+  processIdentity: () => ({ argv: async () => undefined, startMarker: async () => undefined }),
   processMetrics: () =>
     new WindowsProcessMetrics(new WindowsGpuCounters(), undefined, WindowsNetworkTrace.lazyReader()),
   orphanProcesses: () => new WindowsOrphanProcesses(),
@@ -192,6 +197,7 @@ const LINUX: PlatformServices = {
   elevation: () => new LinuxElevation(),
   deElevatedLauncher: () => new NoDeElevatedLauncher(),
   processCwd: () => new LinuxProcessCwd(),
+  processIdentity: () => new LinuxProcessIdentity(),
   processMetrics: () => new LinuxProcessMetrics(new LinuxGpuUsage()),
   orphanProcesses: () => new LinuxOrphanProcesses(),
   foregroundHandoff: () => new NoForegroundHandoff(),
@@ -244,3 +250,6 @@ export function startPlatform(nodePlatform: string = process.platform): Platform
 export { NodeUserContext };
 export { CRASH_DIR_NAME, clearStaleSocket, createFileLog, writeCrashReport, execFileOffLoop } from '@throng/platform-node';
 export type { DiagnosticLog, FileLogOptions } from '@throng/platform-node';
+// 068 — the anonymised diagnostic log: keyed hash, per-install salt, machine identity.
+export { createProcessAnonymiser, hmacHash, readOrCreateSalt, registerMachineIdentity } from '@throng/platform-node';
+export type { MachineIdentityOptions, ProcessAnonymiserOptions } from '@throng/platform-node';

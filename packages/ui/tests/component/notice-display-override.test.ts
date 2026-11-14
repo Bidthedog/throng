@@ -77,9 +77,9 @@ function ProbeView({ into }: { into: Probe }): ReactElement | null {
   return null;
 }
 
-/** Seed one severity's GLOBAL mode/duration before mounting — what the override has to beat. */
-function withGlobal(severity: 'error' | 'warning' | 'success', mode: DisplayMode, timeoutMs: number): void {
-  settingsPayload = { version: 1, notifications: { [severity]: { mode, timeoutMs } } };
+/** Seed one severity's GLOBAL mode and the global toast duration before mounting — what the override has to beat. */
+function withGlobal(severity: 'error' | 'warning' | 'success', mode: DisplayMode, toastDurationMs: number): void {
+  settingsPayload = { version: 1, notifications: { [severity]: { mode }, toastDurationMs } };
 }
 
 /**
@@ -111,91 +111,56 @@ const RAISE: Omit<NoticeInput, 'severity'> = {
   testId: 'probe-notice',
 };
 
-const AN_HOUR = 60 * 60 * 1000;
-
+/*
+ * 068 FR-021: a notice's own display now carries the MODE only; the toast duration is the one global
+ * number, so what an override can change is whether the notice shows at all, and whether it is kept in
+ * the Notifications panel. The tests below keep FR-082a's two halves: the override beats the severity,
+ * and a notice with no override behaves as its severity says.
+ */
 describe('a notice carrying its own display beats the severity-keyed global (FR-082a)', () => {
-  it('is TIMED at its own number while its severity says dismiss', async () => {
-    // The global says an error waits to be dismissed — the shipped behaviour, and the one #224 asked
-    // for. The override says this ONE error leaves after five seconds.
-    withGlobal('error', 'dismiss', 30_000);
+  it('is displayed on the override alone while its severity says never', async () => {
+    withGlobal('error', 'never', 3000);
     const probe = await mount();
 
     vi.useFakeTimers();
-    act(() =>
-      probe.notify!({ severity: 'error', ...RAISE, display: { mode: 'timed', timeoutMs: 5000 } }),
-    );
+    act(() => probe.notify!({ severity: 'error', ...RAISE, display: { toast: true, panel: true } }));
     expect(screen.getByTestId('probe-notice')).toBeVisible();
 
+    // It is a toast like any other: it leaves after the one global duration.
     act(() => {
-      vi.advanceTimersByTime(4000);
+      vi.advanceTimersByTime(2500);
     });
-    expect(
-      screen.queryByTestId('probe-notice'),
-      'a 5000 ms notice left within 4000 ms — the timer is not the override’s number',
-    ).not.toBeNull();
-
+    expect(screen.queryByTestId('probe-notice')).not.toBeNull();
     act(() => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(1000);
     });
     expect(screen.queryByTestId('probe-notice')).toBeNull();
-  });
-
-  it('waits to be DISMISSED while its severity says it should have gone after three seconds', async () => {
-    // The other direction, and the one a provider that merely "prefers the shorter of the two" would
-    // fail: the override is the LONGER-lived behaviour here.
-    withGlobal('success', 'timed', 3000);
-    const probe = await mount();
-
-    vi.useFakeTimers();
-    act(() =>
-      probe.notify!({ severity: 'success', ...RAISE, display: { mode: 'dismiss', timeoutMs: 3000 } }),
-    );
-    expect(screen.getByTestId('probe-notice')).toBeVisible();
-
-    act(() => {
-      vi.advanceTimersByTime(AN_HOUR);
-    });
-    expect(screen.getByTestId('probe-notice')).toBeVisible();
   });
 
   it('is NEVER displayed on the override alone — and still writes its log record', async () => {
     // *Never display* is offerable at all only because silence on screen is not silence in the
     // record (030 FR-005/FR-006). An override that silenced the notice AND the log would be taking
     // away the thing that makes the choice offerable.
-    withGlobal('warning', 'dismiss', 5000);
+    withGlobal('warning', 'panel', 5000);
     const probe = await mount();
 
-    act(() =>
-      probe.notify!({ severity: 'warning', ...RAISE, display: { mode: 'never', timeoutMs: 5000 } }),
-    );
+    act(() => probe.notify!({ severity: 'warning', ...RAISE, display: { toast: false, panel: false } }));
 
     expect(screen.queryByTestId('probe-notice')).toBeNull();
     expect(logged, 'a silenced notice must still reach the diagnostic log').toHaveLength(1);
   });
 });
 
-describe('a notice with NO override behaves exactly as it does today (FR-082a)', () => {
-  /*
-   * The regression half. Every existing call site in the application omits this field, so "absent
-   * resolves exactly as it does today" is the requirement doing the most work here — and it is
-   * invisible in any test of the new field.
-   */
-  it('still waits to be dismissed when its severity says dismiss', async () => {
-    withGlobal('error', 'dismiss', 5000);
+describe('a notice with NO override behaves exactly as its severity says (FR-082a)', () => {
+  it('is not displayed when its severity says never', async () => {
+    withGlobal('success', 'never', 3000);
     const probe = await mount();
-
-    vi.useFakeTimers();
-    act(() => probe.notify!({ severity: 'error', ...RAISE }));
-    expect(screen.getByTestId('probe-notice')).toBeVisible();
-
-    act(() => {
-      vi.advanceTimersByTime(AN_HOUR);
-    });
-    expect(screen.getByTestId('probe-notice')).toBeVisible();
+    act(() => probe.notify!({ severity: 'success', ...RAISE }));
+    expect(screen.queryByTestId('probe-notice')).toBeNull();
   });
 
-  it('still leaves at its severity’s own number when that severity is timed', async () => {
-    withGlobal('success', 'timed', 8000);
+  it('leaves after the global toast duration, whatever its severity’s mode', async () => {
+    withGlobal('success', 'toast', 8000);
     const probe = await mount();
 
     vi.useFakeTimers();
@@ -215,40 +180,36 @@ describe('a notice with NO override behaves exactly as it does today (FR-082a)',
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
- * 043 T239 (FR-082, FR-082a) — a REPEATED notice keeps its own dwell
+ * 043 T239, reshaped by 068 — a REPEATED notice restarts the global duration
  *
- * `notify` resolved the override correctly for a fresh notice. A repeat does not go through that
- * resolution: it is absorbed into the card already up, and `flash()` re-arms that card's timer —
- * from the severity-keyed GLOBAL. So a replace summary set to "Display for 30 s" had its clock cut
- * to the global success timeout the moment an identical summary arrived, which is FR-082's "the
- * global settings MUST NOT be consulted at all" broken at the one consulting point it missed.
+ * A repeat is absorbed into the card already up, and `flash()` re-arms that card's timer. It must
+ * restart the FULL global duration (the per-notice dwell of T239 went with the per-notice timeout).
  * ────────────────────────────────────────────────────────────────────────── */
 
-describe('a repeated notice re-arms from its OWN display, not the global (T239)', () => {
-  it('keeps the override’s 30 s when an identical notice arrives, under a 3 s global', async () => {
-    withGlobal('success', 'timed', 3000);
+describe('a repeated notice re-arms the full global duration (T239)', () => {
+  it('keeps the card for a whole new duration when an identical notice arrives', async () => {
+    withGlobal('success', 'toast', 10_000);
     const probe = await mount();
 
     vi.useFakeTimers();
-    const raise = (): void =>
-      probe.notify!({ severity: 'success', ...RAISE, display: { mode: 'timed', timeoutMs: 30_000 } });
+    const raise = (): void => probe.notify!({ severity: 'success', ...RAISE, display: { toast: true, panel: false } });
     act(() => raise());
     act(() => {
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(6000);
     });
     // The repeat — absorbed into the same card, which re-arms its timer.
     act(() => raise());
 
     act(() => {
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(6000);
     });
     expect(
       screen.queryByTestId('probe-notice'),
-      'the repeat re-armed at the GLOBAL 3000 ms — the override was not consulted',
+      'the repeat did not restart the clock: 12 s of a 10 s duration have passed in total',
     ).not.toBeNull();
 
     act(() => {
-      vi.advanceTimersByTime(25_000);
+      vi.advanceTimersByTime(5000);
     });
     expect(screen.queryByTestId('probe-notice')).toBeNull();
   });
@@ -267,7 +228,7 @@ describe('a repeated notice re-arms from its OWN display, not the global (T239)'
 
 describe('a notice with different details is not a duplicate (T237)', () => {
   it('raises a SECOND card when only the details differ, and logs both', async () => {
-    withGlobal('success', 'dismiss', 5000);
+    withGlobal('success', 'panel', 5000);
     const probe = await mount();
 
     act(() => probe.notify!({ severity: 'success', ...RAISE, details: ['src/a.ts'] }));
@@ -282,7 +243,7 @@ describe('a notice with different details is not a duplicate (T237)', () => {
   it('still collapses a notice raised again with IDENTICAL details — one event seen twice', async () => {
     // The half that must not regress: a watcher re-reporting one unchanged failure, file list and
     // all, is exactly what the duplicate rule exists to keep from stacking.
-    withGlobal('success', 'dismiss', 5000);
+    withGlobal('success', 'panel', 5000);
     const probe = await mount();
 
     act(() => probe.notify!({ severity: 'success', ...RAISE, details: ['src/a.ts'] }));

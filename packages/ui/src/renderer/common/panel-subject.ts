@@ -21,6 +21,10 @@ import { currentPanelTitle } from '../workspace/use-panel-display-names.js';
  * parts, never a string.
  */
 export interface PanelPlace {
+  /** The panel's id — carried into a notice subject so the notice can link to it (068 FR-063). */
+  panelId: string;
+  /** Its origin project's id, where the panel record states one. */
+  projectId?: string;
   /** The panel's displayed title — the one its header shows (048 FR-032), not the stored one. */
   name: string;
   /** Its tab's title, where the panel was found in one. */
@@ -53,6 +57,8 @@ export function usePanelPlace(panelId: string): PanelPlace | undefined {
       const panel = collectPanels(tab.root).find((p) => p.id === panelId);
       if (!panel) continue;
       return {
+        panelId,
+        projectId: panel.originProjectId,
         // Never `panel.title`: that is a generated fallback ("Blank Panel 3") kept only for
         // uniqueness, and *Copy details* would end in it where the header says "Command Prompt".
         name: currentPanelTitle(panel),
@@ -67,7 +73,16 @@ export function usePanelPlace(panelId: string): PanelPlace | undefined {
 
 /** The panel itself as a notice subject — `{ kind: 'none' }` when it is no longer in the layout. */
 export function panelSubject(place: PanelPlace | undefined): NoticeSubject {
-  return place ? { kind: 'panel', name: place.name, tab: place.tab, project: place.project } : { kind: 'none' };
+  return place
+    ? {
+        kind: 'panel',
+        name: place.name,
+        tab: place.tab,
+        project: place.project,
+        panelId: place.panelId,
+        projectId: place.projectId,
+      }
+    : { kind: 'none' };
 }
 
 /**
@@ -78,5 +93,13 @@ export function panelSubject(place: PanelPlace | undefined): NoticeSubject {
  */
 export function terminalSubject(place: PanelPlace | undefined, flavour: string | undefined): NoticeSubject {
   if (!flavour) return panelSubject(place);
-  return { kind: 'terminal', flavour, panel: place?.name, tab: place?.tab, project: place?.project };
+  return {
+    kind: 'terminal',
+    flavour,
+    panel: place?.name,
+    tab: place?.tab,
+    project: place?.project,
+    panelId: place?.panelId,
+    projectId: place?.projectId,
+  };
 }

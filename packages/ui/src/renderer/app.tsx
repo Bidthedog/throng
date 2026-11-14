@@ -46,7 +46,11 @@ import { Spinner, useDelayedFlag } from './common/loading.js';
 import { StatusBar } from './statusbar/status-bar.js';
 import { EstimatesReporterMount, UnloadRouteMount } from './resources/use-estimates-reporter.js';
 import { Chevron } from './panes/chevron.js';
+import { CollapsedRail } from './panes/collapsed-rail.js';
+import { useCollapsedHover } from './panes/use-collapsed-hover.js';
 import { VerticalPanelStack } from './panes/vertical-panel-stack.js';
+import { PendingNotificationsBadge } from './notifications/pending-badge.js';
+import { LimitWarning } from './notifications/limit-warning.js';
 import { FileExplorerPane } from './panes/file-explorer-pane.js';
 import { usePersistedBool } from './panes/use-persisted-bool.js';
 import { NO_SIDE_PANES, panePrefs, SidePanesBridge, type SidePanesSync } from './panes/side-pane-prefs.js';
@@ -349,6 +353,9 @@ export function App(): ReactElement {
   const [shellWidth, setShellWidth] = useState(0);
   const leftShown = leftVisible.value && !autoLeft;
   const rightShown = rightToggle.value && !autoRight;
+  // 068 FR-082: a collapsed pane's strip and its show control share ONE hover, so the hover is the pane's.
+  const leftHover = useCollapsedHover(!leftShown);
+  const rightHover = useCollapsedHover(!rightShown);
 
   // Render-time width clamp: a shown pane that doesn't fit at its set width (e.g.
   // the user expanded it while the window is narrower than its width + workspace
@@ -486,7 +493,8 @@ export function App(): ReactElement {
                 is padded to clear it) and no rail strip exists. Collapsed: only the
                 rail (button + rotated label) remains. */}
             <aside
-              className={`pane pane--sidebar${leftShown ? '' : ' pane--collapsed'}`}
+              {...leftHover}
+              className={`pane pane--sidebar${leftShown ? '' : ' pane--collapsed'}${leftHover.className ? ` ${leftHover.className}` : ''}`}
               data-testid="sidebar-pane"
             >
               <button
@@ -503,6 +511,7 @@ export function App(): ReactElement {
                   <div className="pane-sidebar__body">
                     <VerticalPanelStack
                       storageKey="throng.sidebarPanelSizes"
+                      minimisedStorageKey="throng.sidebarPanelMinimised"
                       panels={[
                         {
                           key: 'projects',
@@ -517,7 +526,11 @@ export function App(): ReactElement {
                           defaultHeight: 180,
                           className: 'sidebar-panel--subworkspaces',
                           dividerTestId: 'sidebar-vresize-sub',
-                          render: () => <SubworkspacesPanel />,
+                          // 068 FR-036: minimises to its header, Projects taking the space.
+                          minimisable: true,
+                          render: ({ minimised, toggleMinimise }) => (
+                            <SubworkspacesPanel minimised={minimised} onToggleMinimise={toggleMinimise} />
+                          ),
                         },
                       ]}
                     />
@@ -530,9 +543,7 @@ export function App(): ReactElement {
                   />
                 </>
               ) : (
-                <div className="pane-rail" data-testid="pane-rail-left">
-                  <span className="pane-rail__label">Projects &amp; Sub-workspaces</span>
-                </div>
+                <CollapsedRail testId="pane-rail-left" label="Projects & Sub-workspaces" onShow={toggleLeft} />
               )}
             </aside>
             <TitleManager />
@@ -569,7 +580,8 @@ export function App(): ReactElement {
             <MouseZoomHandler />
             <WorkspacePane />
             <section
-              className={`pane pane--explorer${rightShown ? '' : ' pane--collapsed'}`}
+              {...rightHover}
+              className={`pane pane--explorer${rightShown ? '' : ' pane--collapsed'}${rightHover.className ? ` ${rightHover.className}` : ''}`}
               data-testid="file-explorer-pane"
             >
               <button
@@ -582,11 +594,14 @@ export function App(): ReactElement {
                 <Chevron dir={rightShown ? 'right' : 'left'} />
               </button>
               {rightShown ? (
-                <FileExplorerPane onResizeStart={explorerWidth.start} resizing={explorerWidth.dragging} />
+                <FileExplorerPane
+                  onResizeStart={explorerWidth.start}
+                  resizing={explorerWidth.dragging}
+                />
               ) : (
-                <div className="pane-rail" data-testid="pane-rail-right">
-                  <span className="pane-rail__label">File Explorer</span>
-                </div>
+                <CollapsedRail testId="pane-rail-right" label="File Explorer & Notifications" onShow={toggleRight}>
+                  <PendingNotificationsBadge testId="pane-rail-right-badge" />
+                </CollapsedRail>
               )}
             </section>
           </div>
@@ -594,6 +609,8 @@ export function App(): ReactElement {
           {/* 055 — reports this window's panel estimates while the monitor window is open, runs the
               Destroys it routes here, and answers where its Minimise should shrink to (FR-085). */}
           <EstimatesReporterMount />
+          {/* 068 FR-031f — the Notifications panel reached its limit; main tells the main window only. */}
+          <LimitWarning />
           {/* 055 FR-086 — Unload Project, routed here by the monitor window. */}
           <UnloadRouteMount />
           <AppClosePrompt />

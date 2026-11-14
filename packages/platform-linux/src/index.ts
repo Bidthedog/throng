@@ -20,7 +20,8 @@ export { LinuxProcessMetrics, LINUX_NETWORK_UNAVAILABLE } from './linux-process-
 export { LinuxGpuUsage, parseDrmFdinfo } from './linux-gpu.js';
 export { LinuxOrphanProcesses } from './linux-orphan-processes.js';
 export { LinuxVolumeRoots, parseMountInfo, type MountPoint } from './linux-volume-roots.js';
-export { parseStat, readProcTable, type ProcRow } from './proc-table.js';
+export { parseStat, readProcTable, readArgv, readStartTicks, type ProcRow } from './proc-table.js';
+export { LinuxProcessIdentity } from './linux-process-identity.js';
 export { LinuxFileListCodec } from './linux-file-list-codec.js';
 export { LinuxFileManagerRegistration } from './linux-file-manager-registration.js';
 export { LinuxFileAttributes } from './linux-file-attributes.js';

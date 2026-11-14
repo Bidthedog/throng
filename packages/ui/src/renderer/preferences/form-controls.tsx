@@ -159,7 +159,11 @@ function ToggleControl({
         disabled={disabled}
         checked={checked}
         onChange={(e) => {
-          setOptimistic(e.target.checked);
+          // A value that may first ask the user (030 FR-008, 068 FR-092) is not shown early: a declined
+          // question writes nothing, and an optimistic tick would then show a value that was never set.
+          if (descriptor.confirmWhen === undefined || e.target.checked !== descriptor.confirmWhen.is) {
+            setOptimistic(e.target.checked);
+          }
           onCommit(e.target.checked);
         }}
       />

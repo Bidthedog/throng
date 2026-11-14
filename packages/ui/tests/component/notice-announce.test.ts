@@ -63,7 +63,7 @@ function ProbeView({ into }: { into: Probe }): ReactElement | null {
 }
 
 function withMode(severity: 'error', mode: DisplayMode, timeoutMs: number): void {
-  settingsPayload = { version: 1, notifications: { [severity]: { mode, timeoutMs } } };
+  settingsPayload = { version: 1, notifications: { [severity]: { mode }, toastDurationMs: timeoutMs } };
 }
 
 async function mount(): Promise<Probe> {
@@ -120,7 +120,7 @@ function utteranceCount(): number {
 
 describe('a pure repeat is announced (FR-011a)', () => {
   it('names the recurring subject rather than restating the notice', async () => {
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -134,7 +134,7 @@ describe('a pure repeat is announced (FR-011a)', () => {
   });
 
   it('is polite, so it queues behind whatever is being read rather than interrupting', async () => {
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
     act(() => probe.notify!(raise([refused('big.bin')])));
@@ -145,7 +145,7 @@ describe('a pure repeat is announced (FR-011a)', () => {
 
 describe('it does not re-read the list (FR-011b, 030 FR-032a)', () => {
   it('names the subject and never the other rows', async () => {
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -161,7 +161,7 @@ describe('it does not re-read the list (FR-011b, 030 FR-032a)', () => {
 
 describe('utterances equal pulses (FR-011c, SC-006e)', () => {
   it('says it ONCE for ten repeats inside one pulse', async () => {
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -178,7 +178,7 @@ describe('utterances equal pulses (FR-011c, SC-006e)', () => {
   it('says it EACH TIME when the repeats are spaced beyond the pulse', async () => {
     // The other direction, and the one that matters more: a bound that only ever suppressed would
     // pass against an implementation that had simply gone silent — which is the defect FR-011a fixes.
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 

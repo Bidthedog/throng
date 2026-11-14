@@ -25,12 +25,12 @@ import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-prot
 import { answerChildPids } from './pty-agent-childpids.js';
 import { answerAttachedProcs } from './pty-agent-attached.js';
 import { answerCwds } from './pty-agent-cwds.js';
-import { openAgentLog } from './pty-agent-log.js';
+import { describeAgentArgv, describeAgentStart, describeMalformedLine, openAgentLog } from './pty-agent-log.js';
 import { probeErrorMeansDaemonGone } from './pty-agent-liveness.js';
 
 // 062: traits first, since the pipe this agent serves is resolved through them.
 const platform = startPlatform();
-const agentLog = openAgentLog({ arg: process.argv[3], env: process.env, pid: process.pid, startedAt: new Date() });
+const agentLog = openAgentLog({ arg: process.argv[3], saltArg: process.argv[4], env: process.env, pid: process.pid, startedAt: new Date() });
 // `console.*` — including `logFatal` below — lands in the log as well. With no log folder the console
 // is left alone: stderr is what the daemon's `watchChild` reads for a plainly spawned agent.
 agentLog?.attachConsole();
@@ -84,7 +84,7 @@ process.on('exit', (code) => {
 });
 
 log(
-  `agent start pid=${process.pid} argv=${JSON.stringify(process.argv)} cwd=${process.cwd()} ` +
+  `agent start pid=${process.pid} argv=${describeAgentArgv(process.argv)} cwd=${process.cwd()} ` +
     `execPath=${process.execPath} node=${process.version} platform=${process.platform} ` +
     `ELECTRON_RUN_AS_NODE=${process.env.ELECTRON_RUN_AS_NODE ?? '(unset)'} ` +
     `USERNAME=${process.env.USERNAME ?? '(unset)'} log=${agentLog?.path ?? '(none)'}`,
@@ -179,10 +179,7 @@ function onCommand(msg: AgentCommand): void {
       break;
     }
     case 'start': {
-      log(
-        `cmd start key=${msg.key} file=${msg.file} args=${JSON.stringify(msg.args)} ` +
-          `cwd=${msg.cwd} cols=${msg.cols} rows=${msg.rows}`,
-      );
+      log(describeAgentStart(msg));
       try {
         log(
           `about to pty.start (native ConPTY spawn) key=${msg.key} — if the log ENDS ` +
@@ -313,7 +310,7 @@ const server = createServer((connection) => {
       try {
         onCommand(JSON.parse(line) as AgentCommand);
       } catch (error) {
-        log(`ignored malformed line (${errText(error)}): ${line.slice(0, 200)}`, 'warn');
+        log(describeMalformedLine(errText(error), line), 'warn');
       }
     }
   });

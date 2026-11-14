@@ -217,9 +217,9 @@ const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
 /** 057 FR-108: Attention is the fifth type, with its own row; the four severities keep their keys. */
 const TYPES = [...SEVERITIES, 'attention'] as const;
 
-/** The mode `<select>` for one severity. */
-const modeFor = (severity: string): HTMLSelectElement =>
-  screen.getByTestId(`control-notifications.${severity}.mode`) as HTMLSelectElement;
+/** One type's Toast checkbox (068 FR-092). */
+const toastFor = (type: string): HTMLInputElement =>
+  screen.getByTestId(`control-notifications.${type}.toast`) as HTMLInputElement;
 
 /*
  * Audit (component-2a): "offers a mode, a duration and OS Notify for every type — fifteen leaves, no
@@ -231,18 +231,15 @@ const modeFor = (severity: string): HTMLSelectElement =>
  * from those labels by `preferences-enum-labels.test.ts`.
  */
 describe('the Notifications category (migrated from notification-prefs.e2e.ts:304)', () => {
-  it('draws the global OS switch first, then one row each for Error, Warning, Information, Success, Attention, each with a mode, a duration and OS Notify (FR-108, FR-109)', () => {
+  it('draws the global OS switch first, then one row each for Error, Warning, Information, Success, Attention, each with Toast, Panel and OS Notify (FR-108, FR-109; 068 FR-021c moved the duration to one global setting, FR-092 the mode to two checkboxes)', () => {
     mount();
 
     const group = screen.getByTestId('settings-group-Notifications');
     expect(group).toBeVisible();
     expect(within(group).getByTestId('control-notifications.os')).toBeVisible();
     for (const type of TYPES) {
-      expect(modeFor(type)).toBeVisible();
-      // `timeoutMs`, and it renders TWO controls — a slider and a number field, which the E2E's
-      // `durationMs` guess would have missed even had the name been right.
-      expect(screen.getByTestId(`control-notifications.${type}.timeoutMs`)).toBeVisible();
-      expect(screen.getByTestId(`control-notifications.${type}.timeoutMs-slider`)).toBeVisible();
+      expect(toastFor(type)).toBeVisible();
+      expect(screen.getByTestId(`control-notifications.${type}.panel`)).toBeVisible();
       expect(screen.getByTestId(`control-notifications.${type}.os`)).toBeVisible();
     }
     const rows = [...group.querySelectorAll<HTMLElement>('[data-testid^="setting-row-"]')];
@@ -259,107 +256,9 @@ describe('the Notifications category (migrated from notification-prefs.e2e.ts:30
     expect(all[0]).toBe(within(group).getByTestId('setting-notifications.os'));
     // One set of row actions per row, none per leaf.
     for (const t of TYPES) expect(within(group).getByTestId(`setting-reset-notifications.${t}`)).toBeInTheDocument();
-    expect(within(group).queryByTestId('setting-reset-notifications.error.mode')).toBeNull();
+    expect(within(group).queryByTestId('setting-reset-notifications.error.toast')).toBeNull();
   });
 });
 
-describe('silencing a FAILURE severity is confirmed (FR-008, migrated from notification-prefs.e2e.ts:654)', () => {
-  /** Choose a mode the way the tab's own `commit()` is reached — a change event on the select. */
-  const choose = (severity: string, value: string): void => {
-    fireEvent.change(modeFor(severity), { target: { value } });
-  };
-
-  it('asks before an ERROR is silenced, and names the consequence rather than the word', () => {
-    mount();
-
-    choose('error', 'never');
-
-    /*
-     * SYNCHRONOUS, and it has to be: this file runs on fake timers for its debounce, and
-     * `findBy*` polls on a real interval that never advances — every await here hung to the 5s
-     * test timeout. `commit()` calls `confirm()` in the change handler, so the dialog is in the
-     * DOM by the time `fireEvent.change` returns, and asserting that directly is stronger than
-     * waiting for it.
-     */
-    /*
-     * The MESSAGE element, not the dialog — and without the word "never".
-     *
-     * The migrated assertion was `/report nothing|not be shown|never/i` against the whole dialog,
-     * and its red step showed it proved nothing: the TITLE is "Never display error notices?", so
-     * the alternation matched before the message was ever consulted. Replacing the entire message
-     * with "Are you sure?" left it green — which is the exact thing the assertion exists to forbid.
-     */
-    const message = within(screen.getByTestId('confirm-dialog')).getByTestId('confirm-message');
-    expect(message.textContent ?? '').toMatch(/report nothing/i);
-    expect(message.textContent ?? '').toMatch(/diagnostic log/i);
-  });
-
-  it('leaves the setting alone when the dialog is declined — and writes NOTHING', async () => {
-    /*
-     * The select's VALUE proves nothing here, and its red step said so: this mount has no config
-     * bridge, so the control reads the shipped document and could not change whatever `applyEdit`
-     * did. Making the change apply on decline left all twelve green.
-     *
-     * The observable that does discriminate is the WRITE. `commit()` calls `applyEdit` only inside
-     * the confirm promise's `.then((accepted) => accepted && …)`, so a decline must reach the bridge
-     * not at all — and a write spy is the only thing in this mount that can tell.
-     */
-    const writes: string[] = [];
-    Reflect.set(window, 'throng', {
-      config: {
-        // writePatch, NOT write. applyChange goes through writeConfigPatch (write-config.ts
-        // :164), which reads window.throng.config.writePatch and returns an unavailable result if it
-        // is absent - so a spy on write() observes nothing and the assertion is vacuous, which is
-        // what its red step reported.
-        writePatch: (_id: unknown, changes: unknown) => {
-          writes.push(JSON.stringify(changes));
-          return Promise.resolve({ ok: true });
-        },
-      },
-    });
-    mount();
-    expect(modeFor('error').value).toBe('dismiss');
-
-    choose('error', 'never');
-    expect(screen.getByTestId('confirm-dialog')).toBeVisible();
-    // Nothing yet: the question is asked BEFORE anything is written, which is what makes it a
-    // question rather than a notification.
-    expect(writes).toEqual([]);
-
-    fireEvent.click(screen.getByTestId('confirm-cancel'));
-
-    // No wait is needed and the migrated test explains why: `commit()` only calls `applyEdit` inside
-    // the confirm promise's `.then((accepted) => accepted && …)`, so a decline never starts a write.
-    // The dialog's removal is proof the decision landed. It settles on a microtask (the confirm
-    // promise's `.then`), which `act` flushes — no timer is involved, so fake timers are no
-    // obstacle here.
-    await act(async () => {});
-    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-    expect(writes, 'a declined confirmation wrote to the settings document').toEqual([]);
-    expect(modeFor('error').value).toBe('dismiss');
-    Reflect.deleteProperty(window, 'throng');
-  });
-
-  it('asks for a WARNING too — a partly-failed operation reporting nothing is the same bargain', () => {
-    mount();
-
-    choose('warning', 'never');
-
-    expect(screen.getByTestId('confirm-dialog')).toBeVisible();
-  });
-
-  it('does NOT ask for INFO or SUCCESS — there is no failure to miss, so a prompt would nag', () => {
-    /*
-     * The discriminating half, and the one an "asks first" test cannot make on its own: a dialog on
-     * every severity would satisfy all three assertions above. The migrated test checked `info`;
-     * `success` is the same bargain and had no test at all.
-     */
-    mount();
-
-    choose('info', 'never');
-    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-
-    choose('success', 'never');
-    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-  });
-});
+// 068 FR-092: the consent to silence a failure type is two-keyed now, and its tests are
+// `preferences-notification-switches.test.ts`, which seeds the Panel value beside the clicked box.

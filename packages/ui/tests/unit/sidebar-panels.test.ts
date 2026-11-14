@@ -70,6 +70,18 @@ describe('the sidebar is Projects and Sub-workspaces, in that order', () => {
   });
 });
 
+describe('Sub-workspaces minimises to its header (068 FR-036, FR-037)', () => {
+  it('persists the minimised flags under throng.sidebarPanelMinimised and marks only Sub-workspaces minimisable', () => {
+    const src = readFileSync(APP, 'utf8');
+    const at = src.indexOf('storageKey="throng.sidebarPanelSizes"');
+    expect(src.slice(at, at + 200)).toContain('minimisedStorageKey="throng.sidebarPanelMinimised"');
+    const body = src.slice(at, src.indexOf(']}', src.indexOf('panels={[', at)));
+    // Projects is always the panel the space goes to; only the lower panel offers the control.
+    expect([...body.matchAll(/minimisable:\s*true/g)]).toHaveLength(1);
+    expect(body.indexOf('minimisable: true')).toBeGreaterThan(body.indexOf("key: 'subworkspaces'"));
+  });
+});
+
 describe('the Terminals panel is gone, and has not crept back (021)', () => {
   it('appears nowhere in the renderer, by any of the three names it had', () => {
     /*

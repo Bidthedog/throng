@@ -269,3 +269,62 @@ describe('registerNoticeLogIpc (the channel)', () => {
     expect(sink.written[0]?.level).toBe('debug');
   });
 });
+
+describe('noticeLogLines, anonymised (068 FR-034a, FR-034c)', () => {
+  const apply = (text: string): string =>
+    text.replaceAll('Alpha', '<project:p-1>').replaceAll('D:\\work', '<path-aaaaaaaa>');
+  const alias = { apply, token: (label: string, value: string): string => `<${label}-${value.length}>` };
+
+  it('names the project by id and states the pending count', () => {
+    const [line] = noticeLogLines(
+      noticeLogRecord({ severity: 'error', message: 'Could not rename it.', projectId: 'p-1', pending: 4 }),
+    );
+    expect(line).toBe('severity=error project=<project:p-1> pending=4 | Could not rename it.');
+  });
+
+  it('runs the subject, action, title, cause, message, detail and panel names through the anonymiser', () => {
+    const lines = noticeLogLines(
+      noticeLogRecord({
+        severity: 'error',
+        message: 'Could not open D:\\work\\a.txt',
+        subject: { kind: 'panel', name: 'one.txt', tab: 'Tab 1', project: 'Alpha' },
+        title: 'Alpha failed',
+        action: 'open D:\\work',
+        causeKey: 'path-missing:D:\\work',
+        detail: 'ENOENT D:\\work\\a.txt',
+        affectedDetails: [{ panel: 'Alpha — Tab 1 — two.txt', detail: 'EPERM D:\\work' }],
+      }),
+      alias,
+    );
+    const text = lines.join('\n');
+    expect(text).not.toMatch(/Alpha|D:\\work|one\.txt|two\.txt/);
+    // A bare file name carries no mark `apply` could find, so the subject's parts are tokenised whole.
+    expect(text).toContain('subject="<project:p-1> — Tab 1 — <name-7>"');
+    expect(text).toContain('panel="<project:p-1> — Tab 1 — <name-7>" detail');
+    expect(text).toContain('cause="path-missing:<path-aaaaaaaa>"');
+    expect(lines).toHaveLength(3);
+  });
+
+  it('tokenises a name quoted in prose, and leaves apostrophes alone', () => {
+    const [line] = noticeLogLines(
+      noticeLogRecord({ severity: 'error', message: "Couldn't rename \"my notes.txt\" - it's locked." }),
+      alias,
+    );
+    expect(line).toBe("severity=error | Couldn't rename \"<name-12>\" - it's locked.");
+  });
+
+  it('writes the anonymised lines through the sink when it carries an anonymiser', () => {
+    const written: string[] = [];
+    const sink: NoticeLogSink = {
+      logAlways: (_level, message) => written.push(message),
+      anonymiser: alias,
+    };
+    const ipc = fakeIpc();
+    registerNoticeLogIpc(sink, ipc);
+    ipc.fire(
+      noticeLogRecord({ severity: 'error', message: 'Alpha broke', detail: 'at D:\\work\\x', projectId: 'p-1', pending: 2 }),
+    );
+    expect(written.join('\n')).not.toMatch(/Alpha|D:\\work/);
+    expect(written[0]).toContain('pending=2');
+  });
+});

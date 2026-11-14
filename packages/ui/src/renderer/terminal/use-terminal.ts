@@ -1649,7 +1649,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
         if (typeof res.windowTitle === 'string') setTerminalTitle(panelId, res.windowTitle);
         // …and the command it last observed: this panel dropped it as it mounted, and an unchanged
         // command is never published again — so a project switch would name none until it changed.
-        if (res.command !== undefined) reportTerminalCommand(panelId, res.command, res.arch);
+        if (res.command !== undefined) reportTerminalCommand(panelId, res.command, res.arch, res.memoryCommand);
         // Conform to the session's shared grid BEFORE replaying scrollback, so a view
         // joining an existing session (whose minimum it may not move — e.g. a larger
         // window mirroring a smaller one) renders the replayed screen at the right size

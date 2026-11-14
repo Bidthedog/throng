@@ -16,8 +16,10 @@ import {
   DEFAULT_NOTIFICATION_SETTINGS,
   DISPLAY_MODES,
   DISPLAY_MODE_LABELS,
-  TIMEOUT_MAX_MS,
-  TIMEOUT_MIN_MS,
+  PANEL_LIMIT_MAX,
+  PANEL_LIMIT_MIN,
+  TOAST_DURATION_MAX_MS,
+  TOAST_DURATION_MIN_MS,
 } from '../../src/notice/display-mode.js';
 
 describe('SETTINGS_METADATA completeness (FR-047)', () => {
@@ -137,113 +139,131 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
   });
 });
 
-describe('SETTINGS_METADATA notification leaves (030 US1, #224)', () => {
+describe('terminals.defaultRememberCommand description (068 US5, FR-051, FR-052)', () => {
+  it('says a running Claude Code session is remembered as a resume of that session, and nothing about its view', () => {
+    const d = SETTINGS_METADATA.find((x) => x.key === 'terminals.defaultRememberCommand');
+    expect(d?.description).toMatch(/Claude Code session/);
+    expect(d?.description).toMatch(/resume of that session/);
+    expect(d?.description).not.toMatch(/restor|screen|conversation|scrollback|view/i);
+  });
+});
+
+describe('SETTINGS_METADATA notification leaves (030 US1, #224; 068 US3)', () => {
   const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
-  const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
+  const TYPES = ['error', 'warning', 'info', 'success', 'attention'] as const;
 
-  /*
-   * The COUNT is not asserted here — the completeness block above already does it, from the leaves
-   * of DEFAULT_APP_SETTINGS. Eight new leaves without eight descriptors fails there, and a ninth
-   * descriptor for a leaf that does not exist fails there too. What that cannot see is whether the
-   * bounds a descriptor declares are the bounds the parser enforces: a control that let you commit
-   * 500 ms into a setting the parser then silently replaced with the default is issue #227's defect,
-   * and it is invisible to any completeness rule.
-   */
-  it('describes both leaves of all four severities', () => {
-    for (const severity of SEVERITIES) {
-      expect(byKey.has(`notifications.${severity}.mode`), severity).toBe(true);
-      expect(byKey.has(`notifications.${severity}.timeoutMs`), severity).toBe(true);
+  it('describes the Toast, Panel and OS switches of every type, and no mode or per-type timeout (FR-021c, FR-092)', () => {
+    for (const type of TYPES) {
+      expect(byKey.has(`notifications.${type}.toast`), type).toBe(true);
+      expect(byKey.has(`notifications.${type}.panel`), type).toBe(true);
+      expect(byKey.has(`notifications.${type}.os`), type).toBe(true);
+      expect(byKey.has(`notifications.${type}.mode`), type).toBe(false);
+      expect(byKey.has(`notifications.${type}.timeoutMs`), type).toBe(false);
     }
   });
 
-  it('offers exactly the three display modes, as a constrained choice', () => {
-    for (const severity of SEVERITIES) {
-      const d = byKey.get(`notifications.${severity}.mode`);
-      expect(d?.control, severity).toBe('select');
-      expect(d?.allowedValues, severity).toEqual(['never', 'timed', 'dismiss']);
+  it('draws Toast and Panel as checkboxes named Toast and Panel (FR-092)', () => {
+    for (const type of TYPES) {
+      expect(byKey.get(`notifications.${type}.toast`), type).toMatchObject({ control: 'toggle', label: 'Toast' });
+      expect(byKey.get(`notifications.${type}.panel`), type).toMatchObject({ control: 'toggle', label: 'Panel' });
     }
   });
 
-  /*
-   * FR-001's THREE NAMES, on the control itself.
-   *
-   * The stored values are machine tokens, and the generic Title-Case fallback turns them into
-   * "Never", "Timed" and "Dismiss" — three words the specification never uses, one of which
-   * ("Dismiss") reads as a button that would dismiss something rather than a mode. The names FR-001
-   * gives are the ones the user is asked about in the FR-008 confirmation and the ones every issue
-   * comment uses, so the dropdown has to say them.
-   */
-  it('names the three modes as FR-001 does, not as the token fallback would', () => {
-    for (const severity of SEVERITIES) {
-      const d = byKey.get(`notifications.${severity}.mode`);
-      expect(d?.optionLabels, severity).toEqual({
-        never: 'Never display',
-        timed: 'Display for',
-        dismiss: 'Dismiss only',
+  it('asks before the last of Toast and Panel is cleared for error and warning only (030 FR-008, FR-092)', () => {
+    for (const type of ['error', 'warning'] as const) {
+      expect(byKey.get(`notifications.${type}.toast`)?.confirmWhen, type).toEqual({
+        is: false,
+        alsoWhen: { key: `notifications.${type}.panel`, is: false },
+      });
+      expect(byKey.get(`notifications.${type}.panel`)?.confirmWhen, type).toEqual({
+        is: false,
+        alsoWhen: { key: `notifications.${type}.toast`, is: false },
       });
     }
-  });
-
-  it('bounds every timeout at the values the parser enforces (3000–30000)', () => {
-    // Read from the notice module rather than retyped: a descriptor whose bounds drift from the
-    // clamp is the bug, so the test must not carry its own copy of either number.
-    for (const severity of SEVERITIES) {
-      const d = byKey.get(`notifications.${severity}.timeoutMs`);
-      expect(d?.min, severity).toBe(TIMEOUT_MIN_MS);
-      expect(d?.max, severity).toBe(TIMEOUT_MAX_MS);
-      expect(d?.min, severity).toBe(3000);
-      expect(d?.max, severity).toBe(30000);
-      expect(d?.step, severity).toBe(500);
+    for (const type of ['info', 'success', 'attention'] as const) {
+      expect(byKey.get(`notifications.${type}.toast`)?.confirmWhen, type).toBeUndefined();
+      expect(byKey.get(`notifications.${type}.panel`)?.confirmWhen, type).toBeUndefined();
     }
   });
 
-  /*
-   * THE SHIPPED DEFAULTS ARE REACHABLE BY DRAGGING — which is what the bounds change bought.
-   *
-   * Under the old 1500–60000 range a step of 500 was illegal (the slider guard wants at least 1% of
-   * a 58500 range, i.e. 585) and the smallest legal step, 750, put 5000 and 10000 BETWEEN two stops:
-   * a user who dragged the thumb could never get back to the value their app shipped with, and the
-   * only route home was Reset or hand-editing JSON. 3000–30000 makes 1% equal 270, so 500 is legal,
-   * and every shipped default sits exactly on the grid.
-   */
-  it('puts every shipped default on the slider grid, so a drag can return to it', () => {
-    for (const severity of SEVERITIES) {
-      const d = byKey.get(`notifications.${severity}.timeoutMs`)!;
-      const shipped = DEFAULT_NOTIFICATION_SETTINGS[severity].timeoutMs;
-      expect(shipped, severity).toBeGreaterThanOrEqual(d.min!);
-      expect(shipped, severity).toBeLessThanOrEqual(d.max!);
-      expect(
-        (shipped - d.min!) % d.step!,
-        `${severity}: the shipped ${shipped} ms is between two stops of a ${d.step} ms slider`,
-      ).toBe(0);
+  it('says that Panel keeps the notice in the Notifications panel until dismissed, with or without a toast', () => {
+    for (const type of TYPES) {
+      expect(byKey.get(`notifications.${type}.panel`)?.description, type).toMatch(
+        /Notifications panel until (you )?dismiss.*with or without a toast/is,
+      );
+      expect(byKey.get(`notifications.${type}.toast`)?.description, type).toMatch(/with neither, it is shown nowhere/i);
     }
   });
 
-  // 057 FR-108 – FR-111: the global OS switch, then five types of three leaves each.
-  it('groups all sixteen under Notifications, so they arrive as one section', () => {
+  it('declares the toast duration as a 1000–30000 slider with a 500 ms step, and says what pauses it (FR-021c, FR-091)', () => {
+    const d = byKey.get('notifications.toastDurationMs');
+    expect(d).toMatchObject({ control: 'slider', min: TOAST_DURATION_MIN_MS, max: TOAST_DURATION_MAX_MS, step: 500, group: 'Notifications' });
+    expect(d?.min).toBe(1000);
+    expect(d?.max).toBe(30000);
+    expect(d?.description).toMatch(/pointer is over it/i);
+    expect(d?.description).toMatch(/keyboard focus is inside it/i);
+    // The shipped default is on the grid, so a drag can return to it.
+    expect((DEFAULT_NOTIFICATION_SETTINGS.toastDurationMs - d!.min!) % d!.step!).toBe(0);
+  });
+
+  it('declares the toast width as a 300–800 px slider on a 10 px step, in the Notifications group (FR-076, FR-090)', () => {
+    const d = byKey.get('notifications.toastWidthPx');
+    expect(d).toMatchObject({ control: 'slider', min: 300, max: 800, step: 10, group: 'Notifications' });
+    expect(d?.description).toMatch(/half the window/i);
+    // The shipped default is on the grid, so a drag can return to it, and the maximum is reachable.
+    expect((DEFAULT_NOTIFICATION_SETTINGS.toastWidthPx - d!.min!) % d!.step!).toBe(0);
+    expect((d!.max! - d!.min!) % d!.step!).toBe(0);
+  });
+
+  it('every type Toast description states the toast duration and the pointer/focus pause, with no stale wording (FR-032)', () => {
+    for (const type of ['error', 'warning', 'info', 'success', 'attention']) {
+      const text = byKey.get(`notifications.${type}.toast`)?.description ?? '';
+      expect(text, type).toMatch(/leaves after the toast duration/i);
+      expect(text, type).toMatch(/pointer is over it or focus is inside it/i);
+      expect(text, type).not.toMatch(/shorten|Display for/i);
+    }
+  });
+
+  it('labels the confirm switch as FR-026c names it', () => {
+    expect(byKey.get('notifications.confirmDismissAll')?.label).toBe('Confirm before dismissing all notifications');
+  });
+
+  it('declares the confirm switch as a toggle and the panel limit as a 20–500 slider with a 10 step', () => {
+    expect(byKey.get('notifications.confirmDismissAll')).toMatchObject({ control: 'toggle', group: 'Notifications' });
+    const d = byKey.get('notifications.panelLimit');
+    expect(d).toMatchObject({ control: 'slider', min: PANEL_LIMIT_MIN, max: PANEL_LIMIT_MAX, step: 10, group: 'Notifications' });
+    expect(d?.min).toBe(20);
+    expect(d?.max).toBe(500);
+    expect(d?.description).toMatch(/oldest/i);
+    expect(d?.description).toMatch(/warn/i);
+    expect((DEFAULT_NOTIFICATION_SETTINGS.panelLimit - d!.min!) % d!.step!).toBe(0);
+    expect((d!.max! - d!.min!) % d!.step!).toBe(0);
+  });
+
+  it('groups all twenty under Notifications, so they arrive as one section', () => {
     const notifications = SETTINGS_METADATA.filter((d) => d.key.startsWith('notifications.'));
-    expect(notifications).toHaveLength(16);
+    expect(notifications).toHaveLength(20);
     for (const d of notifications) expect(d.group, d.key).toBe('Notifications');
   });
 
-  it('gives each type one row of mode, duration and OS switch, after the global switch (FR-108)', () => {
+  it('gives each type one row of Toast, Panel and OS switch, after the global switch (FR-108, FR-092)', () => {
     const notifications = SETTINGS_METADATA.filter((d) => d.group === 'Notifications');
     expect(notifications[0]).toMatchObject({ key: 'notifications.os', control: 'toggle' });
     expect(notifications[0]!.row).toBeUndefined();
-    for (const type of ['error', 'warning', 'info', 'success', 'attention']) {
+    for (const type of TYPES) {
       const row = notifications.filter((d) => d.row?.id === `notifications.${type}`).map((d) => d.key);
-      expect(row, type).toEqual([`notifications.${type}.mode`, `notifications.${type}.timeoutMs`, `notifications.${type}.os`]);
+      expect(row, type).toEqual([`notifications.${type}.toast`, `notifications.${type}.panel`, `notifications.${type}.os`]);
     }
   });
 
   // Round 5: "OS Notify", independent of the mode, shown only while throng is not focused, and inert
   // (keeping its value) while the global switch is off.
   it('labels each OS leaf "OS Notify", says when it shows, and makes it wait on the global switch', () => {
-    for (const type of ['error', 'warning', 'info', 'success', 'attention']) {
+    for (const type of TYPES) {
       const d = SETTINGS_METADATA.find((x) => x.key === `notifications.${type}.os`)!;
       expect(d.label, type).toBe('OS Notify');
       expect(d.description, type).toMatch(/not focused/);
-      expect(d.description, type).toMatch(/whatever .*display/i);
+      expect(d.description, type).toMatch(/whatever Toast and Panel say/i);
       expect(d.enabledWhen, type).toEqual({ key: 'notifications.os', is: true });
     }
   });
@@ -403,7 +423,6 @@ describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/
     // array is what holds the section membership for the whole family: a ninth key added to
     // `search.inFiles` and left out of this list is a row rendered under a heading nobody checked.
     'search.inFiles.summaryNoticeMode',
-    'search.inFiles.summaryNoticeTimeoutMs',
   ];
 
   it('starts a scan as the user types, by default (FR-074)', () => {
@@ -467,41 +486,12 @@ describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/
 });
 
 /**
- * 043 T199 — the replace summary notice gets a display mode and a duration OF ITS OWN (FR-082).
- *
- * ══ WHY THESE TWO ARE NOT `notifications.*` KEYS ══
- *
- * Because they govern ONE notice rather than a severity. FR-082 states the cost of that in as many
- * words: for this notice the global `notifications.*` settings are not consulted at all, so a user
- * whose global preference is that errors stay until dismissed does not get that behaviour here. That
- * is a deliberate override, and the pair therefore belongs in this feature's own section — a
- * preference that governs only Find in Files, in the group named after it (FR-076).
- *
- * ══ WHAT IS ASSERTED, AND WHY EACH ONE ══
- *
- *  - The application's EXISTING display vocabulary, not a parallel one. `allowedValues` is
- *    `DISPLAY_MODES` itself and `optionLabels` is `DISPLAY_MODE_LABELS` itself — identity, not
- *    equality, because a copied array is exactly how a fourth mode comes to exist in one dropdown
- *    and not the other.
- *  - The bounds are `TIMEOUT_MIN_MS`/`TIMEOUT_MAX_MS`, for #227's reason: a descriptor whose bounds
- *    disagree with the parse's clamp ships a control offering values the parser silently replaces.
- *  - The shipped default sits exactly ON a slider stop. That is RE-DERIVED here from the shipped
- *    constants rather than taken on trust from the 5000 that `notifications.*` already ships: a
- *    value between two stops is reachable only by typing, so a user who drags the control can never
- *    get back to what the application came with, and this repository has been bitten by it once
- *    already (the reasoning at `display-mode.ts:44-60`).
- *
- * ══ THE DEFAULT IS NOT SELF-CONTRADICTORY ══
- *
- * `dismiss` with a 5000 ms timeout is what `error` and `warning` already ship. A timeout is stored
- * for every severity whatever its mode — so switching to *Display for* never presents an empty
- * control — and it is consulted only under `timed`. A stored 5000 under `dismiss` is a value waiting
- * to become meaningful.
+ * 043 T199, reshaped by 068 FR-021d — the replace summary notice keeps a display mode of its OWN
+ * (FR-082) and loses its timeout: every toast now leaves after the one global toast duration.
  */
-describe('the replace summary notice has a display mode and a duration of its own (FR-082)', () => {
+describe('the replace summary notice has a display mode of its own (FR-082)', () => {
   const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
   const MODE_KEY = 'search.inFiles.summaryNoticeMode';
-  const TIMEOUT_KEY = 'search.inFiles.summaryNoticeTimeoutMs';
 
   it('offers the three modes the rest of the application offers, under their own names', () => {
     const d = byKey.get(MODE_KEY);
@@ -512,47 +502,23 @@ describe('the replace summary notice has a display mode and a duration of its ow
     expect(d?.optionLabels).toBe(DISPLAY_MODE_LABELS);
   });
 
-  it('bounds the duration exactly as the parse does, on a slider (FR-082, #227)', () => {
-    const d = byKey.get(TIMEOUT_KEY);
-    expect(d, `${TIMEOUT_KEY} has no descriptor`).toBeDefined();
-    expect(d?.control).toBe('slider');
-    expect(d?.min).toBe(TIMEOUT_MIN_MS);
-    expect(d?.max).toBe(TIMEOUT_MAX_MS);
-    expect(d?.step).toBe(500);
+  it('has no timeout descriptor any more', () => {
+    expect(byKey.has('search.inFiles.summaryNoticeTimeoutMs')).toBe(false);
   });
 
-  it('ships dismiss / 5000 ms — and the 5000 lands ON a stop, re-derived', () => {
-    const shipped = DEFAULT_APP_SETTINGS.search.inFiles;
-    expect(shipped.summaryNoticeMode).toBe('dismiss');
-    expect(shipped.summaryNoticeTimeoutMs).toBe(5000);
-
-    const d = byKey.get(TIMEOUT_KEY);
-    expect(shipped.summaryNoticeTimeoutMs).toBeGreaterThanOrEqual(d!.min!);
-    expect(shipped.summaryNoticeTimeoutMs).toBeLessThanOrEqual(d!.max!);
-    expect(
-      (shipped.summaryNoticeTimeoutMs - d!.min!) % d!.step!,
-      'a shipped value between two stops is unreachable by dragging',
-    ).toBe(0);
+  it('ships panel', () => {
+    expect(DEFAULT_APP_SETTINGS.search.inFiles.summaryNoticeMode).toBe('panel');
   });
 
-  it('keeps both OUT of the Notifications section (FR-076)', () => {
-    // The section membership itself is asserted once, over the whole eight, by
-    // `FIND_IN_FILES_KEYS` above. This is the other half of that claim and the one a reader is
-    // likeliest to get wrong: a mode-and-timeout pair looks like it belongs beside the four
-    // severities, and putting it there would tell the user it governs them.
-    for (const key of [MODE_KEY, TIMEOUT_KEY]) {
-      expect(byKey.get(key)?.group, key).not.toBe('Notifications');
-    }
+  it('stays OUT of the Notifications section (FR-076)', () => {
+    expect(byKey.get(MODE_KEY)?.group).not.toBe('Notifications');
   });
 
-  it('leaves the four global severities exactly as they were — this overrides nothing else', () => {
-    // The discriminating half. FR-082 takes the global settings out of the loop for ONE notice; a
-    // change that reached `notifications.*` would be a far larger one than the requirement asks for.
-    // (057 FR-110 gave each an OS switch, off by default.)
-    expect(DEFAULT_NOTIFICATION_SETTINGS.error).toEqual({ mode: 'dismiss', timeoutMs: 5000, os: false });
-    expect(DEFAULT_NOTIFICATION_SETTINGS.warning).toEqual({ mode: 'dismiss', timeoutMs: 5000, os: false });
-    expect(DEFAULT_NOTIFICATION_SETTINGS.info).toEqual({ mode: 'timed', timeoutMs: 10000, os: false });
-    expect(DEFAULT_NOTIFICATION_SETTINGS.success).toEqual({ mode: 'timed', timeoutMs: 5000, os: false });
+  it('leaves the global defaults as 068 FR-062 and FR-092 set them', () => {
+    expect(DEFAULT_NOTIFICATION_SETTINGS.error).toEqual({ toast: true, panel: true, os: false });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.warning).toEqual({ toast: true, panel: true, os: false });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.info).toEqual({ toast: true, panel: true, os: false });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.success).toEqual({ toast: true, panel: true, os: false });
   });
 });
 

@@ -1,6 +1,6 @@
 import { isAbsolute, join, relative } from 'node:path';
-import { parseLogLevel, sessionFileName } from '@throng/core';
-import { createFileLog, type DiagnosticLog } from '@throng/platform-node';
+import { parseLogLevel, sensitive, sessionFileName } from '@throng/core';
+import { createFileLog, createProcessAnonymiser, type DiagnosticLog } from '@throng/platform-node';
 
 /**
  * The PTY agent's log (066 FR-017, contract *PTY agent*).
@@ -36,9 +36,42 @@ export function resolveAgentLogDir(arg: string | undefined, env: NodeJS.ProcessE
   return env.THRONG_LOG_DIR || undefined;
 }
 
+/** The salt travels as argv[4] (see {@link AgentLogOptions.saltArg}); it must never be written out. */
+export function describeAgentArgv(argv: readonly string[]): string {
+  return JSON.stringify(argv.map((arg, index) => (index === 4 ? '<salt>' : arg)));
+}
+
+/**
+ * The `start` request as one log line. The file and arguments are the user's command (068 FR-034b),
+ * which no pattern can recognise, so they are marked `sensitive` and the anonymiser logs a token.
+ */
+export function describeAgentStart(msg: {
+  key: string | number;
+  file: string;
+  args: readonly string[];
+  cwd: string;
+  cols: number;
+  rows: number;
+}): string {
+  return (
+    `cmd start key=${msg.key} file=${sensitive('command', msg.file)} ` +
+    `args=${sensitive('command', JSON.stringify(msg.args))} cwd=${msg.cwd} cols=${msg.cols} rows=${msg.rows}`
+  );
+}
+
+/** A protocol line that did not parse: its text is keystrokes and commands, so it is a token, not a quote. */
+export function describeMalformedLine(reason: string, line: string): string {
+  return `ignored malformed line (${reason}): ${sensitive('line', line.slice(0, 200))}`;
+}
+
 export interface AgentLogOptions {
   /** `argv[3]` — the encoded log folder, if the daemon passed one. */
   readonly arg: string | undefined;
+  /**
+   * `argv[4]` — the anonymiser's salt (068 FR-034a). An extra argument, not an environment variable,
+   * because the de-elevated launch drops the environment; absent, a salt of its own is used (nothing is read from or written to the logs folder).
+   */
+  readonly saltArg?: string | undefined;
   /** The agent's own environment: `APPDATA`, and the level and retention a plain spawn inherits. */
   readonly env: NodeJS.ProcessEnv;
   readonly pid: number;
@@ -50,10 +83,12 @@ export function openAgentLog(options: AgentLogOptions): DiagnosticLog | null {
   const dir = resolveAgentLogDir(options.arg, options.env);
   if (!dir) return null;
   const { env } = options;
+  const { anonymiser } = createProcessAnonymiser({ logDir: dir, salt: options.saltArg || env.THRONG_LOG_SALT });
   return createFileLog({
     dir,
     fileName: sessionFileName('pty-agent', options.startedAt, options.pid),
     component: 'pty-agent',
+    anonymiser,
     level: parseLogLevel(env.THRONG_LOG_LEVEL),
     retention: {
       maxFileBytes: Number(env.THRONG_LOG_MAX_KB) * 1024 || undefined,

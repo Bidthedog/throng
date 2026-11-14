@@ -66,6 +66,8 @@ export function EditorNoticeDialog(): ReactElement | null {
         ) : undefined,
       // Acknowledging the notice clears the store, exactly as the OK button used to.
       onDismiss: dismissEditorNotice,
+      // B10 — an expiry acknowledges it too, or the store keeps the notice and an identical next one is lost.
+      onExpire: dismissEditorNotice,
     });
   }, [notice, notify]);
 

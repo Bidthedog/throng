@@ -8,6 +8,7 @@ import process from 'node:process';
 import { randomUUID } from 'node:crypto';
 import { Container } from 'inversify';
 import type {
+  Anonymiser,
   IDaemonSettings,
   IPersistenceSettings,
   IPlatformInfo,
@@ -59,6 +60,7 @@ import { PanelNameIpcService } from './panel-name-service.js';
 import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
 import { TerminalService } from './terminal-service.js';
+import { ClaudeSessionResolver, claudeConfigDir } from './claude-session-resolver.js';
 import { DEFAULT_AGENT_BUDGETS, PtyAgentHost, logToConsole } from './pty-agent-host.js';
 import { encodeAgentLogDir } from './pty-agent-log.js';
 
@@ -146,10 +148,23 @@ export function readCommandPollMs(env: NodeJS.ProcessEnv, installedConfigRoot?: 
   }
 }
 
+/** 068: the bound on reading Claude Code's session record, so an observation is never held up by it. */
+const CLAUDE_SESSION_READ_LIMIT_MS = 750;
+
 /** Where the daemon's own failures are recorded — its file log when it has one (066 FR-005). */
 export type DaemonLog = (level: LogLevel, message: string) => void;
 
-export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?: DaemonLog): Container {
+/** 068 FR-034a: the daemon's anonymiser and the salt that keys it, passed on to the PTY agent. */
+export interface DaemonAnonymity {
+  readonly anonymiser: Anonymiser;
+  readonly salt: string;
+}
+
+export function createDaemonContainer(
+  env: NodeJS.ProcessEnv = process.env,
+  log?: DaemonLog,
+  anonymity?: DaemonAnonymity,
+): Container {
   const container = new Container({ defaultScope: 'Singleton' });
   const platform = startPlatform();
   const directories = platform.userDirectories();
@@ -192,6 +207,15 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?
     userContext,
     newId,
     now,
+    // 068 FR-034a: the log names a project by its internal id, so each root and name read is taught.
+    onProjectsKnown: anonymity
+      ? (known) => {
+          for (const p of known) {
+            anonymity.anonymiser.register('projectRoot', p.rootFolder, p.id);
+            if (p.name) anonymity.anonymiser.register('projectName', p.name, p.id);
+          }
+        }
+      : undefined,
   });
   const categoryService = new ProjectCategoryService({
     store: categoryStore,
@@ -248,7 +272,11 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?
   // 066 FR-017: the agent's log folder travels as its second argument, because the de-elevated launch
   // drops the environment `THRONG_LOG_DIR` would arrive in. A folder under `%APPDATA%` goes relative to
   // it, so an agent running as another user writes to that user's throng folder (contract *PTY agent*).
-  const agentLogArgs = env.THRONG_LOG_DIR ? [encodeAgentLogDir(env.THRONG_LOG_DIR, env.APPDATA)] : [];
+  // 068: the anonymiser's salt follows as a third argument for the same reason (research D10).
+  const agentSalt = anonymity?.salt ?? env.THRONG_LOG_SALT;
+  const agentLogArgs = env.THRONG_LOG_DIR
+    ? [encodeAgentLogDir(env.THRONG_LOG_DIR, env.APPDATA), ...(agentSalt ? [agentSalt] : [])]
+    : [];
   const agentLog: DaemonLog = log ?? logToConsole;
   const deElevatedPty: PtyAgentHost = new PtyAgentHost(
     agentPipe,
@@ -347,6 +375,13 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?
         );
       },
     },
+    // 068 FR-043: Claude Code's session record for the foreground process; read-only, time-bounded.
+    new ClaudeSessionResolver({
+      configDir: claudeConfigDir(env),
+      os: platform.platformInfo().osName() === 'windows' ? 'windows' : 'linux',
+      identity: platform.processIdentity(),
+      timeoutMs: CLAUDE_SESSION_READ_LIMIT_MS,
+    }),
   );
   container.bind<TerminalEvents>(DAEMON_TYPES.TerminalEvents).toConstantValue(terminalEvents);
   container.bind<TerminalLockManager>(DAEMON_TYPES.TerminalLockManager).toConstantValue(lockManager);

@@ -2,6 +2,7 @@ import {
   LOG_LEVELS,
   NOTICE_SEVERITIES,
   noticeLogLevel,
+  type Anonymiser,
   type LogLevel,
   type NoticeAffectedDetail,
   type NoticeLogRecord,
@@ -48,6 +49,46 @@ export const NOTICE_LOG_COMPONENT = 'renderer-notice';
 /** The write seam — `UiDiagnostics` satisfies it, and a test can satisfy it with an array. */
 export interface NoticeLogSink {
   logAlways(level: LogLevel, message: string, component?: string): void;
+  /** 068 FR-034a: applied to each user-authored field before the line is joined. */
+  readonly anonymiser?: NoticeAnonymiser;
+}
+
+/** What a notice record needs of the shared anonymiser. */
+export type NoticeAnonymiser = Pick<Anonymiser, 'apply' | 'token'>;
+
+/**
+ * 068 FR-034b — the per-field rules. `apply` finds paths, accounts and registered names; a bare file,
+ * tab or panel name carries no mark it could find, so the fields that ARE names (the parts of a
+ * subject, a panel's name, a cause key's subject, a quoted name in prose) are tokenised whole unless
+ * `apply` already replaced something in them. Over-redaction costs readability, never privacy (FR-034f).
+ */
+function noticeFieldAnonymisers(anon: NoticeAnonymiser | undefined): {
+  prose(text: string): string;
+  subject(text: string): string;
+  cause(key: string): string;
+} {
+  if (!anon) return { prose: (t) => t, subject: (t) => t, cause: (t) => t };
+  const name = (part: string): string => {
+    const out = anon.apply(part);
+    return out !== part || /^<[^>]+>$/.test(part) ? out : anon.token('name', part);
+  };
+  const quotedNames = /"([^"\n]{1,200})"|“([^”\n]{1,200})”|(?<!\w)'([^'\n]{1,200})'(?!\w)/g;
+  return {
+    prose: (text) =>
+      anon.apply(text).replace(quotedNames, (m: string, a?: string, b?: string, c?: string) => {
+        const inner = a ?? b ?? c ?? '';
+        return inner.includes('<') ? m : m.replace(inner, () => name(inner));
+      }),
+    subject: (text) =>
+      text
+        .split(' — ')
+        .map((part) => (/^Tab \d+$/.test(part) ? part : name(part)))
+        .join(' — '),
+    cause: (key) => {
+      const colon = key.indexOf(':');
+      return colon < 0 ? anon.apply(key) : `${key.slice(0, colon + 1)}${name(key.slice(colon + 1))}`;
+    },
+  };
 }
 
 /**
@@ -84,27 +125,33 @@ function quoted(value: string): string {
  * RECORD, so the file stays greppable and one notice never has to be reassembled from a fragment
  * that happened to wrap.
  */
-export function noticeLogLines(record: NoticeLogRecord): string[] {
+export function noticeLogLines(record: NoticeLogRecord, anon?: NoticeAnonymiser): string[] {
+  const names = noticeFieldAnonymisers(anon);
+  const a = names.prose;
   const fields = [`severity=${record.severity}`];
-  if (record.subject) fields.push(`subject=${quoted(record.subject)}`);
+  // 068 FR-034a/FR-034c — the project by its internal id (never its name or path), then the count of
+  // entries waiting in the Notifications panel. Everything user-authored below passes `anonymise`.
+  if (record.projectId) fields.push(`project=<project:${record.projectId}>`);
+  if (record.pending !== undefined) fields.push(`pending=${record.pending}`);
+  if (record.subject) fields.push(`subject=${quoted(names.subject(record.subject))}`);
   // WHAT WAS ATTEMPTED (FR-007). The message says what went wrong and the heading says what the user
   // was doing when it did; a record carrying only the first is `A fresh workspace was opened
   // instead.` with nothing naming the failure — which is what this file's own log said before these
   // two fields existed. Labelled rather than composed into the prose, so `action=` is greppable.
-  if (record.action) fields.push(`action=${quoted(record.action)}`);
-  if (record.title) fields.push(`title=${quoted(record.title)}`);
+  if (record.action) fields.push(`action=${quoted(a(record.action))}`);
+  if (record.title) fields.push(`title=${quoted(a(record.title))}`);
   // Quoted like the subject, and for the same reason: a cause key is `kind:subject`, and that
   // subject is routinely a path or a project name with spaces in it.
-  if (record.causeKey) fields.push(`cause=${quoted(record.causeKey)}`);
+  if (record.causeKey) fields.push(`cause=${quoted(names.cause(record.causeKey))}`);
   if (record.affectedCount !== undefined) fields.push(`affected=${record.affectedCount}`);
 
-  const lines = [`${fields.join(' ')} | ${record.message}`];
+  const lines = [`${fields.join(' ')} | ${a(record.message)}`];
   // The raw system error (FR-034). For a silenced severity this is its ONLY route to the user —
-  // there is no toast to copy it from.
-  if (record.detail) lines.push(`detail | ${record.detail}`);
+  // there is no toast to copy it from. Raw as to the system's words, anonymised as to what they name.
+  if (record.detail) lines.push(`detail | ${a(record.detail)}`);
   // And each affected panel's own error (FR-048a), on its own line, naming the panel it belongs to.
   for (const entry of record.affectedDetails ?? []) {
-    lines.push(`panel=${quoted(entry.panel)} detail | ${entry.detail}`);
+    lines.push(`panel=${quoted(names.subject(entry.panel))} detail | ${a(entry.detail)}`);
   }
   return lines;
 }
@@ -155,6 +202,8 @@ function recordFrom(payload: unknown): NoticeLogRecord {
     action: optionalText(raw.action),
     causeKey: optionalText(raw.causeKey),
     affectedCount: typeof raw.affectedCount === 'number' ? raw.affectedCount : undefined,
+    pending: typeof raw.pending === 'number' && Number.isFinite(raw.pending) && raw.pending >= 0 ? raw.pending : undefined,
+    projectId: optionalText(raw.projectId),
     detail: optionalText(raw.detail),
     affectedDetails: affectedDetailsOf(raw.affectedDetails),
   };
@@ -170,7 +219,7 @@ export function registerNoticeLogIpc(sink: NoticeLogSink, ipc: NoticeLogIpc): vo
   ipc.on(NOTICE_LOG_CHANNEL, (_event, payload) => {
     try {
       const record = recordFrom(payload);
-      for (const line of noticeLogLines(record)) {
+      for (const line of noticeLogLines(record, sink.anonymiser)) {
         sink.logAlways(record.level, line, NOTICE_LOG_COMPONENT);
       }
     } catch (error) {

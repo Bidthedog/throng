@@ -1,13 +1,15 @@
 /**
- * 030 (#224) — whether a notice is displayed at all, and for how long.
+ * 030 (#224), reshaped by 068 US3 — whether a notice is displayed at all, and whether it is kept.
  *
- * Before this, severity decided persistence: an `error` stayed until dismissed and everything else
- * vanished after a hardcoded `AUTO_DISMISS_MS`. That is the defect — the user, not the raiser,
- * decides how long they need to read something, and a notice that vanished before it was read was
- * indistinguishable from one that never happened (Principle X).
+ * Every toast now leaves after ONE global duration (`toastDurationMs`), paused while the pointer is
+ * over it or keyboard focus is inside it (FR-021). What a type chooses is two independent things
+ * (FR-092): whether its notices toast, and whether they are kept in the Notifications panel until the
+ * user dismisses them. Neither is *Never display*; both is the old *Toast and keep in panel*.
  *
- * The three modes are exhaustive by design: never display it, display it for a bounded time, or
- * leave it until it is dismissed. There is no fourth, and no severity is exempt.
+ * `DisplayMode` survives as the vocabulary of ONE notice's own override — the Find in Files replace
+ * summary (043 FR-082), which keeps its drop-down — and as the stored form of a pre-FR-092 type row,
+ * which {@link upgradeNotificationDocument} maps forward along with the pre-068 `timed` / `dismiss`
+ * modes and the per-type `timeoutMs`.
  */
 
 /**
@@ -16,10 +18,10 @@
  * `never` still writes the log record (FR-005/FR-006) — silence in the UI is not silence in the
  * record, which is the whole basis on which a user can be asked to turn a severity off.
  */
-export type DisplayMode = 'never' | 'timed' | 'dismiss';
+export type DisplayMode = 'never' | 'toast' | 'panel';
 
 /** The set, so the parse and the Preferences enum agree without either re-listing it. */
-export const DISPLAY_MODES: readonly DisplayMode[] = ['never', 'timed', 'dismiss'];
+export const DISPLAY_MODES: readonly DisplayMode[] = ['never', 'toast', 'panel'];
 
 /**
  * What each mode is CALLED (FR-001) — the three names the specification, the FR-008 confirmation
@@ -36,40 +38,48 @@ export const DISPLAY_MODES: readonly DisplayMode[] = ['never', 'timed', 'dismiss
  */
 export const DISPLAY_MODE_LABELS: Readonly<Record<DisplayMode, string>> = {
   never: 'Never display',
-  timed: 'Display for',
-  dismiss: 'Dismiss only',
+  toast: 'Toast only',
+  panel: 'Toast and keep in panel',
 };
 
 /**
- * The bounds on a timed notice (FR-010).
- *
- * Below 3000 ms nothing longer than a few words can be read, so the notice would be technically
- * displayed and practically silent — the failure mode the whole feature exists to remove. Above
- * thirty seconds it is indistinguishable from *Dismiss only*, which is the setting to use instead.
- *
- * The range is also what makes the CONTROL work, and that is not a coincidence. A slider's step must
- * be at least 1% of its range (`slider-descriptors.test.ts`), so the old 1500–60000 range forbade
- * any step below 585 — and the smallest usable one, 750, put both shipped defaults BETWEEN two
- * stops. A user who dragged the thumb could not get back to the duration their app shipped with
- * except by Reset or by hand-editing JSON. Across 3000–30000 the 1% floor is 270, so a 500 ms step
- * is legal, and 5000 (= 3000 + 4×500) and 10000 (= 3000 + 14×500) are both exactly reachable.
- *
- * The step belongs to the SLIDER, never to this bound. Any integer in the closed range is a valid
- * setting — 3567 typed into the field is accepted, saved and read back unchanged — because the
- * bounds are the contract and the grid is only an affordance for dragging.
+ * The bounds on the global toast duration (FR-021c, FR-091). One second is the shortest the maintainer
+ * allows, for a user who keeps notices in the panel and wants toasts barely there; above thirty seconds
+ * a toast is a panel entry in all but name. The slider's 500 ms
+ * step is the control's affordance only: any integer in the closed range is a valid setting.
  */
-export const TIMEOUT_MIN_MS = 3000;
-export const TIMEOUT_MAX_MS = 30000;
+export const TOAST_DURATION_MIN_MS = 1000;
+export const TOAST_DURATION_MAX_MS = 30000;
+export const TOAST_DURATION_DEFAULT_MS = 3000;
 
+/** The Notifications panel's entry limit (FR-031d); reaching it drops the oldest and warns once. */
+export const PANEL_LIMIT_MIN = 20;
+export const PANEL_LIMIT_MAX = 500;
+export const PANEL_LIMIT_DEFAULT = 100;
+
+/** 068 FR-076, FR-081, FR-090: the width of every toast, in pixels. The default is what the toast was before the setting existed. */
+export const TOAST_WIDTH_MIN_PX = 300;
+export const TOAST_WIDTH_MAX_PX = 800;
+export const TOAST_WIDTH_DEFAULT_PX = 520;
+
+/**
+ * Where a notice is shown (068 FR-092). The two are independent: `panel` without `toast` keeps the
+ * notice in the Notifications panel with no toast, and neither shows it nowhere in throng — the log
+ * record is still filed (FR-005/FR-006).
+ */
 export interface SeverityNotificationSettings {
-  mode: DisplayMode;
-  /** Only consulted when mode is 'timed'. Bounded 3000–30000 (FR-010). */
-  timeoutMs: number;
+  toast: boolean;
+  panel: boolean;
 }
 
-/** One notification type's row (057 FR-108): its display, and whether it also reaches the OS (FR-110). */
+/** A display mode as the two switches it stands for — the Find in Files summary's override, and an old type row. */
+export function displayOf(mode: DisplayMode): SeverityNotificationSettings {
+  return { toast: mode !== 'never', panel: mode === 'panel' };
+}
+
+/** One notification type's row (057 FR-108; FR-092): Toast, Panel, and whether it also reaches the OS (FR-110). */
 export interface NotificationTypeSettings extends SeverityNotificationSettings {
-  /** Also raise a Windows notification while no throng window is focused. Independent of `mode`. */
+  /** Also raise an OS notification while no throng window is focused. Independent of `toast` and `panel`. */
   os: boolean;
 }
 
@@ -86,18 +96,22 @@ export interface NotificationSettings {
   success: NotificationTypeSettings;
   /** 057 FR-111: attention marks, both kinds. */
   attention: NotificationTypeSettings;
+  /** FR-021c: how long every toast stays, before the pointer or focus pauses it. */
+  toastDurationMs: number;
+  /** FR-076: how wide every toast is, in pixels; never wider than half the window. */
+  toastWidthPx: number;
+  /** FR-026c: whether Dismiss all asks first. */
+  confirmDismissAll: boolean;
+  /** FR-031d: the most entries the Notifications panel holds. */
+  panelLimit: number;
 }
 
 /**
- * The shipped defaults (FR-013).
+ * The shipped defaults (FR-021b to FR-021d, FR-026c, FR-031d).
  *
- * `error` and `warning` are *Dismiss only* because a failure the user has not seen is the bug
- * #224 reports; `info` and `success` are timed because a confirmation that has to be dismissed is
- * an interruption.
- *
- * Every severity carries a `timeoutMs` whatever its mode: switching one to *Display for* in
- * Preferences must not present an empty control, and the silenced-notice shadow (FR-005b) expires
- * its entries after that dwell even when nothing is ever rendered.
+ * Every type toasts and is kept in the panel (FR-062 and FR-092, over FR-021c's toast alone for `info`, `success` and `attention`): a
+ * toast leaves after the toast duration, so the panel is where a notice the user did not see waits —
+ * the bug #224 reports for failures, which the maintainer extended to every type on 2026-11-13.
  *
  * `DEFAULT_APP_SETTINGS.notifications` is this object — the defaults live beside the parse that
  * falls back to them, because `parseNotificationSettings` takes no defaults argument and a second
@@ -108,24 +122,24 @@ export interface NotificationSettings {
  */
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   os: true,
-  error: { mode: 'dismiss', timeoutMs: 5000, os: false },
-  warning: { mode: 'dismiss', timeoutMs: 5000, os: false },
-  info: { mode: 'timed', timeoutMs: 10000, os: false },
-  success: { mode: 'timed', timeoutMs: 5000, os: false },
-  attention: { mode: 'timed', timeoutMs: 10000, os: true },
+  error: { toast: true, panel: true, os: false },
+  warning: { toast: true, panel: true, os: false },
+  info: { toast: true, panel: true, os: false },
+  success: { toast: true, panel: true, os: false },
+  attention: { toast: true, panel: true, os: true },
+  toastDurationMs: TOAST_DURATION_DEFAULT_MS,
+  toastWidthPx: TOAST_WIDTH_DEFAULT_PX,
+  confirmDismissAll: true,
+  panelLimit: PANEL_LIMIT_DEFAULT,
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function displayMode(raw: unknown, fallback: DisplayMode): DisplayMode {
-  return DISPLAY_MODES.includes(raw as DisplayMode) ? (raw as DisplayMode) : fallback;
-}
-
-function timeoutMs(raw: unknown, fallback: number): number {
+function boundedInt(raw: unknown, min: number, max: number, fallback: number): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
-  if (raw < TIMEOUT_MIN_MS || raw > TIMEOUT_MAX_MS) return fallback;
+  if (raw < min || raw > max) return fallback;
   return Math.round(raw);
 }
 
@@ -135,7 +149,7 @@ function timeoutMs(raw: unknown, fallback: number): number {
  * That is a requirement, not a nicety (FR-015). `settings.json` is a file a user edits by hand, and
  * a section that threw would take the Preferences window with it — leaving the only route to
  * repairing the mistake behind the mistake. So each value resolves independently: an unrecognised
- * mode does not discard a perfectly good timeout beside it, an unknown severity key is ignored
+ * switch does not discard a perfectly good one beside it, an unknown severity key is ignored
  * rather than fatal, and an absent section is simply the defaults.
  */
 export function parseNotificationSettings(raw: unknown): NotificationSettings {
@@ -146,24 +160,87 @@ export function parseNotificationSettings(raw: unknown): NotificationSettings {
     const v = isRecord(section[type]) ? section[type] : {};
     resolved[type] = { ...severitySettings(v, fallback), os: typeof v.os === 'boolean' ? v.os : fallback.os };
   }
+  resolved.toastDurationMs = boundedInt(
+    section.toastDurationMs,
+    TOAST_DURATION_MIN_MS,
+    TOAST_DURATION_MAX_MS,
+    DEFAULT_NOTIFICATION_SETTINGS.toastDurationMs,
+  );
+  resolved.toastWidthPx = boundedInt(
+    section.toastWidthPx,
+    TOAST_WIDTH_MIN_PX,
+    TOAST_WIDTH_MAX_PX,
+    DEFAULT_NOTIFICATION_SETTINGS.toastWidthPx,
+  );
+  resolved.confirmDismissAll =
+    typeof section.confirmDismissAll === 'boolean' ? section.confirmDismissAll : DEFAULT_NOTIFICATION_SETTINGS.confirmDismissAll;
+  resolved.panelLimit = boundedInt(section.panelLimit, PANEL_LIMIT_MIN, PANEL_LIMIT_MAX, DEFAULT_NOTIFICATION_SETTINGS.panelLimit);
   return resolved;
 }
 
-/**
- * One mode-and-duration pair, resolved field by field against `fallback`: what a setting that owns a
- * notice's display instead of its severity reads (043 FR-082).
- */
-export function parseNoticeDisplay(raw: unknown, fallback: SeverityNotificationSettings): SeverityNotificationSettings {
-  return severitySettings(raw, fallback);
-}
-
-function severitySettings(
-  raw: unknown,
-  fallback: SeverityNotificationSettings,
-): SeverityNotificationSettings {
+function severitySettings(raw: unknown, fallback: SeverityNotificationSettings): SeverityNotificationSettings {
   const v = isRecord(raw) ? raw : {};
   return {
-    mode: displayMode(v.mode, fallback.mode),
-    timeoutMs: timeoutMs(v.timeoutMs, fallback.timeoutMs),
+    toast: typeof v.toast === 'boolean' ? v.toast : fallback.toast,
+    panel: typeof v.panel === 'boolean' ? v.panel : fallback.panel,
   };
+}
+
+/** The pre-068 mode a stored token is mapped to; anything else is left for the parse to resolve. */
+function upgradedMode(mode: unknown): unknown {
+  if (mode === 'dismiss') return 'panel';
+  if (mode === 'timed') return 'toast';
+  return mode;
+}
+
+/**
+ * A type row's stored `mode` as FR-092's two switches, for whichever of them the row does not state
+ * itself: a switch the user has set since wins over the mode it replaced. An unrecognised mode adds
+ * nothing, and the parse then falls back to the defaults.
+ */
+function switchesFromMode(row: Record<string, unknown>): Record<string, unknown> {
+  const { mode, ...rest } = row;
+  const upgraded = upgradedMode(mode);
+  if (!DISPLAY_MODES.includes(upgraded as DisplayMode)) return rest;
+  const switches = displayOf(upgraded as DisplayMode);
+  return {
+    ...rest,
+    ...(typeof rest.toast === 'boolean' ? {} : { toast: switches.toast }),
+    ...(typeof rest.panel === 'boolean' ? {} : { panel: switches.panel }),
+  };
+}
+
+/**
+ * Upgrade a RAW settings document from the earlier notification shapes (data-model "Notification
+ * settings", research D4; FR-092): a type row's `mode` becomes its `toast` and `panel` switches —
+ * `never` neither, `toast` toast alone, `panel` both, with the pre-068 `dismiss` read as `panel` and
+ * `timed` as `toast` — every `notifications.<type>.timeoutMs` and
+ * `search.inFiles.summaryNoticeTimeoutMs` is dropped, and `search.inFiles.summaryNoticeMode` keeps its
+ * mode, mapped from `dismiss` / `timed` the same way.
+ *
+ * It must run on the raw document BEFORE the declared-bounds guard: the guard would otherwise reset a
+ * stored `dismiss` to the new default before it could be mapped. Pure and idempotent: an upgraded
+ * document comes back deeply equal, and the input is never mutated. A non-object is returned as is.
+ */
+export function upgradeNotificationDocument(raw: unknown): unknown {
+  if (!isRecord(raw)) return raw;
+  let out: Record<string, unknown> = raw;
+  const notifications = raw.notifications;
+  if (isRecord(notifications)) {
+    const next: Record<string, unknown> = { ...notifications };
+    for (const type of NOTIFICATION_TYPES) {
+      const row = notifications[type];
+      if (!isRecord(row)) continue;
+      const { timeoutMs: _dropped, ...rest } = row;
+      next[type] = 'mode' in rest ? switchesFromMode(rest) : rest;
+    }
+    out = { ...out, notifications: next };
+  }
+  const search = raw.search;
+  if (isRecord(search) && isRecord(search.inFiles)) {
+    const { summaryNoticeTimeoutMs: _dropped, ...rest } = search.inFiles;
+    const inFiles = 'summaryNoticeMode' in rest ? { ...rest, summaryNoticeMode: upgradedMode(rest.summaryNoticeMode) } : rest;
+    out = { ...out, search: { ...search, inFiles } };
+  }
+  return out;
 }

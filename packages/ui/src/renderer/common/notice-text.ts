@@ -1,10 +1,15 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import {
+  formatPlace,
   formatSubject,
   groupAffected,
+  originOfSubject,
+  placeOfSubject,
   ungroupedAffected,
   type AffectedRow,
   type AffectedTabGroup,
+  type NoticeOrigin,
+  type NoticePlace,
   type NoticeSubject,
 } from '@throng/core';
 
@@ -56,6 +61,8 @@ import type { Notice } from './notification.js';
 export type NoticePart =
   | { kind: 'heading'; text: string }
   | { kind: 'message'; text: string }
+  /** 068 FR-061 — `Project › Tab › Panel`, where the notice relates to a panel or a project. */
+  | { kind: 'place'; text: string }
   /** Arbitrary rendered content — today the editor notice's structured file list. */
   | { kind: 'body'; node: ReactNode }
   /**
@@ -113,6 +120,40 @@ export function noticeHeading(
 }
 
 /**
+ * The names a notice shows for where it belongs, resolved ONCE (068 FR-061): what its raiser stated outright, else
+ * what its subject already names. Only a notice that has an origin is placed — a notice about the whole app, or one
+ * whose raiser never said what it relates to, names none.
+ */
+export function noticePlace(n: Pick<Notice, 'origin' | 'place' | 'subject'>): NoticePlace | undefined {
+  if (!noticeOrigin(n)) return undefined;
+  return n.place ?? placeOfSubject(n.subject);
+}
+
+/** What the notice relates to: what its raiser stated, else the ids its panel subject carries (FR-061, FR-063). */
+export function noticeOrigin(n: Pick<Notice, 'origin' | 'subject'>): NoticeOrigin | undefined {
+  const stated = n.origin;
+  if (stated?.panelId || stated?.projectId) return stated;
+  return originOfSubject(n.subject);
+}
+
+/** The place as it reads, or `''` for a notice with none. */
+export function noticePlaceText(n: Pick<Notice, 'origin' | 'place' | 'subject'>): string {
+  return formatPlace(noticePlace(n));
+}
+
+/**
+ * The place REPLACES the heading when the heading is only the subject (no title, no action) and the subject names
+ * the same project, tab and panel — otherwise a toast would say `Alpha — Build — Shell` and `Alpha › Build › Shell`
+ * one above the other. A heading that says more than the place stays, and the place sits under it.
+ */
+export function headingIsPlace(n: Pick<Notice, 'origin' | 'place' | 'subject' | 'title' | 'action'>): boolean {
+  if (n.title || n.action || n.place !== undefined || !noticePlaceText(n)) return false;
+  // The heading is the subject alone, and the place was read off that same subject: they name the same things. A
+  // terminal's heading also carries its flavour (030 FR-026), which the place does not, so it stays (B19).
+  return n.subject?.kind !== 'terminal' && placeOfSubject(n.subject) !== undefined;
+}
+
+/**
  * The project a subject names, for the affected list's context (FR-031b).
  *
  * The heading already states it, so the rows must not — and rather than carry a second field saying
@@ -143,7 +184,10 @@ export function projectOf(subject: NoticeSubject | undefined): string | undefine
 export function noticeParts(n: NoticeContent): readonly NoticePart[] {
   const parts: NoticePart[] = [];
   const heading = noticeHeading(n);
-  if (heading) parts.push({ kind: 'heading', text: heading });
+  const place = noticePlaceText(n);
+  const placeIsHeading = headingIsPlace(n);
+  if (heading && !placeIsHeading) parts.push({ kind: 'heading', text: heading });
+  if (place) parts.push({ kind: 'place', text: place });
   // Always present — the card always renders the `<p>`, even for a notice whose message is empty,
   // and a part list that disagreed with the DOM about that would be a part list nobody could trust.
   parts.push({ kind: 'message', text: n.message });
@@ -233,6 +277,7 @@ export function nodeText(node: ReactNode): string {
 export function partText(part: NoticePart): string {
   switch (part.kind) {
     case 'heading':
+    case 'place':
     case 'message':
       return part.text;
     case 'body':

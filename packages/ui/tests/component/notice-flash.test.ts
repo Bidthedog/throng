@@ -75,7 +75,7 @@ function ProbeView({ into }: { into: Probe }): ReactElement | null {
 }
 
 function withMode(severity: 'error' | 'warning', mode: DisplayMode, timeoutMs: number): void {
-  settingsPayload = { version: 1, notifications: { [severity]: { mode, timeoutMs } } };
+  settingsPayload = { version: 1, notifications: { [severity]: { mode }, toastDurationMs: timeoutMs } };
 }
 
 async function mount(): Promise<Probe> {
@@ -125,7 +125,7 @@ function rowLabels(): string[] {
 
 describe('a repeat of a listed casualty flashes rather than appending (FR-008, FR-009)', () => {
   it('leaves the row count unchanged and pulses the card', async () => {
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -139,7 +139,7 @@ describe('a repeat of a listed casualty flashes rather than appending (FR-008, F
   });
 
   it('raises no second notice for the repeat', async () => {
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -150,7 +150,7 @@ describe('a repeat of a listed casualty flashes rather than appending (FR-008, F
   });
 
   it('renders no repeat count on the row (FR-008d)', async () => {
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -165,7 +165,7 @@ describe('a repeat of a listed casualty flashes rather than appending (FR-008, F
   it('still ADDS a genuinely new casualty rather than flashing (030 FR-037)', async () => {
     // The control. A flash that swallowed new casualties would "fix" #328 by breaking the thing
     // consolidation exists for — a notice that hides what it speaks for.
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -182,7 +182,7 @@ describe('the flash restarts the dismissal timer (FR-008b, SC-005a)', () => {
     // and the sixth attempt raises a fresh one — so the user re-triggering a condition watches the
     // report vanish underneath them.
     const TIMEOUT = 10_000;
-    withMode('error', 'timed', TIMEOUT);
+    withMode('error', 'toast', TIMEOUT);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -209,19 +209,26 @@ describe('the flash restarts the dismissal timer (FR-008b, SC-005a)', () => {
 });
 
 describe('display modes (FR-008c)', () => {
-  it('pulses a Dismiss-only notice and leaves it standing — there is no timer to restart', async () => {
-    withMode('error', 'dismiss', 10_000);
+  it('pulses a Toast-and-keep-in-panel notice, and the repeat restarts its clock (068 FR-021)', async () => {
+    withMode('error', 'panel', 10_000);
     const probe = await mount();
     vi.useFakeTimers();
 
     act(() => probe.notify!(raise([refused('big.bin')])));
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
     act(() => probe.notify!(raise([refused('big.bin')])));
 
     expect(pulsing()).toBe(true);
     act(() => {
-      vi.advanceTimersByTime(60 * 60 * 1000);
+      vi.advanceTimersByTime(8000);
     });
-    expect(screen.queryByTestId(TEST_ID), 'a Dismiss-only notice armed a timer').not.toBeNull();
+    expect(screen.queryByTestId(TEST_ID), 'the repeat did not restart the full duration').not.toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+    expect(screen.queryByTestId(TEST_ID)).toBeNull();
   });
 
   it('neither raises nor pulses a Never-display notice, but still logs it', async () => {
@@ -241,7 +248,7 @@ describe('absorption — repeats during a running pulse (FR-008e)', () => {
     // twitch for as long as they kept trying; the pulse is a signal that the condition recurred, not
     // a counter.
     const TIMEOUT = 10_000;
-    withMode('error', 'timed', TIMEOUT);
+    withMode('error', 'toast', TIMEOUT);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -261,7 +268,7 @@ describe('absorption — repeats during a running pulse (FR-008e)', () => {
 
 describe('the flash moves nothing (FR-010)', () => {
   it('leaves scroll position, focus and row order untouched', async () => {
-    withMode('error', 'timed', 30_000);
+    withMode('error', 'toast', 30_000);
     const probe = await mount();
     vi.useFakeTimers();
 
@@ -283,7 +290,7 @@ describe('the flash moves nothing (FR-010)', () => {
 describe('suppression is scoped to the LIVE notice (FR-012)', () => {
   it('raises a fresh notice once the first has gone', async () => {
     const TIMEOUT = 10_000;
-    withMode('error', 'timed', TIMEOUT);
+    withMode('error', 'toast', TIMEOUT);
     const probe = await mount();
     vi.useFakeTimers();
 

@@ -1,4 +1,4 @@
-import { logCaught, resolveIpcAddress } from '@throng/core';
+import { logCaught, resolveIpcAddress, sensitive } from '@throng/core';
 import 'reflect-metadata';
 import { connect, type Socket } from 'node:net';
 import { injectable, inject } from 'inversify';
@@ -99,7 +99,7 @@ export class DaemonClient {
             const { code, message, data } = response.error;
             finish(() => reject(new DaemonRpcError(message, code, data)));
           } else {
-            logCaught(`daemon-client: ${method} reply`, new Error(`invalid-response: ${line.slice(0, 200)}`));
+            logCaught(`daemon-client: ${method} reply`, new Error(`invalid-response: ${sensitive('line', line.slice(0, 200))}`));
             finish(() => reject(new Error('invalid-response')));
           }
         } catch (error) {
@@ -153,7 +153,7 @@ export class DaemonClient {
           } else if ('error' in response) {
             finish({ available: false, reason: response.error.message });
           } else {
-            logCaught('daemon-client: health ping reply', new Error(`invalid-response: ${line.slice(0, 200)}`));
+            logCaught('daemon-client: health ping reply', new Error(`invalid-response: ${sensitive('line', line.slice(0, 200))}`));
             finish({ available: false, reason: 'invalid-response' });
           }
         } catch (error) {

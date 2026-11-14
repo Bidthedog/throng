@@ -3,7 +3,7 @@ import { logCaught, type IOsPropertiesDialog, type ShellActionResult } from '@th
 
 const SEE_MASK_INVOKEIDLIST = 0x0000000c;
 const SW_SHOW = 5;
-const REASON = 'Windows could not open its Properties dialog for this item.';
+const REASON = 'The OS could not open its Properties dialog for this item.';
 
 export type ShowProperties = (path: string) => boolean;
 

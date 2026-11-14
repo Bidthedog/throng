@@ -14,6 +14,39 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_APP_SETTINGS, parseSettingsGuarded } from '../../src/index.js';
 
+describe('parseSettingsGuarded — the 068 notification upgrade (T027)', () => {
+  /*
+   * ORDER TRAP: `applyDeclaredBounds` resets a value outside a descriptor's allowed set to its
+   * default. A stored `dismiss` is outside the new set, so unless the upgrade runs FIRST it would
+   * become the default `panel`/`toast` for the TYPE instead of the mapped value, and info (default
+   * `toast`) would lose the user's `dismiss` -> `panel`.
+   */
+  it('maps a stored dismiss to Toast and Panel before the bounds guard can reset it, and reports it corrected (FR-092)', () => {
+    const out = parseSettingsGuarded({ notifications: { info: { mode: 'dismiss', timeoutMs: 8000 } } });
+    expect(out.value.notifications.info).toMatchObject({ toast: true, panel: true });
+    expect(out.corrected).toBe(true);
+  });
+
+  it('maps a stored mode to its switches, a toast-only one included, and reports it corrected (FR-092)', () => {
+    const out = parseSettingsGuarded({ notifications: { info: { mode: 'toast' }, error: { mode: 'never' } } });
+    expect(out.value.notifications.info).toMatchObject({ toast: true, panel: false });
+    expect(out.value.notifications.error).toMatchObject({ toast: false, panel: false });
+    expect(out.corrected).toBe(true);
+  });
+
+  it('maps the summary notice mode the same way and reports it corrected', () => {
+    const out = parseSettingsGuarded({ search: { inFiles: { summaryNoticeMode: 'timed', summaryNoticeTimeoutMs: 4000 } } });
+    expect(out.value.search.inFiles.summaryNoticeMode).toBe('toast');
+    expect(out.corrected).toBe(true);
+  });
+
+  it('does not report an already-upgraded document as corrected', () => {
+    const out = parseSettingsGuarded({ notifications: { info: { toast: false, panel: true } } });
+    expect(out.value.notifications.info).toMatchObject({ toast: false, panel: true });
+    expect(out.corrected).toBe(false);
+  });
+});
+
 describe('parseSettingsGuarded — unreadable', () => {
   it.each([
     ['an array', [] as unknown],

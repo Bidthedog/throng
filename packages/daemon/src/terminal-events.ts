@@ -164,9 +164,21 @@ export class TerminalEvents {
    * of the program it names, null when idle or unreadable — and `observedAt`, when the reading behind it began
    * (epoch ms), so a renderer can tell a window title that arrived after the reading from one before it.
    */
-  publishCommand(panelId: string, command: string | null, arch: string | null = null, observedAt?: number): void {
+  publishCommand(
+    panelId: string,
+    command: string | null,
+    arch: string | null = null,
+    observedAt?: number,
+    memoryCommand?: string,
+  ): void {
     this.flush(panelId);
-    this.emit(TERMINAL_COMMAND_NOTIFICATION, { panelId, command, arch, ...(observedAt !== undefined ? { observedAt } : {}) });
+    this.emit(TERMINAL_COMMAND_NOTIFICATION, {
+      panelId,
+      command,
+      arch,
+      ...(observedAt !== undefined ? { observedAt } : {}),
+      ...(memoryCommand !== undefined ? { memoryCommand } : {}),
+    });
   }
 
   /** 057: a terminal signal that may raise a panel attention mark (contracts/daemon-attention.md). */

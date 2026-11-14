@@ -30,9 +30,9 @@
  *
  * ══ ANTI-VACUITY ══
  *
- * The display asserted is NOT the shipped default. `{ mode: 'timed', timeoutMs: 7000 }` matches no
- * `notifications.*` default and no `search.inFiles` default, so a notice that fell back to any global
- * — or to the shipped pair — fails rather than coincidentally passing.
+ * The display asserted is NOT the shipped default. `{ mode: 'toast' }` differs from the summary's own
+ * default (`panel`) and from the `error` and `warning` defaults, so a notice that fell back to either
+ * fails rather than coincidentally passing.
  */
 import { describe, expect, it } from 'vitest';
 import type { ResultRow, SeverityNotificationSettings } from '@throng/core';
@@ -44,7 +44,7 @@ import {
 } from '../../src/renderer/find-in-files/commit-replace.js';
 
 /** Deliberately equal to no default anywhere in the application — see ANTI-VACUITY above. */
-const DISPLAY: SeverityNotificationSettings = { mode: 'timed', timeoutMs: 7000 };
+const DISPLAY: SeverityNotificationSettings = { mode: 'toast' };
 
 function row(relPath: string, from: number): ResultRow {
   return {

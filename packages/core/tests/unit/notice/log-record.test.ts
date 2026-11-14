@@ -136,4 +136,24 @@ describe('noticeLogRecord (FR-006, FR-007)', () => {
     });
     expect(structuredClone(record)).toEqual(record);
   });
+
+  it('068 FR-034a/FR-034c: carries the pending count and names the project by its internal id', () => {
+    const record = noticeLogRecord({
+      severity: 'error',
+      message: 'Could not rename it.',
+      pending: 3,
+      projectId: '  p-123 ',
+    });
+    expect(record.pending).toBe(3);
+    expect(record.projectId).toBe('p-123');
+  });
+
+  it('068: drops a pending count that is not a whole, non-negative number, and a blank project id', () => {
+    for (const pending of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(noticeLogRecord({ severity: 'info', message: 'm', pending })).not.toHaveProperty('pending');
+    }
+    expect(noticeLogRecord({ severity: 'info', message: 'm', projectId: '  ' })).not.toHaveProperty('projectId');
+    // Zero is a real answer: nothing is waiting.
+    expect(noticeLogRecord({ severity: 'info', message: 'm', pending: 0 }).pending).toBe(0);
+  });
 });

@@ -1,6 +1,13 @@
 import { join } from 'node:path';
-import { createFileLog, writeCrashReport, type DiagnosticLog } from '@throng/platform';
-import { DEFAULT_LOG_LEVEL, passesThreshold, type CrashDetails, type LogLevel, type RetentionPolicy } from '@throng/core';
+import { createFileLog, createProcessAnonymiser, writeCrashReport, type DiagnosticLog } from '@throng/platform';
+import {
+  DEFAULT_LOG_LEVEL,
+  passesThreshold,
+  type Anonymiser,
+  type CrashDetails,
+  type LogLevel,
+  type RetentionPolicy,
+} from '@throng/core';
 
 /**
  * Durable diagnostics for the Electron main process (#123).
@@ -25,6 +32,13 @@ export function logDirFor(userDataDir: string): string {
 export interface UiDiagnostics {
   readonly log: DiagnosticLog;
   readonly logDir: string;
+  /**
+   * 068 FR-034a: the anonymiser every line written here passes through. UI main teaches it each
+   * project's root and name as the project list arrives; its salt goes to the daemon and the
+   * collector so one value gets one token in every process.
+   */
+  readonly anonymiser: Anonymiser;
+  readonly salt: string;
   /** Write a crash report and summarise it into the log, so the timeline shows both. */
   recordCrash(details: Omit<CrashDetails, 'version' | 'buildId'>): void;
   /** Apply the user's configured level once settings have been read. */
@@ -52,16 +66,29 @@ export interface UiDiagnosticsOptions {
   retention?: Partial<RetentionPolicy>;
   /** Test seam: where crash reports go (defaults beside the log). */
   logDir?: string;
+  /** The folder the application is installed in (kept relative in stacks); defaults to the exec dir. */
+  installDir?: string;
+  /** Further folders to hide, such as the config root. */
+  extraDirs?: readonly string[];
 }
 
 export function startUiDiagnostics(options: UiDiagnosticsOptions): UiDiagnostics {
   const logDir = options.logDir ?? logDirFor(options.userDataDir);
+  const { anonymiser, salt } = createProcessAnonymiser({
+    logDir,
+    // The salt lives in the user data folder, outside the logs a user attaches to a bug report.
+    saltDir: options.userDataDir,
+    userDataDir: options.userDataDir,
+    installDir: options.installDir,
+    extraDirs: options.extraDirs,
+  });
   const log = createFileLog({
     dir: logDir,
     fileName: 'main.log',
     component: 'ui-main',
     level: options.level,
     retention: options.retention,
+    anonymiser,
   });
   // Mirrors the log's own threshold, which it does not expose: records written with a component of
   // their own go through `logAlways`, so the threshold test is made here.
@@ -70,6 +97,8 @@ export function startUiDiagnostics(options: UiDiagnosticsOptions): UiDiagnostics
   return {
     log,
     logDir,
+    anonymiser,
+    salt,
     setLevel: (level) => {
       threshold = level;
       log.setLevel(level);
@@ -78,7 +107,7 @@ export function startUiDiagnostics(options: UiDiagnosticsOptions): UiDiagnostics
     logAlways: (level, message, component) => log.logAlways(level, message, component),
     recordCrash(details): void {
       const full: CrashDetails = { ...details, version: options.version, buildId: options.buildId };
-      const path = writeCrashReport(logDir, full);
+      const path = writeCrashReport(logDir, full, anonymiser);
       // The log gets a one-line summary and a POINTER. The report itself is the document a user
       // attaches; the log is the timeline that says a crash happened here, among everything else
       // that was going on at the time — and neither is much use without the other.

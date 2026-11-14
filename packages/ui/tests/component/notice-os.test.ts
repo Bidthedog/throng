@@ -69,7 +69,7 @@ const RAISE: Omit<NoticeInput, 'severity'> = {
   testId: 'os-notice',
 };
 
-const ERROR_OS_ON = { os: true, error: { mode: 'dismiss', timeoutMs: 5000, os: true } };
+const ERROR_OS_ON = { os: true, error: { mode: 'panel', os: true } };
 
 describe('a notice reaches the OS when its type says so (FR-110)', () => {
   it('sends severity, the card heading as the title, and the message as the body', async () => {
@@ -80,26 +80,26 @@ describe('a notice reaches the OS when its type says so (FR-110)', () => {
   });
 
   it('is independent of the display mode: Never display with the OS on still sends, and shows no card', async () => {
-    const probe = await mount({ os: true, error: { mode: 'never', timeoutMs: 5000, os: true } });
+    const probe = await mount({ os: true, error: { mode: 'never', os: true } });
     act(() => { probe.notify!({ ...RAISE, severity: 'error' }); });
     expect(toOs).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('os-notice')).toBeNull();
   });
 
   it('does not send while that type’s own switch is off', async () => {
-    const probe = await mount({ os: true, error: { mode: 'dismiss', timeoutMs: 5000, os: false } });
+    const probe = await mount({ os: true, error: { mode: 'panel', os: false } });
     act(() => { probe.notify!({ ...RAISE, severity: 'error' }); });
     expect(toOs).not.toHaveBeenCalled();
   });
 
   it('does not send for ANY type while the global switch is off', async () => {
-    const probe = await mount({ os: false, error: { mode: 'dismiss', timeoutMs: 5000, os: true } });
+    const probe = await mount({ os: false, error: { mode: 'panel', os: true } });
     act(() => { probe.notify!({ ...RAISE, severity: 'error' }); });
     expect(toOs).not.toHaveBeenCalled();
   });
 
   it('follows the severity: another type’s switch does not send this one', async () => {
-    const probe = await mount({ os: true, error: { mode: 'dismiss', timeoutMs: 5000, os: true } });
+    const probe = await mount({ os: true, error: { mode: 'panel', os: true } });
     act(() => { probe.notify!({ ...RAISE, severity: 'info' }); });
     expect(toOs).not.toHaveBeenCalled();
   });
@@ -123,7 +123,7 @@ describe('a notice reaches the OS when its type says so (FR-110)', () => {
   it('does not send for a notice that carries its own display (attention reaches the OS from main)', async () => {
     const probe = await mount(ERROR_OS_ON);
     act(() => {
-      probe.notify!({ ...RAISE, severity: 'error', display: { mode: 'timed', timeoutMs: 1000 } });
+      probe.notify!({ ...RAISE, severity: 'error', display: { toast: true, panel: false } });
     });
     expect(toOs).not.toHaveBeenCalled();
   });

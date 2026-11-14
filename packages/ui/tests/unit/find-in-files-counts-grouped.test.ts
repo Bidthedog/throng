@@ -90,7 +90,7 @@ async function warningFor(unopenedFileCount: number, locale?: string): Promise<C
     notify: () => {},
     // FR-082 — required since T205, and irrelevant to every claim in this file: nothing here reads a
     // notice's dwell. The shipped pair, so it says nothing this file does not mean.
-    display: { mode: 'dismiss', timeoutMs: 5000 },
+    display: { mode: 'panel' },
     invoke: async () => ({ committed: false, reason: 'needsConfirmation', unopenedFileCount }),
     locale,
   });
@@ -116,7 +116,7 @@ async function noticeFor(
     notify: (notice) => {
       raised = notice;
     },
-    display: { mode: 'dismiss', timeoutMs: 5000 },
+    display: { mode: 'panel' },
     invoke: async () => ({
       committed: true,
       outcome: {

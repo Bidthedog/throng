@@ -50,8 +50,13 @@ import './preferences.css';
 export type { PreferencesTab } from './preferences-toolbar.js';
 export { isPreferencesTab } from './preferences-toolbar.js';
 
-function PreferencesShell({ initialTab }: { initialTab: Tab }): ReactElement {
+function PreferencesShell({ initialTab, initialSection }: { initialTab: Tab; initialSection?: string }): ReactElement {
   const [tab, setTab] = useState<Tab>(initialTab);
+  // 068: a Settings section to open and scroll to — from the URL on open, or pushed by main into a reused
+  // window. The nonce makes each request distinct, so asking for the same section again scrolls again.
+  const [section, setSection] = useState<{ name: string; nonce: number } | undefined>(
+    initialSection ? { name: initialSection, nonce: 1 } : undefined,
+  );
   const [mode, setMode] = useState<'ui' | 'json'>('ui'); // global UI⇄JSON toggle (FR-020)
   // A reset that could not be written must never fail silently (FR-006a) — including one
   // fired from a row inside a tab, which is why the reporter is shared through context.
@@ -147,7 +152,13 @@ function PreferencesShell({ initialTab }: { initialTab: Tab }): ReactElement {
   // again while the window is already open (FR-010/011).
   useEffect(() => {
     const off = window.throng?.onPreferencesTab?.((t) => setTab(t));
-    return () => off?.();
+    const offSection = window.throng?.onPreferencesSection?.((name) =>
+      setSection((previous) => ({ name, nonce: (previous?.nonce ?? 0) + 1 })),
+    );
+    return () => {
+      off?.();
+      offSection?.();
+    };
   }, []);
 
   /**
@@ -361,7 +372,7 @@ function PreferencesShell({ initialTab }: { initialTab: Tab }): ReactElement {
                 }
               />
             ) : tab === 'settings' ? (
-              <SettingsTab />
+              <SettingsTab {...(section ? { focusSection: section } : {})} />
             ) : tab === 'keybindings' ? (
               <KeybindingsTab />
             ) : (
@@ -375,7 +386,7 @@ function PreferencesShell({ initialTab }: { initialTab: Tab }): ReactElement {
   );
 }
 
-export function PreferencesApp({ initialTab }: { initialTab: Tab }): ReactElement {
+export function PreferencesApp({ initialTab, initialSection }: { initialTab: Tab; initialSection?: string }): ReactElement {
   // 018 / FR-061a — the preferences window is a SEPARATE renderer realm with its own root, so it needs
   // the drop-navigation guard too. Without it, a file dropped anywhere on this window makes the engine
   // navigate to it, and the preferences session is simply replaced by a view of the dropped file. It has
@@ -415,7 +426,7 @@ export function PreferencesApp({ initialTab }: { initialTab: Tab }): ReactElemen
               {/* 032 FR-017/FR-018 — the shell and the JSON tab have to agree about one thing:
                   whether the buffer may be left. The gate is where they meet. */}
               <JsonEditGateProvider>
-                <PreferencesShell initialTab={initialTab} />
+                <PreferencesShell initialTab={initialTab} initialSection={initialSection} />
               </JsonEditGateProvider>
             </ResetNoticeProvider>
           </ContextMenuProvider>

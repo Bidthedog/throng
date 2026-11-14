@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactElement,
   type ReactNode,
 } from 'react';
@@ -23,12 +24,18 @@ import {
   joinedPanels,
   mergeAffected,
   noticeLogRecord,
+  logExpected,
   DEFAULT_NOTIFICATION_SETTINGS,
   type AffectedCasualty,
   type AffectedPanel,
   type AffectedRow,
   type AffectedTabGroup,
+  type EntrySeverity,
+  type NotificationActionDescriptor,
+  type NotificationEntryInput,
   type FailureCause,
+  type NoticeOrigin,
+  type NoticePlace,
   type NoticeSeverity,
   type NoticeSubject,
   type NotificationSettings,
@@ -37,8 +44,20 @@ import {
 import { useAppSettings } from '../config/config-store.js';
 import './notification.css';
 import { copyToClipboard } from './clipboard-copy.js';
+import { effectiveToastDurationMs, toastPointerHoldEnabled } from './toast-duration.js';
 import { IconButton } from './icon-button.js';
-import { noticeHeading, noticeParts, noticeToText, projectOf, type NoticePart } from './notice-text.js';
+import {
+  headingIsPlace,
+  noticeHeading,
+  noticeOrigin,
+  noticeParts,
+  noticePlace,
+  noticeToText,
+  partText,
+  projectOf,
+  type NoticePart,
+} from './notice-text.js';
+import { PlacePopover } from '../notifications/place-popover.js';
 import {
   pruneSilenced,
   rememberSilenced,
@@ -73,13 +92,17 @@ import {
  * deciding how long the reader needs, and a notice that disappeared before it was read is
  * indistinguishable from one that never happened.
  *
- * So each severity now carries a MODE the user sets (`notifications.<severity>` in settings):
+ * So each type carries a MODE the user sets (`notifications.<type>` in settings; 068 FR-021a):
  *
  *   never    — nothing is rendered at all. The notice is still ACCEPTED and still written to the
  *              diagnostic log, which is the whole basis on which turning a severity off can be
  *              offered (FR-005/FR-006); silence on screen is never silence in the record.
- *   timed    — rendered, then dismissed after that severity's `timeoutMs`.
- *   dismiss  — rendered until the user says otherwise. No severity is exempt from any of the three.
+ *   toast    — rendered as a toast that leaves after the ONE global `toastDurationMs` (068 FR-021).
+ *   panel    — a toast, AND an entry in the Notifications panel until the user dismisses it.
+ *
+ * EVERY toast leaves after the duration, whatever its mode, and is paused while the pointer is over
+ * it or keyboard focus is inside it (FR-021, FR-022); leaving restarts the full duration. A `sticky`
+ * toast (FR-021e) is the exception: only its close X removes it.
  *
  * The settings are read at RAISE time (FR-016): a change applies to the next notice, and never
  * retroactively to one already on screen, whose dwell the user has already begun.
@@ -125,6 +148,18 @@ export interface Notice {
    * `{ kind: 'none' }`, which is what makes omission inexpressible rather than merely discouraged.
    */
   subject?: NoticeSubject;
+  /**
+   * WHAT THIS NOTICE RELATES TO, by id (068 FR-061, FR-063).
+   *
+   * A `panelId` makes the notice name `Project › Tab › Panel` and makes the whole toast, and its entry in the
+   * Notifications panel, a link to that panel — clicking it or pressing Enter goes there, as an attention toast does.
+   * A `projectId` alone names the project and is no link. Absent, the notice is about the whole app: it names none of
+   * them and acts as no link. Names are NOT looked up here: the provider sits above the stores, so a raiser that knows
+   * where its panel is states the names as its subject (`usePanelPlace`), or as {@link place}.
+   */
+  origin?: NoticeOrigin;
+  /** The names to show for {@link origin}, where the `subject` is not itself the place. A snapshot, taken at the raise. */
+  place?: NoticePlace;
   message: string;
   /** A list carried by the notice — e.g. the files an editor notice is about. */
   details?: readonly string[];
@@ -203,7 +238,36 @@ export interface Notice {
    */
   onDismiss?: () => void;
   /**
-   * THIS notice's own display mode and duration, instead of its severity's (043 FR-082a).
+   * Run when the toast's timer ends it (068 FR-021) — NOT when the user dismisses it, which runs
+   * {@link onDismiss}. A store that is told "the error has been acknowledged" by `onDismiss` must not
+   * be told so by a toast that merely ran out of time.
+   */
+  onExpire?: () => void;
+  /**
+   * Exempt this toast from the duration timer (068 FR-021e, research D4): a card that is the only
+   * control over a live operation (the paste progress card) or that is awaiting a decision (the
+   * different-copy and installed-version notices) must not leave on its own. The close X, where the
+   * card offers one, still removes it.
+   */
+  sticky?: boolean;
+  /**
+   * Serialisable actions the notice's Notifications-panel entry offers (068 data-model "Notice"), where
+   * the toast's own `controls` are closures that cannot be stored. A descriptor whose target is gone
+   * is hidden by the panel (FR-031a).
+   */
+  panelActions?: NotificationActionDescriptor[];
+  /** The type the panel entry carries when it is not the notice's severity — an attention mark (FR-024). */
+  panelSeverity?: EntrySeverity;
+  /**
+   * The entry's own dedupe key, where the raiser knows one (an attention mark: `attention:<panelId>`),
+   * so the entry can be found and removed again when the condition ends (FR-025).
+   */
+  panelKey?: string;
+  /** The project's INTERNAL id where the notice has a project — the notice log names it, never the name (FR-034e). */
+  projectId?: string;
+  /**
+   * THIS notice's own display MODE, instead of its severity's (043 FR-082a; 068: the mode only —
+   * every toast shares the global duration).
    *
    * ══ WHY THE CONTRACT NEEDED WIDENING AT ALL ══
    *
@@ -224,10 +288,6 @@ export interface Notice {
    * read. `notice-display-override.test.ts` asserts both halves, and the half about the notices that
    * carry NO override is the one doing the work: a regression there reaches every failure report in
    * the application.
-   *
-   * Both members are stated together because they are one decision, exactly as they are in
-   * `notifications.<severity>`: `timeoutMs` is stored whatever the mode says and is consulted only
-   * under `timed`.
    *
    * The severity is UNTOUCHED by this. It still decides the colour, the icon, the log level and the
    * announcement — only the display resolution moves.
@@ -561,6 +621,80 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
   displaySettings.current = settings;
 
   /**
+   * How many entries are pending in the Notifications panel (068 FR-034a, FR-039), kept for the notice
+   * log record. Mirrors main's snapshot; 0 until it arrives, and in a window with no panel API.
+   */
+  const pendingRef = useRef(0);
+  useEffect(() => {
+    const api = window.throng?.notifications;
+    if (!api) return undefined;
+    let live = true;
+    void api
+      .list()
+      .then((s) => {
+        if (live && s) pendingRef.current = s.pendingCount;
+      })
+      .catch((error: unknown) => {
+        // Only a log field: a failed read leaves it at the last known count.
+        logExpected('notice: read the pending count', 'it is only a log field and the next change refreshes it', error);
+      });
+    const off = api.onChanged((s) => {
+      pendingRef.current = s.pendingCount;
+    });
+    return () => {
+      live = false;
+      off();
+    };
+  }, []);
+
+  /**
+   * Keep a `panel`-mode notice as an entry in the Notifications panel (068 FR-024).
+   *
+   * Sent for every notice ACCEPTED as a new card, from any window (FR-030) — main dedupes (FR-029), so a
+   * condition raised again after its toast has left is a repeat there and a second toast here. What
+   * crosses is data: the closures a toast carries cannot be stored, so its actions are the notice's
+   * `panelActions` descriptors, and the copy text is the very string the toast's Copy writes.
+   */
+  const routeToPanel = useCallback((notice: NoticeInput, subjectText: string): void => {
+    const api = window.throng?.notifications;
+    if (!api) return;
+    const project = projectOf(notice.subject);
+    const heading = noticeHeading(notice);
+    const groupKey = notice.panelKey ?? notice.groupKey;
+    const entry: NotificationEntryInput = {
+      ...(groupKey ? { groupKey } : {}),
+      severity: notice.panelSeverity ?? notice.severity,
+      ...(heading && !headingIsPlace(notice) ? { title: heading } : {}),
+      message: notice.message,
+      ...(notice.action ? { action: notice.action } : {}),
+      ...(subjectText ? { subject: subjectText } : {}),
+      ...(noticeOrigin(notice) ? { origin: noticeOrigin(notice) } : {}),
+      ...(noticePlace(notice) ? { place: noticePlace(notice) } : {}),
+      ...(notice.testId ? { testId: notice.testId } : {}),
+      ...(notice.instanceKey ? { instanceKey: notice.instanceKey } : {}),
+      details: [...(notice.details ?? [])],
+      copyText: noticeToText(notice),
+      affected: (notice.affected ?? []).map((casualty) => {
+        const label = affectedNames([casualty], project)[0] ?? '';
+        const panelId = 'panelId' in casualty ? casualty.panelId : undefined;
+        return panelId ? { panelId, label } : { label };
+      }),
+      actions: [...(notice.panelActions ?? [])],
+    };
+    void api.add(entry).catch((error: unknown) => {
+      // Principle XIII: the toast is still on screen, but the entry that should outlive it is not.
+      window.throng?.notices?.log?.(
+        noticeLogRecord({
+          severity: 'warning',
+          message: 'A notification could not be kept in the Notifications panel.',
+          subject: { kind: 'none' },
+          detail: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    });
+  }, []);
+
+  /**
    * WHAT JUST JOINED — the only thing a growing notice announces (030 FR-032a).
    *
    * A consolidated notice sits inside the polite region below, so it is read when it arrives. It
@@ -588,9 +722,90 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
    * test can observe directly — where a duration would have to be raced.
    */
   const [pulsing, setPulsing] = useState<readonly string[]>([]);
+  /**
+   * 068 T096 (FR-063, last sentence) — toasts whose panel main has said no longer exists. Asked once as the pointer or
+   * keyboard focus ENTERS a toast, never on a timer; `asking` keeps a focus move inside the card from asking again.
+   */
+  const [goneLinks, setGoneLinks] = useState<readonly string[]>([]);
+  /**
+   * 068 FR-079 — the toast whose text is cut off by the three-line limit and is being hovered or focused: its whole text,
+   * in a popover. Decided on entry by comparing the text block's scroll height with its box — never on a timer — and a toast
+   * whose text fits never sets it.
+   */
+  const [cutText, setCutText] = useState<{ id: string; el: HTMLElement; text: string } | null>(null);
+  const checkCut = useCallback((n: Notice, el: HTMLElement): void => {
+    const block = el.querySelector<HTMLElement>('.notice__text');
+    if (!block || block.scrollHeight <= block.clientHeight) return;
+    const text = noticeParts(n)
+      .filter((p) => p.kind === 'heading' || p.kind === 'place' || p.kind === 'message')
+      .map(partText)
+      .join('\n');
+    setCutText({ id: n.id, el, text });
+  }, []);
+  const askingLink = useRef(new Set<string>());
+  const checkLink = useCallback((n: Notice): void => {
+    const origin = noticeOrigin(n);
+    const ask = window.throng?.attention?.panelsExist;
+    if (!origin?.panelId || !ask || askingLink.current.has(n.id)) return;
+    askingLink.current.add(n.id);
+    void ask([{ panelId: origin.panelId, ...(origin.projectId ? { projectId: origin.projectId } : {}) }])
+      .then((found) => {
+        if (!found.includes(origin.panelId!)) setGoneLinks((cur) => (cur.includes(n.id) ? cur : [...cur, n.id]));
+      })
+      .catch((error: unknown) => logExpected('notice: ask main whether the linked panel exists', 'the toast stays a link and main refuses a gone panel on click', error))
+      .finally(() => askingLink.current.delete(n.id));
+  }, []);
+  const linkOf = (n: Notice): (() => void) | undefined => (goneLinks.includes(n.id) ? undefined : n.onActivate);
   const pulseTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  /** `flash` needs `dismiss`, and `dismiss` is declared after it. A ref breaks the cycle. */
-  const dismissRef = useRef<(id: string) => void>(() => {});
+  /** `armTimer` needs `expire`, and `expire` is declared after it. A ref breaks the cycle. */
+  const expireRef = useRef<(id: string) => void>(() => {});
+  /**
+   * Who is holding each toast open (068 FR-021, FR-022): the pointer over it, and keyboard focus
+   * inside it. Two flags, because the toast stays until BOTH have left. Cleared when the toast goes.
+   */
+  const holds = useRef(new Map<string, { pointer: boolean; focus: boolean }>());
+
+  /**
+   * (Re)start a toast's one timer at the FULL global duration — unless it is `sticky` or held.
+   *
+   * The duration is read now, from the live settings ref, so a change applies to the next arming and
+   * never shortens a dwell already begun (FR-016). One timer per toast: any existing one is cleared.
+   */
+  const armTimer = useCallback((id: string) => {
+    const existing = timers.current.get(id);
+    if (existing) {
+      clearTimeout(existing);
+      timers.current.delete(id);
+    }
+    const notice = live.current.find((n) => n.id === id);
+    if (!notice || notice.sticky) return;
+    const hold = holds.current.get(id);
+    if (hold?.pointer || hold?.focus) return;
+    const ms = effectiveToastDurationMs(
+      displaySettings.current?.toastDurationMs ?? DEFAULT_NOTIFICATION_SETTINGS.toastDurationMs,
+    );
+    timers.current.set(
+      id,
+      setTimeout(() => expireRef.current(id), ms),
+    );
+  }, []);
+
+  const setHold = useCallback(
+    (id: string, kind: 'pointer' | 'focus', on: boolean) => {
+      const next = { ...(holds.current.get(id) ?? { pointer: false, focus: false }), [kind]: on };
+      holds.current.set(id, next);
+      if (next.pointer || next.focus) {
+        const existing = timers.current.get(id);
+        if (existing) {
+          clearTimeout(existing);
+          timers.current.delete(id);
+        }
+      } else {
+        armTimer(id);
+      }
+    },
+    [armTimer],
+  );
 
   /** Mirror the authoritative list into state. The ref moves first; rendering follows it. */
   const publish = useCallback((next: Notice[]) => {
@@ -632,23 +847,10 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
     // Restart the dismissal timer FIRST, and unconditionally. FR-008b: this is what stops a notice
     // expiring while the user is still producing the condition it reports, and it must happen for an
     // absorbed repeat too — otherwise a fast enough retry loop still loses the notice mid-sequence.
-    const existing = timers.current.get(id);
-    if (existing) {
-      clearTimeout(existing);
-      /*
-       * The notice's OWN display first — 043 FR-082a, at the one consulting point `notify` could not
-       * reach (T239). A repeat is absorbed into this card and never passes through `notify`'s
-       * resolution, so reading only the severity-keyed global here cut an overridden notice's dwell
-       * to the global's the moment it recurred: a replace summary set to 30 s went at 3.
-       */
-      const notice = live.current.find((n) => n.id === id)!;
-      const behaviour = notice.display ?? displaySettings.current?.[notice.severity];
-      const timeoutMs = behaviour?.timeoutMs ?? DEFAULT_NOTIFICATION_SETTINGS.error.timeoutMs;
-      timers.current.set(
-        id,
-        setTimeout(() => dismissRef.current(id), timeoutMs),
-      );
-    }
+    // 068: every toast shares the one duration, so there is no per-notice number to consult here any
+    // more (043 T239's override of the dwell went with the per-notice timeout). A held or sticky
+    // toast stays un-armed, which `armTimer` decides.
+    armTimer(id);
 
     if (pulseTimers.current.has(id)) return; // absorbed into the pulse already running
     setPulsing((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -691,10 +893,12 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         setPulsing((prev) => prev.filter((p) => p !== id));
       }, PULSE_MS),
     );
-  }, []);
+  }, [armTimer]);
 
-  const dismiss = useCallback(
-    (id: string) => {
+  /** Take a toast off the screen and out of every table; hands back what was removed. */
+  const detach = useCallback(
+    (id: string): Notice | undefined => {
+      holds.current.delete(id);
       const t = timers.current.get(id);
       if (t) {
         clearTimeout(t);
@@ -706,20 +910,23 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         pulseTimers.current.delete(id);
         setPulsing((prev) => prev.filter((p) => p !== id));
       }
-      // `onDismiss` reaches into a STORE (it is how a migrated error strip says "the failure has been
-      // acknowledged"), so it must not run inside a state updater: that is calling another component's
-      // setState during this one's render, which React warns about and StrictMode double-invokes — the
-      // store was told twice. It runs after the list has moved on instead.
       const going = live.current.find((n) => n.id === id);
-      if (!going) return;
+      if (!going) return undefined;
       publish(live.current.filter((n) => n.id !== id));
-      going.onDismiss?.();
+      return going;
     },
     [publish],
   );
-  // `flash` restarts a dismissal timer, so it needs `dismiss` — which is declared after it because it
-  // is the more fundamental of the two. The ref is the smaller of the two ways round.
-  dismissRef.current = dismiss;
+
+  // `onDismiss` reaches into a STORE (it is how a migrated error strip says "the failure has been
+  // acknowledged"), so it must not run inside a state updater: that is calling another component's
+  // setState during this one's render, which React warns about and StrictMode double-invokes — the
+  // store was told twice. It runs after the list has moved on instead.
+  const dismiss = useCallback((id: string) => detach(id)?.onDismiss?.(), [detach]);
+  /** The timer ended the toast (068 FR-021): the raiser hears `onExpire`, never `onDismiss`. */
+  const expire = useCallback((id: string) => detach(id)?.onExpire?.(), [detach]);
+  // `armTimer` ends a toast through `expire`, declared after it. The ref is the smaller way round.
+  expireRef.current = expire;
 
   const notify = useCallback(
     (input: NoticeInput): string => {
@@ -787,6 +994,9 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             // is what crosses the bridge — the same string, re-derived by nobody. For a silenced
             // severity there is no toast to copy from, so this is its only route to the user.
             detail: input.copyDetail,
+            // 068 FR-034a: how many entries are waiting unseen in the panel, and the project by INTERNAL id.
+            pending: pendingRef.current,
+            ...(input.projectId ? { projectId: input.projectId } : {}),
             ...(of.count === undefined ? {} : { affectedCount: of.count }),
             ...(of.details.length > 0
               ? { affectedDetails: affectedDetails(of.details, { project }) }
@@ -845,6 +1055,9 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             ),
           );
           announceGrowth(joined, project);
+          // FR-029 — a grown notice updates its panel entry in place: main folds the new casualties into the
+          // entry the same group key already names (and into its Copy text), so the entry is as long as the toast.
+          if (behaviour.panel) routeToPanel({ ...input, affected: joined }, subject);
           return target.id;
         }
       }
@@ -898,7 +1111,12 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
       // …and the same question asked of the notices the user chose not to see (FR-005b). Without
       // this half a silenced repeat is compared against an empty list and files a record every time,
       // so a severity turned off is LOUDER in the log than the same events displayed (SC-003).
-      if (shouldSuppressSilenced(silenced.current, shadowKey, panelIds, now)) return '';
+      if (shouldSuppressSilenced(silenced.current, shadowKey, panelIds, now)) {
+        // 068 FR-029, FR-092: with Panel ticked alone there is no card to flash, so the repeat goes to
+        // the store, which groups it onto the entry it already holds and flashes that.
+        if (behaviour.panel) routeToPanel(input, subject);
+        return '';
+      }
       /*
        * ONE CAUSE, ONE NOTICE (029 FR-019).
        *
@@ -954,7 +1172,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
        * chose to watch it happen — which is the whole basis on which *Never display* is offerable.
        */
       const shadow =
-        behaviour.mode === 'never'
+        !behaviour.toast
           ? silencedGrowth(silenced.current, shadowKey, panelIds, now)
           : undefined;
       if (shadow?.grew) {
@@ -997,10 +1215,18 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         });
       }
 
-      if (behaviour.mode === 'never') {
-        // The only state a silenced notice creates: no id, never rendered, never dismissible.
+      // 068 FR-024, FR-092: Panel — the entry outlives the toast, or stands without one.
+      if (behaviour.panel) routeToPanel(input, subject);
+
+      if (!behaviour.toast) {
+        // The only state a toastless notice creates here: no id, never rendered, never dismissible. With
+        // Panel ticked its entry lives in main's store, which groups a repeat onto it (FR-029).
         rememberSilenced(silenced.current, shadowKey, {
-          expiresAt: now + behaviour.timeoutMs,
+          expiresAt:
+            now +
+            effectiveToastDurationMs(
+              displaySettings.current?.toastDurationMs ?? DEFAULT_NOTIFICATION_SETTINGS.toastDurationMs,
+            ),
           causeKey: input.causeKey,
           panelIds,
         });
@@ -1029,17 +1255,28 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
        * the raw error is never rendered. It joins this notice's copy instead.
        */
       const copyDetail = [input.copyDetail, ...carried].filter(Boolean).join('\n') || undefined;
-      publish([...keep, { ...input, id, ...(copyDetail ? { copyDetail } : {}) }]);
-      // `dismiss` leaves the notice standing; only `timed` arms a clock, and it is the user's number.
-      if (behaviour.mode === 'timed') {
-        timers.current.set(
-          id,
-          setTimeout(() => dismiss(id), behaviour.timeoutMs),
-        );
-      }
+      // 068 FR-063: a notice that relates to a panel is a link to it — the whole card, as an attention toast is.
+      // Through main's link route, which needs no attention mark and goes nowhere for a panel that is gone.
+      const origin = noticeOrigin(input);
+      const originPanel = origin?.panelId;
+      const onActivate =
+        input.onActivate ??
+        (originPanel
+          ? () =>
+              void window.throng?.attention?.goToPanel?.({
+                panelId: originPanel,
+                ...(origin?.projectId ? { projectId: origin.projectId } : {}),
+              })
+          : undefined);
+      publish([
+        ...keep,
+        { ...input, id, ...(onActivate ? { onActivate } : {}), ...(copyDetail ? { copyDetail } : {}) },
+      ]);
+      // Every toast gets the one global clock (068 FR-021); a `sticky` one is skipped inside.
+      armTimer(id);
       return id;
     },
-    [announceGrowth, dismiss, flash, publish],
+    [announceGrowth, armTimer, flash, publish, routeToPanel],
   );
 
   /** See {@link NotifyContextValue.update}. */
@@ -1063,6 +1300,8 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             action: next.action,
             causeKey: next.causeKey,
             detail: next.copyDetail,
+            pending: pendingRef.current,
+            ...(next.projectId ? { projectId: next.projectId } : {}),
           }),
         );
       }
@@ -1070,29 +1309,27 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
       publish(live.current.map((n) => (n.id === id ? next : n)));
 
       if (severityChanged || displayChanged) {
-        // Re-resolve the dwell: the patch's own display, else the (new) severity's setting.
-        const existing = timers.current.get(id);
-        if (existing) {
-          clearTimeout(existing);
-          timers.current.delete(id);
-        }
+        // Re-resolve the mode: the patch's own display, else the (new) severity's setting.
         const behaviour: SeverityNotificationSettings =
           next.display ??
           displaySettings.current?.[next.severity] ??
           DEFAULT_NOTIFICATION_SETTINGS[next.severity];
-        if (behaviour.mode === 'never') {
-          // The user chose not to see this severity: the record is filed, the card goes.
+        // A card that became a new event ("pasting" became "failed") whose type has Panel ticked is kept
+        // as an entry too (068 FR-024, FR-092) — the report must outlive the toast, or stand without one.
+        if (behaviour.panel && severityChanged) {
+          const subject = next.subject ?? { kind: 'none' as const };
+          routeToPanel({ ...next, subject }, formatSubject(subject));
+        }
+        if (!behaviour.toast) {
+          // The user chose no toast for this severity: the record is filed, the card goes.
           dismiss(id);
-        } else if (behaviour.mode === 'timed') {
-          timers.current.set(
-            id,
-            setTimeout(() => dismiss(id), behaviour.timeoutMs),
-          );
+        } else {
+          armTimer(id); // the full global duration again, from the patch
         }
       }
       return true;
     },
-    [dismiss, publish],
+    [armTimer, dismiss, publish, routeToPanel],
   );
 
   const clear = useCallback(
@@ -1146,33 +1383,62 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
   return (
     <NotifyContext.Provider value={value}>
       {children}
-      <div className="notices" data-testid="notices" role="status" aria-live="polite">
+      {/* 068 FR-076: the toast width is a preference, held at no more than half the window. */}
+      <div
+        className="notices"
+        data-testid="notices"
+        role="status"
+        aria-live="polite"
+        style={{ '--throng-notice-width': `min(${settings.toastWidthPx}px, 50vw)` } as CSSProperties}
+      >
         {notices.map((n) => (
           <div
             key={n.id}
-            className={`notice notice--${n.severity}${pulsing.includes(n.id) ? ' notice--pulsing' : ''}${n.onActivate ? ' notice--activatable' : ''}`}
+            className={`notice notice--${n.severity}${pulsing.includes(n.id) ? ' notice--pulsing' : ''}${linkOf(n) ? ' notice--activatable' : ''}`}
             onClick={
-              n.onActivate
+              linkOf(n)
                 ? (e) => {
                     // A press on a button inside the card (Copy, Dismiss) is that button's, never the card's.
                     if ((e.target as Element).closest('button')) return;
-                    n.onActivate?.();
+                    linkOf(n)?.();
                   }
                 : undefined
             }
             // Keyboard parity: the focused CARD (not a button inside it, which has its own Enter) activates.
-            tabIndex={n.onActivate ? 0 : undefined}
+            tabIndex={linkOf(n) ? 0 : undefined}
             onKeyDown={
-              n.onActivate
+              linkOf(n)
                 ? (e) => {
                     if (e.target !== e.currentTarget) return;
                     if (e.key !== 'Enter' && e.key !== ' ') return;
                     e.preventDefault();
-                    n.onActivate?.();
+                    linkOf(n)?.();
                   }
                 : undefined
             }
             data-testid={n.testId ?? `notice-${n.severity}`}
+            /* 068 FR-021/FR-022 — the pointer over the card, or keyboard focus anywhere inside it, holds
+               the toast open; leaving restarts the full duration. `onFocus`/`onBlur` bubble in React (they
+               are focusin/focusout), and a blur whose next target is still inside the card is not a leave. */
+            onPointerEnter={(e) => {
+              if (toastPointerHoldEnabled()) setHold(n.id, 'pointer', true);
+              checkLink(n);
+              checkCut(n, e.currentTarget);
+            }}
+            onPointerLeave={() => {
+              setHold(n.id, 'pointer', false);
+              setCutText((cur) => (cur?.id === n.id ? null : cur));
+            }}
+            onFocus={(e) => {
+              setHold(n.id, 'focus', true);
+              checkLink(n);
+              checkCut(n, e.currentTarget);
+            }}
+            onBlur={(e) => {
+              if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+              setHold(n.id, 'focus', false);
+              setCutText((cur) => (cur?.id === n.id ? null : cur));
+            }}
             /* 041 FR-008aa — the pulse as MARKUP, not only as a class the stylesheet reads.
                jsdom applies no stylesheet, so a pulse expressed only in CSS could be asserted
                nowhere below an Electron launch, and FR-008e/FR-011c both hang on the pulse having an
@@ -1196,9 +1462,24 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
                 remembered list of fields — the defect that dropped `body` silently (#238). Markup
                 added here directly, outside a part, is what the E2E's DOM comparison catches.
               */}
-              {noticeParts(n).map((part, index) => (
-                <NoticePartView key={`${part.kind}-${index}`} notice={n} part={part} />
-              ))}
+              {/* 068 FR-077: heading, place and message are ONE block, clamped to three lines together; the rest
+                  (a body, the affected list, details) follows it, and the controls sit outside both. */}
+              {(() => {
+                const parts = noticeParts(n);
+                const isText = (p: NoticePart): boolean => p.kind === 'heading' || p.kind === 'place' || p.kind === 'message';
+                return (
+                  <>
+                    <div className="notice__text">
+                      {parts.filter(isText).map((part, index) => (
+                        <NoticePartView key={`${part.kind}-${index}`} notice={n} part={part} />
+                      ))}
+                    </div>
+                    {parts.filter((p) => !isText(p)).map((part, index) => (
+                      <NoticePartView key={`${part.kind}-${index}`} notice={n} part={part} />
+                    ))}
+                  </>
+                );
+              })()}
             </div>
             {/* COPY. A failure message is the one thing in the application a user is most likely to
                 need somewhere else — in an issue, in a message to us — and it is also the one thing
@@ -1238,6 +1519,9 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           </div>
         ))}
       </div>
+      {cutText && notices.some((n) => n.id === cutText.id) ? (
+        <PlacePopover anchor={cutText.el} text={cutText.text} testId="notice-text-popover" multiline />
+      ) : null}
       {/* THE DELTA, and nothing else (FR-032a). Visually hidden rather than `display: none`, which
           would take it out of the accessibility tree along with the pixels. */}
       <div
@@ -1284,6 +1568,12 @@ function NoticePartView({ notice, part }: { notice: Notice; part: NoticePart }):
   switch (part.kind) {
     case 'heading':
       return <h4 className="notice__title">{part.text}</h4>;
+    case 'place':
+      return (
+        <p className="notice__place" data-testid={`${notice.testId ?? 'notice'}-place`}>
+          {part.text}
+        </p>
+      );
     case 'message':
       return (
         <p className="notice__message" data-testid={notice.testIds?.message}>
@@ -1638,6 +1928,13 @@ export function useErrorNotice(
         // FR-018: the raw error rides along where Copy can reach it, below the human sentence.
         copyDetail: spoken.copyDetail,
         onDismiss: () => {
+          dismissedByUser.current = true;
+          clearError?.();
+        },
+        // B10 — an EXPIRY acknowledges the failure just as a dismissal does: the toast has been shown and
+        // has gone, so the store must let go of the error. Left set, an identical next failure would not
+        // change it, the effect would not re-run, and nothing would be raised, flashed or logged (#287, #328).
+        onExpire: () => {
           dismissedByUser.current = true;
           clearError?.();
         },

@@ -791,6 +791,27 @@ describe('each project row carries its own path (FR-032)', () => {
     expect(pathOf('Pathy')).not.toContain('elsewhere');
     expect(pathOf('Otherly')).not.toContain('deep/path');
   });
+
+  it('068 FR-064: the path hover reads the path, then `(id: <id>)` on a second line', async () => {
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Pathy', 'C:/code/some/deep/path');
+    await createProject(user, 'Otherly', 'C:/code/elsewhere');
+
+    const titleOf = (name: string): string | null => {
+      const row = screen
+        .getAllByTestId(/^project-item-/)
+        .find((el) => (el.textContent ?? '').includes(name));
+      return row ? within(row).getByTestId('project-path').getAttribute('title') : null;
+    };
+    // The ids are the daemon's own — what a log record names (`project=<project:ID>`) — and differ per row.
+    const pathy = titleOf('Pathy') ?? '';
+    const otherly = titleOf('Otherly') ?? '';
+    expect(pathy).toMatch(/^C:\/code\/some\/deep\/path\n\(id: p\d+\)$/);
+    expect(otherly).toMatch(/^C:\/code\/elsewhere\n\(id: p\d+\)$/);
+    expect(pathy.split('\n')[1]).not.toBe(otherly.split('\n')[1]);
+    // The visible line is still the path alone.
+    expect(pathOf('Pathy')).toBe('C:/code/some/deep/path');
+  });
 });
 
 /**

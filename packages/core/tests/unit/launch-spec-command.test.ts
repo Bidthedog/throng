@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveLaunchSpec } from '@throng/core';
+import { BUILTIN_FLAVOUR_COMMAND_RECIPES, expandCommandRecipe, resolveLaunchSpec } from '@throng/core';
 
 const CMD = { file: 'cmd.exe', args: [], commandRecipe: ['/K', '{command}'] as readonly string[] };
 const NO_RECIPE = { file: 'weird-shell.exe', args: ['--login'] };
@@ -74,5 +74,30 @@ describe('a recipe must not duplicate the flavour’s own shell arguments (FR-01
 
   it('leaves shell arguments untouched when there is no startup command', () => {
     expect(resolveLaunchSpec(CMD, '/K', 'C:/proj').args).toEqual(['/K']);
+  });
+});
+
+describe('068 FR-048 — a Claude Code resume command is wrapped so the shell stays interactive after it exits', () => {
+  const RESUME = 'claude --model opus --resume 11111111-2222-3333-4444-555555555555';
+  const INTERACTIVE_TAIL: Record<string, RegExp> = {
+    'windows-powershell': /^-NoExit$/,
+    pwsh: /^-NoExit$/,
+    cmd: /^\/K$/,
+    'git-bash': /exec bash -i$/,
+    bash: /exec bash -i$/,
+    zsh: /exec zsh -i$/,
+    sh: /exec sh -i$/,
+    dash: /exec dash -i$/,
+    ksh: /exec ksh -i$/,
+    tcsh: /exec tcsh -i$/,
+    fish: /^--init-command$/,
+    nu: /^--execute$/,
+  };
+
+  it.each(Object.keys(BUILTIN_FLAVOUR_COMMAND_RECIPES))('%s carries the command once, in one argv element, beside its keep-open', (id) => {
+    const args = expandCommandRecipe(BUILTIN_FLAVOUR_COMMAND_RECIPES[id]!, RESUME);
+
+    expect(args.filter((a) => a.includes(RESUME))).toHaveLength(1);
+    expect(args.some((a) => INTERACTIVE_TAIL[id]!.test(a))).toBe(true);
   });
 });

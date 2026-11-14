@@ -523,6 +523,42 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Save As icon',
     description: 'The glyph on the editor title bar button that saves the document under a new name.',
   },
+  'icons.notifications': {
+    label: 'Notifications icon',
+    description: 'The glyph that marks the Notifications panel and the count of notifications waiting while it is minimised.',
+  },
+  'icons.dismissAll': {
+    label: 'Dismiss all icon',
+    description: 'The glyph on the Notifications panel control that dismisses every notification at once.',
+  },
+  'icons.sortOrder': {
+    label: 'Notification order icon',
+    description: 'The glyph on the Notifications panel control that chooses the order notifications are listed in.',
+  },
+  'icons.minimisePanel': {
+    label: 'Minimise panel icon',
+    description: 'The icon on the Minimise menu item of a side panel, which shrinks the panel to its header and gives its space to the panel above. The button itself draws the side panes\' chevron.',
+  },
+  'icons.restorePanel': {
+    label: 'Restore panel icon',
+    description: 'The icon on the Restore menu item of a side panel, which brings a minimised panel back to the height it had. The button itself draws the side panes\' chevron.',
+  },
+  'icons.noticeError': {
+    label: 'Error notification icon',
+    description: 'The icon at the top left of an error entry in the Notifications panel, before its title.',
+  },
+  'icons.noticeAttention': {
+    label: 'Attention notification icon',
+    description: 'The icon at the top left of an attention entry in the Notifications panel, before its title.',
+  },
+  'icons.noticeInfo': {
+    label: 'Information notification icon',
+    description: 'The icon at the top left of an information entry in the Notifications panel, before its title.',
+  },
+  'icons.noticeSuccess': {
+    label: 'Success notification icon',
+    description: 'The icon at the top left of a success entry in the Notifications panel, before its title. A warning entry draws the Warning icon.',
+  },
   'icons.restoreAll': {
     label: 'Restore all defaults icon',
     description:

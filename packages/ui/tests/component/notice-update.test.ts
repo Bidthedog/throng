@@ -176,29 +176,42 @@ describe('update patches a live notice in place (050 T048)', () => {
     expect(logged).toHaveLength(0);
   });
 
-  it('re-resolves dwell from the new severity: a persistent info that becomes an error follows the error setting', async () => {
-    // Persistent while running (`display` override), then the failure state "uses the user's error
-    // setting" (contracts/ui-surfaces §2): the patch drops the override, and the card waits to be
-    // dismissed because the seeded error mode says so — where the info mode would have timed it out.
+  it('re-resolves the mode from the new severity: an info that becomes an error whose mode is never goes (068)', async () => {
+    // The patch drops the override, so the card answers to the NEW severity's setting.
     settingsPayload = {
       version: 1,
-      notifications: {
-        info: { mode: 'timed', timeoutMs: 3000 },
-        error: { mode: 'dismiss', timeoutMs: 30_000 },
-      },
+      notifications: { info: { mode: 'toast' }, error: { mode: 'never' } },
     };
+    const probe = await mount();
+    let id = '';
+    act(() => {
+      id = probe.notify!({ ...RAISE, display: { toast: true, panel: true } });
+    });
+    expect(screen.getByTestId('paste-progress')).toBeVisible();
+    act(() => probe.update!(id, { severity: 'error', message: 'failed', display: undefined }));
+    expect(screen.queryByTestId('paste-progress')).toBeNull();
+  });
+
+  it('re-arms the full toast duration from the patch (068 FR-021)', async () => {
+    settingsPayload = { version: 1, notifications: { toastDurationMs: 5000, error: { mode: 'panel' } } };
     const probe = await mount();
     vi.useFakeTimers();
     let id = '';
     act(() => {
-      id = probe.notify!({ ...RAISE, display: { mode: 'dismiss', timeoutMs: 3000 } });
+      id = probe.notify!({ ...RAISE });
+    });
+    act(() => {
+      vi.advanceTimersByTime(4000);
     });
     act(() => probe.update!(id, { severity: 'error', message: 'failed', display: undefined }));
-
     act(() => {
-      vi.advanceTimersByTime(60 * 60 * 1000);
+      vi.advanceTimersByTime(4000);
     });
-    expect(screen.getByTestId('paste-progress')).toBeVisible();
+    expect(screen.getByTestId('paste-progress'), 'the patch did not restart the clock').toBeVisible();
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(screen.queryByTestId('paste-progress')).toBeNull();
   });
 
   // DELETED: 'every existing caller shape still compiles and works' (notify, then visible) — zero

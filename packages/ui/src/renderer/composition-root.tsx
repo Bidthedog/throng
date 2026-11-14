@@ -128,8 +128,9 @@ export function CompositionRoot(): ReactElement {
       <ConfigProvider>
         {/* 018 / FR-054 — the two notice models, in every window. */}
         <NotificationProvider>
-          {/* 057 R12 — the toast for a panel that needs the user; every window mounts its own. */}
-          <AttentionToasts />
+          {/* 057 R12 — the toast for a panel that needs the user; every window mounts its own. The MAIN
+              window also reconciles the panel's attention entries against the mark set (068 FR-025). */}
+          <AttentionToasts reconcile />
           <BadgeAnswerer />
           <ConfirmProvider>
             <ContextMenuProvider>

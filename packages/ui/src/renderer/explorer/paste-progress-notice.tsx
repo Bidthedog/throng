@@ -24,8 +24,8 @@ import { IconButton } from '../common/icon-button.js';
 import { useNotify, type NoticeInput } from '../common/notification.js';
 import { pasteFailureNotice } from './paste-failure-notice.js';
 
-/** The card stays until the run ends: the user's notice timings must not take a live Cancel away. */
-const PERSISTENT = { mode: 'dismiss', timeoutMs: 30_000 } as const;
+/** The card stays until the run ends (`sticky`, 068 FR-021e): the toast duration must not take a live Cancel away. */
+const PERSISTENT = { toast: true, panel: false } as const;
 
 const leaf = (path: string): string => pathSegments(path).pop() ?? path;
 
@@ -160,6 +160,7 @@ export function PasteProgressNotice(): ReactElement | null {
         testId: 'paste-progress',
         instanceKey: p.jobId,
         display: PERSISTENT,
+        sticky: true,
         // Cancel is the card's only action while the run is live (FR-019): a Dismiss would take the
         // progress and the Cancel with it, and the failure report with it at the end.
         dismissible: false,
@@ -204,6 +205,8 @@ export function PasteProgressNotice(): ReactElement | null {
             body: undefined,
             // The failure uses the user's own setting for an error again, not the live-run override.
             display: undefined,
+            // …and the report leaves with the duration like any toast (the panel keeps it under `panel`).
+            sticky: false,
             // …and, being a report rather than a live run, it can be dismissed like any other.
             dismissible: true,
           });

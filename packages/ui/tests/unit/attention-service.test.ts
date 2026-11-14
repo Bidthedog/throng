@@ -22,6 +22,7 @@ import {
   TERMINAL_ATTENTION_CONFIG_METHOD,
   TERMINAL_ATTENTION_LEDGER_METHOD,
   TERMINAL_ATTENTION_SYNC_METHOD,
+  WORKSPACE_LOAD_METHOD,
 } from '@throng/ipc-contract';
 import {
   AttentionService,
@@ -50,6 +51,8 @@ interface Rig {
   };
   settings: AttentionSettingsSource;
   ledger: AttentionLedgerEntry[];
+  /** The panel ids each project's SAVED layout holds, for `workspace.load` (068 B16). */
+  layouts: Record<string, string[]>;
   setSettings: (mutate: (s: AttentionSettingsSource) => void) => void;
 }
 
@@ -75,6 +78,7 @@ function rig(ledger: AttentionLedgerEntry[] = [], flags: AttentionFlagEntry[] = 
     badgeRequests: 0,
   };
   let settings = settingsFromDefaults();
+  const layouts: Record<string, string[]> = {};
 
   const windows: AttentionWindows = {
     ids: () => state.ids,
@@ -98,6 +102,11 @@ function rig(ledger: AttentionLedgerEntry[] = [], flags: AttentionFlagEntry[] = 
       daemonCalls.push({ method, params });
       if (method === TERMINAL_ATTENTION_LEDGER_METHOD) return { entries: ledger } as T;
       if (method === ATTENTION_FLAG_LIST_METHOD) return { flags } as T;
+      if (method === WORKSPACE_LOAD_METHOD) {
+        const ids = layouts[(params as { projectId: string }).projectId] ?? [];
+        const panels = ids.map((id) => ({ type: 'panel', id, originProjectId: 'x', title: id }));
+        return { layout: { tabs: [{ id: 't1', title: 'T', root: { type: 'split', direction: 'row', sizes: [0.5, 0.5], children: panels } }] }, restored: true } as T;
+      }
       return { ok: true } as T;
     },
   };
@@ -124,6 +133,7 @@ function rig(ledger: AttentionLedgerEntry[] = [], flags: AttentionFlagEntry[] = 
       return settings;
     },
     ledger,
+    layouts,
     setSettings: (mutate) => {
       const prev = settings;
       settings = structuredClone(prev);
@@ -592,6 +602,68 @@ describe('AttentionService — goTo (T046)', () => {
     r.notifier.click('p1');
     expect(r.raised).toEqual([1]);
     expect(r.sent.some((s) => s.channel === 'throng:attention:focusPanel')).toBe(true);
+  });
+});
+
+describe('AttentionService — goToPanel, the link a notice carries (068 FR-063, B16)', () => {
+  const focusMessages = (r: Rig) => r.sent.filter((s) => s.channel === 'throng:attention:focusPanel');
+
+  it('goes to a panel that carries NO mark: the main window that reports it, switching to its project', async () => {
+    const r = rig();
+    r.service.onFocusReport(report({ windowId: 1, hostedPanels: [{ panelId: 'p5', projectId: 'proj-b', title: 'Shell' }] }));
+    expect(await r.service.goToPanel({ panelId: 'p5' })).toBe(true);
+    expect(r.raised).toEqual([1]);
+    expect(focusMessages(r)).toEqual([
+      { windowId: 1, channel: 'throng:attention:focusPanel', payload: { panelId: 'p5', projectId: 'proj-b' } },
+    ]);
+  });
+
+  it('raises the sub-workspace window that hosts it, with no mark', async () => {
+    const r = rig();
+    r.state.ids = [1, 2];
+    r.service.onFocusReport(report({ windowId: 2, windowFocused: false, hostedPanels: [{ panelId: 'p5', projectId: 'proj-b', title: 'Shell' }] }));
+    await r.service.goToPanel({ panelId: 'p5', projectId: 'proj-b' });
+    expect(r.raised).toEqual([2]);
+    expect(focusMessages(r).map((m) => m.windowId)).toEqual([2]);
+  });
+
+  it('goes to a panel in a project no window shows, found in that project\'s saved layout', async () => {
+    const r = rig();
+    r.layouts['proj-c'] = ['p8', 'p9'];
+    expect(await r.service.goToPanel({ panelId: 'p9', projectId: 'proj-c' })).toBe(true);
+    expect(r.raised).toEqual([1]);
+    expect(focusMessages(r)[0]!.payload).toEqual({ panelId: 'p9', projectId: 'proj-c' });
+  });
+
+  it('does NOT navigate to a panel that no longer exists, whether or not its project is known', async () => {
+    const r = rig();
+    r.layouts['proj-c'] = ['p8'];
+    expect(await r.service.goToPanel({ panelId: 'p9', projectId: 'proj-c' })).toBe(false);
+    expect(await r.service.goToPanel({ panelId: 'p9' })).toBe(false);
+    expect(r.raised).toEqual([]);
+    expect(focusMessages(r)).toEqual([]);
+  });
+
+  it('with a mark, prefers the origin\'s project and falls back to the mark\'s when it has none', async () => {
+    const r = rig();
+    r.service.onSignal(signal({ panelId: 'p1', projectId: 'proj-a' }));
+    await r.service.goToPanel({ panelId: 'p1' });
+    await r.service.goToPanel({ panelId: 'p1', projectId: 'proj-q' });
+    expect(focusMessages(r).map((m) => m.payload.projectId)).toEqual(['proj-a', 'proj-q']);
+  });
+
+  it('answers which panels still exist, without navigating (the entry\'s link decision)', async () => {
+    const r = rig();
+    r.layouts['proj-c'] = ['p9'];
+    r.service.onFocusReport(report({ windowId: 1, hostedPanels: [{ panelId: 'p5', projectId: 'proj-b', title: 'Shell' }] }));
+    const found = await r.service.existingPanels([
+      { panelId: 'p5' },
+      { panelId: 'p9', projectId: 'proj-c' },
+      { panelId: 'p10', projectId: 'proj-c' },
+      { panelId: 'p11' },
+    ]);
+    expect([...found].sort()).toEqual(['p5', 'p9']);
+    expect(r.raised).toEqual([]);
   });
 });
 

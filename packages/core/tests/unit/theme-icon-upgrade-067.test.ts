@@ -23,7 +23,7 @@ function v30Theme(name: string): Theme {
 
 describe('the version-30 icons 067’s hand-test round moved', () => {
   it('is shipped-defaults version 31', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(31);
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(33);
   });
 
   it('records only glyphs whose shipped value really moved, and is frozen', () => {

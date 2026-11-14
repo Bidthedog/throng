@@ -117,10 +117,12 @@ declare global {
         onMaximizeChange: (cb: (maximized: boolean) => void) => () => void;
       };
       // Cog → preferences (007, main window only) + the prefs window's tab-switch push.
-      openPreferences?: (tab: 'settings' | 'keybindings' | 'themes') => void;
+      openPreferences?: (tab: 'settings' | 'keybindings' | 'themes', section?: string) => void;
       onPreferencesTab?: (
         cb: (tab: 'settings' | 'keybindings' | 'themes') => void,
       ) => () => void;
+      /** 068 — an open Preferences window is told which Settings section to open and scroll to. */
+      onPreferencesSection?: (cb: (section: string) => void) => () => void;
       /** 032 FR-018 — main asks before closing Preferences; an invalid JSON buffer may refuse. */
       onPreferencesCloseRequest?: (cb: (payload: { requestId: number }) => void) => () => void;
       replyPreferencesClose?: (payload: { requestId: number; allow: boolean }) => void;
@@ -220,6 +222,24 @@ declare global {
          * was affected. Returns the unsubscribe. An open form reads its lists again on it (FR-064b, FR-066).
          */
         onChanged: (cb: (change: { flavourId?: string }) => void) => () => void;
+      };
+      /** 068 US3 — the Notifications panel's entries, held by main (contracts/ipc.md). */
+      notifications?: {
+        /** Answers `null` for a payload main refused. */
+        add: (entry: import('@throng/core').NotificationEntryInput) => Promise<{ outcome: 'added' | 'repeat'; id: string } | null>;
+        list: () => Promise<NotificationsSnapshot | null>;
+        dismiss: (id: string) => Promise<NotificationsSnapshot | null>;
+        dismissAll: () => Promise<NotificationsSnapshot | null>;
+        setOrder: (order: import('@throng/core').NotificationOrder) => Promise<NotificationsSnapshot | null>;
+        /** The X on the limit warning: never warn again (FR-031g). */
+        dismissLimitWarning: () => void;
+        /** The warning's link was followed: it closes and arms again; not a refusal (FR-031g). */
+        followLimitWarning: () => void;
+        onChanged: (cb: (snapshot: NotificationsSnapshot) => void) => () => void;
+        /** Main window only: a repeat of a stored condition — flash that entry. */
+        onRepeat: (cb: (repeat: { id: string }) => void) => () => void;
+        /** Main window only: the limit was reached and the warning is owed (FR-031f). */
+        onLimitReached: (cb: () => void) => () => void;
       };
       /** 067 US3 — the file manager's "open as throng project" item (FR-034). */
       fileManagerItem?: {
@@ -381,7 +401,9 @@ declare global {
         /** The shell's working directory changed (012): shown in the panel title. */
         onCwd: (cb: (e: { panelId: string; cwd: string }) => void) => () => void;
         /** 025 FR-019: the terminal's current foreground command, or null when idle; 053 `arch` of its program. */
-        onCommand?: (cb: (e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number }) => void) => () => void;
+        onCommand?: (
+          cb: (e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number; memoryCommand?: string }) => void,
+        ) => () => void;
         onExit: (
           cb: (e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number; failure?: import('@throng/core').PtyExitFailure }) => void,
         ) => () => void;
@@ -397,6 +419,10 @@ declare global {
         onToast: (cb: (e: AttentionToastEvent) => void) => () => void;
         onFocusPanel: (cb: (e: { panelId: string; projectId: string }) => void) => () => void;
         goTo: (panelId: string) => void;
+        /** 068 FR-063 — a notice's link: go to the panel with or without a mark; `false` when it no longer exists. */
+        goToPanel: (origin: { panelId: string; projectId?: string }) => Promise<boolean>;
+        /** The ids, of these panels, that still exist — what decides whether an entry is a link. */
+        panelsExist: (panels: { panelId: string; projectId?: string }[]) => Promise<string[]>;
         /** 057 FR-125 — the panel menu's Flag: a mark from the user, reason "Flagged". Fire and forget. */
         flag: (req: {
           panelId: string;
@@ -988,6 +1014,17 @@ declare global {
   }
 }
 
+/** 068 — what every window renders of the Notifications panel (contracts/ipc.md); main's `NotificationsSnapshot`. */
+export interface NotificationsSnapshot {
+  entries: import('@throng/core').NotificationEntry[];
+  order: import('@throng/core').NotificationOrder;
+  pendingCount: number;
+  pendingSeverity: import('@throng/core').EntrySeverity | null;
+  limit: number;
+  /** The limit warning is outstanding: shown, and neither dismissed nor followed (FR-031f). */
+  limitWarningActive?: boolean;
+}
+
 /** 057 — one `throng:attention:toast` push (contracts/app-attention.md): a toast per mark, raised in one window. */
 export interface AttentionToastEvent {
   op: 'raise' | 'update' | 'dismiss';
@@ -1109,6 +1146,8 @@ export type TerminalAttachEnvelope =
       /** 053 — the running command and its architecture, as the daemon last observed them. */
       command?: string | null;
       arch?: string | null;
+      /** 068 — the resume command beside `command` for a Claude Code session; absent without one. */
+      memoryCommand?: string;
       /** The session's shared grid — the attaching view conforms its xterm to it (008 FR-009). */
       grid?: { cols: number; rows: number };
       /**

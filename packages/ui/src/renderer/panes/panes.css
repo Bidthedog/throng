@@ -175,3 +175,16 @@
 .pane-chevron--left {
   transform: rotate(180deg);
 }
+/* 068 FR-058 — the Notifications and Sub-workspaces panels point it down to minimise and up to restore. */
+.pane-chevron--down {
+  transform: rotate(90deg);
+}
+.pane-chevron--up {
+  transform: rotate(-90deg);
+}
+/* ...and centre it, horizontally and vertically, in its button. */
+.panel__action--chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

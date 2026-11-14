@@ -14,6 +14,9 @@ import { useErrorNotice } from '../common/notification.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useAppSettings } from '../config/config-store.js';
 import { Icon } from '../common/icon.js';
+import { MinimiseChevronButton } from '../panes/chevron.js';
+import { useCollapsedHover } from '../panes/use-collapsed-hover.js';
+import { useContextMenuOptional } from '../context-menu-provider.js';
 
 const dragId = (id: string): string => `subws|${id}`;
 const parseDragId = (id: string): string | null => (id.startsWith('subws|') ? id.slice(6) : null);
@@ -44,7 +47,16 @@ function SubWorkspaceGrip({ id }: { id: string }): ReactElement {
  * project's edit button sits, and a delete button. Sub-workspaces can't be
  * "edited" like a project (no folder), so Open replaces edit.
  */
-export function SubworkspacesPanel(): ReactElement {
+export function SubworkspacesPanel({
+  minimised = false,
+  onToggleMinimise,
+}: {
+  /** 068 FR-036: the panel is minimised to its header; its owner (the sidebar stack) holds and persists the state. */
+  minimised?: boolean;
+  onToggleMinimise?: () => void;
+} = {}): ReactElement {
+  const hover = useCollapsedHover(minimised);
+  const contextMenu = useContextMenuOptional();
   const {
     subWorkspaces, loadedIds, open, create, rename, recolour, remove, reorder, error, errorAction, errorSubject, clearError,
   } = useSubWorkspaces();
@@ -171,25 +183,66 @@ export function SubworkspacesPanel(): ReactElement {
   };
 
   return (
-    <div className="panel subworkspaces-panel" data-testid="subworkspaces-panel">
-      <header className="panel__header">
+    <div
+      className={`panel subworkspaces-panel${minimised ? ' panel--minimised' : ''}`}
+      data-testid="subworkspaces-panel"
+      // 068 FR-036 — every panel action has a menu item: Minimise / Restore is also in the panel's menu.
+      onContextMenu={(e) => {
+        if (!contextMenu || !onToggleMinimise) return;
+        // The list's own rows are not menu surfaces yet; the panel's menu is the whole panel.
+        e.preventDefault();
+        contextMenu.openMenu(e.clientX, e.clientY, [
+          {
+            label: minimised ? 'Restore' : 'Minimise',
+            icon: minimised ? 'restorePanel' : 'minimisePanel',
+            section: 'viewState',
+            onClick: onToggleMinimise,
+          },
+        ]);
+      }}
+    >
+      <header
+        {...hover}
+        className={`panel__header${hover.className ? ` ${hover.className}` : ''}`}
+        // 068 FR-067: a click anywhere on a MINIMISED header restores the panel; an open header does nothing, so it never
+        // competes with the resize handle. A press on a control inside it is that control's, never the header's.
+        onClick={
+          minimised && onToggleMinimise
+            ? (e) => {
+                if ((e.target as Element).closest('button')) return;
+                onToggleMinimise?.();
+              }
+            : undefined
+        }
+      >
         <span className="panel__title">Sub-workspaces</span>
         {/* 067 FR-082 — in the slot the Projects panel's New project button holds, with its classes. */}
         <span className="panel__header-actions">
-          <button
-            type="button"
-            className="panel__action panel__action--icon panel__action--neutral"
-            data-testid="subworkspace-new"
-            title="New sub-workspace"
-            aria-label="New sub-workspace"
-            onClick={() => void startCreate()}
-          >
-            <Icon token="add" />
-          </button>
+          {minimised ? null : (
+            <button
+              type="button"
+              className="panel__action panel__action--icon panel__action--neutral"
+              data-testid="subworkspace-new"
+              title="New sub-workspace"
+              aria-label="New sub-workspace"
+              onClick={() => void startCreate()}
+            >
+              <Icon token="add" />
+            </button>
+          )}
+          {onToggleMinimise ? (
+            <MinimiseChevronButton
+              minimised={minimised}
+              testId={minimised ? 'subworkspaces-restore' : 'subworkspaces-minimise'}
+              title={minimised ? 'Restore Sub-workspaces' : 'Minimise Sub-workspaces'}
+              onClick={onToggleMinimise}
+            />
+          ) : null}
         </span>
       </header>
       {/* 018 / FR-051 — the third of four copy-pasted error strips. Now the shared model. Its CSS
           block was a verbatim copy of the Projects panel's, hard-coded #3a1d22 on #ff9aa6 and all. */}
+      {minimised ? null : (
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <ul className="subworkspace-list" data-testid="subworkspace-list" ref={listRef}>
           {draggingId !== null && indicatorY !== null ? (
@@ -301,6 +354,7 @@ export function SubworkspacesPanel(): ReactElement {
           )}
         </ul>
       </DndContext>
+      )}
     </div>
   );
 }

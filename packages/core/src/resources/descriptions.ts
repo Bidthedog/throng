@@ -21,7 +21,7 @@ export const ROLE_DESCRIPTIONS: Readonly<Record<ThrongRole, string>> = Object.fr
   utility: 'A helper process Electron starts for one job, such as network requests or audio.',
   daemon: 'The background process that keeps your terminals running when throng\'s windows close.',
   conhost:
-    "Windows' console host for one terminal. It turns the shell's console output into the text the terminal panel shows.",
+    "The OS console host for one terminal. It turns the shell's console output into the text the terminal panel shows.",
   'lock-helper':
     'Holds a project folder open, so it cannot be moved or deleted from under throng while you work in it.',
   collector: "This monitor's own process. It measures throng's usage, so the measuring never slows throng's windows.",

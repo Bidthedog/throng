@@ -65,6 +65,16 @@ describe('progress appears when main says so (050 T079, FR-031, FR-019)', () => 
     expect(cards()).toHaveLength(0);
   });
 
+  it('keeps a live card far past the toast duration — it is sticky (068 FR-021e)', () => {
+    render(tree());
+    running({ display: true });
+    expect(cards()).toHaveLength(1);
+    act(() => {
+      vi.advanceTimersByTime(10 * 60_000);
+    });
+    expect(cards(), 'the duration timer took a live Cancel away').toHaveLength(1);
+  });
+
   it('raises a card on the first event carrying display: true, with no renderer timer', () => {
     render(tree());
     running({ display: false });
@@ -231,11 +241,15 @@ describe('how the run ends (050 T050, FR-013)', () => {
 
     expect(cards()).toHaveLength(1);
     expect(cards()[0]!.className).toContain('notice--error');
-    // …and the timer that would have raised progress does not resurrect a card afterwards.
+    // …and nothing raises a second card afterwards; the error toast then leaves with the toast duration (068).
     act(() => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(2000);
     });
     expect(cards()).toHaveLength(1);
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(cards()).toHaveLength(0);
   });
 
   it('says what a roll back could not restore', () => {

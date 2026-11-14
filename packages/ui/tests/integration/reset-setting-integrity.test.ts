@@ -55,7 +55,7 @@ function settingsOf(root: string): Record<string, any> {
  * distinguishable per key rather than collapsing into one observation.
  */
 const SHIPPED = buildShippedDefaults().settings;
-const ERROR_MODE_SHIPPED = SHIPPED.notifications.error.mode; // 'dismiss'
+const ERROR_MODE_SHIPPED = SHIPPED.notifications.error.toast; // true (068 FR-092)
 const DESTROY_SHIPPED = SHIPPED.confirmations.destroyProject; // 'double'
 
 describe('ShippedDefaultsService.resetSetting — concurrency', () => {
@@ -67,7 +67,7 @@ describe('ShippedDefaultsService.resetSetting — concurrency', () => {
       join(root, 'settings.json'),
       JSON.stringify({
         version: 1,
-        notifications: { error: { mode: 'never' } },
+        notifications: { error: { toast: false, panel: true } },
         confirmations: { destroyProject: 'single' },
       }),
       'utf8',
@@ -79,7 +79,7 @@ describe('ShippedDefaultsService.resetSetting — concurrency', () => {
      * second write erases the first's change. A lost update, in the plainest form there is.
      */
     const [a, b] = await Promise.all([
-      svc.resetSetting('notifications.error.mode'),
+      svc.resetSetting('notifications.error.toast'),
       svc.resetSetting('confirmations.destroyProject'),
     ]);
 
@@ -99,7 +99,7 @@ describe('ShippedDefaultsService.resetSetting — concurrency', () => {
 
     const after = settingsOf(root);
     expect(
-      after.notifications.error.mode,
+      after.notifications.error.toast,
       `the error-mode reset must not be erased by the concurrent destroyProject reset. ${outcome}`,
     ).toBe(ERROR_MODE_SHIPPED);
     expect(

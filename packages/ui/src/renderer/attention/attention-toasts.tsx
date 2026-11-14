@@ -1,3 +1,4 @@
+import { logCaught } from '@throng/core';
 import { useEffect, useRef, type ReactElement } from 'react';
 import { useNotify, type NoticeInput } from '../common/notification.js';
 import { useAppSettings } from '../config/config-store.js';
@@ -21,10 +22,17 @@ import type { AttentionToastEvent } from '../global.js';
  * Severity follows the kind — `info` for Attention, `error` for Failed (FR-037) — for the colour, icon and
  * log level. How long the card stays is the user's `notifications.attention`, for both kinds (FR-111).
  *
+ * ══ ITS ENTRY IN THE NOTIFICATIONS PANEL (068 FR-024, FR-025) ══
+ *
+ * Under `panel` mode the card is also an entry, typed `attention` and keyed `attention:<panelId>`. The
+ * entry lives as long as the MARK, not the toast: the MAIN window (`reconcile`) removes every such entry
+ * whose panel is no longer marked, on each change of the mark set, because the window that raised the
+ * toast may be closed by the time the mark clears.
+ *
  * The WHOLE CARD is the link (FR-124): a click anywhere but Copy and Dismiss goes to the panel (FR-034's
  * navigation), and the card carries no go-to control of its own. Dismiss stays (030 FR-060).
  */
-export function AttentionToasts(): ReactElement | null {
+export function AttentionToasts({ reconcile = false }: { reconcile?: boolean } = {}): ReactElement | null {
   const { notify, update, dismiss } = useNotify();
   const display = useAppSettings().notifications.attention;
   const displayRef = useRef(display);
@@ -40,12 +48,17 @@ export function AttentionToasts(): ReactElement | null {
       const failed = e.kind === 'failed';
       return {
         severity: failed ? 'error' : 'info',
-        display: { mode: displayRef.current.mode, timeoutMs: displayRef.current.timeoutMs },
-        // No `title`: with a subject and no action the heading IS the subject (`noticeHeading`), so the
-        // card reads "<project> — <tab> — <panel>" over the reason, from the one formatter (030 FR-058).
+        display: { toast: displayRef.current.toast, panel: displayRef.current.panel },
+        panelSeverity: 'attention',
+        panelKey: `attention:${e.panelId}`,
+        // No `panelActions`: the entry is a link to its panel through its origin, which the subject's `panelId`
+        // states (068 FR-063), so no go-to-panel descriptor is stored or drawn.
+        // No `title`: with a subject and no action the heading IS the subject (`noticeHeading`), and the notice's
+        // place (FR-061) stands in for it, so the card reads "<project> › <tab> › <panel>" over the reason.
         // FR-120: project, tab and panel head the card, through the one subject formatter.
         subject: {
           kind: 'panel',
+          panelId: e.panelId,
           name: e.title ?? 'Terminal',
           ...(e.tabTitle ? { tab: e.tabTitle } : {}),
           ...(e.projectName ? { project: e.projectName } : {}),
@@ -85,6 +98,30 @@ export function AttentionToasts(): ReactElement | null {
       off();
     };
   }, [notify, update, dismiss]);
+
+  // FR-025: an attention entry goes when its mark does. Main window only; removing an entry twice is harmless,
+  // but only one window should be reading the store for it.
+  useEffect(() => {
+    const attention = window.throng?.attention;
+    if (!reconcile || !attention?.onChanged) return undefined;
+    return attention.onChanged(({ marks }) => {
+      const api = window.throng?.notifications;
+      if (!api) return;
+      const marked = new Set(marks.map((m) => m.panelId));
+      void api
+        .list()
+        .then((snapshot) => {
+          for (const entry of snapshot?.entries ?? []) {
+            const prefix = 'group:attention:';
+            if (!entry.key.startsWith(prefix) || marked.has(entry.key.slice(prefix.length))) continue;
+            void api.dismiss(entry.id);
+          }
+        })
+        .catch((error: unknown) => {
+          logCaught('attention: reconcile the notification entries', error);
+        });
+    });
+  }, [reconcile]);
 
   return null;
 }

@@ -29,7 +29,7 @@ const after = (doc: Doc): Doc => applyKeybindingsUpgrade(doc) as Doc;
 
 describe('the v30 keybindings upgrade (062 FR-034a)', () => {
   it('is shipped-defaults version 30', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(31);
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(33);
   });
 
   it('ships Y, or the cases below are vacuous', () => {

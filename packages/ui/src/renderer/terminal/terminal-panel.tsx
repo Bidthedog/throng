@@ -37,8 +37,8 @@ import { useCopyToClipboard } from '../common/use-copy.js';
 import {
   ensureTerminalCommandBridge,
   forgetTerminalCommand,
-  peekTerminalCommand,
-  useTerminalCommand,
+  peekTerminalMemoryCommand,
+  useTerminalMemoryCommand,
 } from './command-store.js';
 import { peekTerminalCwd, useTerminalCwd } from './cwd-store.js';
 import { ensureAppTerminatingBridge, isAppTerminating, onAppCloseCancelled } from './app-terminating.js';
@@ -625,7 +625,8 @@ export function TerminalPanel({
   // the debounced layout save, so the save is pushed back forever and NOTHING is ever persisted.
   // That is precisely why directory memory appeared to do nothing at all.
   const lastPersistedCommand = useRef<string | null | undefined>(undefined);
-  const observedNow = useTerminalCommand(panel.id);
+  // 068 FR-041: for Claude Code, the command that resumes its session; the title keeps the plain command.
+  const observedNow = useTerminalMemoryCommand(panel.id);
   useEffect(() => {
     if (!terminalConfig.rememberCommand) return;
     if (observedNow === undefined) return;
@@ -678,7 +679,7 @@ export function TerminalPanel({
       // panel destroy, project close, "terminate all", the shell exiting on its own), which is
       // exactly the set FR-020 requires, and it happens BEFORE clearPanelType so the config is
       // still readable. `clearPanelType` then preserves `terminalMemory` on the way past.
-      const observed = peekTerminalCommand(panel.id);
+      const observed = peekTerminalMemoryCommand(panel.id);
       const decision = captureDecision(
         terminalConfig.rememberCommand,
         terminalConfig.startupCommand,

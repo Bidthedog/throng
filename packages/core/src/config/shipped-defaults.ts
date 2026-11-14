@@ -353,7 +353,17 @@ import { setAtPath } from './metadata.js';
 // built-in theme file, so this is 060's guarded value rewrite again: {@link V30_MOVED_ICONS} records
 // what 30 wrote, and {@link planThemeValueUpgrade} moves a glyph only where the file still holds it.
 // The additive half also fills `save` and `saveAs` (067 FR-069), which no seed has written yet.
-export const SHIPPED_DEFAULTS_VERSION = 31;
+//
+// Bumped by 068 (31 → 32): five icon tokens for the Notifications panel and the side-panel minimise control —
+// `notifications`, `dismissAll`, `sortOrder`, `minimisePanel` and `restorePanel` (FR-026, FR-036, FR-038). The
+// additive case: every payload arrives, no existing value moves. The notification settings reshape (modes
+// `dismiss`/`timed` become `panel`/`toast`, `timeoutMs` dropped) is NOT a seed upgrade: it is read-side, in
+// `parseSettingsGuarded`, because it must run on the user's own file before the bounds guard resets it.
+//
+// Bumped by 068 T103–T105 (32 → 33): four icon tokens for the type icon at the top left of a Notifications panel entry —
+// `noticeError`, `noticeAttention`, `noticeInfo` and `noticeSuccess` (FR-074; a warning entry draws the existing `warning`).
+// The additive case again: every payload arrives, no existing value moves.
+export const SHIPPED_DEFAULTS_VERSION = 33;
 
 /**
  * The icon glyphs shipped-defaults version 30 wrote for the tokens 067's hand-test round moved, the

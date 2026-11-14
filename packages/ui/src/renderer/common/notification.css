@@ -86,3 +86,20 @@
     }
   }
 }
+
+/* 068 FR-061 — where the notice belongs, `Project › Tab › Panel`, under its heading. */
+.notice__place {
+  margin: 0 0 2px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* 068 FR-077 — a toast shows at most three lines of text, heading, place and message together, and cuts the rest with an
+   ellipsis; hovering it shows the whole text (FR-079). The controls and the lists below sit outside this block. */
+.notice__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}

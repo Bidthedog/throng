@@ -41,6 +41,7 @@ import {
 } from 'react';
 import {
   MAX_LISTED_MATCHES,
+  displayOf,
   formatGrouped,
   groupRows,
   isWithinRoot,
@@ -687,7 +688,7 @@ export function FindInFilesPanel({
         // FR-082 — the summary notice answers to ITS OWN pair of preferences, not to
         // `notifications.<severity>`. Read here because this is where the settings already are;
         // `commitReplace` is a function rather than a hook, so it is handed the values.
-        display: { mode: prefs.summaryNoticeMode, timeoutMs: prefs.summaryNoticeTimeoutMs },
+        display: displayOf(prefs.summaryNoticeMode),
         invoke: window.throng?.fileSearch?.commit,
       },
     );

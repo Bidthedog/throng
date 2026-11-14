@@ -98,9 +98,7 @@ describe('a partially written settings.json is not mistaken for the defaults', (
     // delay every launch on a brand-new install to learn something that was never going to change.
     const result = await readConfigOnce(new FileConfigStore(freshRoot()));
     expect(result.settingsUnreadable).toBe(false);
-    expect(result.payload.settings.notifications.error.mode).toBe(
-      DEFAULT_APP_SETTINGS.notifications.error.mode,
-    );
+    expect(result.payload.settings.notifications.error).toEqual(DEFAULT_APP_SETTINGS.notifications.error);
   });
 
   it('DOES NOT report unreadable for a parseable document that merely needed correcting', async () => {
@@ -109,7 +107,7 @@ describe('a partially written settings.json is not mistaken for the defaults', (
     const root = freshRoot();
     writeFileSync(
       join(root, 'settings.json'),
-      JSON.stringify({ version: 1, notifications: { error: { mode: 'timed', timeoutMs: 999999 } } }),
+      JSON.stringify({ version: 1, notifications: { error: { mode: 'toast' }, toastDurationMs: 999999 } }),
       'utf8',
     );
     const result = await readConfigOnce(new FileConfigStore(root));
@@ -123,11 +121,11 @@ describe('a partially written settings.json is not mistaken for the defaults', (
     const root = freshRoot();
     writeFileSync(
       join(root, 'settings.json'),
-      JSON.stringify({ version: 1, notifications: { error: { mode: 'never' } } }),
+      JSON.stringify({ version: 1, notifications: { error: { toast: false, panel: false } } }),
       'utf8',
     );
     const payload = await readConfigPayload(new FileConfigStore(root));
-    expect(payload.settings.notifications.error.mode).toBe('never');
+    expect(payload.settings.notifications.error).toMatchObject({ toast: false, panel: false });
     /*
      * `generation` joined the set deliberately (#341, #333), and it is the ONE addition since 032
      * pinned this. It is not a new signal for readers — every existing consumer ignores it — but the

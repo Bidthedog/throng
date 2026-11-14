@@ -153,3 +153,5 @@ export {
 } from './reconnect.js';
 export { assignConhosts } from './conhost-assignment.js';
 export { escalationTargets } from './escalation-targets.js';
+export { splitWindowsCommandLine } from './command-line-args.js';
+export { isClaudeCodeProcess, claudeResumeCommand, resumeShellFor, type ResumeShell } from './claude-resume.js';

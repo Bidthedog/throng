@@ -173,7 +173,7 @@ function DraggableCategoryHeader({
  * The project's root path in a de-emphasised line. When it overflows, hovering
  * starts a horizontal marquee scroll after ~200 ms and resets on leave (FR-032).
  */
-function PathLabel({ path }: { path: string }): ReactElement {
+function PathLabel({ path, id }: { path: string; id: string }): ReactElement {
   const outerRef = useRef<HTMLSpanElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [offset, setOffset] = useState(0);
@@ -196,7 +196,9 @@ function PathLabel({ path }: { path: string }): ReactElement {
       ref={outerRef}
       className="project-item__path"
       data-testid="project-path"
-      title={path}
+      // 068 FR-064 (over FR-034d): the path, then `(id: <id>)` on a second line, so a user can match a
+      // log record (`project=<project:ID>`) to this project.
+      title={`${path}\n(id: ${id})`}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -1384,7 +1386,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                           ({counts.tabs}T·{counts.panels}P)
                         </span>
                       </span>
-                      <PathLabel path={project.rootFolder} />
+                      <PathLabel path={project.rootFolder} id={project.id} />
                     </span>
                   </button>
                 )}

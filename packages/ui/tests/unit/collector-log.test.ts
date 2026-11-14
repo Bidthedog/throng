@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { sessionFileName } from '@throng/core';
@@ -28,6 +28,26 @@ describe('the collector log', () => {
     log!.close();
     expect(readdirSync(dir)).toContain(sessionFileName('collector', STARTED, 4242));
     expect(readFileSync(join(dir, sessionFileName('collector', STARTED, 4242)), 'utf8')).toMatch(/\[collector\] hello/);
+  });
+
+  it('068 FR-034a: writes no home folder or user name, and tokens follow the salt main passed', () => {
+    const write = (salt: string): string => {
+      const dir = mkdtempSync(join(tmpdir(), 'throng-collector-log-'));
+      dirs.push(dir);
+      const log = openCollectorLog({
+        env: { THRONG_LOG_DIR: dir, THRONG_LOG_SALT: salt },
+        pid: 9,
+        startedAt: STARTED,
+      })!;
+      log.info(`reading ${homedir()}/notes/todo.md for ${userInfo().username}`);
+      log.close();
+      return readFileSync(join(dir, sessionFileName('collector', STARTED, 9)), 'utf8');
+    };
+    const a = write('salt-one');
+    expect(a).not.toContain(homedir());
+    expect(a).not.toContain('todo.md');
+    expect(write('salt-one').replace(/^\S+/, '')).toBe(a.replace(/^\S+/, ''));
+    expect(write('salt-two').replace(/^\S+/, '')).not.toBe(a.replace(/^\S+/, ''));
   });
 
   it('has no log when main passed no folder', () => {

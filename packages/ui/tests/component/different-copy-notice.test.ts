@@ -12,7 +12,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DifferentCopyNotice as Payload } from '@throng/core';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
@@ -42,6 +42,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   Reflect.deleteProperty(window, 'throng');
+  vi.useRealTimers();
 });
 
 const RUNNING = { runningRoot: 'C:\\Program Files\\throng', runningVersion: '1.4.0' };
@@ -86,6 +87,18 @@ describe('the different-copy notice (058 FR-018)', () => {
     expect(notices[0].textContent).toContain('To open the copy at E:\\archive\\throng, close this one first.');
     expect(notices[0].textContent).not.toContain('D:\\portable\\throng');
     expect(notices[0].getAttribute('data-pulsing')).toBe('true');
+  });
+
+  it('is sticky: it stays long past the toast duration (068 FR-021e)', async () => {
+    mount();
+    await waitFor(() => expect(push).toBeDefined());
+    vi.useFakeTimers();
+    act(() => push!({ ...RUNNING, launchedRoot: 'D:\\portable\\throng' }));
+    expect(screen.getByTestId('different-copy-notice')).toBeVisible();
+    act(() => {
+      vi.advanceTimersByTime(10 * 60_000);
+    });
+    expect(screen.queryByTestId('different-copy-notice'), 'the duration timer took a sticky card').not.toBeNull();
   });
 
   it('is dismissed through the themed dismiss control, and a later launch raises it again', async () => {

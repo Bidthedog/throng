@@ -7,6 +7,7 @@ import {
   MAX_CAPTURABLE_COMMAND_LENGTH,
   shouldNotifyCaptureOutcome,
   captureLogLine,
+  createAnonymiser,
 } from '@throng/core';
 import type { ChildProcess } from '@throng/core';
 
@@ -201,5 +202,13 @@ describe('observability of a capture (025 FR-026a/b/c)', () => {
     expect(captureLogLine('p1', captureDecision(true, '', null))).toContain('reason=nothing-running');
     expect(captureLogLine('p1', captureDecision(false, '', 'x'))).toContain('reason=memory-off');
     expect(captureLogLine('p1', captureDecision(true, '', 'npm run dev'))).toContain('panel=p1');
+  });
+
+  it('068 FR-034b: the command text reaches the log only as a token, never verbatim', () => {
+    const anon = createAnonymiser({ salt: 's', os: 'linux', hash: (_salt, value) => `${value.length}`.padStart(8, '0') });
+    const command = 'claude "draft the Acme layoff memo"';
+    const logged = anon.apply(captureLogLine('p1', captureDecision(true, '', command)));
+    expect(logged).not.toMatch(/Acme|layoff|claude/);
+    expect(logged).toMatch(/reason=saved value=<command-[0-9a-f]{8}>$/);
   });
 });
