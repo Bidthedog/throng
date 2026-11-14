@@ -11,6 +11,7 @@
  * second resolver". `path` on {@link WikiTarget} deliberately does NOT carry a leading `/`: `rooted`
  * is the one place that fact lives, so a caller never has to re-test the string for it.
  */
+import { isUnderPath } from '../fs/path-id.js';
 import { resolveAgainst, separatorOf } from './path-resolve.js';
 
 export interface WikiTarget {
@@ -54,8 +55,9 @@ export function parseWikilink(inner: string): WikiTarget | null {
 
 /**
  * The ordered absolute candidates FR-052c names for `target`, resolved from `docDir` — the
- * document's own FOLDER, already a directory, not its file path — for a relative target, or
- * `projectRoot` for a rooted one, exactly as an ordinary link resolves (`path-resolve.ts`, FR-053).
+ * document's own FOLDER, already a directory, not its file path — for a relative target, then the same
+ * from `projectRoot` (068 FR-001, the vault-root fallback), or `projectRoot` alone for a rooted one,
+ * exactly as an ordinary link resolves (`path-resolve.ts`, FR-053).
  * `[]` for: an empty path (nothing to resolve as a file — a same-document `[[#Heading]]`); a rooted
  * target with no project root (FR-052b, a sub-workspace preview); or a path that climbs above its
  * base's own root.
@@ -68,14 +70,33 @@ export function wikiCandidates(target: WikiTarget, docDir: string, projectRoot: 
   if (target.path.length === 0) return [];
   if (target.rooted && projectRoot === null) return [];
 
-  const base = target.rooted ? (projectRoot as string) : docDir;
-  const sep = separatorOf(base);
+  // 068 FR-001: a target with no leading `/` is tried from the document's folder FIRST (the note's own
+  // neighbour wins), then the same from the project root — a vault-style `[[folder/sub/Target]]` is
+  // written from the vault root, wherever the note sits. A rooted target is the root only.
+  const bases = target.rooted ? [projectRoot as string] : projectRoot === null ? [docDir] : [docDir, projectRoot];
   const suffixes = HAS_EXTENSION.test(target.path) ? [''] : ['.md', '.markdown', ''];
 
   const candidates: string[] = [];
-  for (const suffix of suffixes) {
-    const resolved = resolveAgainst(base, target.path + suffix, sep);
-    if (resolved !== null) candidates.push(resolved);
+  for (const base of bases) {
+    const sep = separatorOf(base);
+    for (const suffix of suffixes) {
+      const resolved = resolveAgainst(base, target.path + suffix, sep);
+      if (resolved === null || candidates.includes(resolved)) continue;
+      // The root FALLBACK stays inside the project (Principle I): a `..` target climbing out of the root
+      // names nothing the document-folder candidates did not already, and is never probed.
+      if (!target.rooted && base !== docDir && !isUnderPath(resolved, base)) continue;
+      candidates.push(resolved);
+    }
   }
   return candidates;
+}
+
+/**
+ * A wikilink target as the user wrote it — `folder/sub/Target#Some Heading`, a leading `/` kept for a
+ * rooted one — for a tooltip and the status bar (068 FR-004, FR-005). Plain text: no percent escapes,
+ * no `throng-wiki:` scheme.
+ */
+export function wikiDisplayText(target: WikiTarget): string {
+  const path = target.rooted ? `/${target.path}` : target.path;
+  return target.fragment === null ? path : `${path}#${target.fragment}`;
 }

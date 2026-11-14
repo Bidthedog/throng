@@ -4,9 +4,15 @@
  * Recognises `[[Target]]`, `[[Target|Alias]]`, `[[Target#Heading]]`, `[[#Heading]]` and
  * `[[Target#^block]]` and emits an ordinary `link_open` / `text` / `link_close` triplet — the sanitiser
  * never learns a wikilink was involved (`sanitise.ts`'s `onLink` classifies `href` through
- * `classifyPreviewLink`, which already has core's wiki case, R12). `![[…]]` (an embed, out of scope
- * per FR-056) and `[[…]]` malformed per core's `parseWikilink` are left LITERAL: this rule declines to
+ * `classifyPreviewLink`, which already has core's wiki case, R12). `![[…]]` (an embed — `embeds.ts`
+ * owns it) and `[[…]]` malformed per core's `parseWikilink` are left LITERAL: this rule declines to
  * match, and markdown-it's ordinary text handling renders the brackets as written.
+ *
+ * ══ CANDIDATE 0 IS PROVISIONAL (068 FR-002) ══
+ *
+ * The classification the sanitiser gives a wikilink targets candidate 0 only. Which candidate EXISTS is
+ * main's answer (`resolveWikiTargets`), and {@link applyWikiResolution} rewrites each link's
+ * `data-throng-link` to it — so styling, follow, Copy Link and the status bar all use the one decision.
  *
  * ══ NEVER INSIDE CODE (FR-050) ══
  *
@@ -28,7 +34,8 @@
  * inspects — see {@link WIKI_HREF_ATTRIBUTE}.
  */
 import type { MarkdownIt as MarkdownItInstance, StateInline } from 'markdown-it';
-import { parseWikilink } from '@throng/core';
+import { classifyResolvedWiki, parseWikilink, wikiDisplayText } from '@throng/core';
+import { LINK_ATTRIBUTE, linkOf, serialiseLink } from '../../link-dom.js';
 import { logCaught } from '@throng/core';
 
 const OPEN = 0x5b; // [
@@ -76,6 +83,27 @@ export function decodeWikiHref(body: string): { path: string; rooted: boolean } 
   return { path: rooted ? path.slice(1) : path, rooted };
 }
 
+/**
+ * The attribute's BODY → the target as the author wrote it (`folder/sub/Target#Some Heading`, a rooted
+ * one with its leading `/`) for the link's tooltip and the status bar (068 FR-004, FR-005): decoded, no
+ * `throng-wiki:` scheme, no `%2F`. `null` when a part fails to decode.
+ */
+export function wikiHrefDisplayText(body: string): string | null {
+  const hashIndex = body.indexOf('#');
+  const target = decodeWikiHref(body);
+  if (target === null) return null;
+  let fragment: string | null = null;
+  if (hashIndex >= 0 && hashIndex < body.length - 1) {
+    try {
+      fragment = decodeURIComponent(body.slice(hashIndex + 1));
+    } catch (error) {
+      logCaught('wikilinks: decode a wikilink fragment', error);
+      return null;
+    }
+  }
+  return wikiDisplayText({ path: target.path, rooted: target.rooted, fragment, alias: null });
+}
+
 /** The attribute {@link decodeWikiHref}'s caller (`pipeline.ts`) marks each wikilink `<a>` with. */
 export const WIKI_INDEX_ATTRIBUTE = 'data-throng-wiki-index';
 
@@ -88,12 +116,28 @@ export const UNRESOLVED_CLASS = 'preview-link--unresolved';
  * `wikiTargets` were collected) — `null` means no candidate exists on disk. Toggles
  * `preview-link--unresolved` accordingly; an index past the end of `resolved` (T062's 500-target cap)
  * is treated as unresolved, the same as a `null` answer.
+ *
+ * 068 FR-002, FR-006 — main's answer is the ONE decision. A resolved link's `data-throng-link` is
+ * rewritten to `classifyResolvedWiki` of the answer (the fragment kept), so Ctrl+click, Ctrl+Enter, the
+ * link menu's Open and Copy Link all read the file that EXISTS, never candidate 0 the sanitiser guessed.
+ * An unresolved link keeps candidate 0, so the missing-target notice names the document-folder path
+ * (FR-003). `projectRoot` is `''` for a run with no owning project, as everywhere in the pipeline.
  */
-export function applyWikiResolution(root: HTMLElement, resolved: readonly (string | null)[]): void {
+export function applyWikiResolution(
+  root: HTMLElement,
+  resolved: readonly (string | null)[],
+  projectRoot: string,
+): void {
   for (const el of root.querySelectorAll<HTMLElement>(`[${WIKI_INDEX_ATTRIBUTE}]`)) {
+    if (el.tagName === 'IMG') continue; // an image embed: `applyImageEmbedResolution` (`embeds.ts`) owns it
     const index = Number(el.getAttribute(WIKI_INDEX_ATTRIBUTE));
     const found = Number.isInteger(index) && index >= 0 && index < resolved.length ? resolved[index] : null;
     el.classList.toggle(UNRESOLVED_CLASS, found === null || found === undefined);
+    if (found === null || found === undefined) continue;
+    const current = linkOf(el);
+    if (current === null) continue;
+    const fragment = current.kind === 'file' ? (current.fragment ?? null) : null;
+    el.setAttribute(LINK_ATTRIBUTE, serialiseLink(classifyResolvedWiki(found, fragment, { docPath: '', projectRoot })));
   }
 }
 
