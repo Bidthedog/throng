@@ -11,7 +11,7 @@ Spec: `specs/068-vault-links-notifications-agent-restore/spec.md`
 | MT-05 | Minimising the side panels and the pending badge | signed off | bee2c978f6f5 | 2026-11-14 | |
 | MT-06 | Resuming a Claude Code session in a remembered terminal | signed off | bee2c978f6f5 | 2026-11-14 | |
 | MT-07 | Anonymised diagnostic log and the project id hover | signed off | bee2c978f6f5 | 2026-11-14 | |
-| MT-08 | Notification preferences | signed off | bee2c978f6f5 | 2026-11-14 | |
+| MT-08 | Notification preferences | needs retest | bee2c978f6f5 | 2026-11-14 | d5537553 touched packages/ui/src/renderer/preferences/form-controls.tsx |
 
 ## MT-01: Vault-root wikilinks in a Markdown preview
 
