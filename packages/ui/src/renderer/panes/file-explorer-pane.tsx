@@ -18,6 +18,9 @@ import { IconButton } from '../common/icon-button.js';
 import { ProjectSettingsDialog } from '../project-settings/project-settings-dialog.js';
 import { setActivePane, useActivePane } from '../workspace/active-pane.js';
 import { registerExplorerCommands, unregisterExplorerCommands } from '../explorer/explorer-commands.js';
+import { NotificationsPanel } from '../notifications/notifications-panel.js';
+import { useNotificationActions } from '../notifications/use-notification-actions.js';
+import { VerticalPanelStack } from './vertical-panel-stack.js';
 
 /**
  * Inner content of the right-hand File Explorer Pane (FR-004/006): a draggable
@@ -33,6 +36,7 @@ export function FileExplorerPane({
   onResizeStart: (e: ReactPointerEvent) => void;
   resizing: boolean;
 }): ReactElement {
+  const notificationActions = useNotificationActions();
   const { activeProject, projects, setProjectHidden, setSearchExcludes } = useProjects();
   const keybindings = useKeybindings();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -86,6 +90,18 @@ export function FileExplorerPane({
         // explain.
         onFocus={() => setActivePane('files')}
       >
+        {/* 068 US3/US4 (FR-035, FR-038, FR-038a): the pane is a stack of two — the File Explorer, then the
+            Notifications panel, which minimises to its header and starts small. */}
+        <VerticalPanelStack
+          storageKey="throng.explorerPanelSizes"
+          minimisedStorageKey="throng.explorerPanelMinimised"
+          panels={[
+            {
+              key: 'explorer',
+              minHeight: 140,
+              defaultHeight: 480,
+              dividerTestId: 'explorer-vresize-notifications',
+              render: () => (
         <div className="panel">
           <header className="panel__header">
             <span className="panel__title">File Explorer</span>
@@ -166,6 +182,25 @@ export function FileExplorerPane({
             </>
           )}
         </div>
+              ),
+            },
+            {
+              key: 'notifications',
+              minHeight: 90,
+              defaultHeight: 160,
+              minimisable: true,
+              className: 'sidebar-panel--notifications',
+              render: ({ minimised, toggleMinimise }) => (
+                <NotificationsPanel
+                  minimised={minimised}
+                  onToggleMinimise={toggleMinimise}
+                  targetExists={notificationActions.targetExists}
+                  runAction={notificationActions.runAction}
+                />
+              ),
+            },
+          ]}
+        />
       </div>
     </>
   );

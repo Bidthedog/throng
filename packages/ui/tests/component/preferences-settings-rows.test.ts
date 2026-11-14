@@ -21,7 +21,8 @@ import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice
 import { SettingsMetadataContext, SettingsTab } from '../../src/renderer/preferences/settings-tab.js';
 
 const MODE = 'search.inFiles.summaryNoticeMode';
-const TIMEOUT = 'search.inFiles.summaryNoticeTimeoutMs';
+// 068: the duration leaf is gone; a leaf with an `enabledWhen` of its own stands in for it.
+const TIMEOUT = 'notifications.info.os';
 const FLAG = 'terminals.advertiseHyperlinks';
 const ROW = { id: 'synthetic', label: 'Synthetic row' };
 
@@ -76,8 +77,8 @@ async function mount(descriptors: readonly FieldDescriptor[], settings: Record<s
   await waitFor(() => expect(loaded).toBe(true));
 }
 
-const TIMED = { search: { inFiles: { summaryNoticeMode: 'timed', summaryNoticeTimeoutMs: 5000 } } };
-const DISMISS = { search: { inFiles: { summaryNoticeMode: 'dismiss', summaryNoticeTimeoutMs: 5000 } }, terminals: { advertiseHyperlinks: false } };
+const TIMED = { notifications: { os: true }, search: { inFiles: { summaryNoticeMode: 'toast' } } };
+const DISMISS = { notifications: { os: false }, search: { inFiles: { summaryNoticeMode: 'panel' } }, terminals: { advertiseHyperlinks: false } };
 
 describe('descriptors sharing a row (FR-108)', () => {
   it('render as ONE row: the label once, every leaf’s control inside it', async () => {
@@ -126,13 +127,13 @@ describe('descriptors sharing a row (FR-108)', () => {
     expect(document.querySelectorAll('.settings-row')).toHaveLength(2);
   });
 
-  it('keeps a leaf’s inertness: the duration is inert unless the mode leaf is Display for', async () => {
+  it('keeps a leaf’s inertness: the OS leaf is inert while the global switch is off', async () => {
     await mount([rowed(MODE), rowed(TIMEOUT)], DISMISS);
     expect((screen.getByTestId(`control-${TIMEOUT}`) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByTestId(`control-${MODE}`) as HTMLSelectElement).disabled).toBe(false);
   });
 
-  it('leaves the duration live under Display for', async () => {
+  it('leaves the OS leaf live while the global switch is on', async () => {
     await mount([rowed(MODE), rowed(TIMEOUT)], TIMED);
     expect((screen.getByTestId(`control-${TIMEOUT}`) as HTMLInputElement).disabled).toBe(false);
   });

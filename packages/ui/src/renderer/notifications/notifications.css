@@ -1,0 +1,250 @@
+/* 068 US3/US4 — the Notifications panel and its pending badge.
+   Every colour is a theme token: the severity edge reuses the toast's own (`notice.css` / theme.css), so an
+   entry reads as the toast it came from, and the badge takes the most severe pending entry's colour. */
+
+/* The explorer pane pads every panel header clear of its absolute collapse button; this header is not
+   under it. */
+.pane--explorer .pane-explorer__body .notifications-panel .panel__header {
+  padding-right: 12px;
+}
+
+.notifications-panel {
+  min-height: 0;
+  height: 100%;
+}
+
+.notifications-panel--minimised .panel__header {
+  border-bottom: none;
+}
+
+.notifications-panel .panel__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.notifications-panel__empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--text-dim);
+}
+
+/* The one scroll region: it takes the height the stack gives it and scrolls when the entries overflow. */
+.notifications-panel__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notification-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background: var(--throng-colour-surfaceActive); /* the raised card surface the type's tint is mixed into (FR-071) */
+  color: var(--throng-colour-text);
+  min-width: 0;
+}
+
+.notification-entry:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 1px;
+}
+
+/* 068 FR-071 — the entry's background is a pastel, understated tint of its type's colour (16% of it mixed into the
+   theme surface; `entry-look.ts` holds the share and the token per type, and a unit test holds the text to 4.5:1 on
+   each in every shipped theme). It replaces the coloured strip the entry used to carry on its left edge. */
+.notification-entry--error {
+  background: color-mix(in srgb, var(--throng-colour-danger) 16%, var(--throng-colour-surfaceActive));
+}
+.notification-entry--warning {
+  background: color-mix(in srgb, var(--throng-colour-warning) 16%, var(--throng-colour-surfaceActive));
+}
+.notification-entry--attention {
+  background: color-mix(in srgb, var(--throng-colour-attentionMark) 16%, var(--throng-colour-surfaceActive));
+}
+.notification-entry--info {
+  background: color-mix(in srgb, var(--throng-colour-accent) 16%, var(--throng-colour-surfaceActive));
+}
+.notification-entry--success {
+  background: color-mix(in srgb, var(--throng-colour-success) 16%, var(--throng-colour-surfaceActive));
+}
+
+/* 068 FR-072, FR-089 — the border is the colour of the project the entry relates to, at full strength (set live by the
+   panel as `--entry-project`); an entry about no project keeps the theme's ordinary border. Its width is set once, on
+   `.notification-entry`, and no state changes it. */
+.notification-entry[data-project='true'] {
+  border-color: var(--entry-project);
+}
+
+/* 068 FR-073, FR-089 — a link entry (it goes to a panel) takes the project's highlight on hover and keyboard focus: the
+   project colour mixed toward the text colour, so it changes colour at the same weight. One that is not a link changes
+   nothing. */
+.notification-entry--activatable:hover,
+.notification-entry--activatable:focus-visible {
+  border-color: color-mix(in srgb, var(--entry-project, var(--throng-colour-accent)) 55%, var(--throng-colour-text));
+}
+
+/* A repeat of a stored condition pulses the entry that already holds it (FR-031b). */
+.notification-entry[data-flashing='true'] {
+  animation: notification-entry-flash 600ms ease-out;
+}
+@keyframes notification-entry-flash {
+  from {
+    box-shadow: 0 0 0 3px var(--throng-colour-accent);
+  }
+  to {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notification-entry[data-flashing='true'] {
+    animation: none;
+    outline: 2px solid var(--throng-colour-accent);
+  }
+}
+
+/* 068 FR-083, FR-084 — line 1 holds the icon, the date and time and the repeat count (the lead) and then the actions. The lead
+   is a single row of whole items that WRAP and are clipped to that one row: what does not fit drops out whole, from the end,
+   so the repeat count goes first, then the date and time, then the icon. The actions never shrink or wrap. No script
+   measures anything. */
+.notification-entry__line1 {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.notification-entry__lead {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  column-gap: 8px;
+  row-gap: 0;
+  height: 1.6em;
+  overflow: hidden;
+}
+/* 068 FR-088 — every row of line 1 is exactly 1.6em, so line 1 is the same height at rest and expanded while its parts fit
+   on one row: expanding an entry with nothing cut moves nothing. */
+.notification-entry__lead > * {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 1.6em;
+  line-height: 1.6em;
+  white-space: nowrap;
+}
+.notification-entry__time,
+.notification-entry__count {
+  color: var(--text-dim);
+  font-size: 0.85em;
+}
+
+.notification-entry__title,
+.notification-entry__message,
+.notification-entry__place {
+  margin: 0;
+}
+.notification-entry__title {
+  font-size: var(--throng-notice-title-font-size);
+  font-weight: 600;
+}
+.notification-entry__place {
+  color: var(--text-dim);
+}
+/* 068 FR-084 — at rest, each line after line 1 is ONE line, cut with an ellipsis by the stylesheet (never by the text:
+   FR-086), and the lists stay out of the four lines. */
+.notification-entry:not([data-expanded='true']) .notification-entry__title,
+.notification-entry:not([data-expanded='true']) .notification-entry__place,
+.notification-entry:not([data-expanded='true']) .notification-entry__message {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notification-entry:not([data-expanded='true']) :is(.notification-entry__details, .notification-entry__affected) {
+  display: none;
+}
+/* 068 FR-085 — pointing at an entry, or focusing it, shows all of it in place: every line wraps and line 1 shows everything. */
+.notification-entry[data-expanded='true'] :is(.notification-entry__title, .notification-entry__place, .notification-entry__message) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.notification-entry[data-expanded='true'] .notification-entry__lead {
+  height: auto;
+}
+
+.notification-entry__details,
+.notification-entry__affected {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  overflow-wrap: anywhere;
+}
+
+.notification-entry__controls {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 2px;
+}
+
+/* A link inside a notice's body (the limit warning's): it follows on Ctrl+click and Ctrl+Enter (constitution 5.5.0). */
+.notice__link {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--throng-colour-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.notice__link:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 1px;
+}
+
+/* The Notifications title and its count (FR-060): one row, vertically centred, one character apart. */
+.notifications-panel__heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 1ch;
+  min-width: 0;
+}
+
+/* The count (FR-059): a small pill in throng's highlight colour and its paired text colour, whatever the types it counts (FR-093). */
+.pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.6;
+  font-weight: 600;
+  color: var(--throng-colour-accentText);
+  background: var(--throng-colour-accent);
+}
+/* On the collapsed right rail the count sits below the rotated File Explorer title, one character clear of it. */
+.pane-rail .pending-badge {
+  margin-top: 1ch;
+}
+.notification-entry--activatable {
+  cursor: pointer;
+}
+/* 068 FR-074, FR-083 — the type's icon, the first part of line 1. */
+.notification-entry__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  line-height: 1.3;
+}

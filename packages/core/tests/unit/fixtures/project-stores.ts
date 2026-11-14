@@ -15,6 +15,17 @@ export class InMemoryProjectStore implements IProjectStore {
   list(ownerUser: string): Project[] {
     return [...this.rows.values()].filter((p) => p.ownerUser === ownerUser).map((p) => ({ ...p }));
   }
+  assignMissingIds(ownerUser: string, newId: () => string): number {
+    let healed = 0;
+    for (const [key, row] of [...this.rows.entries()]) {
+      if (row.ownerUser !== ownerUser || (row.id !== null && row.id !== undefined && row.id !== '')) continue;
+      this.rows.delete(key);
+      const id = newId();
+      this.rows.set(id, { ...row, id });
+      healed += 1;
+    }
+    return healed;
+  }
   getById(ownerUser: string, id: string): Project | undefined {
     const row = this.rows.get(id);
     return row && row.ownerUser === ownerUser ? { ...row } : undefined;

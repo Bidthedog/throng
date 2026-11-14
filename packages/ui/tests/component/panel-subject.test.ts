@@ -153,7 +153,8 @@ describe('locating a panel (FR-022)', () => {
   it('names the panel, its tab, and its project', async () => {
     const place = await mount(layoutWith(ALPHA), [dto(ALPHA, 'Alpha'), dto(BETA, 'Beta')]);
 
-    expect(place).toEqual({ name: 'Server', tab: 'Build', project: 'Alpha' });
+    // 068 FR-061, FR-063: and its ids, so a notice about it can link to it.
+    expect(place).toEqual({ panelId: 'panel-1', projectId: ALPHA, name: 'Server', tab: 'Build', project: 'Alpha' });
   });
 
   it('names the panel’s ORIGIN project, not the window’s active one (INV-5/6)', async () => {
@@ -178,7 +179,7 @@ describe('locating a panel (FR-022)', () => {
     // than a confident wrong name.
     const place = await mount(layoutWith('project-unknown'), [dto(ALPHA, 'Alpha')]);
 
-    expect(place).toEqual({ name: 'Server', tab: 'Build', project: undefined });
+    expect(place).toEqual({ panelId: 'panel-1', projectId: 'project-unknown', name: 'Server', tab: 'Build', project: undefined });
   });
 
   it('returns undefined for a panel that is not in this window', async () => {
@@ -237,7 +238,7 @@ describe('the panel is named by its content, as its header names it (048 FR-032)
 });
 
 describe('turning a place into a notice subject', () => {
-  const place: PanelPlace = { name: 'Server', tab: 'Build', project: 'Alpha' };
+  const place: PanelPlace = { panelId: 'p1', projectId: 'pr1', name: 'Server', tab: 'Build', project: 'Alpha' };
 
   it('describes the panel', () => {
     expect(panelSubject(place)).toEqual({
@@ -245,6 +246,8 @@ describe('turning a place into a notice subject', () => {
       name: 'Server',
       tab: 'Build',
       project: 'Alpha',
+      panelId: 'p1',
+      projectId: 'pr1',
     });
   });
 
@@ -265,6 +268,8 @@ describe('turning a place into a notice subject', () => {
       panel: 'Server',
       tab: 'Build',
       project: 'Alpha',
+      panelId: 'p1',
+      projectId: 'pr1',
     });
   });
 
@@ -274,6 +279,8 @@ describe('turning a place into a notice subject', () => {
       name: 'Server',
       tab: 'Build',
       project: 'Alpha',
+      panelId: 'p1',
+      projectId: 'pr1',
     });
   });
 

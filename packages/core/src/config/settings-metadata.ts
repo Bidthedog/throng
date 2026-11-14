@@ -20,8 +20,12 @@ import { codePageName } from '../editor/text-fidelity.js';
 import {
   DISPLAY_MODES,
   DISPLAY_MODE_LABELS,
-  TIMEOUT_MAX_MS,
-  TIMEOUT_MIN_MS,
+  PANEL_LIMIT_MAX,
+  PANEL_LIMIT_MIN,
+  TOAST_WIDTH_MAX_PX,
+  TOAST_WIDTH_MIN_PX,
+  TOAST_DURATION_MAX_MS,
+  TOAST_DURATION_MIN_MS,
 } from '../notice/display-mode.js';
 import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
 // 044 — imports neither this module nor `app-settings.ts`, so no cycle (see its header).
@@ -83,13 +87,11 @@ function confirmDescriptor(key: string, label: string, description: string): Fie
 }
 
 /**
- * The two descriptors one severity needs (030 US1, #224).
+ * The descriptors one severity needs (030 US1, #224; 068 FR-021, FR-032).
  *
- * Written as a pair because they are edited as one decision: choosing *Display for* is what gives
- * the duration a meaning, and the duration control is inert under the other two modes (FR-011). The
- * mode's options come from `DISPLAY_MODES` and the bounds from the parse's own constants, so a
- * control can never offer a value the parser would silently replace — the defect issue #227 records,
- * where a descriptor's bounds and the code's clamp disagreed and only the clamp was real.
+ * A type's Toast, Panel and OS switches share one row (057 FR-108, 068 FR-092), as three checkboxes
+ * in any combination. There is no per-severity duration: one global toast duration
+ * (`notifications.toastDurationMs`) governs every toast, and the Toast description says so.
  */
 function noticeDescriptors(
   severity: 'error' | 'warning' | 'info' | 'success' | 'attention',
@@ -98,79 +100,47 @@ function noticeDescriptors(
 ): FieldDescriptor[] {
   // 057 FR-108: the three settings of one type share a line in Preferences.
   const row = { id: `notifications.${severity}`, label: noun };
+  /*
+   * FR-008's consent, DECLARED — lifted out of `settings-tab.tsx`'s `SILENCEABLE_FAILURE_KEY` regular
+   * expression by 043 T204, and made two-keyed by FR-092: clearing Toast or Panel silences the type
+   * only when the other is already clear, so each asks only then.
+   *
+   * Only `error` and `warning`. `info` and `success` report things that already happened and worked,
+   * so there is no failure to miss and a prompt on them would be nagging — which is why this is a
+   * conditional rather than a property of the pair.
+   */
+  const asks = severity === 'error' || severity === 'warning';
+  const silencedUnless = (other: 'toast' | 'panel'): Pick<FieldDescriptor, 'confirmWhen'> =>
+    asks ? { confirmWhen: { is: false, alsoWhen: { key: `notifications.${severity}.${other}`, is: false } } } : {};
   return [
     {
-      key: `notifications.${severity}.mode`,
-      label: `${noun} notices`,
+      key: `notifications.${severity}.toast`,
+      label: 'Toast',
       description:
-        `Whether ${noun.toLowerCase()} notices stay until you dismiss them, disappear on their own, or are never shown. ` +
-        `${consequence} Whatever this says, the event is still written to the log.`,
+        `Show ${noun.toLowerCase()} notices as a toast. Every toast leaves after the toast duration, unless the pointer is over it or focus is inside it. ` +
+        `With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it is shown nowhere in throng. ` +
+        `${consequence} Whatever these say, the event is still written to the log.`,
       group: 'Notifications',
       row,
-      control: 'select',
-      allowedValues: DISPLAY_MODES,
-      /*
-       * FR-001's OWN NAMES, because the fallback's are not the specification's.
-       *
-       * `humanizeOptionLabel` Title-Cases the stored token, which is right for `lastViewed` and
-       * wrong here: it produces "Never", "Timed" and "Dismiss". "Timed" names a mechanism rather
-       * than a choice, and "Dismiss" reads as a verb — as though picking it would dismiss something.
-       * FR-001, the FR-008 confirmation and every issue comment on #224 all say *Never display*,
-       * *Display for* and *Dismiss only*, and this is what makes the control say them too.
-       */
-      optionLabels: DISPLAY_MODE_LABELS,
-      /*
-       * FR-008's consent, DECLARED — lifted out of `settings-tab.tsx`'s `SILENCEABLE_FAILURE_KEY`
-       * regular expression by 043 T204.
-       *
-       * Only `error` and `warning`. `info` and `success` report things that already happened and
-       * worked, so there is no failure to miss and a prompt on them would be nagging — which is why
-       * this is a conditional rather than a property of the pair.
-       */
-      ...(severity === 'error' || severity === 'warning'
-        ? { confirmWhen: { is: 'never' as const } }
-        : {}),
+      control: 'toggle',
+      ...silencedUnless('panel'),
     },
     {
-      key: `notifications.${severity}.timeoutMs`,
-      label: `${noun} notice duration`,
-      description: `How long a ${noun.toLowerCase()} notice stays on screen, in milliseconds. Only used under "Display for".`,
+      key: `notifications.${severity}.panel`,
+      label: 'Panel',
+      description: `Keep ${noun.toLowerCase()} notices in the Notifications panel until you dismiss them, with or without a toast.`,
       group: 'Notifications',
       row,
-      // A bounded numeric is a slider in this app (018, FR-032/034) — and the converse guard makes
-      // that mandatory, not optional: anything declaring both a min and a max must declare the
-      // control those bounds exist for.
-      //
-      // The step is 500 ms, and it is the range that permits it: the slider guard wants at most a
-      // hundred stops across the drag, so a step must be at least 1% of the range — 270 ms across
-      // 3000–30000. 500 clears that, divides 27000 exactly so the maximum is drag-reachable, and
-      // lands ON both shipped defaults (3000 + 4×500 = 5000, 3000 + 14×500 = 10000) so a drag can
-      // always return to the value the app came with. None of that was possible under 1500–60000,
-      // where the smallest legal step was 750 and neither default sat on the grid.
-      //
-      // It constrains DRAGGING only. The field beside it accepts any integer in the bounds, on the
-      // grid or off it, and `NumberControl.parse` checks min and max and nothing else.
-      control: 'slider',
-      min: TIMEOUT_MIN_MS,
-      max: TIMEOUT_MAX_MS,
-      step: 500,
-      /*
-       * FR-011's inertness, DECLARED — lifted out of `settings-tab.tsx`'s `NOTICE_TIMEOUT_KEY`
-       * regular expression by 043 T204.
-       *
-       * The regular expression DERIVED this sibling by swapping the key's last segment for `mode`,
-       * which works for exactly this family and for no other. Stating it is what lets a second
-       * mode/duration pair — spelled `summaryNoticeMode`/`summaryNoticeTimeoutMs` — use the same
-       * mechanism instead of needing a third pattern.
-       */
-      enabledWhen: { key: `notifications.${severity}.mode`, is: 'timed' },
+      control: 'toggle',
+      ...silencedUnless('toast'),
     },
     {
-      // 057 FR-110: independent of the mode above — "Never display" with this on is a Windows notification alone.
+      // 057 FR-110: independent of Toast and Panel — with both clear and this on, an OS notification alone.
       key: `notifications.${severity}.os`,
       label: 'OS Notify',
       get description() {
-        return `Raise a ${hostTraits().os === 'windows' ? 'Windows' : 'desktop'} notification for ${noun.toLowerCase()} notices, whatever the display setting says — but only while throng is not focused. While it is focused, the in-app notice and its display setting decide. Unavailable while "Operating system notifications" is off, keeping its setting.`;
+        // 068 FR-065 (constitution v6.5.0): the OS is named generically.
+        return `Raise an OS notification for ${noun.toLowerCase()} notices, whatever Toast and Panel say — but only while throng is not focused. While it is focused, Toast and Panel decide. Unavailable while "Operating system notifications" is off, keeping its setting.`;
       },
       group: 'Notifications',
       row,
@@ -1057,7 +1027,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.defaultRememberCommand',
     label: 'Remember the last running command by default',
     description:
-      'Tick “Remember the last running command” on new terminal panels. When a terminal is closed while a command is running, that command is saved and runs again next time the panel opens — so this ships off, and a panel you switch it on for keeps its own setting.',
+      'Tick “Remember the last running command” on new terminal panels. When a terminal is closed while a command is running, that command is saved and runs again next time the panel opens. A running Claude Code session is remembered as a resume of that session, not as a fresh start. This ships off, and a panel you switch it on for keeps its own setting.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1547,7 +1517,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.summaryNoticeMode',
     label: 'Replace summary notices',
     description:
-      'Whether the notice reporting what a Find in Files replace changed stays until you dismiss it, disappears on its own, or is never shown. This governs the notice whether the replace succeeded, partly succeeded or failed, and it is used instead of the notification settings for that severity. Whatever this says, the outcome is still written to the log.',
+      'Whether the notice reporting what a Find in Files replace changed is never shown, shown as a toast only, or shown as a toast and kept in the Notifications panel until you dismiss it. This governs the notice whether the replace succeeded, partly succeeded or failed, and it is used instead of the notification settings for that severity. Whatever this says, the outcome is still written to the log.',
     group: 'Search · Find in Files',
     control: 'select',
     allowedValues: DISPLAY_MODES,
@@ -1563,24 +1533,6 @@ export const SETTINGS_METADATA: MetadataRegistry = [
      */
     confirmWhen: { is: 'never' },
   },
-  {
-    key: 'search.inFiles.summaryNoticeTimeoutMs',
-    label: 'Replace summary notice duration',
-    description:
-      'How long the Find in Files replace summary notice stays on screen, in milliseconds. Only used when the setting above is "Display for".',
-    group: 'Search · Find in Files',
-    // Same control, same bounds and the same 500 ms step as every notice duration below — the step
-    // divides 27000 exactly, clears the slider guard's 1% floor (270 ms), and lands ON the shipped
-    // 5000 (3000 + 4 × 500) so a drag can always return to what the application came with.
-    control: 'slider',
-    min: TIMEOUT_MIN_MS,
-    max: TIMEOUT_MAX_MS,
-    step: 500,
-    // FR-082b, the inert half. The sibling is STATED rather than derived by swapping the key's last
-    // segment, which is the whole reason the mechanism moved onto the descriptor: this pair's mode is
-    // `summaryNoticeMode`, and no rule about suffixes reaches it.
-    enabledWhen: { key: 'search.inFiles.summaryNoticeMode', is: 'timed' },
-  },
   // Notifications (030 US1, #224)
   //
   // A mode and a duration per severity (057 FR-108 adds an OS switch to each, a fifth type and one switch
@@ -1595,9 +1547,60 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.os',
     label: 'Operating system notifications',
     description:
-      'Allow throng to send Windows notifications at all. Off, nothing reaches Windows and every OS Notify is unavailable, though each keeps its setting.',
+      'Allow throng to send OS notifications at all. Off, nothing reaches the OS and every OS Notify is unavailable, though each keeps its setting.',
     group: 'Notifications',
     control: 'toggle',
+  },
+  {
+    // 068 FR-021c: one duration for every toast, replacing the per-type durations.
+    key: 'notifications.toastDurationMs',
+    label: 'Toast duration',
+    description:
+      'How long every toast stays on screen, in milliseconds. A toast stays while the pointer is over it or keyboard focus is inside it, and leaves the full duration after both have gone. A notice kept in the Notifications panel stays there until you dismiss it.',
+    group: 'Notifications',
+    // Bounded numeric, so a slider (018). The 500 ms step is at least 1% of the 29000 range (FR-091), divides
+    // it exactly so the maximum is reachable, and lands on the shipped 3000. It constrains DRAGGING
+    // only: the field beside it takes any integer in the bounds.
+    control: 'slider',
+    min: TOAST_DURATION_MIN_MS,
+    max: TOAST_DURATION_MAX_MS,
+    step: 500,
+  },
+  {
+    // 068 FR-076: how wide every toast is.
+    key: 'notifications.toastWidthPx',
+    label: 'Toast width',
+    description:
+      'How wide every toast is, in pixels. A toast is never wider than half the window, and shows at most three lines of text: a longer one is cut off with an ellipsis, and hovering it shows all of its text. The Notifications panel always shows a notification whole.',
+    group: 'Notifications',
+    // Bounded numeric, so a slider (018). The 10 px step is at least 1% of the 500 range (5, FR-090), divides it exactly so
+    // the maximum is reachable, and lands on the shipped 520. It constrains DRAGGING only: the field beside it takes any
+    // integer in the bounds.
+    control: 'slider',
+    min: TOAST_WIDTH_MIN_PX,
+    max: TOAST_WIDTH_MAX_PX,
+    step: 10,
+  },
+  {
+    // 068 FR-026c: Dismiss all asks first, unless the user turns that off.
+    key: 'notifications.confirmDismissAll',
+    label: 'Confirm before dismissing all notifications',
+    description:
+      'Ask for confirmation before Dismiss all clears every notification in the Notifications panel. Attention marks are never cleared by it.',
+    group: 'Notifications',
+    control: 'toggle',
+  },
+  {
+    // 068 FR-031d: step 10 is at least 1% of the 480 range (4.8), divides it exactly, and lands on 100.
+    key: 'notifications.panelLimit',
+    label: 'Notifications panel limit',
+    description:
+      'The most notifications the Notifications panel keeps. Past the limit the oldest are dropped and you are warned once that unattended notifications can affect performance.',
+    group: 'Notifications',
+    control: 'slider',
+    min: PANEL_LIMIT_MIN,
+    max: PANEL_LIMIT_MAX,
+    step: 10,
   },
   ...noticeDescriptors(
     'error',
@@ -1613,7 +1616,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   ...noticeDescriptors(
     'success',
     'Success',
-    'These confirm an operation that worked, so they are the safest to shorten or switch off.',
+    'These confirm an operation that worked, so they are the ones most worth switching off.',
   ),
   // 057 FR-111: one type for both kinds of attention mark; a Failed mark keeps the Error colour and icon.
   ...noticeDescriptors(

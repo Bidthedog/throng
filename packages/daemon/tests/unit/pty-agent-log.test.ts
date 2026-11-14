@@ -1,9 +1,16 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { sessionFileName } from '@throng/core';
-import { APPDATA_LOG_DIR_PREFIX, encodeAgentLogDir, openAgentLog } from '../../src/pty-agent-log.js';
+import { createAnonymiser, sessionFileName } from '@throng/core';
+import {
+  APPDATA_LOG_DIR_PREFIX,
+  describeAgentArgv,
+  describeAgentStart,
+  describeMalformedLine,
+  encodeAgentLogDir,
+  openAgentLog,
+} from '../../src/pty-agent-log.js';
 
 /**
  * 066 FR-017 / contract *PTY agent* — the de-elevated agent is launched with NO environment
@@ -36,6 +43,36 @@ function open(arg: string | undefined, env: NodeJS.ProcessEnv): ReturnType<typeo
   if (log) logs.push(log);
   return log;
 }
+
+/**
+ * 068 FR-034b (review) — what the agent writes about its own launch and its protocol lines must not
+ * carry the user's command text, nor the anonymiser's own salt (argv[4]).
+ */
+describe('agent log fields', () => {
+  const anon = createAnonymiser({ salt: 's', os: 'linux', hash: (_s, v) => `${v.length}`.padStart(8, '0') });
+
+  it('masks the salt argument, keeping the rest of argv', () => {
+    const argv = ['node', 'entry.js', 'pipe', 'appdata:throng/logs', 'abcdef0123456789'];
+    const text = describeAgentArgv(argv);
+    expect(text).not.toContain('abcdef0123456789');
+    expect(text).toContain('appdata:throng/logs');
+  });
+
+  it('logs a start request with the command and its arguments as tokens', () => {
+    const out = anon.apply(
+      describeAgentStart({ key: 'k1', file: 'claude', args: ['draft the Acme layoff memo'], cwd: 'C:\\x', cols: 80, rows: 24 }),
+    );
+    expect(out).not.toMatch(/Acme|layoff|claude/);
+    expect(out).toContain('key=k1');
+    expect(out).toContain('cols=80');
+  });
+
+  it('logs a malformed protocol line as a token, never the line itself', () => {
+    const out = anon.apply(describeMalformedLine('bad', '{"type":"write","data":"echo secret-plan"}'));
+    expect(out).not.toMatch(/secret-plan/);
+    expect(out).toContain('ignored malformed line (bad)');
+  });
+});
 
 describe('openAgentLog', () => {
   it('resolves an appdata: argument against the agent’s own APPDATA', () => {
@@ -101,5 +138,22 @@ describe('encodeAgentLogDir', () => {
     const appData = scratch();
     const arg = encodeAgentLogDir(join(appData, 'throng', 'logs'), appData);
     expect(open(arg, { APPDATA: appData })?.path).toBe(join(appData, 'throng', 'logs', FILE));
+  });
+
+  it('068 FR-034a: anonymises its lines, keyed by the salt passed as an extra argument', () => {
+    const dir = scratch();
+    const write = (saltArg: string): string => {
+      const log = openAgentLog({ arg: dir, saltArg, env: {}, pid: PID, startedAt: STARTED });
+      logs.push(log!);
+      log!.info(`spawn ${homedir()}/work/app.exe for ${userInfo().username}`);
+      log!.close();
+      const text = readFileSync(join(dir, FILE), 'utf8');
+      rmSync(join(dir, FILE));
+      return text;
+    };
+    const one = write('salt-one');
+    expect(one).not.toContain(homedir());
+    expect(one).not.toContain('app.exe');
+    expect(write('salt-two').replace(/^\S+/, '')).not.toBe(one.replace(/^\S+/, ''));
   });
 });

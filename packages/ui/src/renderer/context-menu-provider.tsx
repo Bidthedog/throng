@@ -137,6 +137,11 @@ export function useOptionalContextMenu(): ContextMenuController | null {
   return useContext(Ctx);
 }
 
+/** The menu controller, or `null` outside a `ContextMenuProvider` (a panel that is drawn either way, 068). */
+export function useContextMenuOptional(): ContextMenuController | null {
+  return useContext(Ctx);
+}
+
 export function useContextMenu(): ContextMenuController {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useContextMenu must be used within a ContextMenuProvider');

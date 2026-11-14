@@ -19,6 +19,12 @@ export interface IProjectStore {
    * same way.
    */
   list(ownerUser: string): Project[];
+  /**
+   * 068 FR-034e: give every one of the owner's projects whose id is null or empty a new id from
+   * `newId`, saved so it never changes again. Addressed by the row's own position in the store, not
+   * by id, since the id is what is missing. Returns how many were healed.
+   */
+  assignMissingIds(ownerUser: string, newId: () => string): number;
   /** A single project, or undefined if absent. */
   getById(ownerUser: string, id: string): Project | undefined;
   /** Insert a fully-formed project row. */

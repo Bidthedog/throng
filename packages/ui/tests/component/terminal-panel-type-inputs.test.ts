@@ -188,6 +188,21 @@ describe('the Terminal type form offers its three configuration controls (025 FR
     expect(control('terminal-remember-command')).not.toBeChecked();
   });
 
+  /*
+   * 068 FR-051 / FR-052 — the description says what is remembered for a Claude Code session: a resume of
+   * THAT session (not the bare `claude` command), and nothing about restoring what the session showed.
+   */
+  it('says a running Claude Code session is remembered as a resume of that session (FR-051, FR-052)', async () => {
+    stubBridge();
+    await renderForm({ rememberCommand: 'false' });
+
+    const title = control('terminal-remember-command').closest('label')?.getAttribute('title') ?? '';
+    expect(title).toMatch(/Claude Code session/);
+    expect(title).toMatch(/resume of that session/);
+    // It promises nothing about the view inside the session, in either direction.
+    expect(title).not.toMatch(/restor|screen|conversation|scrollback|view/i);
+  });
+
   it('shows it ticked when the preference or the panel says so', async () => {
     stubBridge();
     await renderForm({ rememberCommand: 'true' });

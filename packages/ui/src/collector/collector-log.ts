@@ -1,5 +1,5 @@
 import { logFatal, parseLogLevel, sessionFileName } from '@throng/core';
-import { createFileLog, type DiagnosticLog } from '@throng/platform';
+import { createFileLog, createProcessAnonymiser, type DiagnosticLog } from '@throng/platform';
 
 /**
  * 066 FR-005 / FR-017 — the resource collector's own log, in the one logs folder.
@@ -19,10 +19,13 @@ export function openCollectorLog(options: CollectorLogOptions): DiagnosticLog | 
   const { env } = options;
   const dir = env.THRONG_LOG_DIR;
   if (!dir) return null;
+  // 068 FR-034a: the salt UI main passed (`THRONG_LOG_SALT`), else one of its own (the salt file lives in the user data folder, which only UI main reads).
+  const { anonymiser } = createProcessAnonymiser({ logDir: dir, salt: env.THRONG_LOG_SALT });
   return createFileLog({
     dir,
     fileName: sessionFileName('collector', options.startedAt, options.pid),
     component: 'collector',
+    anonymiser,
     level: parseLogLevel(env.THRONG_LOG_LEVEL),
     retention: {
       maxFileBytes: Number(env.THRONG_LOG_MAX_KB) * 1024 || undefined,

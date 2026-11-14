@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { LogLevel } from '@throng/core';
@@ -130,5 +130,18 @@ describe('the renderer console backstop (066 T023)', () => {
     const d = diagnostics('error');
     consoleOf(d)('error', '[FATAL] renderer crashed: boom');
     expect(lines(d).join('\n')).toMatch(/ FATAL \[renderer\] renderer crashed: boom/);
+  });
+
+  it('068 FR-034b: anonymises a renderer message BEFORE the 8 KB cap and in the file', () => {
+    const d = diagnostics('info');
+    const home = homedir();
+    // The home folder is a long registered value: once tokenised the message fits under the cap, so a
+    // cap applied first would have cut it and written a "more chars" marker.
+    const padding = 'x'.repeat(MAX_RENDERER_MESSAGE_CHARS - 45);
+    ipc(d)({ level: 'info', component: 'renderer', message: `${padding} ${home}/a/very/long/${'y'.repeat(60)}.ts` });
+    const text = lines(d).join('\n');
+    expect(text).not.toContain(home);
+    expect(text).not.toContain('more chars');
+    expect(text).toMatch(/<(home|path)-[0-9a-f]{8}>/);
   });
 });

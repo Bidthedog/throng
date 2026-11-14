@@ -93,10 +93,6 @@ const NEW_KEYS = [
     key: 'search.inFiles.summaryNoticeMode',
     governs: "the replace summary notice's own display mode, on all three outcomes (FR-082)",
   },
-  {
-    key: 'search.inFiles.summaryNoticeTimeoutMs',
-    governs: 'how long a timed replace summary notice stays on screen (FR-082)',
-  },
 ] as const;
 
 /**

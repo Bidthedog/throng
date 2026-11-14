@@ -410,6 +410,20 @@ export const THRONG_THEME: Theme = {
        and outlined for Save As; monochrome like the rest of the set, so they take the icon colour. */
     save: '🖪',
     saveAs: '🖫',
+    /* 068 US3/US4: the Notifications panel (its header and the pending badge), Dismiss all, the order menu,
+       and the minimise / restore control every minimisable side panel carries. Monochrome, and none of them
+       is the `dismiss` cross, the `cancel` slashed circle or the `collapse`/`expand` chevrons. */
+    notifications: '◈',
+    dismissAll: '⊠',
+    sortOrder: '⇵',
+    minimisePanel: '⌄',
+    restorePanel: '⌃',
+    /* 068 T103–T105 (FR-074): the icon at the top left of a Notifications panel entry, one per type. A warning entry
+       draws the existing `warning` glyph. Monochrome, and none is the `dismiss` cross or the `cancel` slashed circle. */
+    noticeError: '⨂',
+    noticeAttention: '◉',
+    noticeInfo: 'ⓘ',
+    noticeSuccess: '✓',
     detach: '⧉',
     // Retry a terminal attach that is still starting (008 FR-005) — a themeable action
     // icon (constitution v3.12.0), auto-exposed in the Themes editor like every token.

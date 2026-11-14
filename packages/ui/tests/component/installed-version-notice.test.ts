@@ -58,6 +58,19 @@ describe('the running-copy notice (063 FR-010)', () => {
     expect(card.textContent).toMatch(/may end the terminals/);
   });
 
+  it('is sticky: it stays long past the toast duration (068 FR-021e)', async () => {
+    render(createElement(ConfigProvider, null, createElement(NotificationProvider, null, createElement(InstalledVersionNotice))));
+    await waitFor(() => expect(push).toBeDefined());
+    vi.useFakeTimers();
+    act(() => push!({ runningVersion: '1.0.0', installedVersion: '1.1.0' }));
+    expect(screen.getByTestId('installed-version-notice')).toBeVisible();
+    act(() => {
+      vi.advanceTimersByTime(10 * 60_000);
+    });
+    expect(screen.queryByTestId('installed-version-notice'), 'the duration timer took a sticky card').not.toBeNull();
+    vi.useRealTimers();
+  });
+
   it('carries the Restart that resolves it', async () => {
     await raise('1.1.0');
     fireEvent.click(await screen.findByTestId('installed-version-restart'));

@@ -13,6 +13,13 @@ export {
   passesThreshold,
   type LogLevel,
 } from './log-level.js';
+export {
+  createAnonymiser,
+  sensitive,
+  type AnonKind,
+  type Anonymiser,
+  type AnonymiserOptions,
+} from './anonymise.js';
 export { FATAL_CONSOLE_PREFIX, describeError, logAt, logCaught, logExpected, logFatal } from './caught.js';
 export {
   crashFileName,

@@ -3,8 +3,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { shouldExitForRemovedInstall } from './removed-install-watch.js';
-import { isPackagedEntry, logExpected, logFatal, parseLogLevel } from '@throng/core';
-import { createFileLog, startPlatform, writeCrashReport, type DiagnosticLog } from '@throng/platform';
+import { isPackagedEntry, logExpected, logFatal, parseLogLevel, type Anonymiser } from '@throng/core';
+import {
+  createFileLog,
+  createProcessAnonymiser,
+  startPlatform,
+  writeCrashReport,
+  type DiagnosticLog,
+} from '@throng/platform';
 import type { IDaemonSettings, IPersistenceSettings, IPlatformInfo } from '@throng/core';
 import { runMigrations, type ThrongDatabase } from '@throng/persistence';
 import { createDaemonContainer, DAEMON_TYPES } from './composition-root.js';
@@ -31,13 +37,14 @@ import { reapOrphans } from './reap-orphans.js';
  * installed beside installed — and a daemon started by hand simply logs nowhere rather than
  * guessing at somebody's data directory.
  */
-function startDaemonDiagnostics(): DiagnosticLog | null {
+function startDaemonDiagnostics(anonymiser: Anonymiser | undefined): DiagnosticLog | null {
   const dir = process.env.THRONG_LOG_DIR;
   if (!dir) return null;
   const log = createFileLog({
     dir,
     fileName: 'daemon.log',
     component: 'daemon',
+    anonymiser,
     level: parseLogLevel(process.env.THRONG_LOG_LEVEL),
     // Roll-over and retention arrive with the level, from the same settings the UI is using — one
     // "Logging" section governs both halves of one application (Principle X, 066 FR-019).
@@ -53,6 +60,24 @@ function startDaemonDiagnostics(): DiagnosticLog | null {
   return log;
 }
 
+/**
+ * 068 FR-034a — the daemon's anonymiser: the salt UI main passed (`THRONG_LOG_SALT`, else one of its
+ * own — the salt file lives in the user data folder, which only UI main reads), this machine's identity, and the config and data folders it was told about.
+ * The composition root teaches it each project's root as `ProjectService` reads them.
+ */
+function startDaemonAnonymiser(): { anonymiser: Anonymiser; salt: string } | null {
+  const dir = process.env.THRONG_LOG_DIR;
+  if (!dir) return null;
+  const databasePath = process.env.THRONG_DATABASE_PATH;
+  return createProcessAnonymiser({
+    logDir: dir,
+    salt: process.env.THRONG_LOG_SALT,
+    extraDirs: [process.env.THRONG_CONFIG_ROOT, databasePath ? dirname(databasePath) : undefined].filter(
+      (d): d is string => Boolean(d),
+    ),
+  });
+}
+
 /** The build this daemon was stamped with (`dist/BUILD_ID`), for its crash reports. */
 function daemonBuildId(): string {
   try {
@@ -64,7 +89,8 @@ function daemonBuildId(): string {
 }
 
 async function main(): Promise<void> {
-  const diagnostics = startDaemonDiagnostics();
+  const anon = startDaemonAnonymiser();
+  const diagnostics = startDaemonDiagnostics(anon?.anonymiser);
   if (diagnostics) {
     diagnostics.info(`daemon starting — pid ${process.pid}, node ${process.version}`);
     const dir = process.env.THRONG_LOG_DIR as string;
@@ -80,7 +106,7 @@ async function main(): Promise<void> {
         buildId,
         pid: process.pid,
         output: error.stack ?? String(error),
-      });
+      }, anon?.anonymiser);
       // 066 FR-009a: a crash is fatal, written whatever the threshold (`[FATAL]` → the fatal level).
       logFatal('daemon', error);
       diagnostics.close();
@@ -96,7 +122,11 @@ async function main(): Promise<void> {
   }
 
   // The agent host records its failures here, not only on the panel it fails (066 FR-005).
-  const container = createDaemonContainer(process.env, diagnostics ? (level, message) => diagnostics.log(level, message) : undefined);
+  const container = createDaemonContainer(
+    process.env,
+    diagnostics ? (level, message) => diagnostics.log(level, message) : undefined,
+    anon ? { anonymiser: anon.anonymiser, salt: anon.salt } : undefined,
+  );
 
   const platform = container.get<IPlatformInfo>(DAEMON_TYPES.PlatformInfo);
   console.log(`[throng-daemon] platform: ${platform.osName()}`);

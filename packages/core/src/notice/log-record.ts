@@ -62,6 +62,16 @@ export interface NoticeLogRecord {
   readonly detail?: string;
   /** Per-panel raw errors (FR-048a); each becomes its own line in the file. */
   readonly affectedDetails?: readonly NoticeAffectedDetail[];
+  /**
+   * 068 FR-034a — how many entries were waiting in the Notifications panel when the record was
+   * written. Zero is kept: "nothing waiting" is an answer, and a reader can tell it apart from a record that does not say.
+   */
+  readonly pending?: number;
+  /**
+   * 068 FR-034c — the project's INTERNAL id, never its name or path, so a record can say which
+   * project it was about without naming it. Written as `project=<project:ID>`.
+   */
+  readonly projectId?: string;
 }
 
 /** What a caller supplies. The level is absent on purpose: it is derived, not offered. */
@@ -79,6 +89,10 @@ export interface NoticeLogInput {
   affectedCount?: number;
   detail?: string;
   affectedDetails?: readonly NoticeAffectedDetail[];
+  /** 068 FR-034a — entries pending in the Notifications panel now. */
+  pending?: number;
+  /** 068 FR-034c — the project's internal id. */
+  projectId?: string;
 }
 
 function trimmed(value: string | undefined): string | undefined {
@@ -123,5 +137,9 @@ export function noticeLogRecord(input: NoticeLogInput): NoticeLogRecord {
     ...(count === undefined ? {} : { affectedCount: count }),
     ...(trimmed(input.detail) ? { detail: trimmed(input.detail) } : {}),
     ...(affected.length > 0 ? { affectedDetails: affected } : {}),
+    ...(typeof input.pending === 'number' && Number.isFinite(input.pending) && input.pending >= 0
+      ? { pending: Math.trunc(input.pending) }
+      : {}),
+    ...(trimmed(input.projectId) ? { projectId: trimmed(input.projectId) } : {}),
   };
 }

@@ -124,3 +124,48 @@ describe('XIII — no silent failure in packages/*/src (066 SC-002, SC-003)', ()
     expect(violations.map(render), `${violations.length} silent sites:\n${violations.map(render).join('\n')}`).toEqual([]);
   });
 });
+
+/**
+ * 068 FR-034b — `createFileLog.emit` is the chokepoint where text is anonymised, so nothing else may
+ * write into the logs folder. A write call whose destination names the log folder or a `.log` file is
+ * flagged anywhere but `node-file-log.ts`. Reading the folder, and writing a file that is not a log
+ * (the salt, an anonymised rewrite of `daemon-startup.log` through a variable), are not flagged.
+ */
+const LOG_WRITER = /\b(?:appendFileSync|writeFileSync|createWriteStream|appendFile|writeFile)\s*\(([^;\n]{0,120})/g;
+const LOG_TARGET = /\blogDir\b|\blogsDir\b|LOG_DIR|\.log['"`]|['"`]logs['"`]/;
+const CHOKEPOINT = 'packages/platform-node/src/node-file-log.ts';
+
+function scanLogWrites(file: string, source: string): string[] {
+  if (file.replaceAll('\\', '/') === CHOKEPOINT) return [];
+  const hits: string[] = [];
+  for (const match of source.matchAll(LOG_WRITER)) {
+    if (LOG_TARGET.test(match[1] ?? '')) hits.push(`${file}: ${match[0].trim()}`);
+  }
+  return hits;
+}
+
+describe('068 FR-034b — the logs folder has one writer', () => {
+  it('flags a write into the logs folder and accepts other writes', () => {
+    expect(scanLogWrites('a.ts', "appendFileSync(join(logDir, 'x.log'), line)")).toHaveLength(1);
+    expect(scanLogWrites('a.ts', "writeFileSync(join(dir, 'daemon-startup.log'), t)")).toHaveLength(1);
+    expect(scanLogWrites('a.ts', "createWriteStream(join(process.env.THRONG_LOG_DIR, 'a'))")).toHaveLength(1);
+    expect(scanLogWrites('a.ts', 'writeFileSync(path, salt)')).toEqual([]);
+    expect(scanLogWrites('a.ts', 'appendFileSync(attentionOsLog, line)')).toEqual([]);
+    expect(scanLogWrites(CHOKEPOINT, 'appendFileSync(path, line)')).toEqual([]);
+  });
+
+  it('finds no write into the logs folder outside node-file-log.ts', () => {
+    const hits: string[] = [];
+    for (const pkg of readdirSync(PACKAGES, { withFileTypes: true })) {
+      if (!pkg.isDirectory()) continue;
+      let files: string[];
+      try {
+        files = sourceFiles(join(PACKAGES, pkg.name, 'src'));
+      } catch {
+        continue;
+      }
+      for (const file of files) hits.push(...scanLogWrites(relative(REPO, file), readFileSync(file, 'utf8')));
+    }
+    expect(hits).toEqual([]);
+  });
+});

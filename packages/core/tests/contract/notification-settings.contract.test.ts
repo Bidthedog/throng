@@ -61,67 +61,64 @@ describe('notifications merge contract', () => {
     expect(resolved.diagnostics.keepDays).toBe(7);
   });
 
-  it('honours a written notifications section, per severity', () => {
+  it('honours a written notifications section, per type', () => {
     const resolved = parseAppSettings({
       ...preFeatureFile,
       notifications: {
-        error: { mode: 'timed', timeoutMs: 20000 },
-        success: { mode: 'never', timeoutMs: 4000 },
+        error: { toast: true, panel: false },
+        success: { toast: false, panel: false },
       },
     });
-    expect(resolved.notifications.error).toEqual({ mode: 'timed', timeoutMs: 20000, os: false });
-    expect(resolved.notifications.success).toEqual({ mode: 'never', timeoutMs: 4000, os: false });
-    // Unwritten severities are still the shipped values, not undefined.
+    expect(resolved.notifications.error).toEqual({ toast: true, panel: false, os: false });
+    expect(resolved.notifications.success).toEqual({ toast: false, panel: false, os: false });
     expect(resolved.notifications.warning).toEqual(DEFAULT_NOTIFICATION_SETTINGS.warning);
     expect(resolved.notifications.info).toEqual(DEFAULT_NOTIFICATION_SETTINGS.info);
   });
 
-  /*
-   * A DURATION SAVED BETWEEN TWO SLIDER STOPS IS STILL THE USER'S DURATION (FR-010).
-   *
-   * The contract admits any integer in [3000, 30000]. The 500 ms step is the slider's grid and
-   * belongs to the control, so a file carrying 3567 — typed rather than dragged — must load as 3567.
-   * Asserted here as well as in the parser's own tests because this is the path the APPLICATION
-   * takes on startup, and a snap introduced in the merge would be invisible to a parse test.
-   */
+  // 068 FR-021c: one global duration; a typed value off the slider grid is still the user's value.
   it('loads a typed duration that no slider stop can produce', () => {
+    const resolved = parseAppSettings({ ...preFeatureFile, notifications: { toastDurationMs: 3567 } });
+    expect(resolved.notifications.toastDurationMs).toBe(3567);
+  });
+
+  it('reads the confirm switch and the panel limit, resolving malformed values to the defaults', () => {
     const resolved = parseAppSettings({
       ...preFeatureFile,
-      notifications: { info: { mode: 'timed', timeoutMs: 3567 } },
+      notifications: { confirmDismissAll: false, panelLimit: 250 },
     });
-    expect(resolved.notifications.info).toEqual({ mode: 'timed', timeoutMs: 3567, os: false });
+    expect(resolved.notifications.confirmDismissAll).toBe(false);
+    expect(resolved.notifications.panelLimit).toBe(250);
+    const bad = parseAppSettings({ notifications: { confirmDismissAll: 'x', panelLimit: 5, toastDurationMs: 1 } });
+    expect(bad.notifications.confirmDismissAll).toBe(true);
+    expect(bad.notifications.panelLimit).toBe(100);
+    expect(bad.notifications.toastDurationMs).toBe(3000);
   });
 
   it('resolves a malformed value per-value, discarding neither the section nor the file (FR-015)', () => {
-    // Every value here is wrong in a different way — the mode is not a mode, the timeout is below
-    // the floor, a whole severity is a number, and there is a severity that does not exist. A
-    // hand-edited settings.json produces exactly this, and it must cost the user nothing else.
     const resolved = parseAppSettings({
       ...preFeatureFile,
       notifications: {
-        error: { mode: 'sometimes', timeoutMs: 30000 },
-        warning: { mode: 'timed', timeoutMs: 900 },
+        error: { toast: 'sometimes' },
+        warning: { panel: false, timeoutMs: 900 },
         info: 5,
-        fatal: { mode: 'never' },
+        fatal: { toast: false },
       },
     });
-    expect(resolved.notifications.error).toEqual({ mode: 'dismiss', timeoutMs: 30000, os: false });
-    expect(resolved.notifications.warning).toEqual({
-      mode: 'timed',
-      timeoutMs: DEFAULT_NOTIFICATION_SETTINGS.warning.timeoutMs,
-      os: false,
-    });
+    expect(resolved.notifications.error).toEqual({ toast: true, panel: true, os: false });
+    expect(resolved.notifications.warning).toEqual({ toast: true, panel: false, os: false });
     expect(resolved.notifications.info).toEqual(DEFAULT_NOTIFICATION_SETTINGS.info);
-    // 057 FR-108 – FR-111 add the global OS switch and the Attention type; an unknown severity is still dropped.
     expect(Object.keys(resolved.notifications).sort()).toEqual([
       'attention',
+      'confirmDismissAll',
       'error',
       'info',
       'os',
+      'panelLimit',
       'success',
+      'toastDurationMs',
+      'toastWidthPx',
       'warning',
     ]);
-    // The rest of the file is untouched by a broken neighbour.
     expect(resolved.appearance.theme).toBe('Light');
     expect(resolved.diagnostics.logLevel).toBe('debug');
   });
@@ -131,39 +128,34 @@ describe('notifications merge contract', () => {
     const d = DEFAULT_NOTIFICATION_SETTINGS;
     expect(d.os).toBe(true);
     for (const severity of ['error', 'warning', 'info', 'success'] as const) expect(d[severity].os).toBe(false);
-    expect(d.attention).toEqual({ mode: 'timed', timeoutMs: 10000, os: true });
+    expect(d.attention).toEqual({ toast: true, panel: true, os: true }); // 068 FR-062, FR-092
   });
 
   it('reads the OS switches and the Attention type per value, falling back on anything malformed', () => {
     const resolved = parseAppSettings({
       ...preFeatureFile,
-      notifications: { os: 'no', error: { os: true }, attention: { mode: 'dismiss', os: 0, timeoutMs: 1 } },
+      notifications: { os: 'no', error: { os: true }, attention: { toast: false, panel: false, os: 0 } },
     });
     expect(resolved.notifications.os).toBe(true);
-    expect(resolved.notifications.error).toEqual({ mode: 'dismiss', timeoutMs: 5000, os: true });
-    expect(resolved.notifications.attention).toEqual({ mode: 'dismiss', timeoutMs: 10000, os: true });
+    expect(resolved.notifications.error).toEqual({ toast: true, panel: true, os: true });
+    expect(resolved.notifications.attention).toEqual({ toast: false, panel: false, os: true });
     expect(parseAppSettings({ notifications: { os: false } }).notifications.os).toBe(false);
   });
 
-  it('a section that is not an object at all still yields the four shipped rows', () => {
-    expect(parseAppSettings({ notifications: 'off' }).notifications).toEqual(
-      DEFAULT_NOTIFICATION_SETTINGS,
-    );
+  it('a section that is not an object at all still yields the shipped rows', () => {
+    expect(parseAppSettings({ notifications: 'off' }).notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
     expect(parseAppSettings(undefined).notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });
 
   it('hands every caller its OWN object, so nothing can corrupt the shipped defaults', () => {
     const a = parseAppSettings({});
     const b = parseAppSettings({});
-    a.notifications.error.timeoutMs = 12345;
-    expect(b.notifications.error.timeoutMs).toBe(DEFAULT_NOTIFICATION_SETTINGS.error.timeoutMs);
-    expect(DEFAULT_APP_SETTINGS.notifications.error.timeoutMs).toBe(
-      DEFAULT_NOTIFICATION_SETTINGS.error.timeoutMs,
-    );
-    // The defaults-clone path (a non-object document) is the one that used to share sub-objects.
+    a.notifications.error.toast = false;
+    expect(b.notifications.error.toast).toBe(DEFAULT_NOTIFICATION_SETTINGS.error.toast);
+    expect(DEFAULT_APP_SETTINGS.notifications.error.toast).toBe(DEFAULT_NOTIFICATION_SETTINGS.error.toast);
     const cloned = parseAppSettings(null);
-    cloned.notifications.info.mode = 'never';
-    expect(DEFAULT_APP_SETTINGS.notifications.info.mode).toBe('timed');
+    cloned.notifications.info.panel = false;
+    expect(DEFAULT_APP_SETTINGS.notifications.info.panel).toBe(true);
     cloned.notifications.attention.os = false;
     expect(DEFAULT_APP_SETTINGS.notifications.attention.os).toBe(true);
   });

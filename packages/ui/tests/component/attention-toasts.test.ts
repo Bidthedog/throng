@@ -46,10 +46,12 @@ const raise = (panelId: string, over: Partial<AttentionToastEvent> = {}): void =
 const card = (panelId: string): HTMLElement => screen.getByTestId(`attention-toast-${panelId}`);
 
 describe('raise', () => {
-  it('heads the card with the project, the tab and the panel, over the reason (FR-120)', () => {
+  it('heads the card with the project, the tab and the panel, over the reason (FR-120, FR-061)', () => {
     raise('p1', { title: 'Build', tabTitle: 'Agents', reason: 'Wants your attention' });
     const text = card('p1').textContent ?? '';
-    expect(text).toContain('Alpha — Agents — Build');
+    // 068 FR-061 (over 057 FR-120's separator): `Project › Tab › Panel`, once.
+    expect(text).toContain('Alpha › Agents › Build');
+    expect(text).not.toContain('Alpha — Agents — Build');
     expect(text).toContain('Wants your attention');
   });
 

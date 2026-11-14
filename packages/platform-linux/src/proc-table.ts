@@ -126,6 +126,32 @@ export async function readCommandLine(pid: number): Promise<string> {
   }
 }
 
+/** The real argument vector: `/proc/<pid>/cmdline` split on NUL. Absent for a kernel thread or a process gone. */
+export async function readArgv(pid: number): Promise<string[] | undefined> {
+  try {
+    const raw = await readFile(`/proc/${pid}/cmdline`, 'utf8');
+    if (raw.length === 0) return undefined;
+    const parts = raw.split(String.fromCharCode(0));
+    if (parts[parts.length - 1] === '') parts.pop();
+    return parts;
+  } catch (error) {
+    logExpected('proc-table: read argv', 'a process can exit before its argument vector is read', error);
+    return undefined;
+  }
+}
+
+/** The kernel's start marker (field 22 of `/proc/<pid>/stat`, clock ticks since boot), as Claude Code records it. */
+export async function readStartTicks(pid: number): Promise<string | undefined> {
+  try {
+    const text = await readFile(`/proc/${pid}/stat`, 'utf8');
+    const rest = text.slice(text.lastIndexOf(')') + 2).split(' ');
+    return rest.length >= 20 ? rest[19] : undefined;
+  } catch (error) {
+    logExpected('proc-table: read start ticks', 'a process can exit before its start time is read', error);
+    return undefined;
+  }
+}
+
 export async function readExecutablePath(pid: number): Promise<string | undefined> {
   try {
     return await readlink(`/proc/${pid}/exe`);

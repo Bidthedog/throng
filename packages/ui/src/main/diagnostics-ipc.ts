@@ -1,4 +1,4 @@
-import { FATAL_CONSOLE_PREFIX, isLogLevel, logCaught, type LogLevel } from '@throng/core';
+import { FATAL_CONSOLE_PREFIX, isLogLevel, logCaught, type Anonymiser, type LogLevel } from '@throng/core';
 
 /**
  * 066 FR-005 / research R1, R5 — the renderer's records reach `main.log`.
@@ -25,6 +25,11 @@ const RENDERER_COMPONENT = 'renderer';
 export interface DiagnosticsLogSink {
   logAlways(level: LogLevel, message: string, component?: string): void;
   passes(level: LogLevel): boolean;
+  /**
+   * 068 FR-034b: applied BEFORE the 8 KB cap, so the cap can never cut a path in half and leave a
+   * fragment no pattern recognises. The file's own chokepoint applies it again, harmlessly.
+   */
+  readonly anonymiser?: Pick<Anonymiser, 'apply'>;
 }
 
 export interface DiagnosticsLogIpc {
@@ -39,7 +44,7 @@ function cap(message: string): string {
 
 function write(sink: DiagnosticsLogSink, level: LogLevel, component: string, message: string): void {
   if (level !== 'fatal' && !sink.passes(level)) return;
-  sink.logAlways(level, cap(message), component);
+  sink.logAlways(level, cap(sink.anonymiser ? sink.anonymiser.apply(message) : message), component);
 }
 
 /** The renderer's own channel. A payload that is not `{ level, component, message }` is dropped. */

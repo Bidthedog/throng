@@ -105,13 +105,13 @@ afterEach(() => {
 interface Probe {
   notify?: (input: NoticeInput) => void;
   loaded?: boolean;
-  errorMode?: string;
+  errorToast?: boolean;
 }
 
 function ProbeView({ into }: { into: Probe }): ReactElement | null {
   into.notify = useNotify().notify;
   into.loaded = useConfigLoaded();
-  into.errorMode = useAppSettings().notifications.error.mode;
+  into.errorToast = useAppSettings().notifications.error.toast;
   return null;
 }
 
@@ -146,7 +146,7 @@ async function mount(children?: ReactNode): Promise<Probe> {
 /** Seed `notifications` before mounting — the config-root equivalent of the E2E's `settings.json`. */
 function silence(...severities: readonly ('error' | 'warning' | 'info' | 'success')[]): void {
   const notifications: Record<string, unknown> = {};
-  for (const severity of severities) notifications[severity] = { mode: 'never', timeoutMs: 30000 };
+  for (const severity of severities) notifications[severity] = { mode: 'never' };
   settingsPayload = { version: 1, notifications };
 }
 
@@ -240,7 +240,7 @@ describe('a severity the user turned off (FR-005/FR-005b/FR-006)', () => {
   it('renders nothing at all, and files the record anyway', async () => {
     silence('error');
     const probe = await mount();
-    expect(probe.errorMode, 'the Never-display mode never reached the provider').toBe('never');
+    expect(probe.errorToast, 'the cleared Toast never reached the provider').toBe(false);
 
     act(() => {
       probe.notify!({

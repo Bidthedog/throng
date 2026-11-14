@@ -15,6 +15,7 @@ import {
   passesThreshold,
   retentionPlan,
   shouldRotate,
+  type Anonymiser,
   type CrashDetails,
   type LogFileInfo,
   type LogLevel,
@@ -103,6 +104,11 @@ export interface FileLogOptions {
    * a redirected file) does not write everything twice.
    */
   mirrorToConsole?: boolean;
+  /**
+   * 068 FR-034a: every line and crash report passes through it before it is written, so no path, name
+   * or machine identity reaches the disk. Applied in `emit`, ahead of repeat collapsing.
+   */
+  anonymiser?: Anonymiser;
 }
 
 type ConsoleMethod = 'log' | 'info' | 'warn' | 'error' | 'debug';
@@ -287,8 +293,10 @@ export function createFileLog(options: FileLogOptions): DiagnosticLog {
   };
 
   /** The write itself — retention, repeats, rotation, formatting, disk. No threshold of its own. */
-  const emit = (level: LogLevel, message: string, component: string): void => {
+  const emit = (level: LogLevel, rawMessage: string, component: string): void => {
     const at = now();
+    // Before the repeat key: two lines that differ only in a path collapse into one token.
+    const message = options.anonymiser ? options.anonymiser.apply(rawMessage) : rawMessage;
     pruneIfNewDay(at);
     const key = `${level}\u0001${component}\u0001${message}`;
     if (last && last.key === key) {
@@ -359,12 +367,17 @@ export const CRASH_DIR_NAME = 'crashes';
  * exit code, output — and the thing a user attaches to a bug report. It is ALSO summarised into the
  * log by the caller, so the timeline still shows that the crash happened and where to find it.
  */
-export function writeCrashReport(logDir: string, details: CrashDetails): string | null {
+export function writeCrashReport(
+  logDir: string,
+  details: CrashDetails,
+  anonymiser?: Anonymiser,
+): string | null {
   const dir = join(logDir, CRASH_DIR_NAME);
   const file = join(dir, crashFileName(details.component, details.at));
   try {
     mkdirSync(dir, { recursive: true });
-    writeFileSync(file, formatCrashReport(details));
+    const report = formatCrashReport(details);
+    writeFileSync(file, anonymiser ? anonymiser.apply(report) : report);
     return file;
   } catch (error) {
     // A crash we cannot record is not a reason to crash again — but it is a reason to say so.

@@ -155,6 +155,8 @@ import { FilesService } from './files-service.js';
 import { FileClipboardService } from './file-clipboard.js';
 import { ShutdownDriver, type ShutdownStep } from './shutdown-driver.js';
 import { FormHistoryService } from './form-history-service.js';
+import { NotificationStore } from './notification-store.js';
+import { createNotificationsEvents, registerNotificationsIpc } from './notifications-ipc.js';
 import { PropertiesService } from './properties-service.js';
 import { OpenFolderQueue } from './open-folder-queue.js';
 import { TransferService } from './transfer-service.js';
@@ -511,7 +513,17 @@ async function createMainWindow(
  */
 function rendererQuery(): Record<string, string> {
   const autosaveMs = process.env.THRONG_AUTOSAVE_DEBOUNCE_MS;
-  return autosaveMs ? { autosaveMs } : {};
+  return { ...(autosaveMs ? { autosaveMs } : {}), ...toastQuery() };
+}
+
+/**
+ * 068 research D11 — the E2E harness's toast duration (`THRONG_E2E_TOAST_MS`), passed to every window
+ * as `?toastMs=`. Only the harness sets it, so a real run gets `{}` and the user's setting governs.
+ */
+function toastQuery(): Record<string, string> {
+  const toastMs = process.env.THRONG_E2E_TOAST_MS;
+  const toastHold = process.env.THRONG_E2E_TOAST_HOLD;
+  return { ...(toastMs ? { toastMs } : {}), ...(toastHold === 'off' ? { toastHold } : {}) };
 }
 
 /**
@@ -524,7 +536,7 @@ function rendererQuery(): Record<string, string> {
  * Main reads the environment here and nowhere else (Principle X); the renderer sees only `foldDefault`.
  */
 function prefsQuery(): Record<string, string> {
-  return process.env.THRONG_PREFS_SECTIONS_OPEN === '1' ? { foldDefault: 'open' } : {};
+  return { ...(process.env.THRONG_PREFS_SECTIONS_OPEN === '1' ? { foldDefault: 'open' } : {}), ...toastQuery() };
 }
 
 /**
@@ -1011,6 +1023,8 @@ if (isPrimaryInstance)
     logDir: diagnostics.logDir,
     // 066 FR-005 — a daemon that dies, even while loading its modules, leaves its record here.
     log: (level, message) => diagnostics.log.log(level, message),
+    // 068 FR-034b — daemon-startup.log is a raw redirect; it is anonymised when read back.
+    anonymise: (text) => diagnostics.anonymiser.apply(text),
     // The daemon's threshold is injected, never hardcoded (Principle X) — the same value the UI
     // is using, so one setting governs both halves of one application.
     env: {
@@ -1024,6 +1038,8 @@ if (isPrimaryInstance)
       THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
       THRONG_LOG_KEEP_DAYS: String(startupDiagnostics.keepDays),
       THRONG_LOG_MAX_TOTAL_MB: String(startupDiagnostics.maxTotalMb),
+      // 068 FR-034a — one salt per install, so one value gets one token in every process's log.
+      THRONG_LOG_SALT: diagnostics.salt,
       THRONG_VERSION: productInfo.version,
     },
   });
@@ -1174,6 +1190,9 @@ if (isPrimaryInstance)
   );
   const asFormField = (field: unknown): 'startupCommand' | 'shellArguments' | null =>
     field === 'startupCommand' || field === 'shellArguments' ? field : null;
+  // 068 US3: the Notifications panel's store. Declared here so `broadcast` below can reach it; built and
+  // wired after `currentMainWindow`, which its events need.
+  let notificationStore: NotificationStore | null = null;
   const logFormHistory = (work: Promise<unknown>): void => void work.catch((error: unknown) => logCaught('main: form history', error));
   ipcMain.handle('throng:formHistory:get', (_event, flavourId: unknown) => formHistory.get(String(flavourId)));
   ipcMain.on('throng:formHistory:record', (_event, flavourId: unknown, values: unknown) => {
@@ -1201,6 +1220,11 @@ if (isPrimaryInstance)
     currentSettings = payload.settings;
     if (currentSettings.terminals.formHistory.maxEntries < previous.terminals.formHistory.maxEntries) {
       logFormHistory(formHistory.applyLimit());
+    }
+    // 068 FR-031e: a lowered panel limit drops the oldest entries now, logging each; FR-031g: a raised one
+    // re-arms the limit warning, so any change is handed to the store.
+    if (currentSettings.notifications.panelLimit !== previous.notifications.panelLimit && notificationStore) {
+      void notificationStore.applyLimit().catch((error: unknown) => logCaught('main: notifications limit', error));
     }
     currentTheme = payload.theme; // keep the pre-paint bootstrap snapshot current (issue 132)
     pushGhostTheme(payload.theme);
@@ -1262,7 +1286,7 @@ if (isPrimaryInstance)
   // notice the user asked never to be shown (FR-006b) — which is the only evidence it happened.
   registerNoticeLogIpc(diagnostics, ipcMain);
   // #290/#162 — the renderer's terminal debug lines, written only at `diagnostics.logLevel: debug`.
-  registerRendererDebugLogIpc(diagnostics.log, ipcMain);
+  registerRendererDebugLogIpc(diagnostics.log, ipcMain, diagnostics.anonymiser);
   // 066 contract *Preload → main* — the renderer's own records: fatal always, the rest by threshold.
   registerDiagnosticsLogIpc(diagnostics, ipcMain);
 
@@ -1290,6 +1314,27 @@ if (isPrimaryInstance)
   const currentMainWindow = (): BrowserWindow | null =>
     mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
 
+  // 068 US3 (FR-024 to FR-031g): the Notifications panel's store and its IPC. `changed` reaches every
+  // window; `repeat` and `limitReached` only the main window, which flashes an entry and raises the
+  // limit warning (contracts/ipc.md).
+  const notificationEvents = createNotificationsEvents(
+    () => BrowserWindow.getAllWindows(),
+    () => currentMainWindow() ?? undefined,
+  );
+  notificationStore = new NotificationStore(
+    join(app.getPath('userData'), 'notifications.json'),
+    {
+      limit: () => currentSettings.notifications.panelLimit,
+      log: (message) => diagnostics.log.warn(message),
+      ...notificationEvents,
+    },
+  );
+  registerNotificationsIpc(ipcMain, notificationStore, {
+    // 068 FR-030: an entry added from any window but the main one flashes in the main window's panel.
+    isMainSender: (event) => (event as { sender?: unknown }).sender === currentMainWindow()?.webContents,
+    flash: notificationEvents.repeat,
+  });
+
   // The platform seam behind every window's deny-renderer-windows guard (044 FR-091 / R10) and
   // behind file-explorer reveal/open (FR-035) — built early because Preferences, About and the drag
   // ghost all need it below, well before FilesService (which also takes it) is built further down.
@@ -1306,8 +1351,9 @@ if (isPrimaryInstance)
     // The `foldDefault` test seam (056 FR-016); empty in every real run.
     query: prefsQuery(),
   };
-  ipcMain.on('throng:preferences:open', (_event, tab: unknown) => {
-    openPreferences(isPreferencesTab(tab) ? tab : 'settings', preferencesDeps);
+  ipcMain.on('throng:preferences:open', (_event, tab: unknown, section?: unknown) => {
+    // 068: `section` is a Settings group name to open and scroll to (the limit warning's link).
+    openPreferences(isPreferencesTab(tab) ? tab : 'settings', preferencesDeps, typeof section === 'string' ? section : undefined);
   });
 
   // About throng (020, FR-003/FR-003a): the cog menu's "About throng" item opens the
@@ -1588,7 +1634,13 @@ if (isPrimaryInstance)
     a.length === b.length && a.every((v, i) => v === b[i]);
   /** Re-list from the daemon; answer with the roots whose hidden set ACTUALLY changed. */
   const refreshProjectsCache = async (): Promise<string[]> => {
-    type ListedProject = { id: string; rootFolder: string; hiddenPaths?: string[]; searchExcludeGlobs?: string[] };
+    type ListedProject = {
+      id: string;
+      name?: string;
+      rootFolder: string;
+      hiddenPaths?: string[];
+      searchExcludeGlobs?: string[];
+    };
     let projects: ListedProject[];
     try {
       const result = await daemonClient.call<{
@@ -1606,6 +1658,9 @@ if (isPrimaryInstance)
     for (const p of projects) {
       const key = normaliseForCompare(p.rootFolder);
       seen.add(key);
+      // 068 FR-034a/FR-034c — the log names a project by its internal id, never its root or name.
+      diagnostics.anonymiser.register('projectRoot', p.rootFolder, p.id);
+      if (p.name) diagnostics.anonymiser.register('projectName', p.name, p.id);
       const hiddenPaths = [...(p.hiddenPaths ?? [])];
       const before = projectsByRoot.get(key);
       if (!before || !sameHidden(before.hiddenPaths, hiddenPaths)) changed.push(p.rootFolder);
@@ -2385,6 +2440,26 @@ if (isPrimaryInstance)
       hostedPanels: r.hostedPanels,
     });
   });
+  // 068 FR-063: a notice's link — usable with no attention mark; answers whether it navigated.
+  ipcMain.handle('throng:attention:goToPanel', async (_event, payload: unknown) => {
+    const p = payload as { panelId?: unknown; projectId?: unknown } | null;
+    if (!p || typeof p.panelId !== 'string') return false;
+    return attentionService.goToPanel({
+      panelId: p.panelId,
+      ...(typeof p.projectId === 'string' && p.projectId !== '' ? { projectId: p.projectId } : {}),
+    });
+  });
+  ipcMain.handle('throng:attention:panelsExist', async (_event, payload: unknown) => {
+    const list = (payload as { panels?: unknown } | null)?.panels;
+    if (!Array.isArray(list)) return [];
+    const refs = list.flatMap((r: unknown) => {
+      const p = r as { panelId?: unknown; projectId?: unknown } | null;
+      return p && typeof p.panelId === 'string'
+        ? [{ panelId: p.panelId, ...(typeof p.projectId === 'string' && p.projectId !== '' ? { projectId: p.projectId } : {}) }]
+        : [];
+    });
+    return [...(await attentionService.existingPanels(refs))];
+  });
   ipcMain.on('throng:attention:goTo', (_event, payload: unknown) => {
     const p = payload as { panelId?: unknown } | null;
     if (p && typeof p.panelId === 'string') attentionService.goTo(p.panelId);
@@ -2514,6 +2589,7 @@ if (isPrimaryInstance)
     THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
     THRONG_LOG_KEEP_DAYS: String(startupDiagnostics.keepDays),
     THRONG_LOG_MAX_TOTAL_MB: String(startupDiagnostics.maxTotalMb),
+    THRONG_LOG_SALT: diagnostics.salt,
   };
   const resourceMonitor = new ResourceMonitorHost({
     collectorEntry: resolveFromHere('../collector/resource-collector-entry.js'),

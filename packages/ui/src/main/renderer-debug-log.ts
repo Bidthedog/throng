@@ -7,6 +7,7 @@
  * asked for `diagnostics.logLevel: debug`, and must cost nothing otherwise.
  */
 
+import type { Anonymiser } from '@throng/core';
 import { reportOwnFailure } from '@throng/platform-node';
 
 /** One-way, like the notice channel: a diagnostics write that failed must never surface. */
@@ -29,11 +30,14 @@ export interface RendererDebugLogIpc {
 export function registerRendererDebugLogIpc(
   sink: RendererDebugLogSink,
   ipc: RendererDebugLogIpc,
+  /** 068 FR-034b: applied before the bound, so it can never cut a path in half. */
+  anonymiser?: Pick<Anonymiser, 'apply'>,
 ): void {
   ipc.on(RENDERER_DEBUG_LOG_CHANNEL, (_event, payload) => {
     try {
       if (typeof payload !== 'string' || payload === '') return;
-      const line = payload.replace(/[\r\n]+/g, ' ').slice(0, MAX_LINE);
+      const flat = payload.replace(/[\r\n]+/g, ' ');
+      const line = (anonymiser ? anonymiser.apply(flat) : flat).slice(0, MAX_LINE);
       sink.debug(`${RENDERER_DEBUG_PREFIX} ${line}`);
     } catch (error) {
       // An uncaught throw in an ipcMain listener would take main down. The log that failed cannot

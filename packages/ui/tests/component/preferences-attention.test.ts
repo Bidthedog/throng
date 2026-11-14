@@ -67,7 +67,7 @@ describe('Attention settings, as drawn (057 US4)', () => {
     // No longer carries the notification choices — they are Notifications' now (FR-108).
     expect(within(group).queryByTestId('control-attention.delivery.attention')).toBeNull();
     expect(within(group).queryByTestId('control-attention.toasts.attention.mode')).toBeNull();
-    expect(screen.getByTestId('control-notifications.attention.mode')).toBeInTheDocument();
+    expect(screen.getByTestId('control-notifications.attention.toast')).toBeInTheDocument();
 
     // The master switch, every signal and the quiet time, each with its description.
     const sub = screen.getByTestId('settings-subgroup-Terminal-Attention');

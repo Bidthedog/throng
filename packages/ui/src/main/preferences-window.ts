@@ -26,6 +26,20 @@ const PREF_TABS: readonly PreferencesTab[] = ['settings', 'keybindings', 'themes
 
 /** Channel the prefs renderer listens on to switch tab when the window is reused. */
 export const PREFERENCES_TAB_CHANNEL = 'throng:preferences:tab';
+/** 068: an already-open Preferences window is told which Settings section to open and scroll to. */
+export const PREFERENCES_SECTION_CHANNEL = 'throng:preferences:section';
+
+/**
+ * The query the Preferences window loads with: `deps.query` first (the test seam can add `foldDefault` but
+ * never replace the tab), then `prefs=<tab>` and, for a deep link, `section=<name>` (068 contracts/ipc.md).
+ */
+export function preferencesQuery(
+  base: Record<string, string> | undefined,
+  tab: PreferencesTab,
+  section?: string,
+): Record<string, string> {
+  return { ...base, prefs: tab, ...(section !== undefined && section.trim() !== '' ? { section } : {}) };
+}
 
 /**
  * Channel every OTHER window listens on to learn it has been blurred by the app-modal preferences
@@ -114,9 +128,11 @@ let prefsWindow: BrowserWindow | null = null;
  * Create-or-focus the single preferences window on `tab`. Idempotent: a second
  * call focuses the existing window and switches its tab (FR-010/011).
  */
-export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps): BrowserWindow {
+export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps, section?: string): BrowserWindow {
   if (prefsWindow && !prefsWindow.isDestroyed()) {
     prefsWindow.webContents.send(PREFERENCES_TAB_CHANNEL, tab);
+    // 068: a deep link into an already-open window — it opens and scrolls to the section.
+    if (section !== undefined && section.trim() !== '') prefsWindow.webContents.send(PREFERENCES_SECTION_CHANNEL, section);
     if (prefsWindow.isMinimized()) prefsWindow.restore();
     prefsWindow.focus();
     return prefsWindow;
@@ -192,7 +208,7 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
   });
 
   // `deps.query` first, so it can add a seam (`foldDefault`) but never replace the tab.
-  void win.loadFile(deps.indexHtml, { query: { ...deps.query, prefs: tab } });
+  void win.loadFile(deps.indexHtml, { query: preferencesQuery(deps.query, tab, section) });
   return win;
 }
 

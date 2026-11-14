@@ -1,7 +1,7 @@
 import { logAt, logCaught, logExpected, resolveIpcAddress, type LogLevel } from '@throng/core';
 import { STDERR_TAIL_CHARS, watchChild, type WatchChildOptions } from '@throng/platform-node';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
@@ -66,6 +66,12 @@ export interface EnsureDaemonOptions {
   readyTimeoutMs?: number;
   /** Extra environment for the spawned daemon. */
   env?: Record<string, string>;
+  /**
+   * 068 FR-034b: anonymises `daemon-startup.log` when it is read back (it is a raw stdout/stderr
+   * redirect the logger never sees), and the raw file is overwritten with the anonymised text.
+   * Absent in tests that care about neither.
+   */
+  anonymise?: (text: string) => string;
   /**
    * Whether THIS app process is elevated (FR-025b). When the app is elevated but the
    * running daemon is not, the daemon is retired and respawned — an elevated app
@@ -137,9 +143,32 @@ function openDaemonStdio(logDir: string | undefined): number | null {
   }
 }
 
+/** The most of `daemon-startup.log` read back to be anonymised; it is truncated per spawn, so small. */
+const STARTUP_SCRUB_MAX_BYTES = 1024 * 1024;
+
+/**
+ * 068 FR-034b — overwrite `daemon-startup.log` with its anonymised text. It is a raw fd redirect, so
+ * the logger's chokepoint never saw it; this runs when main reads it back, after the daemon has
+ * exited or failed to start, so no writer is left holding the old offset. A failure is reported and
+ * the file is left as it was (Principle XIII: never drop, never throw).
+ */
+export function scrubStartupLog(logDir: string, anonymise: (text: string) => string): void {
+  const path = join(logDir, 'daemon-startup.log');
+  try {
+    if (!existsSync(path)) return;
+    const raw = readFileSync(path, 'utf8');
+    if (raw.length === 0 || raw.length > STARTUP_SCRUB_MAX_BYTES) return;
+    const clean = anonymise(raw);
+    if (clean !== raw) writeFileSync(path, clean);
+  } catch (error) {
+    logCaught('daemon-lifecycle: anonymise daemon-startup.log', error);
+  }
+}
+
 /** The end of `daemon-startup.log` (≤ STDERR_TAIL_CHARS): where a load failure's error is. */
-function readStartupTail(logDir: string | undefined): string {
+function readStartupTail(logDir: string | undefined, anonymise?: (text: string) => string): string {
   if (!logDir) return '';
+  if (anonymise) scrubStartupLog(logDir, anonymise);
   let fd: number | undefined;
   try {
     fd = openSync(join(logDir, 'daemon-startup.log'), 'r');
@@ -171,7 +200,12 @@ const consoleLog = logAt;
  * logged at debug: one this process asked for (a retired daemon), and the loser of the pipe race,
  * which exits because a sibling daemon already holds the pipe.
  */
-function daemonWatch(child: ChildProcess, logDir: string | undefined, log: (level: LogLevel, message: string) => void): WatchChildOptions {
+function daemonWatch(
+  child: ChildProcess,
+  logDir: string | undefined,
+  log: (level: LogLevel, message: string) => void,
+  anonymise?: (text: string) => string,
+): WatchChildOptions {
   return {
     name: 'daemon',
     longLived: true,
@@ -180,12 +214,12 @@ function daemonWatch(child: ChildProcess, logDir: string | undefined, log: (leve
         log(level, message);
         return;
       }
-      const tail = readStartupTail(logDir);
+      const tail = readStartupTail(logDir, anonymise);
       log(level, tail ? `${message} — daemon-startup.log: ${tail}` : message);
     },
     expectedExit: () => {
       if (child.pid !== undefined && stopRequested.delete(child.pid)) return 'throng asked it to stop';
-      if (/daemon pipe ".*" is already in use/.test(readStartupTail(logDir))) {
+      if (/daemon pipe ".*" is already in use/.test(readStartupTail(logDir, anonymise))) {
         return 'another daemon already holds the pipe (lost the start-up race)';
       }
       return undefined;
@@ -401,7 +435,7 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
       ...opts.env,
     },
   });
-  watchChild(child, daemonWatch(child, stdio === null ? undefined : opts.logDir, opts.log ?? consoleLog));
+  watchChild(child, daemonWatch(child, stdio === null ? undefined : opts.logDir, opts.log ?? consoleLog, opts.anonymise));
   child.unref();
 
   // Poll until it (or the race winner) is answering, bounded by readyTimeout.

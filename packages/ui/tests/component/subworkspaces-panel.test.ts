@@ -25,6 +25,7 @@ import { SubWorkspacesClient } from '../../src/renderer/state/subworkspaces-clie
 import { SubWorkspacesProvider } from '../../src/renderer/state/subworkspaces-store.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
+import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { SubworkspacesPanel } from '../../src/renderer/sidebar/subworkspaces-panel.js';
 
 const sw = (id: string, name: string, colour = '#3fb950'): SubWorkspaceMetaDto => ({
@@ -229,5 +230,109 @@ describe('drag-to-reorder by the grip', () => {
       expect(server.invoke).toHaveBeenCalledWith('subworkspace.reorder', { orderedIds: ['swA', 'swB'] }),
     );
     expect(names()).toEqual(['Detached A', 'Detached B']);
+  });
+});
+
+describe('minimise and restore (068 FR-036)', () => {
+  async function mountMinimisable(props: { minimised: boolean; onToggleMinimise: () => void }) {
+    const server = makeServer([sw('sw1', 'Detached A')]);
+    Reflect.set(window, 'throng', { subWorkspace: bridgeApi });
+    render(
+      createElement(
+        NotificationProvider,
+        null,
+        createElement(
+          ConfirmProvider,
+          null,
+          createElement(
+            ContextMenuProvider,
+            null,
+            createElement(
+              SubWorkspacesProvider,
+              { client: new SubWorkspacesClient(server.bridge) },
+              createElement(SubworkspacesPanel, props),
+            ),
+          ),
+        ),
+      ),
+    );
+    await waitFor(() => expect(screen.getByTestId('subworkspaces-panel')).toBeInTheDocument());
+  }
+
+  it('has a minimise icon control in the header', async () => {
+    const onToggleMinimise = vi.fn();
+    await mountMinimisable({ minimised: false, onToggleMinimise });
+    const button = screen.getByTestId('subworkspaces-minimise');
+    expect(button.getAttribute('title')).toBe('Minimise Sub-workspaces');
+    expect(button.querySelector('.icon[aria-hidden="true"]')).not.toBeNull();
+    fireEvent.click(button);
+    expect(onToggleMinimise).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws the side panes\' chevron, pointing down to minimise and up to restore (FR-058)', async () => {
+    await mountMinimisable({ minimised: false, onToggleMinimise: vi.fn() });
+    const minimise = screen.getByTestId('subworkspaces-minimise');
+    expect(minimise.querySelector('.pane-chevron.pane-chevron--down')).not.toBeNull();
+    expect(minimise.querySelector('.pane-chevron--up')).toBeNull();
+    expect(minimise.className).toContain('panel__action--chevron');
+    expect(minimise.getAttribute('aria-label')).toBe('Minimise Sub-workspaces');
+  });
+
+  it('draws the chevron pointing up while minimised, and the menu item keeps its own themed icon (FR-058)', async () => {
+    await mountMinimisable({ minimised: true, onToggleMinimise: vi.fn() });
+    const restore = screen.getByTestId('subworkspaces-restore');
+    expect(restore.querySelector('.pane-chevron.pane-chevron--up')).not.toBeNull();
+    expect(restore.querySelector('.pane-chevron--down')).toBeNull();
+    fireEvent.contextMenu(screen.getByTestId('subworkspaces-panel'));
+    expect(await screen.findByTestId('menu-item-Restore')).toBeInTheDocument();
+  });
+
+  it('restores on a click anywhere on the minimised header, once, and never minimises from an open one (FR-067)', async () => {
+    const onToggleMinimise = vi.fn();
+    await mountMinimisable({ minimised: true, onToggleMinimise });
+    expect(screen.getByTestId('subworkspaces-panel').className).toContain('panel--minimised');
+    fireEvent.click(screen.getByText('Sub-workspaces', { selector: '.panel__title' }));
+    expect(onToggleMinimise).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('subworkspaces-restore'));
+    expect(onToggleMinimise).toHaveBeenCalledTimes(2);
+  });
+
+  it('wires the shared collapsed hover to the minimised header only (FR-070)', async () => {
+    await mountMinimisable({ minimised: true, onToggleMinimise: vi.fn() });
+    const header = screen.getByTestId('subworkspaces-panel').querySelector('header')!;
+    expect(header.className).toContain('collapsed-hover');
+    expect(header.getAttribute('data-hover-armed')).toBe('false');
+    fireEvent.pointerMove(header, { movementX: 3, movementY: 0 });
+    expect(header.getAttribute('data-hover-armed')).toBe('true');
+  });
+
+  it('does not minimise when the open header is clicked', async () => {
+    const onToggleMinimise = vi.fn();
+    await mountMinimisable({ minimised: false, onToggleMinimise });
+    expect(screen.getByTestId('subworkspaces-panel').className).not.toContain('panel--minimised');
+    fireEvent.click(screen.getByText('Sub-workspaces', { selector: '.panel__title' }));
+    expect(onToggleMinimise).not.toHaveBeenCalled();
+  });
+
+  it('shows a restore control and only its header while minimised', async () => {
+    await mountMinimisable({ minimised: true, onToggleMinimise: vi.fn() });
+    expect(screen.getByTestId('subworkspaces-restore').getAttribute('title')).toBe('Restore Sub-workspaces');
+    expect(screen.queryByTestId('subworkspace-list')).toBeNull();
+    expect(screen.queryByTestId('subworkspaces-minimise')).toBeNull();
+  });
+
+  it('has a context menu with Minimise, and Restore while minimised', async () => {
+    const onToggleMinimise = vi.fn();
+    await mountMinimisable({ minimised: false, onToggleMinimise });
+    fireEvent.contextMenu(screen.getByTestId('subworkspaces-panel'));
+    fireEvent.click(await screen.findByTestId('menu-item-Minimise'));
+    expect(onToggleMinimise).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Restore from the menu while minimised', async () => {
+    await mountMinimisable({ minimised: true, onToggleMinimise: vi.fn() });
+    fireEvent.contextMenu(screen.getByTestId('subworkspaces-panel'));
+    expect(await screen.findByTestId('menu-item-Restore')).toBeInTheDocument();
+    expect(screen.queryByTestId('menu-item-Minimise')).toBeNull();
   });
 });

@@ -15,17 +15,17 @@
  *
  * ══ IT STAYS UNTIL DISMISSED ══
  *
- * The display is pinned to `dismiss` rather than read from the user's per-severity mode: FR-018 says
- * the running instance MUST show it, and a launch that visibly did nothing — because the severity's
- * mode was *never*, or a timer took the card before it was read — is exactly the confusion it exists
- * to end. Dismissing it is one click.
+ * The display is pinned to `toast` and the card is `sticky` (068 FR-021e) rather than read from the user's
+ * per-severity mode and the toast duration: FR-018 says the running instance MUST show it, and a launch
+ * that visibly did nothing — because the severity's mode was *never*, or a timer took the card before it
+ * was read — is exactly the confusion it exists to end. Dismissing it is one click.
  */
 import { useEffect, useRef } from 'react';
 import { differentCopyNoticeText, type DifferentCopyNotice as Payload } from '@throng/core';
 import { useNotify, type NoticeInput } from './notification.js';
 
 const TEST_ID = 'different-copy-notice';
-const UNTIL_DISMISSED = { mode: 'dismiss', timeoutMs: 30_000 } as const;
+const ALWAYS_SHOWN = { toast: true, panel: false } as const;
 
 function noticeInput(payload: Payload): NoticeInput {
   return {
@@ -33,7 +33,8 @@ function noticeInput(payload: Payload): NoticeInput {
     subject: { kind: 'none' },
     message: differentCopyNoticeText(payload),
     testId: TEST_ID,
-    display: UNTIL_DISMISSED,
+    display: ALWAYS_SHOWN,
+    sticky: true,
   };
 }
 

@@ -130,54 +130,33 @@ async function mount(inFiles: Record<string, unknown>): Promise<void> {
 
 const modeControl = (): HTMLSelectElement =>
   screen.getByTestId(`control-${MODE_KEY}`) as HTMLSelectElement;
-const durationField = (): HTMLInputElement =>
-  screen.getByTestId(`control-${TIMEOUT_KEY}`) as HTMLInputElement;
-const durationSlider = (): HTMLInputElement =>
-  screen.getByTestId(`control-${TIMEOUT_KEY}-slider`) as HTMLInputElement;
 
-const DISMISS_ONLY = { summaryNoticeMode: 'dismiss', summaryNoticeTimeoutMs: 5000 };
-const TIMED = { summaryNoticeMode: 'timed', summaryNoticeTimeoutMs: 5000 };
-
-/*
- * Nine tests became two mounts (audit, component-2a): one DISMISS_ONLY mount carrying every
- * assertion that starts from it, one TIMED mount. No assertion was dropped.
- */
-describe('the replace summary gates (FR-082b, 030 FR-008, 030 FR-011)', () => {
+describe('the replace summary consent gate (FR-082b, 030 FR-008; 068 FR-021d)', () => {
   const choose = (value: string): void => {
     fireEvent.change(modeControl(), { target: { value } });
   };
 
-  it('under Dismiss only: the duration is inert, the mode is not, and silencing is confirmed, stated and declinable', async () => {
-    await mount(DISMISS_ONLY);
-
-    expect(
-      durationField().disabled,
-      'a duration nothing will read is live, which invites the user to tune a value the app ignores',
-    ).toBe(true);
-    // Both halves or neither: a disabled thumb beside a live text box is not an inert control.
-    expect(durationSlider().disabled).toBe(true);
-    // Never greys out the MODE itself — that is the control the dependency reads.
+  it('has no duration control any more: the global toast duration governs it', async () => {
+    await mount({ summaryNoticeMode: 'panel' });
+    expect(screen.queryByTestId(`control-${TIMEOUT_KEY}`)).toBeNull();
     expect(modeControl().disabled).toBe(false);
+  });
+
+  it('silencing is confirmed, stated and declinable, and the other modes ask nothing', async () => {
+    await mount({ summaryNoticeMode: 'panel' });
 
     choose('never');
 
-    /*
-     * SYNCHRONOUS. `commit()` calls `confirm()` inside the change handler, so the dialog is in the
-     * DOM by the time `fireEvent.change` returns, and asserting that directly is stronger than
-     * waiting for it — a `findBy*` would pass just as well against a form that put the dialog up a
-     * second later, after the write had already gone.
-     */
+    // SYNCHRONOUS: `commit()` calls `confirm()` inside the change handler.
     expect(
       screen.queryByTestId('confirm-dialog'),
       'Never display silenced a notice that reports failures with no consent at all (030 FR-008)',
     ).not.toBeNull();
 
-    // The MESSAGE, not the dialog: the title says "Never display …?", so any assertion run over the
-    // whole dialog matches the option's own name and proves nothing about what the user was told.
+    // The MESSAGE, not the dialog: the title says "Never display …?".
     const message = within(screen.getByTestId('confirm-dialog')).getByTestId('confirm-message');
     expect(message.textContent ?? '').toMatch(/report nothing/i);
     expect(message.textContent ?? '').toMatch(/log/i);
-    // A silenced type still reaches the OS while its OS Notify is on (057 FR-110).
     expect(message.textContent ?? '').toMatch(/OS Notify/);
     expect(message.textContent ?? '').toMatch(/still/i);
 
@@ -185,35 +164,11 @@ describe('the replace summary gates (FR-082b, 030 FR-008, 030 FR-011)', () => {
     await act(async () => {
       await Promise.resolve();
     });
-
-    /*
-     * The WRITE is the observable, not the select's value: `commit()` reaches `applyEdit` only inside
-     * the confirm promise's `then`, and the control is React-controlled from settings that have not
-     * changed — so a decline that wrongly applied the change would still leave the select looking
-     * right until the patch came back.
-     */
     expect(writes, `a declined silencing still wrote: ${writes.join(' | ')}`).toEqual([]);
 
-    // Does NOT ask for Display for or Dismiss only — a prompt on every change is a prompt nobody
-    // reads. The discriminating half: a form that confirmed every commit would satisfy the
-    // assertions above and be a worse control than the one it replaced.
-    choose('timed');
+    choose('toast');
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-    choose('dismiss');
-    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-  });
-
-  it('under Display for: the duration is live, and changing it asks for no confirmation', async () => {
-    await mount(TIMED);
-
-    expect(durationField().disabled).toBe(false);
-    expect(durationSlider().disabled).toBe(false);
-
-    // The other half of the discrimination, and the one that catches a gate keyed to the pair
-    // rather than to the mode: a duration is not a silencing, whatever its value.
-    fireEvent.change(durationField(), { target: { value: '9000' } });
-    fireEvent.blur(durationField());
-
+    choose('panel');
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   });
 });

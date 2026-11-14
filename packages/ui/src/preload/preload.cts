@@ -368,8 +368,14 @@ contextBridge.exposeInMainWorld('throng', {
   },
   // Cog → preferences (007, main window only): create-or-focus the single shared
   // preferences window on the chosen tab (FR-005/008/009/010).
-  openPreferences: (tab: 'settings' | 'keybindings' | 'themes') =>
-    ipcRenderer.send('throng:preferences:open', tab),
+  openPreferences: (tab: 'settings' | 'keybindings' | 'themes', section?: string) =>
+    ipcRenderer.send('throng:preferences:open', tab, section),
+  // 068: an open Preferences window is told which Settings section to open and scroll to.
+  onPreferencesSection: (cb: (section: string) => void) => {
+    const handler = (_event: unknown, section: string): void => cb(section);
+    ipcRenderer.on('throng:preferences:section', handler);
+    return () => ipcRenderer.removeListener('throng:preferences:section', handler);
+  },
   // The preferences renderer subscribes to tab switches when the window is reused.
   onPreferencesTab: (cb: (tab: 'settings' | 'keybindings' | 'themes') => void) => {
     const handler = (_event: unknown, tab: 'settings' | 'keybindings' | 'themes'): void => cb(tab);
@@ -577,8 +583,13 @@ contextBridge.exposeInMainWorld('throng', {
     // 025 FR-019: which command currently holds a terminal — the twin of onCwd above — and 053's
     // `arch` of the program it names (null/absent when idle or unreadable), and when the reading began, passed
     // through unchanged.
-    onCommand: (cb: (e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number }) => void) => {
-      const handler = (_event: unknown, e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number }): void =>
+    onCommand: (
+      cb: (e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number; memoryCommand?: string }) => void,
+    ) => {
+      const handler = (
+        _event: unknown,
+        e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number; memoryCommand?: string },
+      ): void =>
         cb(e);
       ipcRenderer.on('throng:terminal:command', handler);
       return () => ipcRenderer.removeListener('throng:terminal:command', handler);
@@ -679,6 +690,31 @@ contextBridge.exposeInMainWorld('throng', {
       const handler = (_event: unknown, change: { flavourId?: string }): void => cb(change);
       ipcRenderer.on('throng:formHistory:changed', handler);
       return () => ipcRenderer.removeListener('throng:formHistory:changed', handler);
+    },
+  },
+  // 068 US3 — the Notifications panel (contracts/ipc.md "Main ↔ renderer: notifications").
+  notifications: {
+    add: (entry: unknown) => ipcRenderer.invoke('throng:notifications:add', entry),
+    list: () => ipcRenderer.invoke('throng:notifications:list'),
+    dismiss: (id: string) => ipcRenderer.invoke('throng:notifications:dismiss', { id }),
+    dismissAll: () => ipcRenderer.invoke('throng:notifications:dismissAll'),
+    setOrder: (order: string) => ipcRenderer.invoke('throng:notifications:setOrder', { order }),
+    dismissLimitWarning: () => ipcRenderer.send('throng:notifications:dismissLimitWarning'),
+    followLimitWarning: () => ipcRenderer.send('throng:notifications:followLimitWarning'),
+    onChanged: (cb: (snapshot: unknown) => void) => {
+      const handler = (_event: unknown, snapshot: unknown): void => cb(snapshot);
+      ipcRenderer.on('throng:notifications:changed', handler);
+      return () => ipcRenderer.removeListener('throng:notifications:changed', handler);
+    },
+    onRepeat: (cb: (repeat: { id: string }) => void) => {
+      const handler = (_event: unknown, repeat: { id: string }): void => cb(repeat);
+      ipcRenderer.on('throng:notifications:repeat', handler);
+      return () => ipcRenderer.removeListener('throng:notifications:repeat', handler);
+    },
+    onLimitReached: (cb: () => void) => {
+      const handler = (): void => cb();
+      ipcRenderer.on('throng:notifications:limitReached', handler);
+      return () => ipcRenderer.removeListener('throng:notifications:limitReached', handler);
     },
   },
   fileManagerItem: {
@@ -1130,6 +1166,9 @@ contextBridge.exposeInMainWorld('throng', {
     },
     /** A toast link or Go to Next Marked Panel: main routes to the window that hosts the panel. */
     goTo: (panelId: string) => ipcRenderer.send('throng:attention:goTo', { panelId }),
+    // 068 FR-063: a notice's link, usable with no mark; and which of its panels still exist.
+    goToPanel: (origin: { panelId: string; projectId?: string }) => ipcRenderer.invoke('throng:attention:goToPanel', origin),
+    panelsExist: (panels: { panelId: string; projectId?: string }[]) => ipcRenderer.invoke('throng:attention:panelsExist', { panels }),
     /** 057 round 12 (FR-125): the panel menu's Flag — main raises a user mark and stores it. */
     flag: (panel: { panelId: string; projectId: string; panelTitle: string; tabTitle: string; projectName: string }) =>
       ipcRenderer.send('throng:attention:flag', panel),

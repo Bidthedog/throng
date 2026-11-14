@@ -40,17 +40,16 @@ describe('two windows, different keys (G2 — the #249 shape)', () => {
   it('both changes survive', async () => {
     // The literal reproduction: the Preferences window changes a notification mode while the main
     // window persists the folder it just used for a project.
-    // Real values from `DISPLAY_MODES`, not plausible-looking ones. An unrecognised mode would be
-    // substituted by the bounds guard and the test would be asserting the guard's behaviour rather
-    // than the write's.
+    // Real values (068 FR-092's booleans), not plausible-looking ones. An unrecognised value would be
+    // substituted by the parse and the test would be asserting that rather than the write.
     const { store, root } = freshStore({
-      notifications: { error: { mode: 'dismiss' } },
+      notifications: { error: { toast: true, panel: true } },
       newProject: { lastProjectFolder: 'D:/old' },
     });
 
     await Promise.all([
       writeConfigPatch(store, { kind: 'settings' }, [
-        { path: ['notifications', 'error', 'mode'], value: 'never' },
+        { path: ['notifications', 'error', 'panel'], value: false },
       ]),
       writeConfigPatch(store, { kind: 'settings' }, [
         { path: ['newProject', 'lastProjectFolder'], value: 'D:/new' },
@@ -58,10 +57,10 @@ describe('two windows, different keys (G2 — the #249 shape)', () => {
     ]);
 
     const after = readSettings(root) as {
-      notifications: { error: { mode: string } };
+      notifications: { error: { panel: boolean } };
       newProject: { lastProjectFolder: string };
     };
-    expect(after.notifications.error.mode).toBe('never');
+    expect(after.notifications.error.panel).toBe(false);
     expect(after.newProject.lastProjectFolder).toBe('D:/new');
   });
 
