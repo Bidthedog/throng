@@ -108,6 +108,16 @@ describe('a type row is three checkboxes (FR-092)', () => {
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
     await waitFor(() => expect(writes.join('')).toMatch(/"path":\["notifications","error","toast"\],"value":false/));
   });
+
+  it.each(['toast', 'panel'] as const)(
+    'shows a cleared %s at once, before the write comes back, while the other switch is still ticked',
+    async (which) => {
+      // Only a click that will ASK is held back; one that writes straight away shows straight away.
+      await mount({ error: { toast: true, panel: true } });
+      fireEvent.click(box('error', which));
+      expect(box('error', which).checked, 'the box waited for the stored value').toBe(false);
+    },
+  );
 });
 
 describe('clearing the last of Toast and Panel is confirmed for failures (030 FR-008, FR-092)', () => {
