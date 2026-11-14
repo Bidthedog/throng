@@ -36,14 +36,15 @@ goes away.
 - **Projects and categories** — each project owns a root folder and a colour; group them into categories and switch between them from the keyboard.
 - **Dockable workspace** — unlimited tabs of drag-to-split panels, saved and restored per project.
 - **Sub-workspaces** — tear tabs or panels off into their own windows that move as one group.
-- **Terminal panels** — your real installed shells, owned by a background service so they survive a restart and reattach.
+- **Terminal panels** — your real installed shells, owned by a background service so they survive a restart and reattach; a remembered Claude Code session resumes where it left off.
 - **Attention marks** — a panel, tab or project that needs you says so, with an optional notification and taskbar count, and one chord jumps to the next.
+- **Notifications panel** — toasts that get out of your way, with the errors and warnings you choose kept in a panel until you have dealt with them.
 - **Editor panels** — a fast code editor with syntax highlighting for 55 languages, crash recovery, one buffer per file across every window, and every file kept in its own encoding and line endings.
 - **File explorer** — a live, project-scoped file tree with undoable rename, move, copy and delete, and cut, copy and paste between projects.
 - **Works with your file manager** — copy, paste and drag files to and from your OS, and open any folder as a project from its menu or with `throng <path>`.
 - **Find across files and Quick Open** — search and replace the whole project, or jump to any file by name.
 - **Previews** — rendered, live-updating Markdown beside its editor, with scroll kept in sync, find,
-  a heading outline, section folding shared with the editor, wikilinks, clickable task lists and
+  a heading outline, section folding shared with the editor, Obsidian wikilinks and image embeds, clickable task lists and
   Mermaid diagrams.
 - **Focus Mode** — let any panel, or a single diagram, fill its tab while you work on it, and step back out with Esc.
 - **Clickable links** — paths, URLs and hyperlinks in terminals, editors and previews open where they belong.
