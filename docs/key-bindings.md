@@ -21,7 +21,7 @@ its default chord or chords, and its **scope**: where the chord is live.
 A command live in several places lists each of them. A chord is only ever acted on where its command
 is live — anywhere else, the key goes to whatever has focus, a shell included.
 
-These are the defaults on Windows and Linux. [The focus moves need the keypad on Linux](linux.md#key-bindings), because the desktop keeps the arrow keys.
+These are the defaults on Windows and Linux. [The focus moves need the keypad on Linux](linux.md#key-bindings), because the desktop keeps the arrow keys. On a Mac, Cmd takes Ctrl's place in every application chord: see [On macOS](#on-macos).
 
 ## How the defaults are laid out
 
@@ -114,6 +114,14 @@ four splits are on every panel's **+** button and in its **Split** menu.
 | Next Project | `project.next` | `Ctrl+Shift+Alt+PageDown` | Everywhere | Switch to the next project in the Projects pane, skipping the hidden projects of a minimised category (its loaded projects stay listed and are included) and stopping at the end. |
 | Previous Project | `project.previous` | `Ctrl+Shift+Alt+PageUp` | Everywhere | Switch to the previous project, skipping the hidden projects of a minimised category and stopping at the start. |
 | Open context menu | `menu.open` | `Shift+F10`, `ContextMenu` | Everywhere | Open the focused item's context menu from the keyboard. `ContextMenu` is the Menu key. |
+
+## Application
+
+| Command | Action id | Default | Scope | What it does |
+|---|---|---|---|---|
+| Open Settings | `app.settings` | `Cmd+,` | Everywhere | macOS only: open Preferences at its Settings tab. |
+| Install 'throng' command | `app.installCommandLine` | none | Everywhere | macOS only: put the `throng` command on your path, so throng opens a folder from a terminal ([how](install-macos.md#the-throng-command)). |
+| Uninstall 'throng' command | `app.uninstallCommandLine` | none | Everywhere | macOS only: take the `throng` command off your path. Only a command that points at throng is removed. |
 
 ## Tabs
 
@@ -243,6 +251,34 @@ running program.
 | Scroll to top | `terminal.scrollToTop` | `Ctrl+Home` | Terminal | Jump to the oldest retained line of scrollback. |
 | Scroll to bottom | `terminal.scrollToBottom` | `Ctrl+End` | Terminal | Jump to the newest output and resume following it. |
 | Refresh / redraw terminal | `terminal.redraw` | `Ctrl+F5` | Terminal | Ask the running program to redraw its screen. Changes no content, scrollback, selection or layout. Bare `F5` is left to the program. |
+
+## On macOS
+
+Every application chord in the tables above uses **Cmd** where they show **Ctrl**, and **Option** is Alt:
+`Ctrl+Shift+Alt+K` is `Option+Shift+Cmd+K`. A terminal still receives Ctrl itself, so `Ctrl+C`, `Ctrl+R` and the
+rest reach your shell. Where macOS keeps the Cmd form for itself, or the Mac has its own convention, the default is
+different:
+
+| Command | Action id | macOS default | Why |
+|---|---|---|---|
+| Cycle focus forward | `focus.cycle` | `` Ctrl+` `` | macOS keeps `` Cmd+` `` for switching windows |
+| Cycle focus backward | `focus.cycleBack` | `` Ctrl+Shift+` `` | macOS keeps `` Shift+Cmd+` `` |
+| Replace | `search.replace` | `Option+Cmd+F` | macOS keeps Cmd+H for Hide |
+| Toggle fullscreen | `view.fullscreen` | `Ctrl+Cmd+F` | The Mac's own full-screen chord; F11 shows the desktop |
+| Toggle section | `markdown.toggleSection` | `Ctrl+M,M` | macOS keeps Cmd+M for Minimise |
+| Toggle all sections | `markdown.toggleAll` | `Ctrl+M,L` | macOS keeps Cmd+M |
+| Collapse section | `markdown.collapseSection` | `Ctrl+M,S` | macOS keeps Cmd+M |
+| Collapse all sections | `markdown.collapseAll` | `Ctrl+M,A` | macOS keeps Cmd+M |
+| Redraw terminal | `terminal.redraw` | `Shift+Cmd+F5` | macOS keeps Cmd+F5 for VoiceOver |
+| Back | `navigate.back` | `Cmd+[` | The Mac convention |
+| Forward | `navigate.forward` | `Cmd+]` | The Mac convention |
+| Column select up | `editor.columnSelectUp` | `Ctrl+Option+Shift+ArrowUp` | Option+Arrow keeps moving by word |
+| Column select down | `editor.columnSelectDown` | `Ctrl+Option+Shift+ArrowDown` | Option+Arrow keeps moving by word |
+| Column select left | `editor.columnSelectLeft` | `Ctrl+Option+Shift+ArrowLeft` | Option+Arrow keeps moving by word |
+| Column select right | `editor.columnSelectRight` | `Ctrl+Option+Shift+ArrowRight` | Option+Arrow keeps moving by word |
+| Open Settings | `app.settings` | `Cmd+,` | The Mac convention; macOS only |
+
+Column selection with the mouse uses Option. A link in a terminal or editor opens with Cmd+click.
 
 ## Multi-key chords
 

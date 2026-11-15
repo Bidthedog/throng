@@ -8,7 +8,9 @@ know your way around. Every chord mentioned is rebindable; the full list is in
 
 ## Before you start
 
-Install throng on [Windows](install-windows.md) or [Linux](install-linux.md), or
+Install throng on [Windows](install-windows.md), [Linux](install-linux.md) or [macOS](install-macos.md) (best
+endeavours: checked by automated tests only, so please [report](https://github.com/Bidthedog/throng/issues) anything
+that looks wrong on a Mac), or
 [run it from a clone](installation.md#running-from-source).
 
 ## First launch

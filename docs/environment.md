@@ -126,6 +126,8 @@ launches.
 | `THRONG_MEASURE_ECHOES` | How many typed characters it times. | `200` |
 | `THRONG_MEASURE_VISIBLE_BUSY` | `1` runs a fast printer in the visible terminal instead of timing typing. | unset |
 | `THRONG_MEASURE_REPLAY` | `1` also times returning to a terminal that kept 10,000 lines. | unset |
+| `THRONG_MEASURE_ASSERT_P95_MS` | Fails the measurement when the 95th-percentile typing echo is slower than this many milliseconds. The macOS gate sets `100`; the figures print either way. | unset |
+| `THRONG_TEST_EXEC_PATH` | macOS: the path throng treats as its own when checking whether macOS moved it to a temporary read-only copy. The macOS package check sets a translocated path to prove throng then starts nothing; the refusal is logged instead of shown. | unset |
 | `THRONG_E2E_STEP_MS` | Pauses between the steps of a spec that opts in, so a run can be watched. | `0` |
 | `THRONG_E2E_CLIPBOARD` | `memory` gives each app an in-memory clipboard; the harness sets it, and it also marks a run as a test run. See [global OS resources](../.claude/skills/throng-testing/references/global-os-resources.md). | unset |
 | `THRONG_E2E_ATTENTION_OS` | `record` swaps the operating system notification and taskbar badge for recorders that append each effective call to a JSON-lines log, which Playwright cannot otherwise observe. Without it a test run uses no-ops, so no real notification is raised. | unset |
