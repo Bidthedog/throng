@@ -16,6 +16,7 @@ const alias = {
   '@throng/ipc-contract': pkg('ipc-contract'),
   '@throng/platform-windows': pkg('platform-windows'),
   '@throng/platform-linux': pkg('platform-linux'),
+  '@throng/platform-macos': pkg('platform-macos'),
   '@throng/platform-node': pkg('platform-node'),
   '@throng/platform': pkg('platform'),
   '@throng/persistence': pkg('persistence'),
@@ -109,7 +110,7 @@ const TD_TAGS = ['critical-path', 'regression', 'benched', 'slow-ok', 'contract'
  * So those files are found by reading them, here, on every run — not listed by hand — and run in
  * `unit-isolated` with the default per-file isolation. A new mocking file is routed automatically.
  */
-const UNIT_GLOB_ROOTS = ['core', 'daemon', 'ipc-contract', 'persistence', 'platform', 'platform-linux', 'platform-node', 'platform-windows', 'ui'].map(
+const UNIT_GLOB_ROOTS = ['core', 'daemon', 'ipc-contract', 'persistence', 'platform', 'platform-linux', 'platform-macos', 'platform-node', 'platform-windows', 'ui'].map(
   (p) => `packages/${p}/tests/unit`,
 );
 const NEEDS_OWN_REGISTRY = /\bvi\.(mock|doMock|unmock|doUnmock|stubGlobal|stubEnv|resetModules|spyOn)\(/;
@@ -123,13 +124,19 @@ const isolatedUnitFiles = UNIT_GLOB_ROOTS.flatMap((dir) => {
 });
 
 /**
- * 062 FR-042: these two packages' real-OS layers ARE one platform's classes, ConPTY and `/proc` respectively, so off
- * that platform there is nothing to run. Named once here instead of a guard on every file.
+ * 062 FR-042, 070 FR-038: each platform package's real-OS layers ARE one platform's classes (ConPTY, `/proc`, libproc),
+ * so off that platform there is nothing to run. Each host runs only its own package's contract and integration tests;
+ * named once here instead of a guard on every file. A macOS file still carries `skipUnlessMacos`, so a run that names
+ * it directly elsewhere says why it skipped (070 T018).
  */
-const offPlatformOsTests =
-  process.platform === 'win32'
-    ? ['packages/platform-linux/tests/{contract,integration}/**']
-    : ['packages/platform-windows/tests/{contract,integration}/**'];
+const PLATFORM_PACKAGE_BY_HOST: Readonly<Record<string, string>> = {
+  win32: 'platform-windows',
+  linux: 'platform-linux',
+  darwin: 'platform-macos',
+};
+const offPlatformOsTests = Object.entries(PLATFORM_PACKAGE_BY_HOST)
+  .filter(([host]) => host !== process.platform)
+  .map(([, dir]) => `packages/${dir}/tests/{contract,integration}/**`);
 
 export default defineConfig({
   resolve: { alias },

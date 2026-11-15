@@ -7,6 +7,7 @@
     { "path": "packages/platform-node" },
     { "path": "packages/platform-windows" },
     { "path": "packages/platform-linux" },
+    { "path": "packages/platform-macos" },
     { "path": "packages/platform" },
     { "path": "packages/persistence" },
     { "path": "packages/daemon" },

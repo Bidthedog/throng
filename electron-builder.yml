@@ -1,6 +1,6 @@
-# electron-builder configuration for throng's Windows installers (020 FR-007/009/012/038/040) and Linux packages (063).
-# Run from the repo root: `npm run package` on Windows, `npm run package:linux` on Linux
-# (build → stage:runtime → electron-builder).
+# electron-builder configuration for throng's Windows installers (020 FR-007/009/012/038/040), Linux packages (063) and
+# macOS copies (070). Run from the repo root: `npm run package` on Windows and on an Apple silicon Mac,
+# `npm run package:linux` on Linux (build → stage:runtime → electron-builder).
 #
 # Layout note (FR-009): the daemon runs as a SEPARATE host-Node process (not Electron), loading
 # native modules built against the host-Node ABI. So the app is NOT asar-packed — every package's
@@ -58,12 +58,13 @@ files:
   - '!node_modules/@typescript/**'
   - '!node_modules/eslint*/**'
   - '!node_modules/@typescript-eslint/**'
-  # better-sqlite3 13 ships an N-API prebuild per platform inside the package (#520), loaded by
-  # platform name at runtime. throng builds x64 Windows and glibc Linux only, so the other six are dead
-  # weight; win32-x64 and linux-x64 both ship, which costs one unused 2 MB binary per package.
-  - '!node_modules/better-sqlite3/prebuilds/darwin-*.node'
-  - '!node_modules/better-sqlite3/prebuilds/linuxmusl-*.node'
-  - '!node_modules/better-sqlite3/prebuilds/*-arm64.node'
+  # better-sqlite3 13 and node-pty ship a prebuild per platform inside the package (#520), loaded by platform name at
+  # runtime. Each copy keeps only its own: electron-builder expands ${platform} (win32, linux, darwin) and ${arch} per
+  # build, so Windows keeps win32-x64, Linux linux-x64 and the Mac darwin-arm64 (070 FR-043, research R23). These stay
+  # in this list: a platform's own `files:` list REPLACES this one rather than adding to it, and a list of nothing but
+  # exclusions then packs the whole repository.
+  - '!node_modules/better-sqlite3/prebuilds/!(${platform}-${arch}).node'
+  - '!node_modules/node-pty/prebuilds/!(${platform}-${arch}){,/**}'
   # CRITICAL (FR-009 launch): the workspace libraries are imported as BARE specifiers
   # (`import … from '@throng/core'`) by both the UI main and the daemon. In the dev tree those
   # resolve through node_modules/@throng/* symlinks into packages/* — but electron-builder DROPS
@@ -89,12 +90,19 @@ files:
   - from: packages/platform-linux
     to: node_modules/@throng/platform-linux
     filter: ['package.json', 'dist/**/*']
+  - from: packages/platform-macos
+    to: node_modules/@throng/platform-macos
+    filter: ['package.json', 'dist/**/*']
   - from: packages/platform
     to: node_modules/@throng/platform
     filter: ['package.json', 'dist/**/*']
 
 # 063 research D3 -- on Linux, puts the launcher where Electron's binary was. Returns at once on Windows.
 afterPack: packaging/linux/after-pack.cjs
+
+# 070 FR-044, research R23 -- on macOS, ad-hoc signs every bundled executable and native library, verifies the bundle
+# and checks every Mach-O is arm64; any failure fails the build. Returns at once on Windows and Linux.
+afterSign: packaging/macos/after-sign.cjs
 
 # The Electron main entry, injected into the packaged app's package.json.
 extraMetadata:
@@ -239,6 +247,53 @@ rpm:
     - libdrm
     - alsa-lib
     - util-linux-core
+
+# 070 -- the macOS copies (FR-003, FR-042 to FR-044, research R23). Apple silicon only: no Intel copy is built. Every
+# filename is declared in release-artifacts.ts, as on Windows and Linux, and `npm run package` on an Apple silicon Mac
+# builds both with no extra step.
+#
+# Not signed with a developer identity and not notarised (FR-006): `identity: "-"` signs ad hoc, which Apple silicon
+# needs before it runs any code at all. With no hardened runtime the bundled Node runtime loads koffi and the other
+# natives without entitlements. packaging/macos/after-sign.cjs signs what electron-builder does not reach and fails the
+# build on any binary a Mac would refuse.
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  category: public.app-category.developer-tools
+  # electron-builder makes the .icns from this; it needs at least 512px (scripts/build-app-icons.mjs writes it).
+  icon: packages/ui/assets/throng-1024.png
+  identity: '-'
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  # The zip has no block of its own, so its name lives here, as the Windows zip's does.
+  artifactName: throng-${version}-mac-${arch}.${ext}
+  # FR-024a, research R20 -- the script the Install 'throng' command links /usr/local/bin/throng to.
+  extraResources:
+    - from: packaging/macos/throng-cli.sh
+      to: bin/throng
+  # FR-024, research R19 -- a folder dropped on the Dock icon, or opened with Open With, opens as a project. Alternate,
+  # so Finder stays the default for folders.
+  extendInfo:
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: Folder
+        CFBundleTypeRole: Viewer
+        LSItemContentTypes:
+          - public.folder
+        LSHandlerRank: Alternate
+
+# The disk image: the app beside a link to Applications, which is how a Mac installs it (drag one onto the other).
+dmg:
+  artifactName: throng-${version}-mac-${arch}.${ext}
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
 
 # The setup offers BOTH scopes (058 FR-001/FR-005): the install-mode page lists "Only for me"
 # (the default, per-user, no administrator; 020 FR-012/040) and "Anyone who uses this computer"
