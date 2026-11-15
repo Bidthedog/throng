@@ -211,9 +211,11 @@ port](docs/architecture.md#adding-a-platform-port).
 
 ## Developer setup
 
-Windows and Linux are both supported for development; see [running from source](docs/installation.md#running-from-source).
-Spec Kit's scripts are bash and run on either. A feature that needs different code per platform delivers Windows and Linux
-together.
+Windows, Linux and macOS on Apple silicon are all supported for development; see
+[running from source](docs/installation.md#running-from-source). Spec Kit's scripts are bash and run on each. A feature
+that needs different code per platform delivers Windows, Linux and macOS together. macOS is supported at a
+best-endeavours level: its side is proved by CI on hosted macOS runners, so no Mac is needed to contribute. If you use throng on a Mac, bug reports are especially
+welcome: the project has no Mac of its own.
 
 Clone, then `npm install && npm run build && npm test` to confirm a green baseline before you
 start (prerequisites and commands are in the [README](README.md)). For the AI path, install

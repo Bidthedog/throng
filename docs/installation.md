@@ -8,8 +8,9 @@ Pick your system. No Node.js, compiler or other runtime is needed for any downlo
 |---|---|
 | Windows 11 (x64) | [Installing on Windows](install-windows.md) |
 | 64-bit Linux | [Installing on Linux](install-linux.md), with `apt` and `dnf` repositories that bring upgrades with your system updates |
+| macOS on Apple silicon, current or previous release | [Installing on macOS](install-macos.md), best endeavours: checked by automated tests only |
 
-macOS ([#22](https://github.com/Bidthedog/throng/issues/22)) is planned. Once it is running, the
+Once it is running, the
 [quick start](quick-start.md) takes it from there. Each guide also covers opening a folder as a project from your file
 manager, or with `throng <path>`.
 
@@ -17,9 +18,10 @@ manager, or with `throng <path>`.
 
 To run a revision that has no release yet, or to work on throng itself:
 
-- **Node.js 22.12 or later**, and **Windows 11** or **Linux**. On Windows the native modules (`better-sqlite3`,
-  `node-pty`) ship prebuilt binaries, so no compiler toolchain is needed. On Linux, install `build-essential` and
-  `python3`, and if a font list or the Trash is missing, `fontconfig` and `gvfs`.
+- **Node.js 22.12 or later**, and **Windows 11**, **Linux** or **macOS** on Apple silicon. On Windows and macOS the
+  native modules (`better-sqlite3`, `node-pty`) ship prebuilt binaries, so no compiler toolchain is needed; a Mac needs
+  the Xcode Command Line Tools (`xcode-select --install`) only if one has none for your machine. On Linux, install
+  `build-essential` and `python3`, and if a font list or the Trash is missing, `fontconfig` and `gvfs`.
 - From a clone of the repository:
 
   ```bash

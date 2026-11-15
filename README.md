@@ -9,6 +9,7 @@
 [![v1.0.0 progress](https://img.shields.io/github/milestones/progress-percent/Bidthedog/throng/1?label=v1.0.0)](https://github.com/Bidthedog/throng/milestone/1)
 [![Windows 11 x64](https://img.shields.io/badge/Windows%2011-x64-0078D4)](docs/install-windows.md)
 [![Linux x64](https://img.shields.io/badge/Linux-x64-FCC624?logo=linux&logoColor=black)](docs/install-linux.md)
+[![macOS Apple silicon](https://img.shields.io/badge/macOS-Apple%20silicon-999999?logo=apple&logoColor=white)](docs/install-macos.md)
 [![apt and dnf](https://img.shields.io/badge/packages-apt%20%7C%20dnf-A81D33)](docs/install-linux.md#the-package-repository)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
@@ -54,13 +55,13 @@ goes away.
 
 ## Getting started
 
-throng runs on **Windows 11** and [**Linux**](docs/install-linux.md); macOS
-([#22](https://github.com/Bidthedog/throng/issues/22)) is planned.
+throng runs on **Windows 11**, [**Linux**](docs/install-linux.md) and, at a best-endeavours level checked by
+automated tests only, [**macOS**](docs/install-macos.md) on Apple silicon. Mac bug reports are very welcome.
 
 1. **Install it** — on [Windows](docs/install-windows.md), download the installer, an MSI, a portable build or a zip
    from the [Releases page](https://github.com/Bidthedog/throng/releases), for just you or for everyone on the machine.
    On [Linux](docs/install-linux.md), add the `apt` or `dnf` repository once, and upgrades arrive with your system
-   updates. No prerequisites; [installation](docs/installation.md) also covers running from source.
+   updates. On [macOS](docs/install-macos.md), drag the app from the disk image into Applications. No prerequisites; [installation](docs/installation.md) also covers running from source.
 2. **Take the tour** — the [quick start](docs/quick-start.md) goes from first launch to a working
    project in a few minutes.
 3. **Go deeper** — every guide is listed in the [docs index](docs/README.md): key bindings,

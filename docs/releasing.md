@@ -48,6 +48,8 @@ its role:
 | `deb` | `throng-<version>-amd64.deb` | The Linux package for Ubuntu, Debian and their relatives, for the whole machine. |
 | `rpm` | `throng-<version>-x86_64.rpm` | The Linux package for Fedora and its relatives, for the whole machine. |
 | `tarball` | `throng-<version>-linux-x64.tar.gz` | The Linux archive, extracted and run from wherever the user puts it. |
+| `dmg` | `throng-<version>-mac-arm64.dmg` | The macOS disk image for Apple silicon: throng beside a link to Applications. |
+| `macarchive` | `throng-<version>-mac-arm64.zip` | The same app as a zip, for unpacking into Applications by hand. |
 
 All of them bundle their own Node.js runtime, so nothing else needs installing. The two Windows installers each
 support two **install scopes**; the others have none. Which one a user should pick is covered in [Installation](installation.md).
@@ -59,15 +61,17 @@ Detail — how the set is declared and reconciled, and what ships inside:
 The notes come from [`CHANGELOG.md`](../CHANGELOG.md). Entries collect under `## Unreleased` as work
 merges; before the tag, that section is renamed to the version and committed, so the notes are
 **reviewed as a diff** in the release PR. The pipeline composes the release body from that section
-plus a fixed footer (the unrecognised-app warning, one SHA-256 per artifact, the source revision). It
+plus a fixed footer (the unrecognised-app warning, the macOS support level and its first-launch **Open Anyway** step,
+one SHA-256 per artifact, the source revision). It
 never writes prose and never falls back to another version's notes. The exact body is rendered and
 checked before anything is signed, so a release whose body cannot be composed stops there. Detail:
 [release notes](../.claude/skills/throng-release/references/release-notes.md).
 
 ## Verification
 
-Every **combination** of artifact and install scope — nine today: the setup and the MSI each per-user
-and machine-wide, the portable build, the archive, and the three Linux artifacts — is installed (or extracted, or unpacked),
+Every **combination** of artifact and install scope — thirteen today: the setup and the MSI each per-user
+and machine-wide, the portable build, the archive, the three Linux artifacts, and the two macOS copies on each of two
+macOS releases — is installed (or extracted, or unpacked),
 launched, checked for the right version, driven through a core journey — project, terminal, close,
 reopen, reattach — checksummed, and removed again, each on its own fresh CI runner. Machine-wide
 combinations also prove a second, standard account gets its own background service and terminals,
@@ -75,7 +79,11 @@ and that an upgrade in use by that account finishes at a restart without closing
 job installs every copy side by side and proves they coexist: one runs at a time, all open the same
 data. Each combination, and the coexistence run, gets its own verdict. A missing verdict is a
 failure, and a set of verdicts covering only some combinations is a refusal, not a partial pass. The
-one gap allowed — a second-account check a hosted runner cannot exercise — is named on every run. The Linux
+two gaps allowed — a second-account check a hosted runner cannot exercise, and macOS's first-launch **Open Anyway**
+step, which a hosted Mac never shows — are named on every run. The macOS copies are built by `build-macos` and
+verified by `verify-macos` on the current and previous macOS runners named in `.github/macos-runners.json`, and are
+signed ad hoc rather than with a developer identity. When Apple ships a new macOS, move the supported range by changing
+the two labels in that file; every macOS job reads them from there. The Linux
 packages also prove an older copy left open survives the upgrade, and that an older package is refused; the `.rpm` is
 verified in a Fedora container, because no hosted runner is rpm-based. Detail:
 [verification](../.claude/skills/throng-release/references/verification.md).

@@ -111,6 +111,15 @@ real X display with a window manager (`scripts/ci-linux-display.sh`), and its la
 specs about Linux itself. A test asserting one platform's behaviour says so with `skipUnlessWindows(reason)` or
 `skipUnlessLinux(reason)` from `@throng/core/testing`, and the reason is required.
 
+## On macOS
+
+CI runs every layer on hosted Apple silicon runners too, on the current and the previous macOS release named in
+`.github/macos-runners.json`: the `macos-` jobs in `ci.yml`, and `gate-macos` in `gate.yml`. Its E2E lane is `@core` plus
+`@macos`, and `skipUnlessMacos(reason)` marks a test about macOS itself. These runs are the whole of throng's macOS
+testing; no step needs a Mac by hand ([macOS](macos.md#not-checked-by-the-automated-tests) lists what they cannot show).
+Typing latency is the one SLA asserted on CI, on macOS only: `gate-macos` runs the terminal load measurement with
+`THRONG_MEASURE_ASSERT_P95_MS=100`.
+
 ## Two lanes: `@core` and `@extended`
 
 Every E2E test carries exactly one significance tag and at least one category tag, and

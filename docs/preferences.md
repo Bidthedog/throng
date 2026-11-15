@@ -246,6 +246,7 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
+| Use Option as Meta (macOS only) | `terminals.macOptionIsMeta` | off | on · off | Make Option act as the Meta key in terminals, so shortcuts such as Option+B and Option+F reach programs that use Meta. Off, Option types the characters your keyboard layout puts on it, such as # or @. |
 | Remember terminal form values | `terminals.formHistory.enabled` | on | on · off | Offer Startup Command and Shell Arguments values used before, per terminal type. Off stops recording and offering them, and keeps what is stored until cleared. |
 | Terminal form values remembered | `terminals.formHistory.maxEntries` | 10 | 1 – 50 | How many values each field keeps per terminal type. Lowering this trims every list to its newest entries. |
 | Show terminal status bar | `terminals.showStatusBar` | on | on · off | The status bar along the bottom of each terminal panel. |
