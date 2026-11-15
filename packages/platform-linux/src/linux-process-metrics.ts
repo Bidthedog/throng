@@ -12,7 +12,7 @@ import {
   type TerminateResult,
   type Unavailable,
 } from '@throng/core';
-import { programName, isLiveRow, kernelUnits, readCommandLine, readExecutablePath, readProcRow, trySignal } from './proc-table.js';
+import { programName, isLiveRow, kernelUnits, readCommandLine, readExecutablePath, readProcRow, trySignal, type ProcRow } from './proc-table.js';
 import type { LinuxGpuUsage } from './linux-gpu.js';
 import { procRelevantProcesses, type RelevantProcesses } from './relevant-processes.js';
 
@@ -57,7 +57,7 @@ function readPrivateBytes(pid: number, pageSize: number): number {
 
 /** `IProcessMetrics` from `/proc` (062 FR-037, FR-038). */
 export class LinuxProcessMetrics implements IProcessMetrics {
-  private scope: RelevantProcesses | undefined;
+  private scope: RelevantProcesses<ProcRow> | undefined;
   private machineInfo: MachineInfo | undefined;
 
   constructor(private readonly gpuUsage: LinuxGpuUsage) {}

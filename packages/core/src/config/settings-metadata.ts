@@ -1050,6 +1050,16 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
   },
   {
+    // 070 FR-031 (research R22): xterm's own Option-as-Meta switch, which means nothing off a Mac.
+    onlyOn: 'macos',
+    key: 'terminals.macOptionIsMeta',
+    label: 'Use Option as Meta',
+    description:
+      'Make Option act as the Meta key in terminals, so shortcuts such as Option+B and Option+F reach programs that use Meta. Off, Option types the characters your keyboard layout puts on it, such as # or @.',
+    group: 'Terminal',
+    control: 'toggle',
+  },
+  {
     key: 'terminals.formHistory.enabled',
     label: 'Remember terminal form values',
     description: 'Offer Startup Command and Shell Arguments values used before, per terminal type. Off stops recording and offering them, and keeps what is already stored until cleared.',

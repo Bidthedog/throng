@@ -265,11 +265,13 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
    * trash on Linux.
    */
   const trashRestore = platform.trashRestore((originalPath) => restoreFromRecycleBin(originalPath));
+  // 070 R6: macOS trashes through the platform, which records where the item went so undo can put it back.
+  const trash = trashRestore.trash?.bind(trashRestore) ?? ((p: string) => shell.trashItem(p));
   container
     .bind<IFileSystem>(UI_TYPES.FileSystem)
     .toConstantValue(
       new NodeFileSystem(
-        (p) => shell.trashItem(p),
+        trash,
         (originalPath, deletedAt) => trashRestore.restore(originalPath, deletedAt),
       ),
     );

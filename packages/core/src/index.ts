@@ -1,10 +1,12 @@
 export {
   LINUX_PATH_TRAITS,
+  MACOS_PATH_TRAITS,
   WINDOWS_HOST_TRAITS,
   WINDOWS_PATH_TRAITS,
   configureHostTraits,
   hostTraits,
   linuxHostTraits,
+  macosHostTraits,
   resolveIpcAddress,
   trashTerm,
 } from './platform/host-traits.js';
@@ -18,6 +20,7 @@ export type { IOrphanProcesses, ITrashRestore, IUserDirectories, IVolumeRoots, O
 // Exports grow per implementation phase; each addition keeps the tree compiling.
 
 export type { IPlatformInfo, OsName } from './abstractions/platform-info.js';
+export { osNameFor } from './abstractions/platform-info.js';
 // The OS clipboard seam (016, FR-013a) — core reads the live clipboard to decide a paste mode.
 export type { FileListSnapshot, IClipboard, IFileListCodec } from './abstractions/clipboard.js';
 export { decidePasteSource, type PasteSource } from './explorer/paste-source.js';
@@ -37,6 +40,8 @@ export {
   type FormHistoryLists,
 } from './terminal/form-history.js';
 export type { FileManagerRegistration, IFileManagerRegistration } from './abstractions/file-manager-registration.js';
+export { NoCommandLineInstall } from './abstractions/command-line-install.js';
+export type { CommandLineStatus, ICommandLineInstall } from './abstractions/command-line-install.js';
 export {
   ShutdownRun,
   shutdownTaskSummary,
@@ -117,6 +122,7 @@ export type {
 } from './config/install-handoff.js';
 export {
   COEXISTENCE_STEPS,
+  GATEKEEPER_UNPROVEN_REASON,
   RUNNER_LIMITED_STEPS,
   VERIFICATION_STEPS,
   buildArtifactVerdict,
@@ -143,6 +149,8 @@ export type {
 } from './config/verification-verdict.js';
 export {
   END_STATE_STEPS,
+  MACOS_PACKAGE_STEPS,
+  MACOS_RUNNER_SLOTS,
   artifactSetForPlatform,
   combinationsOf,
   declareArtifactSet,
@@ -152,6 +160,7 @@ export {
 export type {
   ArtifactPlatform,
   InstallScope,
+  MacosRunnerSlot,
   ReconcileResult,
   ReleaseArtifact,
   ReleaseArtifactRole,
@@ -508,6 +517,12 @@ export {
   DESKTOP_RESERVED_CHORDS,
   KEYPAD_REACHABLE_CHORDS,
   LINUX_BINDING_OVERRIDES,
+  // 070 FR-029 — macOS's derived table, its overrides and the chords macOS keeps for itself.
+  MACOS_BINDING_OVERRIDES,
+  MACOS_BINDINGS,
+  MACOS_RESERVED_CHORDS,
+  ctrlToMeta,
+  chordLabel,
   SHIPPED_KEYBINDINGS_BY_PLATFORM,
   COMMAND_SCOPES,
   shippedBindingsFor,

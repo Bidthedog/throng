@@ -28,10 +28,20 @@ import type { VerificationStep } from './verification-verdict.js';
  * The set is closed for 042 and deliberately open to growth: #361 adds a machine-wide installer, so
  * no consumer may assume the count.
  */
-export type ReleaseArtifactRole = 'setup' | 'msi' | 'portable' | 'archive' | 'deb' | 'rpm' | 'tarball';
+export type ReleaseArtifactRole = 'setup' | 'msi' | 'portable' | 'archive' | 'deb' | 'rpm' | 'tarball' | 'dmg' | 'macarchive';
 
 /** The OS an artifact is built and verified on (063 FR-016), in `process.platform`'s spelling. */
-export type ArtifactPlatform = 'win32' | 'linux';
+export type ArtifactPlatform = 'win32' | 'linux' | 'darwin';
+
+/**
+ * Which supported macOS release's machine verifies a copy (070 FR-003a, FR-010): the current one and the previous one.
+ *
+ * A SLOT, never a runner label. The labels are named once, in `.github/macos-runners.json` (FR-037), and the workflow
+ * maps a slot to its label; so moving the supported range forward is one edit there, and nothing here moves.
+ */
+export type MacosRunnerSlot = 'current' | 'previous';
+
+export const MACOS_RUNNER_SLOTS: readonly MacosRunnerSlot[] = ['current', 'previous'];
 
 /**
  * Where an installer puts itself (058 FR-003, spec entity *Install scope*): for the signed-in user
@@ -83,6 +93,11 @@ export interface ReleaseArtifact {
    * the same position: absence is not success).
    */
   applicableSteps: readonly VerificationStep[];
+  /**
+   * The macOS releases it is verified on, one clean machine each (070 FR-010). Absent for an artifact verified on
+   * one machine, which is every Windows and Linux one.
+   */
+  verificationRunners?: readonly MacosRunnerSlot[];
   /** The digest of the published bytes; `null` in a declaration, filled once the bytes exist. */
   sha256: string | null;
 }
@@ -124,6 +139,27 @@ const LINUX_PACKAGE_STEPS: readonly VerificationStep[] = [
   'no-write',
   'uninstall',
   'residue-scan',
+];
+
+/**
+ * A macOS copy's steps (070 FR-010, data-model.md *Release artifacts*). An app bundle installs by being copied and
+ * uninstalls by being deleted, so it has no shortcut or service step; it has the bundle's own `bin/throng` command, and
+ * the Gatekeeper first launch, which a hosted runner cannot exercise and records unproven (RUNNER_LIMITED_STEPS).
+ */
+export const MACOS_PACKAGE_STEPS: readonly VerificationStep[] = [
+  'install',
+  'launch',
+  'version-match',
+  'self-contained',
+  'core-journey',
+  'reattach',
+  'in-use-upgrade',
+  'checksum-match',
+  'no-write',
+  'cli-command',
+  'uninstall',
+  'residue-scan',
+  'gatekeeper-first-launch',
 ];
 
 /**
@@ -285,6 +321,33 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
         ],
         sha256: null,
       },
+      // 070 FR-003: Apple silicon only, with the architecture in the name; no Intel copy is built.
+      {
+        role: 'dmg',
+        platform: 'darwin',
+        verificationContainer: null,
+        filename: `throng-${version}-mac-arm64.dmg`,
+        label: 'macOS disk image (Apple silicon)',
+        audience: 'Most Mac users: open it and drag throng to Applications',
+        scopes: [],
+        applicableSteps: MACOS_PACKAGE_STEPS,
+        verificationRunners: MACOS_RUNNER_SLOTS,
+        sha256: null,
+      },
+      {
+        role: 'macarchive',
+        platform: 'darwin',
+        verificationContainer: null,
+        filename: `throng-${version}-mac-arm64.zip`,
+        label: 'macOS archive (.zip)',
+        audience: 'Apple silicon Macs, without a disk image: unzip and move throng to Applications',
+        scopes: [],
+        // The same copy, arriving another way. The upgrade over a running copy is the disk image's to prove: both put
+        // the same bundle in the same place, and one fixture is enough.
+        applicableSteps: MACOS_PACKAGE_STEPS.filter((step) => step !== 'in-use-upgrade'),
+        verificationRunners: MACOS_RUNNER_SLOTS,
+        sha256: null,
+      },
     ],
   };
 }
@@ -314,6 +377,8 @@ export interface VerificationCombination {
   container: string;
   /** `null` for an artifact without scopes. */
   scope: InstallScope | null;
+  /** The macOS release whose machine runs it (070 FR-010); absent off macOS, so those matrices are as they were. */
+  runner?: MacosRunnerSlot;
   /** The artifact's own steps plus the ones its scope adds. */
   applicableSteps: readonly VerificationStep[];
   /** Where this combination's verdict is written and read. */
@@ -330,10 +395,29 @@ function scopeSteps(role: ReleaseArtifactRole, scope: InstallScope): readonly Ve
   return machine;
 }
 
-/** Every combination of the set, in declaration order, per-user before machine-wide. */
+/**
+ * Every combination of the set, in declaration order, per-user before machine-wide, and the current macOS release
+ * before the previous one.
+ */
 export function combinationsOf(set: ReleaseArtifactSet): readonly VerificationCombination[] {
   const combinations: VerificationCombination[] = [];
   for (const artifact of set.artifacts) {
+    if (artifact.verificationRunners !== undefined && artifact.verificationRunners.length > 0) {
+      for (const runner of artifact.verificationRunners) {
+        const id = `${artifact.role}-${runner}`;
+        combinations.push({
+          id,
+          role: artifact.role,
+          platform: artifact.platform,
+          container: artifact.verificationContainer ?? '',
+          scope: null,
+          runner,
+          applicableSteps: artifact.applicableSteps,
+          verdictFile: `verification-verdict-${id}.json`,
+        });
+      }
+      continue;
+    }
     if (artifact.scopes.length === 0) {
       combinations.push({
         id: artifact.role,

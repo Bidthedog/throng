@@ -16,6 +16,7 @@
  * shared across processes, so the same value must give the same token everywhere (research D10).
  * Over-redaction costs readability, never privacy (FR-034f), so every ambiguity resolves to a token.
  */
+import type { OsName } from '../abstractions/platform-info.js';
 
 export type AnonKind =
   | 'projectRoot'
@@ -41,7 +42,7 @@ export interface Anonymiser {
 
 export interface AnonymiserOptions {
   salt: string;
-  os: 'windows' | 'linux';
+  os: OsName;
   /** Keyed hash, hex. HMAC-SHA256 in production; injected so core imports no Node builtin. */
   hash: (salt: string, value: string) => string;
 }
@@ -139,13 +140,16 @@ export function sensitive(kind: 'command' | 'prompt' | 'title' | 'input' | 'line
 
 export function createAnonymiser(opts: AnonymiserOptions): Anonymiser {
   const win = opts.os === 'windows';
+  // macOS volumes are case-insensitive by default, so a path the user typed in another case is still theirs (070 R32).
+  const foldCase = opts.os !== 'linux';
   const sep = win ? '[\\\\/]+' : '/+';
-  const flags = win ? 'gi' : 'g';
+  const flags = foldCase ? 'gi' : 'g';
   const entries: Entry[] = [];
   const seen = new Set<string>();
 
   const norm = (value: string): string => {
-    const v = win ? value.replace(/[\\/]+/g, '/').toLowerCase() : value;
+    const separated = win ? value.replace(/[\\/]+/g, '/') : value;
+    const v = foldCase ? separated.toLowerCase() : separated;
     return v.length > 1 ? v.replace(/\/+$/, '') : v;
   };
   const digest = (value: string): string => opts.hash(opts.salt, norm(value)).slice(0, 8);

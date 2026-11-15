@@ -58,6 +58,8 @@ import { terminalLinkHintAnchor } from './link-hint-anchor.js';
 import { shouldDropScrollback, withScrollbackDrop } from './clear-detect.js';
 import { sliceReplay } from './replay-slices.js';
 import { subscribeTerminalOutput } from './output-router.js';
+import { isPasteChord } from './paste-chord.js';
+import { primaryModifierLabel } from '../config/host-modifiers.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
 import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
 import { parseOsc52 } from './osc52.js';
@@ -157,16 +159,6 @@ export interface TerminalApi {
   getHoveredLink(): HoveredLink | null;
 }
 
-/**
- * A paste chord: Ctrl+V or Shift+Insert (#142). Ctrl+Shift+V and Alt combinations are left to the
- * shell. `e.key` is `'v'` (no Shift) but we accept `'V'` defensively; Shift+Insert reports `'Insert'`.
- */
-function isPasteChord(e: KeyboardEvent): boolean {
-  if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'v' || e.key === 'V')) return true;
-  if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key === 'Insert') return true;
-  return false;
-}
-
 export interface UseTerminalOptions {
   panelId: string;
   projectId: string;
@@ -191,6 +183,11 @@ export interface UseTerminalOptions {
   /** Themeable terminal font (006, FR-074) — resolved from the terminal typography role. */
   fontFamily: string;
   fontSize: number;
+  /**
+   * 070 FR-031 (`terminals.macOptionIsMeta`): Option sends Meta instead of the layout's character. xterm reads it on
+   * macOS only. Absent → off, which is xterm's own default.
+   */
+  macOptionIsMeta?: boolean;
   /** Display labels sent on attach for the app-close warning details (FR-015). */
   meta?: { projectName?: string; tabName?: string; panelName?: string };
   /** Called when the terminal process ends (revert to the form, FR-020). */
@@ -426,6 +423,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
     return () => clearTimeout(id);
   }, [opts.fontFamily, opts.fontSize]);
 
+  // 070 FR-031: a change to `terminals.macOptionIsMeta` applies to a live terminal at once — no grid change, no resize.
+  useEffect(() => {
+    const t = termRef.current;
+    if (t) t.options.macOptionIsMeta = opts.macOptionIsMeta === true;
+  }, [opts.macOptionIsMeta]);
+
   useEffect(() => {
     if (!container) return;
     const bridge = window.throng?.terminal;
@@ -480,7 +483,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
       ...(linkWslRef.current?.() === true ? { wslFlavour: true as const } : {}),
     });
     /** The activation chord, as FR-165g's hint words it. (The tooltip that also used it is gone.) */
-    const linkChord = /Mac/i.test(navigator.platform) ? 'Cmd' : 'Ctrl';
+    // From host traits, not `navigator.platform` (070 R32): Cmd on macOS, Ctrl elsewhere.
+    const linkChord = primaryModifierLabel();
     /**
      * Track the hovered link (045 FR-042, FR-043, FR-167).
      *
@@ -576,6 +580,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
       cursorBlink: true,
       fontFamily: opts.fontFamily,
       fontSize: opts.fontSize,
+      // 070 FR-031: off lets Option type the layout's characters; on makes it Meta (xterm reads it on macOS only).
+      macOptionIsMeta: opts.macOptionIsMeta === true,
       theme: themeRef.current,
       // The search addon paints match highlights through xterm's decorations API, which
       // is still flagged "proposed" — without this it throws rather than highlighting (013).

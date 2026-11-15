@@ -1,9 +1,11 @@
 import {
+  NoCommandLineInstall,
   NoForegroundHandoff,
   NoInstalledVersion,
   WINDOWS_HOST_TRAITS,
   configureHostTraits,
   type HostTraits,
+  type ICommandLineInstall,
   type Holder,
   type IDirectoryLock,
   type IElevationState,
@@ -29,7 +31,39 @@ import {
   type IUserDirectories,
   type IVolumeRoots,
 } from '@throng/core';
-import { NodeUserContext } from '@throng/platform-node';
+import {
+  MACOS_SHELL_SEARCH_DIRS,
+  NoDeElevatedLauncher as PosixNoDeElevatedLauncher,
+  NodeUserContext,
+  PosixDirectoryLock,
+  PosixElevation,
+  PosixPathForms,
+  PosixShellDetection,
+  posixLookupHolder,
+} from '@throng/platform-node';
+import {
+  MacosCommandLineInstall,
+  MacosExecutableExtensions,
+  MacosFileAccessInfo,
+  MacosFileAttributes,
+  MacosFileListCodec,
+  MacosInstalledVersion,
+  MacosFileManagerRegistration,
+  MacosFontEnumeration,
+  MacosOrphanProcesses,
+  MacosOsPropertiesDialog,
+  MacosPlatformInfo,
+  MacosProcessCwd,
+  MacosProcessIdentity,
+  MacosProcessMetrics,
+  MacosPtyHost,
+  MacosRefusedUriSchemes,
+  MacosTrash,
+  MacosUserDirectories,
+  MacosVolumeRoots,
+  macosTraitsForThisProcess,
+  startupRefusal as macosStartupRefusal,
+} from '@throng/platform-macos';
 import {
   LinuxDirectoryLock,
   LinuxElevation,
@@ -142,7 +176,39 @@ export interface PlatformServices {
   readonly fileAccessInfo: () => IFileAccessInfo;
   /** The "Open as throng project" item. `installed`: false for a portable or archive build (067 FR-036). */
   readonly fileManagerRegistration: (opts: { execPath: string; home: string; installed: boolean }) => IFileManagerRegistration;
+  /**
+   * The `BrowserWindow` options that give a window this platform's frame (070 FR-026, R16): throng draws its own title
+   * bar everywhere; on macOS the native traffic lights sit in it, so main never branches on the OS.
+   */
+  readonly windowChrome: () => BrowserWindowChromeOptions;
+  /**
+   * Folders the OS withholds until the user grants access, under `home` (070 FR-025, R14). A listing refused under one
+   * of these is the OS's privacy rule, not a permissions fault. Empty where the OS has no such rule.
+   */
+  readonly privacyProtectedRoots: (home: string) => string[];
+  /** The `throng` command on the user's PATH (070 FR-024a, R20). Unavailable where the installer already owns it. */
+  readonly commandLineInstall: (opts: { execPath: string }) => ICommandLineInstall;
 }
+
+/** The subset of Electron's `BrowserWindowConstructorOptions` a platform's frame sets. */
+export interface BrowserWindowChromeOptions {
+  readonly frame?: boolean;
+  readonly titleBarStyle?: 'hidden';
+  readonly trafficLightPosition?: { readonly x: number; readonly y: number };
+}
+
+/** Windows and Linux: no OS frame at all; throng's title bar carries its own window controls. */
+const FRAMELESS: BrowserWindowChromeOptions = { frame: false };
+
+/**
+ * macOS: the title bar hidden and the traffic lights kept, centred in throng's 34 px title bar (12 px lights, so 11 px
+ * above; 12 px in from the left edge, as Finder places them).
+ */
+const MACOS_CHROME: BrowserWindowChromeOptions = { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 11 } };
+
+/** The command ships with the Windows installer and the Linux packages, so there is nothing for throng to install. */
+const INSTALLER_OWNS_COMMAND = 'The installer already puts the throng command on your PATH.';
+
 
 const WINDOWS: PlatformServices = {
   traits: () => WINDOWS_HOST_TRAITS,
@@ -185,6 +251,9 @@ const WINDOWS: PlatformServices = {
   osPropertiesDialog: () => new WindowsOsPropertiesDialog(),
   fileAccessInfo: () => new WindowsFileAccessInfo(),
   fileManagerRegistration: ({ execPath, installed }) => new WindowsFileManagerRegistration(REG_EXE, execPath, installed),
+  windowChrome: () => FRAMELESS,
+  privacyProtectedRoots: () => [],
+  commandLineInstall: () => new NoCommandLineInstall(INSTALLER_OWNS_COMMAND),
 };
 
 const LINUX: PlatformServices = {
@@ -219,7 +288,67 @@ const LINUX: PlatformServices = {
   osPropertiesDialog: () => new LinuxOsPropertiesDialog(),
   fileAccessInfo: () => new LinuxFileAccessInfo(),
   fileManagerRegistration: ({ home, installed }) => new LinuxFileManagerRegistration(home, installed),
+  windowChrome: () => FRAMELESS,
+  privacyProtectedRoots: () => [],
+  commandLineInstall: () => new NoCommandLineInstall(INSTALLER_OWNS_COMMAND),
 };
+
+/**
+ * macOS (070 contracts/platform-services-macos.md): its own classes where the OS differs, the shared POSIX ones from
+ * `@throng/platform-node` where it does not, and a stated absence where macOS has no such concept (FR-013).
+ */
+const MACOS: PlatformServices = {
+  traits: () => macosTraitsForThisProcess(),
+  platformInfo: () => new MacosPlatformInfo(),
+  userDirectories: () => new MacosUserDirectories(),
+  shellDetection: () => new PosixShellDetection({ extraSearchDirs: MACOS_SHELL_SEARCH_DIRS }),
+  ptyHost: () => new MacosPtyHost(),
+  directoryLock: () => new PosixDirectoryLock(),
+  elevation: () => new PosixElevation(),
+  deElevatedLauncher: () => new PosixNoDeElevatedLauncher(),
+  processCwd: () => new MacosProcessCwd(),
+  processIdentity: () => new MacosProcessIdentity(),
+  processMetrics: () => new MacosProcessMetrics(),
+  orphanProcesses: () => new MacosOrphanProcesses(),
+  foregroundHandoff: () => new NoForegroundHandoff(),
+  fontEnumeration: () => new MacosFontEnumeration(),
+  pathForms: () => new PosixPathForms(),
+  executableExtensions: () => new MacosExecutableExtensions(),
+  refusedUriSchemes: () => new MacosRefusedUriSchemes(),
+  trashRestore: () => new MacosTrash(),
+  hasTaskbarOverlay: false,
+  volumeRoots: () => new MacosVolumeRoots(),
+  // Chromium on macOS has one display backend; there is nothing to choose.
+  displaySwitches: () => [],
+  lookupHolder: posixLookupHolder,
+  startupRefusal: () => macosStartupRefusal(),
+  installedVersion: (execPath) => new MacosInstalledVersion(execPath),
+  // 063 FR-013: a daemon ends once its bundle is gone and nothing needs it.
+  exitWhenEntryRemoved: true,
+  fileListCodec: () => new MacosFileListCodec(),
+  fileAttributes: () => new MacosFileAttributes(),
+  osPropertiesDialog: () => new MacosOsPropertiesDialog(),
+  fileAccessInfo: () => new MacosFileAccessInfo(),
+  fileManagerRegistration: () => new MacosFileManagerRegistration(),
+  windowChrome: () => MACOS_CHROME,
+  privacyProtectedRoots: (home) => macosPrivacyProtectedRoots(home),
+  commandLineInstall: ({ execPath }) => new MacosCommandLineInstall({ execPath }),
+};
+
+/**
+ * The folders macOS's privacy rules (TCC) withhold until the user grants access (070 FR-025, R14): Desktop,
+ * Documents, Downloads, iCloud Drive, and every other mounted volume.
+ */
+export function macosPrivacyProtectedRoots(home: string): string[] {
+  const base = home.replace(/\/+$/, '');
+  return [
+    `${base}/Desktop`,
+    `${base}/Documents`,
+    `${base}/Downloads`,
+    `${base}/Library/Mobile Documents/com~apple~CloudDocs`,
+    '/Volumes',
+  ];
+}
 
 /** A platform with no implementation set. Never answered with another platform's (062 FR-050). */
 export class UnsupportedPlatformError extends Error {
@@ -235,6 +364,8 @@ export function selectPlatform(nodePlatform: string): PlatformServices {
       return WINDOWS;
     case 'linux':
       return LINUX;
+    case 'darwin':
+      return MACOS;
     default:
       throw new UnsupportedPlatformError(nodePlatform);
   }

@@ -31,6 +31,7 @@ import {
   logExpected,
 } from '@throng/core';
 import { codePageHint } from './code-page-guess.js';
+import { realRoots } from './real-roots.js';
 
 /**
  * 059 FR-068 / FR-069 — how a document was read, when that is worth telling the user. `suspect`: detection read
@@ -181,7 +182,9 @@ export class EditorService {
         hasBom: decoded.hasBom,
         lineEnding: decoded.lineEnding,
         ...(decoded.mixedLineEndings ? { mixedLineEndings: decoded.mixedLineEndings } : {}),
-        relativeFolder: relativeFolderOf(decision.absPath, req.ownerRoot),
+        // The request's own path against the request's own root: the decision's path is the REAL one, and a root reached
+        // through a link (any project under /tmp or /var on macOS) would put every real path outside it.
+        relativeFolder: relativeFolderOf(req.absPath, req.ownerRoot),
       };
     } catch (e) {
       logCaught('editor-service: load', e);
@@ -209,7 +212,7 @@ export class EditorService {
     return resolveDrop(
       { realPath, isDirectory: stat.kind === 'folder', size },
       { ownerKind: req.ownerKind },
-      { ownerRoot: req.ownerRoot, allProjectRoots: req.allProjectRoots },
+      await realRoots(this.fs, { ownerRoot: req.ownerRoot, allProjectRoots: req.allProjectRoots }),
       { maxOpenFileBytes: this.settings().editor.maxOpenFileBytes },
     );
   }
@@ -230,7 +233,7 @@ export class EditorService {
       const realTarget = await this.resolveRealTarget(req.absPath);
       const confinement = resolveSaveConfinement(
         { ownerKind: req.ownerKind },
-        { ownerRoot: req.ownerRoot, allProjectRoots: req.allProjectRoots },
+        await realRoots(this.fs, { ownerRoot: req.ownerRoot, allProjectRoots: req.allProjectRoots }),
       );
       if (!confinement.allowed(realTarget)) {
         return {
@@ -261,12 +264,20 @@ export class EditorService {
     }
   }
 
-  /** Resolve the real path of a save target that may not exist yet (new doc). */
+  /**
+   * Resolve the real path of a save target that may not exist yet (new doc), through its nearest existing ancestor:
+   * the roots it is compared with are real, so a missing folder under a linked root must not leave the path unresolved.
+   */
   private async resolveRealTarget(absPath: string): Promise<string> {
-    if (await this.fs.exists(absPath)) return this.fs.realpath(absPath);
-    const dir = dirname(absPath);
-    const realDir = (await this.fs.exists(dir)) ? await this.fs.realpath(dir) : dir;
-    return join(realDir, basename(absPath));
+    const missing: string[] = [];
+    let here = absPath;
+    while (!(await this.fs.exists(here))) {
+      const parent = dirname(here);
+      if (parent === here) return absPath;
+      missing.unshift(basename(here));
+      here = parent;
+    }
+    return join(await this.fs.realpath(here), ...missing);
   }
 }
 

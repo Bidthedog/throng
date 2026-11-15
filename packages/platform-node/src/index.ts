@@ -1,6 +1,6 @@
 /**
  * Node code every platform implementation shares (062 R4). A leaf: it knows core and nothing else, so
- * `platform-windows` and `platform-linux` can both use it without ever seeing each other.
+ * `platform-windows`, `platform-linux` and `platform-macos` can all use it without ever seeing each other.
  */
 export { NodeUserContext } from './node-user-context.js';
 // Durable diagnostics (#123): the file sink both boundaries log through, and crash reports.
@@ -20,3 +20,5 @@ export {
 export { execFileOffLoop } from './off-loop-exec.js';
 export { STDERR_TAIL_CHARS, logChildFailure, watchChild, type WatchChildOptions } from './watch-child.js';
 export { clearStaleSocket } from './stale-socket.js';
+// 070 R1 — the POSIX code Linux and macOS share.
+export * from './posix/index.js';

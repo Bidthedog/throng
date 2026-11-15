@@ -964,6 +964,7 @@ export function TerminalPanel({
     theme: xtermTheme,
     fontFamily: font.family,
     fontSize: effectiveFontSize,
+    macOptionIsMeta: appSettings.terminals.macOptionIsMeta,
     meta,
     onExit,
     onError,

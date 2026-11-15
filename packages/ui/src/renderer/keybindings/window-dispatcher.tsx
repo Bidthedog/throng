@@ -939,6 +939,17 @@ export function WindowDispatcher({
             }
           }
           break;
+        // 070 FR-027, FR-024a — the macOS app menu's commands, from the keyboard (Principle VI). Main runs each one
+        // exactly as the menu item does, notices included.
+        case 'app.settings':
+          window.throng?.openPreferences?.('settings');
+          break;
+        case 'app.installCommandLine':
+          window.throng?.commandLine?.install();
+          break;
+        case 'app.uninstallCommandLine':
+          window.throng?.commandLine?.uninstall();
+          break;
         default:
           break;
       }

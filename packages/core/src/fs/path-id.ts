@@ -1,4 +1,4 @@
-import { hostTraits } from '../platform/host-traits.js';
+import { hostTraits, type PathTraits } from '../platform/host-traits.js';
 
 /**
  * Path IDENTITY — is this the same file, and is this file under that folder? (019 / FR-007.)
@@ -61,9 +61,58 @@ import { hostTraits } from '../platform/host-traits.js';
  * `p.replace(/\\/g, '/').toLowerCase()`, the rule the sites that use it spelled inline.
  */
 export function pathCompareKey(p: string): string {
-  const { caseSensitive, backslashIsSeparator } = hostTraits().paths;
-  const separated = backslashIsSeparator ? p.replace(/\\/g, '/') : p;
-  return caseSensitive ? separated : separated.toLowerCase();
+  const paths = hostTraits().paths;
+  const separated = paths.backslashIsSeparator ? p.replace(/\\/g, '/') : p;
+  return foldCase(toUnicodeForm(separated, paths), paths);
+}
+
+/** The host's comparison form (070 FR-021). Absent on Windows and Linux, so their keys are untouched. */
+function toUnicodeForm(p: string, paths: PathTraits): string {
+  return paths.unicodeForm ? p.normalize(paths.unicodeForm) : p;
+}
+
+/**
+ * Lower-case `p` unless its volume is case-sensitive (070 FR-020). A path under a `caseSensitiveRoots` entry keeps the
+ * case of everything below that root (the longest matching root wins); the root's own names are folded, because they
+ * live on the volume that holds the mount point, so `/volumes/work` and `/Volumes/Work` name one mount.
+ *
+ * Cut by segments, never by length: lower-casing is not length-preserving (see `remainderUnder`).
+ */
+function foldCase(p: string, paths: PathTraits): string {
+  if (paths.caseSensitive) return p;
+  const lower = p.toLowerCase();
+  const rootDepth = caseSensitiveRootDepth(lower, paths);
+  if (rootDepth === null) return lower;
+  const names = p.split('/');
+  return [...names.slice(0, rootDepth).map((n) => n.toLowerCase()), ...names.slice(rootDepth)].join('/');
+}
+
+interface RootKey {
+  readonly key: string;
+  readonly depth: number;
+}
+
+/** Each traits value's case-sensitive roots in comparison form, longest first: worked out once, not on every compare. */
+const rootKeysByTraits = new WeakMap<PathTraits, readonly RootKey[]>();
+
+function rootKeysOf(paths: PathTraits): readonly RootKey[] {
+  let keys = rootKeysByTraits.get(paths);
+  if (keys === undefined) {
+    keys = (paths.caseSensitiveRoots ?? [])
+      .map((root) => toUnicodeForm(root, paths).replace(/\/+$/, '').toLowerCase())
+      .sort((a, b) => b.length - a.length)
+      .map((key) => ({ key, depth: key.split('/').length }));
+    rootKeysByTraits.set(paths, keys);
+  }
+  return keys;
+}
+
+/** How many `/`-separated names the longest case-sensitive root containing `lowerPath` has, or null if none does. */
+function caseSensitiveRootDepth(lowerPath: string, paths: PathTraits): number | null {
+  for (const { key, depth } of rootKeysOf(paths)) {
+    if (lowerPath === key || lowerPath.startsWith(key + '/')) return depth;
+  }
+  return null;
 }
 
 /** `\` respelled as `/` where `\` is a separator; otherwise the path as given. */
@@ -89,10 +138,10 @@ export function trimTrailingSeparators(p: string): string {
 
 /** {@link pathCompareKey}, with any trailing separator dropped. The comparable form of a path. */
 export function normaliseForCompare(p: string): string {
-  const { caseSensitive, backslashIsSeparator } = hostTraits().paths;
-  const separated = backslashIsSeparator ? p.replace(/\\/g, '/') : p;
+  const paths = hostTraits().paths;
+  const separated = paths.backslashIsSeparator ? p.replace(/\\/g, '/') : p;
   const trimmed = separated.replace(/\/+$/, '');
-  return caseSensitive ? trimmed : trimmed.toLowerCase();
+  return foldCase(toUnicodeForm(trimmed, paths), paths);
 }
 
 /** Do these two paths name the same file or folder, however each is spelled? */

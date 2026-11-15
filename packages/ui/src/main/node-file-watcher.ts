@@ -6,7 +6,7 @@
  * first target) so no extra dependency is needed; the OS detail stays behind the
  * IFileWatcher abstraction (Principle II).
  */
-import { existsSync, watch, type FSWatcher } from 'node:fs';
+import { existsSync, unwatchFile, watch, watchFile, type FSWatcher } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { logExpected, type Disposable, type IFileWatcher, type WatchBatch, type WatchOptions } from '@throng/core';
 import { watchDirectoryTree, type TreeWatch, type TreeWatchListener } from './directory-tree-watch.js';
@@ -52,7 +52,24 @@ export interface NodeFileWatcherOptions {
   retryBaseMs?: number;
   /** How a recursive watch is built; defaults to {@link defaultRecursiveWatchStrategy}. */
   recursiveStrategy?: RecursiveWatchStrategy;
+  /** Whether the folder's own removal is watched from its parent; defaults to {@link guardsRootByDefault}. */
+  guardRoot?: boolean;
 }
+
+/**
+ * Whether a watch must poll for its own folder going away (070, #161).
+ *
+ * On macOS the native watch is FSEvents, and libuv drops every event about the watched folder itself: renamed away, it
+ * goes silent rather than failing, so nothing reaches `waitForPath` and an open editor never learns the folder came
+ * back. Windows reports it as an event storm and Linux as an error, both already handled.
+ *
+ * A poll, not a watch on the parent: libuv rebuilds the one FSEvents stream it shares across a process each time a
+ * watch is added, and a change in that gap is lost, so a second watch per folder doubled the gap every new watch opens.
+ */
+export const guardsRootByDefault = (platform: NodeJS.Platform = process.platform): boolean => platform === 'darwin';
+
+/** How often the guard asks whether the folder is still there: one `stat` per quarter second per watch. */
+export const ROOT_POLL_MS = 250;
 
 /**
  * How many events into a burst before the watch is asked whether its directory still exists
@@ -81,6 +98,8 @@ export class NodeFileWatcher implements IFileWatcher {
 
   private readonly recursiveStrategy: RecursiveWatchStrategy;
 
+  private readonly guardRoot: boolean;
+
   constructor(
     private readonly debounceMs = 100,
     options: NodeFileWatcherOptions = {},
@@ -89,6 +108,7 @@ export class NodeFileWatcher implements IFileWatcher {
     this.maxRetries = options.maxRetries ?? 5;
     this.retryBaseMs = options.retryBaseMs ?? 250;
     this.recursiveStrategy = options.recursiveStrategy ?? defaultRecursiveWatchStrategy();
+    this.guardRoot = options.guardRoot ?? guardsRootByDefault();
   }
 
   watch(
@@ -102,6 +122,8 @@ export class NodeFileWatcher implements IFileWatcher {
     let watcher: TreeWatch | null = null;
     /** The watch on the nearest existing ancestor, held only while `dir` does not exist. */
     let sentinel: FSWatcher | null = null;
+    /** Ends the poll that notices `dir` itself going away, where the native watch cannot ({@link guardsRootByDefault}). */
+    let rootGuard: (() => void) | null = null;
     let disposed = false;
     let attempts = 0;
     /**
@@ -230,6 +252,35 @@ export class NodeFileWatcher implements IFileWatcher {
       sentinel = null;
     };
 
+    const closeRootGuard = (): void => {
+      rootGuard?.();
+      rootGuard = null;
+    };
+
+    /**
+     * Poll `dir` and treat its absence as the watch's end: the same route a storm or an ENOENT takes, so a folder renamed
+     * away and back recovers here as it does elsewhere.
+     */
+    const guardTheRoot = (): void => {
+      closeRootGuard();
+      const onStat = (): void => {
+        if (disposed || existsSync(dir)) return;
+        closeRootGuard();
+        watcher?.close();
+        watcher = null;
+        if (timer) clearTimeout(timer);
+        timer = null;
+        resetBurst();
+        waitForPath();
+      };
+      try {
+        watchFile(dir, { interval: ROOT_POLL_MS, persistent: false }, onStat);
+        rootGuard = () => unwatchFile(dir, onStat);
+      } catch (error) {
+        logExpected('node-file-watcher: guard the watched folder', 'the watch itself still reports what it can', error);
+      }
+    };
+
     /**
      * The directory is not there YET — so WAIT for it rather than spend the retry budget on it
      * (027 / #161, FR-010b).
@@ -248,6 +299,7 @@ export class NodeFileWatcher implements IFileWatcher {
      */
     const waitForPath = (): void => {
       if (disposed) return;
+      closeRootGuard();
       closeSentinel();
       const ancestor = nearestExisting(dir);
       // Nothing above it exists either (an unplugged drive, a UNC share that is gone). That is a
@@ -324,6 +376,7 @@ export class NodeFileWatcher implements IFileWatcher {
         });
         if (failed) return;
         watcher = created;
+        if (this.guardRoot && this.recursiveStrategy === 'native') guardTheRoot();
         if (opts?.reportOnArm) {
           // A directory that has just (RE)APPEARED is entirely news: nobody was watching while it
           // was away, so no event describes what changed inside it. Report it once, immediately —
@@ -364,6 +417,8 @@ export class NodeFileWatcher implements IFileWatcher {
         // sentinel left open would re-arm a watch on a project the user has already left.
         sentinel?.close();
         sentinel = null;
+        rootGuard?.();
+        rootGuard = null;
       },
     };
   }

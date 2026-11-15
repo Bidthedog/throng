@@ -2,7 +2,7 @@ export { runTrashRestoreContract, runUserDirectoriesContract, type TrashRestoreC
 export { withHostTraits } from './with-host-traits.js';
 export { FakeFileManagerRegistration } from './fake-file-manager-registration.js';
 export { FakeFileAttributes, FakeOsPropertiesDialog, FakeFileAccessInfo } from './fake-properties.js';
-export { isLinuxHost, isWindowsHost, skipUnlessLinux, skipUnlessWindows } from './platform-guards.js';
+export { isLinuxHost, isMacosHost, isWindowsHost, skipOnMacos, skipOnWindows, skipUnlessLinux, skipUnlessMacos, skipUnlessWindows } from './platform-guards.js';
 // Test-only surface of @throng/core, exposed via the "@throng/core/testing"
 // subpath export so the production entry point (".") stays free of test
 // utilities. Consumed by test layers across packages.
@@ -43,3 +43,11 @@ export { runRefusedUriSchemesContract } from './refused-uri-schemes-contract.js'
 export { runProcessMetricsContract, type ProcessMetricsContractEnv } from './process-metrics-contract.js';
 export { FakeProcessMetrics } from './fake-process-metrics.js';
 export { runFileListCodecContract } from './file-list-codec-contract.js';
+// 070 — the seams that had no contract before macOS needed one; Windows and Linux run them too.
+export { runProcessCwdContract, type ProcessCwdContractEnv, type StartedInFolder } from './process-cwd-contract.js';
+export { runProcessIdentityContract, type ProcessIdentityContractEnv, type StartedWithArgv } from './process-identity-contract.js';
+export { runOrphanProcessesContract, type OrphanProcessesContractEnv, type StartedProcess } from './orphan-processes-contract.js';
+export { runVolumeRootsContract, type VolumeRootsContractEnv } from './volume-roots-contract.js';
+export { runFileAttributesContract, type FileAttributesContractEnv } from './file-attributes-contract.js';
+export { runFileAccessInfoContract, type FileAccessInfoContractEnv } from './file-access-info-contract.js';
+export { runCommandLineInstallContract, type CommandLineInstallHarness } from './command-line-install-contract.js';

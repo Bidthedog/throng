@@ -30,8 +30,10 @@ export type VerificationStep =
   | 'silent-elevation-refused'
   | 'checksum-match'
   | 'no-write'
+  | 'cli-command'
   | 'uninstall'
-  | 'residue-scan';
+  | 'residue-scan'
+  | 'gatekeeper-first-launch';
 
 export const VERIFICATION_STEPS: readonly VerificationStep[] = [
   'interrupted-install', // an aborted install leaves no launchable partial product (FR-022)
@@ -51,8 +53,10 @@ export const VERIFICATION_STEPS: readonly VerificationStep[] = [
   'silent-elevation-refused', // `/S /allusers` without elevation exits 740 and installs nothing (058 FR-010)
   'checksum-match', // the installer bytes match the expected checksum (FR-024a)
   'no-write', // nothing was written under the install root at runtime (FR-008)
+  'cli-command', // the bundle's own `bin/throng <folder>` opens the folder as a project (070 FR-024a)
   'uninstall', // silent uninstall removed the app
   'residue-scan', // no throng process or component left behind (FR-020)
+  'gatekeeper-first-launch', // a downloaded copy opens past Gatekeeper with Open Anyway (070 FR-006, FR-010)
 ];
 
 /**
@@ -65,7 +69,14 @@ export const VERIFICATION_STEPS: readonly VerificationStep[] = [
  * is no medium desktop to start the app from. Adding to this list widens what a release may publish
  * with unproven — so it is a reviewed change, not a convenience.
  */
-export const RUNNER_LIMITED_STEPS: readonly VerificationStep[] = ['second-account', 'not-elevated-launch'];
+export const RUNNER_LIMITED_STEPS: readonly VerificationStep[] = ['second-account', 'not-elevated-launch', 'gatekeeper-first-launch'];
+
+/**
+ * 070 FR-010, research R24: the block a downloaded, unnotarised copy meets on its first launch is cleared by a person
+ * clicking Open Anyway in System Settings, and nothing on a hosted runner can click it. It is the one macOS step that
+ * may be unproven; every other macOS step that fails blocks the release. This is the reason the harness records.
+ */
+export const GATEKEEPER_UNPROVEN_REASON = 'a hosted runner cannot click Open Anyway, so the first-launch block is not exercised';
 
 export interface VerificationVerdict {
   /** Product version of the package tested. */

@@ -378,7 +378,7 @@ export function createDaemonContainer(
     // 068 FR-043: Claude Code's session record for the foreground process; read-only, time-bounded.
     new ClaudeSessionResolver({
       configDir: claudeConfigDir(env),
-      os: platform.platformInfo().osName() === 'windows' ? 'windows' : 'linux',
+      os: platform.platformInfo().osName(),
       identity: platform.processIdentity(),
       timeoutMs: CLAUDE_SESSION_READ_LIMIT_MS,
     }),

@@ -6,6 +6,18 @@
  */
 export type OsName = 'windows' | 'macos' | 'linux';
 
+const OS_BY_NODE_PLATFORM: Readonly<Record<string, OsName>> = { win32: 'windows', linux: 'linux', darwin: 'macos' };
+
+/**
+ * The OS a Node `process.platform` value names (070 R32). Throws for one throng has no rules for, naming it, rather
+ * than answering with another platform's (062 FR-050).
+ */
+export function osNameFor(nodePlatform: string): OsName {
+  const os = OS_BY_NODE_PLATFORM[nodePlatform];
+  if (os === undefined) throw new Error(`throng has no platform rules for ${nodePlatform}.`);
+  return os;
+}
+
 export interface IPlatformInfo {
   /** Stable identifier of the host operating system. */
   osName(): OsName;

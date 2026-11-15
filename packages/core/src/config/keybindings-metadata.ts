@@ -203,6 +203,28 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Open the focused item’s context menu from the keyboard (024 US6).',
   ),
 
+  // Application (070 FR-027, FR-024a) — the macOS app menu's commands, each rebindable here (Principle VI). All three
+  // are macOS's only: Windows and Linux open Settings from the cog, and gain no Key Bindings row (FR-039).
+  { ...chord('app.settings', 'Application', 'Open Settings', 'Open Preferences at its Settings tab.'), onlyOn: 'macos' },
+  {
+    ...chord(
+      'app.installCommandLine',
+      'Application',
+      "Install 'throng' command",
+      'Put the throng command on your PATH, so throng opens a folder from a terminal. macOS asks for an administrator’s approval when the folder needs it.',
+    ),
+    onlyOn: 'macos',
+  },
+  {
+    ...chord(
+      'app.uninstallCommandLine',
+      'Application',
+      "Uninstall 'throng' command",
+      'Take the throng command off your PATH. Only a command that points at throng is removed.',
+    ),
+    onlyOn: 'macos',
+  },
+
   // Tabs (031, FR-032b). Grouped under the SAME heading the Settings editor gives the tab options,
   // so a user hunting for anything about tabs finds one word in both windows rather than two.
   chord(

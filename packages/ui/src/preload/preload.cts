@@ -68,6 +68,20 @@ contextBridge.exposeInMainWorld('throng', {
   // The host OS family, so the renderer can render paths with native separators
   // (FR-101) — Windows uses '\\', everything else '/'.
   osName: process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux',
+  /*
+   * 070 FR-011 (research R32) — main's host traits, whole, asked for once and synchronously before any renderer code
+   * runs, so the renderer's path rules and bindings are the platform's own (macOS's case-sensitive volumes included).
+   * Undefined if main cannot be asked; `configure-host.ts` then falls back on `osName`.
+   */
+  hostTraits: ((): unknown => {
+    try {
+      return ipcRenderer.sendSync('throng:host:traits');
+    } catch (error) {
+      // logExpected's shape by hand, as the theme bootstrap above: a sandboxed preload cannot load @throng/core.
+      console.debug('[preload] host traits: expected — main may not answer; configure-host falls back on osName', error);
+      return undefined;
+    }
+  })(),
   getDaemonStatus: () => ipcRenderer.invoke('throng:getDaemonStatus'),
   /*
    * 029 / #182 — daemon liveness, PUSHED.
@@ -116,6 +130,21 @@ contextBridge.exposeInMainWorld('throng', {
     },
     installedVersionReady: () => ipcRenderer.send('throng:instance:installedVersionReady'),
     restartInstalled: () => ipcRenderer.send('throng:instance:restartInstalled'),
+  },
+  /**
+   * 070 FR-024a — Install and Uninstall 'throng' command, from the key bindings list (the app menu runs them in main),
+   * and the one outcome each comes to. Channels are `main/command-line-install-ipc.ts`'s, spelled out because a
+   * sandboxed preload cannot import it; `command-line-install-ipc.test.ts` keeps them equal.
+   */
+  commandLine: {
+    install: () => ipcRenderer.send('throng:commandLine:install'),
+    uninstall: () => ipcRenderer.send('throng:commandLine:uninstall'),
+    onOutcome: (cb: (outcome: unknown) => void) => {
+      const h = (_e: unknown, outcome: unknown): void => cb(outcome);
+      ipcRenderer.on('throng:commandLine:outcome', h);
+      return () => ipcRenderer.removeListener('throng:commandLine:outcome', h);
+    },
+    ready: () => ipcRenderer.send('throng:commandLine:ready'),
   },
   /** 055 — the resource monitor (contracts/resources-ipc-055.md). Every invoke resolves. */
   resources: {

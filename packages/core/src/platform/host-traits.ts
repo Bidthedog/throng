@@ -17,6 +17,16 @@ export interface PathTraits {
   readonly caseSensitive: boolean;
   /** Is `\` a separator, rather than a character a filename may contain? */
   readonly backslashIsSeparator: boolean;
+  /**
+   * Absolute mount roots whose volume is case-sensitive although the host's default is not (070 FR-020, R4). A path
+   * under one is compared case-sensitively; the longest root wins. Absent reproduces today's results exactly.
+   */
+  readonly caseSensitiveRoots?: readonly string[];
+  /**
+   * The Unicode form paths are folded to before comparison, so an NFD and an NFC spelling are one file (070 FR-021).
+   * Comparison only: a stored or displayed path keeps its spelling. Absent reproduces today's results exactly.
+   */
+  readonly unicodeForm?: 'NFC';
 }
 
 export type IpcTraits =
@@ -37,6 +47,26 @@ export const WINDOWS_HOST_TRAITS: HostTraits = { os: 'windows', paths: WINDOWS_P
 
 export function linuxHostTraits(ipcDir: string): HostTraits {
   return { os: 'linux', paths: LINUX_PATH_TRAITS, ipc: { kind: 'socket', dir: ipcDir } };
+}
+
+/** A default APFS volume: case-insensitive and case-preserving, `/` only, compared in NFC (070 R4). */
+export const MACOS_PATH_TRAITS: PathTraits = {
+  caseSensitive: false,
+  backslashIsSeparator: false,
+  caseSensitiveRoots: [],
+  unicodeForm: 'NFC',
+};
+
+/**
+ * macOS: `ipcDir` is the owner-only socket folder (`$TMPDIR/throng`), `caseSensitiveRoots` the mounted volumes found
+ * case-sensitive at startup (`pathconf(_PC_CASE_SENSITIVE)`).
+ */
+export function macosHostTraits(ipcDir: string, caseSensitiveRoots: readonly string[]): HostTraits {
+  return {
+    os: 'macos',
+    paths: { ...MACOS_PATH_TRAITS, caseSensitiveRoots: [...caseSensitiveRoots] },
+    ipc: { kind: 'socket', dir: ipcDir },
+  };
 }
 
 let current: HostTraits = WINDOWS_HOST_TRAITS;

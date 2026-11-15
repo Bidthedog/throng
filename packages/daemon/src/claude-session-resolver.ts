@@ -9,6 +9,7 @@ import {
   type ClaudeSessionProcess,
   type IClaudeSessionResolver,
   type IProcessIdentity,
+  type OsName,
 } from '@throng/core';
 
 /** How far Claude Code's own recorded start (epoch ms) may sit from the process table's where the OS has no tick marker (Windows): generous for Claude's startup, far below a pid-reuse gap. */
@@ -23,7 +24,7 @@ const SESSION_ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 export interface ClaudeSessionResolverDeps {
   /** Claude Code's config dir: `CLAUDE_CONFIG_DIR`, else the home folder's `.claude`. */
   readonly configDir: string;
-  readonly os: 'windows' | 'linux';
+  readonly os: OsName;
   readonly identity: IProcessIdentity;
   /** Bound on one whole `resolve` call. */
   readonly timeoutMs: number;

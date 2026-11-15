@@ -2,6 +2,13 @@
 // preload exposes a generic JSON-RPC `invoke` plus the 001 daemon-status and
 // zoom relays. Kept in the renderer so components can rely on it type-safely.
 
+/** 070 FR-024a — what one Install/Uninstall 'throng' command action came to (`main/command-line-install-ipc.ts`). */
+export type CommandLineOutcome =
+  | { readonly kind: 'installed'; readonly linkPath: string }
+  | { readonly kind: 'uninstalled'; readonly linkPath: string }
+  | { readonly kind: 'failed'; readonly action: 'install' | 'uninstall'; readonly reason: string }
+  | { readonly kind: 'broken'; readonly linkPath: string; readonly target: string };
+
 export interface ThrongRpcEnvelope {
   ok: boolean;
   result?: unknown;
@@ -13,6 +20,8 @@ declare global {
     throng?: {
       /** Host OS family for native-separator path display (FR-101). */
       osName?: 'windows' | 'macos' | 'linux';
+      /** 070 FR-011 — main's host traits, whole; checked by `host-traits-from-preload.ts` before use. */
+      hostTraits?: unknown;
       /** Cross-window projects-changed sync (create/rename/recolour/delete). */
       projects?: {
         notifyChanged: () => void;
@@ -50,6 +59,14 @@ declare global {
         onInstalledVersion?: (cb: (notice: import('@throng/core').InstalledVersionNotice) => void) => () => void;
         installedVersionReady: () => void;
         restartInstalled: () => void;
+      };
+      /** 070 FR-024a — the `throng` command's two actions and the outcome each comes to (main shows none itself). */
+      commandLine?: {
+        install: () => void;
+        uninstall: () => void;
+        onOutcome: (cb: (outcome: CommandLineOutcome) => void) => () => void;
+        /** This window is listening, so an outcome reached before it loaded (the start-up check) is delivered. */
+        ready: () => void;
       };
       /** 055 — the resource monitor (contracts/resources-ipc-055.md). Every invoke resolves. */
       resources?: {

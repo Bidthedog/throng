@@ -12,6 +12,7 @@
  * (FR-010).
  */
 import { BrowserWindow } from 'electron';
+import type { SecondaryWindowChrome } from './window-chrome.js';
 import { logExpected, type IShellIntegration } from '@throng/core';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
@@ -116,6 +117,11 @@ export interface PreferencesWindowDeps {
   /** The current main window — used to parent the prefs window (FR-013) and to
    *  refocus throng when it closes (FR-013a). Resolved lazily at open time. */
   getMainWindow?: () => BrowserWindow | null;
+  /**
+   * The platform's window frame (070 FR-026, `PlatformServices.windowChrome()`): frameless where throng draws the
+   * whole title bar, the hidden title bar with native traffic lights on macOS. Absent → frameless.
+   */
+  chrome?: () => SecondaryWindowChrome;
   /** Capture the reset-all on-entry snapshot when the window (first) opens (FR-024). */
   onOpen?: () => void;
   /** Restore interactivity bookkeeping after the window closes. */
@@ -155,7 +161,7 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
     ...placeOverParent(parent, size),
     minWidth: 420,
     minHeight: 360,
-    frame: false,
+    ...(deps.chrome?.() ?? { frame: false }),
     // Parented to the main window: it floats above throng's own windows only (not globally
     // always-on-top, so never above other OS apps), stays above the main window even when the user
     // clicks into it, and minimises/restores with it (FR-013/013a). Deliberately NOT modal — every

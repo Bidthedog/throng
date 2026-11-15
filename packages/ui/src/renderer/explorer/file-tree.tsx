@@ -5,7 +5,7 @@
  * collapse/expand and load lazily. Open-state, selection, and the level-by-level
  * Expand are driven by useExplorerData. All colours/fonts/icons are themed.
  */
-import { logCaught, normaliseForCompare, pathCompareKey } from '@throng/core';
+import { hostTraits, logCaught, normaliseForCompare, pathCompareKey } from '@throng/core';
 import {
   useCallback,
   useEffect,
@@ -404,7 +404,8 @@ export function FileTree({
         return;
       }
       const target = inboundTarget(e);
-      osOffersMove = /Linux/i.test(navigator.platform) && e.dataTransfer.effectAllowed === 'copyMove';
+      // A Linux file manager's move offer (067 FR-005a), read from host traits rather than `navigator.platform` (070 R32).
+      osOffersMove = hostTraits().os === 'linux' && e.dataTransfer.effectAllowed === 'copyMove';
       const effect = resolveInboundDragEffect(modsOf(e), dragConfigRef.current, target !== null, osOffersMove);
       labelDrop(effect, e);
       if (effect === 'none') {
