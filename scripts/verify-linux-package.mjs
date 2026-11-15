@@ -18,10 +18,8 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
-import { connect } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -29,6 +27,17 @@ import { fileURLToPath } from 'node:url';
 import { buildArtifactVerdict, combinationsOf, declareArtifactSet, matchReleaseVersions } from '@throng/core';
 import { _electron as electron } from '@playwright/test';
 import { sha256OfFile } from './checksum.mjs';
+import {
+  coreJourney as journeyOn,
+  createRpc,
+  keepIsListed as keepIsListedOn,
+  keepTerminal as keepTerminalOn,
+  projectNames as projectNamesOn,
+  projectRoot,
+  reattaches as reattachesWith,
+  snapshot,
+  waitForDaemon as waitForDaemonOn,
+} from './verify-package-lib.mjs';
 
 const PAYLOAD = '/opt/throng';
 const VERSIONS = '/opt/throng-versions';
@@ -37,7 +46,6 @@ const DESKTOP_EXEC = '/opt/throng/throng';
 const DESKTOP_ENTRY = '/usr/share/applications/throng.desktop';
 const ICON = '/usr/share/icons/hicolor/256x256/apps/throng.png';
 const PROFILE = '/etc/apparmor.d/throng';
-const MARKER = 'THRONG_VERIFY_OK';
 
 function flag(name) {
   const i = process.argv.indexOf(name);
@@ -103,33 +111,8 @@ const packages = {
       : run('rpm', ['-q', 'throng'], { quiet: true }).status === 0),
 };
 
-/** One JSON-RPC call to the app's own daemon, as the window makes them. */
-function rpc(method, params = {}, timeoutMs = 20_000) {
-  return new Promise((settle, reject) => {
-    const socket = connect(pipe);
-    let buffer = '';
-    const timer = setTimeout(() => {
-      socket.destroy();
-      reject(new Error(`${method} timed out`));
-    }, timeoutMs);
-    socket.setEncoding('utf8');
-    socket.on('connect', () => socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })}\n`));
-    socket.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    socket.on('data', (chunk) => {
-      buffer += chunk;
-      const newline = buffer.indexOf('\n');
-      if (newline === -1) return;
-      clearTimeout(timer);
-      socket.destroy();
-      const reply = JSON.parse(buffer.slice(0, newline));
-      if (reply.error) reject(new Error(`${method}: ${reply.error.message}`));
-      else settle(reply.result);
-    });
-  });
-}
+/** One JSON-RPC call to the app's own daemon, as the window makes them (scripts/verify-package-lib.mjs). */
+const rpc = createRpc(pipe);
 
 /** A sandboxed process's exe link cannot be read, even by its own account, though its cmdline and status can. */
 function readExe(pid) {
@@ -191,19 +174,7 @@ async function close(session) {
   await delay(1500);
 }
 
-async function waitForDaemon() {
-  const deadline = Date.now() + 30_000;
-  let last;
-  while (Date.now() < deadline) {
-    try {
-      return await rpc('health.ping', {}, 2000);
-    } catch (err) {
-      last = err;
-      await delay(500);
-    }
-  }
-  throw new Error(`the daemon did not answer: ${last?.message}`);
-}
+const waitForDaemon = () => waitForDaemonOn(rpc);
 
 /** Stop anything of ours still running, so one step's leftovers are not the next step's starting state. */
 async function clearProcesses() {
@@ -251,66 +222,12 @@ function collectorStarts(root) {
   return run.status === 0;
 }
 
-const projectRoot = (name) => {
-  const folder = join(homedir(), 'throng-verify', name);
-  mkdirSync(folder, { recursive: true });
-  return folder;
-};
-
-/** A project goes in, and a terminal runs a command in a real shell on the app's own daemon (SC-001). */
-async function coreJourney(name) {
-  await rpc('projects.create', { name, colour: '#3b82f6', rootFolder: projectRoot(name) });
-  const params = {
-    panelId: 'verify-echo',
-    projectId: 'verify-project',
-    rootless: true,
-    viewId: 'verify-view',
-    cols: 80,
-    rows: 24,
-    // It stays open: the daemon forgets a session that has exited, scrollback and all, and the next attach starts another.
-    launch: { file: '/bin/sh', args: ['-c', `echo ${MARKER}; exec sleep 300`], cwd: homedir() },
-  };
-  let attached = await rpc('terminal.attach', params);
-  const deadline = Date.now() + 15_000;
-  while (!String(attached.scrollback ?? '').includes(MARKER) && Date.now() < deadline) {
-    await delay(500);
-    attached = await rpc('terminal.attach', { ...params, explicit: false });
-  }
-  return String(attached.scrollback ?? '').includes(MARKER);
-}
-
-/** A shell that stays open, for a later step to look for. */
-async function keepTerminal() {
-  const attached = await rpc('terminal.attach', {
-    panelId: 'verify-keep',
-    projectId: 'verify-project',
-    rootless: true,
-    viewId: 'verify-view',
-    cols: 80,
-    rows: 24,
-    launch: { file: '/bin/sh', args: [], cwd: homedir() },
-  });
-  return attached.status === 'running';
-}
-
-const keepIsListed = async () => JSON.stringify(await rpc('terminal.list', {})).includes('verify-keep');
-const projectNames = async () => ((await rpc('projects.list', {}))?.projects ?? []).map((p) => p.name);
-
-/** The daemon survives the window, and the next window reuses it, terminal and all (Principle III). */
-async function reattaches(launcher) {
-  const first = await open(launcher);
-  const before = (await waitForDaemon()).pid;
-  const kept = await keepTerminal();
-  await close(first);
-  const survived = (await waitForDaemon()).pid === before;
-  const second = await open(launcher);
-  const same = (await waitForDaemon()).pid === before;
-  const listed = await keepIsListed();
-  await rpc('terminal.killAll', {});
-  await close(second);
-  log(`reattach: kept=${kept} survived=${survived} same=${same} listed=${listed}`);
-  return kept && survived && same && listed;
-}
+// The journey, the kept terminal and the reattach check are shared with the macOS harness (verify-package-lib.mjs).
+const coreJourney = (name) => journeyOn(rpc, name);
+const keepTerminal = () => keepTerminalOn(rpc);
+const keepIsListed = () => keepIsListedOn(rpc);
+const projectNames = () => projectNamesOn(rpc);
+const reattaches = (launcher) => reattachesWith({ rpc, open: () => open(launcher), close, log });
 
 /** No unit under any systemd folder names throng (020 FR-011). */
 function noService() {
@@ -318,20 +235,6 @@ function noService() {
     if (existsSync(dir) && readdirSync(dir).some((name) => name.includes('throng'))) return false;
   }
   return true;
-}
-
-/** Every file's path and modified time, to prove a run wrote nothing there (FR-005). */
-function snapshot(...roots) {
-  const lines = [];
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else lines.push(`${path}:${statSync(path, { throwIfNoEntry: false })?.mtimeMs ?? 'link'}`);
-    }
-  };
-  for (const root of roots) if (existsSync(root)) walk(root);
-  return lines.sort().join('\n');
 }
 
 const versionIn = (root) => JSON.parse(readFileSync(join(root, 'resources', 'app', 'package.json'), 'utf8')).version;
@@ -649,6 +552,8 @@ function finish() {
  */
 function crashed(err) {
   log(`crashed: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
+  // After the verdict, finish() has already run and returns at once: leave with a failure, never a silent 0.
+  if (finished) process.exit(1);
   finish();
 }
 process.on('uncaughtException', crashed);

@@ -1,15 +1,16 @@
 // End a checkout's dev processes and, unless --keep-data, remove its dev data folders (spec 062 T035).
 //
-// The Linux half of `.claude/skills/throng-clear-dev-state`. It matches processes by this checkout's path, never by
-// name, because every other Electron and node on the machine shares those names. Children go first, so nothing is
-// orphaned on the way down.
+// The Linux and macOS half of `.claude/skills/throng-clear-dev-state`. It matches processes by this checkout's path,
+// never by name, because every other Electron and node on the machine shares those names. Children go first, so
+// nothing is orphaned on the way down. macOS has no /proc, so there the table is BSD `ps` (070 FR-047, research R27).
 //
 //   node scripts/clear-dev-state.mjs [--keep-data] [--root <checkout>]
 import { readFileSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isDevProcess } from './clear-dev-state-lib.mjs';
+import { darwinDevFolders, isDarwinDevProcess, isDevProcess } from './clear-dev-state-lib.mjs';
+import { darwinProcessTable, killTreesDeepestFirst } from './process-table.mjs';
 
 const args = process.argv.slice(2);
 const keepData = args.includes('--keep-data');
@@ -17,6 +18,24 @@ const rootAt = args.indexOf('--root');
 const root = resolve(rootAt >= 0 ? args[rootAt + 1] : join(fileURLToPath(new URL('.', import.meta.url)), '..'));
 
 const nul = String.fromCharCode(0);
+
+/** macOS: the same clean-up from `ps`, then the same folders in Apple's per-user locations. */
+function clearDarwin() {
+  const rows = darwinProcessTable();
+  const roots = rows.filter((row) => row.pid !== process.pid && isDarwinDevProcess(row.comm, row.args, root)).map((row) => row.pid);
+  const ended = killTreesDeepestFirst(rows, roots);
+  console.log(`[clear-dev-state] ended ${ended} process(es) under ${root}`);
+  if (keepData) return;
+  for (const dir of darwinDevFolders(homedir())) {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    console.log(`[clear-dev-state] removed ${dir}`);
+  }
+}
+
+if (process.platform === 'darwin') {
+  clearDarwin();
+  process.exit(0);
+}
 
 function table() {
   const rows = [];

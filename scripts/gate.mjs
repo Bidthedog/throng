@@ -45,6 +45,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { ensureRunDir, cleanupRunDir, sweepStaleRunDirs } from './test-run-dir.mjs';
+import { stageArgs } from './gate-lib.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..');
@@ -111,7 +112,8 @@ function killOrphans(reason) {
 
   console.log(`\n[gate] clearing test orphans (${reason})`);
 
-  // 062: the same clean-up, for a Linux run. Matched by checkout path, so it cannot touch anything else's processes.
+  // 062: the same clean-up, for a Linux run; 070 FR-047: and a macOS one, where clear-dev-state reads BSD `ps` instead of
+  // /proc. Matched by checkout path, so it cannot touch anything else's processes.
   if (process.platform !== 'win32') {
     spawnSync(process.execPath, [join(REPO_ROOT, 'scripts', 'clear-dev-state.mjs'), '--keep-data'], { stdio: 'inherit' });
     return;
@@ -155,7 +157,7 @@ let failure = null;
 try {
   for (const stage of STAGES) {
     const t0 = Date.now();
-    const res = spawnSync('npm', ['run', stage.script, ...(stage.name === 'e2e' && e2eGrep ? ['--', '--grep', `"${e2eGrep}"`] : [])], {
+    const res = spawnSync('npm', stageArgs(stage, { platform: process.platform, e2eGrep }), {
       cwd: REPO_ROOT,
       stdio: 'inherit',
       shell: true,

@@ -14,7 +14,9 @@ name: Release
 #                                         ▼
 #                                    coexistence  (one machine, every copy at once)
 #                                         ▼
-#   e2e-full ─▶ build-linux ─────▶ verify-linux × N  (the .deb, .rpm and .tar.gz, 063 FR-017) ──┐
+#   e2e-full ─▶ build-macos ─────▶ verify-macos × N  (each copy on each supported macOS release, 070 FR-010) ──┐
+#                 ▲ macos-runners (the labels, from .github/macos-runners.json, and the matrix)             │
+#   e2e-full ─▶ build-linux ─────▶ verify-linux × N  (the .deb, .rpm and .tar.gz, 063 FR-017) ──┤
 #                                                                                              ▼
 #                 └─▶ verify-repositories × 2  (the apt and dnf routes, 064 FR-013) ─────────────────┤
 #                                                                                              ▼
@@ -394,6 +396,179 @@ jobs:
           if-no-files-found: error
           retention-days: 5
 
+  # THE macOS RUNNERS AND MATRIX (070 FR-037, FR-045). The runner labels are named once, in .github/macos-runners.json;
+  # the matrix is derived from the declared set, as the other platforms' are, one leg per copy per supported release.
+  # A leg carries a SLOT (`current` or `previous`), which the jobs below map to a label through `runners`.
+  macos-runners:
+    name: Read the macOS runners and matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      labels: ${{ steps.list.outputs.labels }}
+      runners: ${{ steps.list.outputs.runners }}
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core
+        run: npx tsc -b packages/core
+      - id: list
+        name: Emit the runners and the matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/macos-runners.mjs >> "$GITHUB_OUTPUT"
+          matrix=$(node scripts/artifact-set.mjs list --combinations --json --platform darwin | tr -d '\n')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Verifying these macOS combinations:"
+          node scripts/artifact-set.mjs list --combinations --platform darwin
+
+  # THE macOS COPIES (070 FR-003, FR-042 to FR-045). Built on the current release's Apple silicon runner: `npm run package`
+  # there is the same command as on Windows, and packaging/macos/after-sign.cjs fails the build on any binary a Mac would
+  # refuse to run. The bundled runtime is the runner's own arm64 node, as on the other platforms.
+  build-macos:
+    name: Build the macOS copies
+    needs: [e2e-full, macos-runners]
+    if: ${{ !cancelled() && (needs.e2e-full.result == 'success' || needs.e2e-full.result == 'skipped') && needs.macos-runners.result == 'success' }}
+    runs-on: ${{ fromJSON(needs.macos-runners.outputs.runners).current }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Package (build + stage runtime + electron-builder targets, signed ad hoc)
+        run: npm run package -- --publish never
+      - name: Reconcile the built copies against the declared set
+        run: node scripts/artifact-set.mjs reconcile --platform darwin
+      - name: Check every declared role is uploaded below
+        id: artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          declared=$(node scripts/artifact-set.mjs list --platform darwin | cut -f1 | sort | paste -sd' ' -)
+          uploaded="dmg macarchive"
+          if [ "$declared" != "$uploaded" ]; then
+            echo "::error::the declared roles are '$declared' but this job uploads '$uploaded' — add the missing upload step"
+            exit 1
+          fi
+          for role in $uploaded; do
+            echo "$role=$(node scripts/artifact-set.mjs resolve "$role")" >> "$GITHUB_OUTPUT"
+          done
+      - name: Upload the disk image
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-dmg
+          path: ${{ steps.artifacts.outputs.dmg }}
+          if-no-files-found: error
+          retention-days: 5
+      - name: Upload the archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-macarchive
+          path: ${{ steps.artifacts.outputs.macarchive }}
+          if-no-files-found: error
+          retention-days: 5
+      # An older build of this same tree, for the upgrade over a running copy. Its name does not start with `throng-`, so
+      # the jobs that collect the release's artifacts never see it: it is declared nowhere and never published.
+      - name: Package the older build the upgrade step installs first
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm version 0.9.0 --workspaces --include-workspace-root --no-git-tag-version
+          npm run package -- --publish never
+          mkdir -p upgrade-fixture
+          cp dist/installer/throng-0.9.0-mac-arm64.dmg upgrade-fixture/
+      - name: Upload the older build
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-upgrade-fixture
+          path: upgrade-fixture/
+          if-no-files-found: error
+          retention-days: 5
+      - name: Clear what the build left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+
+  # ONE CLEAN MAC PER COPY PER SUPPORTED RELEASE (070 FR-010, FR-045). A failed step on either release fails its verdict,
+  # and the publish gate then refuses the whole release; only the Gatekeeper first launch may be unproven, and it is
+  # listed in the body. `fail-fast: false`, so every leg's verdict is there to read.
+  verify-macos:
+    name: Verify ${{ matrix.id }}
+    needs: [build-macos, macos-runners]
+    if: ${{ !cancelled() && needs.build-macos.result == 'success' && needs.macos-runners.result == 'success' }}
+    runs-on: ${{ fromJSON(needs.macos-runners.outputs.runners)[matrix.runner] }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.macos-runners.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # Only the harness runs from this checkout. Nothing here may stand in for what the copy has to bring.
+      - name: Install the harness (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core for the harness
+        run: npx tsc -b packages/core
+      - name: Download the copy
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-${{ matrix.role }}
+          path: dist/installer
+      - name: Download the older build
+        if: matrix.role == 'dmg'
+        uses: actions/download-artifact@v7
+        with:
+          name: macos-upgrade-fixture
+          path: upgrade-fixture
+      - name: Verify ${{ matrix.id }}
+        shell: bash
+        env:
+          ROLE: ${{ matrix.role }}
+          RUNNER: ${{ matrix.runner }}
+          VERDICT: ${{ matrix.verdictFile }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          artifact=$(node scripts/artifact-set.mjs resolve "$ROLE")
+          older=()
+          if [ "$ROLE" = dmg ]; then older=(--older upgrade-fixture/throng-0.9.0-mac-arm64.dmg); fi
+          # The ${older[@]+...} form, because macOS's bash 3.2 calls an empty array unbound under `set -u`.
+          node scripts/verify-macos-package.mjs "$artifact" --role "$ROLE" --runner "$RUNNER" \
+            --expected-version "$version" --verdict-out "$VERDICT" ${older[@]+"${older[@]}"}
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-${{ matrix.id }}
+          path: ${{ matrix.verdictFile }}
+          if-no-files-found: warn
+          retention-days: 5
+      - name: Upload the logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v6
+        with:
+          name: installer-logs-${{ matrix.id }}
+          path: installer-logs/
+          if-no-files-found: ignore
+          retention-days: 5
+      - name: Clear what the check left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+
   # ONE CLEAN MACHINE PER LINUX PACKAGE (063 FR-017). ubuntu-24.04 restricts user namespaces, so the .deb's profile and
   # the archive's refusal are both exercised for real. No hosted runner is rpm-based, so the .rpm's machine is a Fedora
   # container, privileged because Chromium's sandbox needs what a default container withholds. The image is '' for the
@@ -743,10 +918,10 @@ jobs:
     name: Render the release body
     runs-on: windows-2022
     timeout-minutes: 20
-    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux]
+    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, build-macos, verify-macos]
     # Even when a verification failed: the preview and the refusal naming it are what a maintainer
     # needs to see. Not when a build itself never happened, since the gate could then read nothing.
-    if: ${{ !cancelled() && needs.build-installer.result == 'success' && needs.build-linux.result == 'success' }}
+    if: ${{ !cancelled() && needs.build-installer.result == 'success' && needs.build-linux.result == 'success' && needs.build-macos.result == 'success' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -828,7 +1003,7 @@ jobs:
     name: Publish GitHub Release
     runs-on: windows-2022
     timeout-minutes: 20
-    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, render-body, sign-index]
+    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, build-macos, verify-macos, render-body, sign-index]
     # Only for a `v*` tag whose commit is on master, and nobody approves it (065 FR-001 to FR-003). A
     # dispatch never publishes: it is a rehearsal whatever its inputs say.
     #
@@ -846,6 +1021,7 @@ jobs:
       && needs.build-installer.result == 'success' && needs.verify-installer.result == 'success'
       && needs.coexistence.result == 'success' && needs.build-linux.result == 'success'
       && needs.verify-linux.result == 'success' && needs.verify-repositories.result == 'success'
+      && needs.build-macos.result == 'success' && needs.verify-macos.result == 'success'
       && needs.render-body.result == 'success' && needs.sign-index.result == 'success' }}
     environment: release
     permissions:
@@ -957,13 +1133,14 @@ jobs:
     name: Sign the repository indexes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, render-body]
+    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, build-macos, verify-macos, render-body]
     # Every need named, as `publish` explains: the implicit success() skips this when e2e-full was skipped.
     if: >-
       ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && !inputs.skip_e2e && !inputs.hand_tests
       && needs.build-installer.result == 'success' && needs.verify-installer.result == 'success'
       && needs.coexistence.result == 'success' && needs.build-linux.result == 'success'
       && needs.verify-linux.result == 'success' && needs.verify-repositories.result == 'success'
+      && needs.build-macos.result == 'success' && needs.verify-macos.result == 'success'
       && needs.render-body.result == 'success' }}
     environment: release
     permissions:

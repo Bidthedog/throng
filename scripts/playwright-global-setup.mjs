@@ -12,6 +12,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { darwinProcessTable, killTreesDeepestFirst } from './process-table.mjs';
 import { ensureRunDir, sweepStaleRunDirs } from './test-run-dir.mjs';
 
 /** A cold launch took about 8 s on a hosted runner (gate run 41326945782). */
@@ -71,6 +72,9 @@ export default async function () {
       await new Promise((resolve) => setTimeout(resolve, WARM_UP_MS));
       if (child.pid !== undefined) {
         if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        // 070 FR-047: a Mac's Electron helpers are its children, and outlive a killed parent for a moment; end the
+        // whole tree, deepest first, so the first spec starts on a machine with no warm-up processes in it.
+        else if (process.platform === 'darwin') killTreesDeepestFirst(darwinProcessTable(), [child.pid]);
         else child.kill('SIGKILL');
       }
     } catch {

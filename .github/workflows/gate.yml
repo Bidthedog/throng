@@ -380,6 +380,78 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # 070 FR-036, FR-046, FR-050: the same gate on hosted Apple silicon, once for each supported macOS release. The labels
+  # are named once, in .github/macos-runners.json (FR-037), and read here as ci.yml reads them.
+  macos-runners:
+    name: 'macOS: read the runner list'
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.stress_spec == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      labels: ${{ steps.list.outputs.labels }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/macos-runners.json
+            scripts/macos-runners.mjs
+          sparse-checkout-cone-mode: false
+      - id: list
+        name: Read .github/macos-runners.json
+        run: node scripts/macos-runners.mjs >> "$GITHUB_OUTPUT"
+
+  # Every stage, and the E2E lanes the Linux gate runs: @core plus this platform's own suite (FR-036). The rest of the
+  # suite still assumes Windows shells, as it does on Linux. gate.mjs clears what each run leaves behind on macOS too
+  # (FR-047), and the step at the end clears what the measurement leaves.
+  gate-macos:
+    name: npm run gate (macOS ${{ matrix.runner }})
+    needs: macos-runners
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.stress_spec == '' }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      THRONG_GATE_E2E_GREP: '@core|@macos'
+    # A hang detector, as the other gate jobs' 120 is, with room for the latency measurement after the gate.
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.macos-runners.outputs.labels) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: scripts/ci-macos-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      # On macOS, gate.mjs adds the skip-reasons reporter to the unit, component, integration and contract stages (FR-038).
+      - name: Run the gate
+        run: npm run gate
+      # FR-050, SC-012, research R28: typing in the visible terminal, with 10 others printing, must echo within 100 ms at
+      # the 95th percentile. There is no macOS reference hardware, so it is asserted here, on the hosted Mac itself. It
+      # prints its MEASURE line whether it passes or fails, and runs after a red gate too, for the figures.
+      - name: Measure typing latency with 10 busy terminals
+        if: ${{ !cancelled() }}
+        env:
+          THRONG_MEASURE_BUSY: '10'
+          THRONG_MEASURE_ASSERT_P95_MS: '100'
+        run: npx playwright test -c packages/ui/tests/measure/playwright.measure.config.ts
+      - name: Upload traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-gate-macos-${{ matrix.runner }}
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Clear what the run left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+
   # A red nightly that nobody is awake for is a red nobody sees. This turns it into an issue.
   #
   # Scheduled runs only: a failed MANUAL dispatch already has someone watching it, and filing an
@@ -390,7 +462,7 @@ jobs:
   # an existing open issue with the same title gets a comment instead.
   report-failure:
     name: Report a failed nightly
-    needs: [gate, admin, gate-linux]
+    needs: [gate, admin, gate-linux, gate-macos]
     if: ${{ failure() && github.event_name == 'schedule' }}
 
     # ubuntu-latest, and hosted ON PURPOSE. This job only calls the API, and it must not queue

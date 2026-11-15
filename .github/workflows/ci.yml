@@ -7,7 +7,8 @@ name: CI
 # Windows jobs run on Windows, where the ConPTY terminal stack and the de-elevation path are real. The
 # Windows runner has a virtual desktop, which the E2E layer requires (the app has no headless mode — inline
 # xterm.js terminals only paint in a visible window; see docs/testing.md). The `linux-*` jobs at the end run
-# the same layers on Ubuntu (spec 062), with a real X display and window manager for E2E.
+# the same layers on Ubuntu (spec 062), with a real X display and window manager for E2E. The `macos-*` jobs after
+# them run them on hosted Apple silicon, once for each supported macOS release (spec 070).
 #
 # Runner is pinned to `windows-2022` (not `windows-latest`): `windows-latest` now maps
 # to Windows Server 2025 shipping Visual Studio 2026, which the node-gyp bundled with
@@ -364,3 +365,138 @@ jobs:
           path: test-results/
           retention-days: 14
           if-no-files-found: ignore
+
+  # ── macOS (spec 070 FR-036, FR-046) ─────────────────────────────────────────────────────────────────────
+  # Hosted Apple silicon, one machine for each supported macOS release: the current and the previous (FR-003a). The
+  # runner labels are written in one place, .github/macos-runners.json, and every job below takes its machine from
+  # `macos-runners` (FR-037), so moving the range forward is an edit to that file and nothing here.
+  # packages/ui/tests/unit/macos-runners.test.ts fails on a label written anywhere else.
+  #
+  # Each job ends by clearing what it left behind (FR-047): the daemon outlives its window by design (Principle III).
+  macos-runners:
+    name: 'macOS: read the runner list'
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      labels: ${{ steps.list.outputs.labels }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/macos-runners.json
+            scripts/macos-runners.mjs
+          sparse-checkout-cone-mode: false
+      # No dependencies: the script reads one JSON file, and fails the run on one that is not the expected shape.
+      - id: list
+        name: Read .github/macos-runners.json
+        run: node scripts/macos-runners.mjs >> "$GITHUB_OUTPUT"
+
+  macos-fast:
+    name: 'macOS ${{ matrix.runner }}: unit / component'
+    needs: macos-runners
+    if: github.event.pull_request.draft != true
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      # Each release's result is wanted even when the other's fails: a red one names the release.
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.macos-runners.outputs.labels) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      # The skip-reasons reporter lists every skip by its platform guard's reason, and fails one that gives none (FR-038).
+      - name: Unit tests
+        run: npm run test:unit -- --tags-filter='!regression' --reporter=default --reporter=./packages/platform/tests/support/skip-reasons.reporter.ts
+      - name: Component tests
+        run: npm run test:component -- --tags-filter='!regression' --reporter=default --reporter=./packages/platform/tests/support/skip-reasons.reporter.ts
+      - name: Clear what the run left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+
+  macos-test:
+    name: 'macOS ${{ matrix.runner }}: integration / contract'
+    needs: macos-runners
+    if: github.event.pull_request.draft != true
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.macos-runners.outputs.labels) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # These layers start real shells, and zsh on a fresh account stops at its new-user wizard.
+      - name: Prepare the runner
+        run: scripts/ci-macos-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Build
+        run: npm run build
+      # The skip reporter lists every skip by its platform guard's reason, and fails a skip that states none (FR-038).
+      - name: Integration tests
+        run: npm run test:integration -- --tags-filter='!regression' --reporter=default --reporter=./packages/platform/tests/support/skip-reasons.reporter.ts
+      - name: Contract tests
+        run: npm run test:contract -- --tags-filter='!regression' --reporter=default --reporter=./packages/platform/tests/support/skip-reasons.reporter.ts
+      - name: Clear what the run left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+
+  # E2E against the app as built on this machine. A hosted Mac has a logged-in desktop, so no display server is started.
+  macos-e2e:
+    name: 'macOS ${{ matrix.runner }}: E2E (@core + @macos)'
+    needs: macos-runners
+    if: github.event.pull_request.draft != true
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.macos-runners.outputs.labels) }}
+    env:
+      THRONG_E2E_WORKERS: 1
+      THRONG_E2E_RETRIES: 3
+      THRONG_E2E_TRACE: 1
+      # The list reporter prints how many were skipped; this report, uploaded below, says why each one was.
+      THRONG_E2E_JSON_OUT: test-results/e2e-report.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: scripts/ci-macos-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Build
+        run: npm run build
+      - name: Run E2E
+        run: npx playwright test --grep '@core|@macos'
+      - name: Upload traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-macos-e2e-${{ matrix.runner }}
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Clear what the run left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
