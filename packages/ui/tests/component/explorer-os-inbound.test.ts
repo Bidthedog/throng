@@ -12,6 +12,7 @@
  */
 import { act, screen, waitFor } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WINDOWS_HOST_TRAITS, configureHostTraits, linuxHostTraits, macosHostTraits } from '@throng/core';
 import {
   installResizeObserver,
   mountExplorer,
@@ -157,9 +158,9 @@ describe('an OS file drag over the tree (FR-004, FR-005a)', () => {
   });
 
   describe('on Linux, where the file manager sends no modifier but narrows what it offers', () => {
-    beforeEach(() => {
-      vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Linux x86_64');
-    });
+    // The OS comes from host traits, not `navigator.platform` (070 R32).
+    beforeEach(() => configureHostTraits(linuxHostTraits('/run/x')));
+    afterEach(() => configureHostTraits(WINDOWS_HOST_TRAITS));
 
     it('shows a move while the OS offers one, and a copy once it stops', async () => {
       const m = await mount();
@@ -181,9 +182,18 @@ describe('an OS file drag over the tree (FR-004, FR-005a)', () => {
   });
 
   it('ignores what the OS offers elsewhere, where a plain drag can offer a move', async () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
     const m = await mount();
     expect(drag('dragover', row(m, 'Docs'), { allowed: 'copyMove' }).dt.dropEffect).toBe('copy');
+  });
+
+  it('ignores it on macOS too: the carve-out is only for a Linux file manager (070 R32)', async () => {
+    configureHostTraits(macosHostTraits('/tmp/throng', []));
+    try {
+      const m = await mount();
+      expect(drag('dragover', row(m, 'Docs'), { allowed: 'copyMove' }).dt.dropEffect).toBe('copy');
+    } finally {
+      configureHostTraits(WINDOWS_HOST_TRAITS);
+    }
   });
 
   it('targets the PARENT folder when the pointer is over a file row', async () => {

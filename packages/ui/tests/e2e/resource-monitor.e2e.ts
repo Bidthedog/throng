@@ -73,7 +73,19 @@ test('the status bar shows numeric CPU and memory within 5 s, and a busy loop in
   // not-a-clock: 100 bounds a percentage-of-machine figure to a valid reading, not a duration.
   // Let a reading or two settle so "before" is the idle shell, not the first sample's noise.
   await expect.poll(() => cpuFigure(win), { timeout: 10_000 }).toBeLessThan(100);
-  const before = await cpuFigure(win);
+  // The idle figure is the lowest of three intervals' readings, not one. A single reading taken during startup's own work
+  // read 30% on the hosted Macs (3 cores), and the loop's third of the machine then had to clear a bar a spike set (070).
+  const idle: number[] = [];
+  await expect
+    .poll(
+      async () => {
+        idle.push(await cpuFigure(win));
+        return idle.length;
+      },
+      { intervals: [1000], timeout: 15_000 },
+    )
+    .toBeGreaterThanOrEqual(6);
+  const before = Math.min(...idle);
 
   // One core spinning is 100 / logicalProcessors percent of the machine; half of that is unmistakable.
   const cores = cpus().length;

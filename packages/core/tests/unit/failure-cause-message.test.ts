@@ -161,6 +161,7 @@ describe('every cause speaks plainly (FR-016 / FR-017 / SC-003)', () => {
     'permission-denied': 'Guarded',
     'not-empty': 'Full',
     'daemon-stopped': 'throng',
+    'privacy-withheld': 'Documents',
   };
 
   const KINDS = Object.keys(SUBJECTS) as Array<FailureCause['kind']>;
@@ -168,7 +169,7 @@ describe('every cause speaks plainly (FR-016 / FR-017 / SC-003)', () => {
   it('covers the whole closed set — a new kind cannot slip past this file', () => {
     // Guards the guard: if `SUBJECTS` were emptied or the cast went wrong, every loop below would
     // pass by iterating over nothing.
-    expect(KINDS.length).toBe(5);
+    expect(KINDS.length).toBe(6);
   });
 
   for (const kind of KINDS) {

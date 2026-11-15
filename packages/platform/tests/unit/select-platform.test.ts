@@ -12,7 +12,10 @@ import {
   WindowsShellDetection,
   WindowsUserDirectories,
 } from '@throng/platform-windows';
-import { UnsupportedPlatformError, selectPlatform } from '@throng/platform';
+import { runCommandLineInstallContract } from '@throng/core/testing';
+import { MacosPlatformInfo, MacosUserDirectories } from '@throng/platform-macos';
+import { PosixDirectoryLock, PosixPathForms, PosixShellDetection } from '@throng/platform-node';
+import { UnsupportedPlatformError, selectPlatform, type PlatformServices } from '@throng/platform';
 
 describe('selectPlatform (062 FR-007, FR-050)', () => {
   it('gives Windows the classes it has always had (FR-009)', () => {
@@ -49,10 +52,102 @@ describe('selectPlatform (062 FR-007, FR-050)', () => {
   });
 
   it('refuses a platform with no set, naming it, rather than using another', () => {
-    expect(() => selectPlatform('darwin')).toThrow(UnsupportedPlatformError);
-    expect(() => selectPlatform('darwin')).toThrow(/darwin/);
+    expect(() => selectPlatform('freebsd')).toThrow(UnsupportedPlatformError);
+    expect(() => selectPlatform('freebsd')).toThrow(/freebsd/);
+    expect(() => selectPlatform('aix')).toThrow(UnsupportedPlatformError);
   });
 });
+
+/** 070 FR-011, superseding 062 FR-050's darwin refusal: macOS has a set of its own, never another platform's. */
+describe('selectPlatform on macOS', () => {
+  const macos = selectPlatform('darwin');
+
+  it('answers with the macOS set, not the Windows or Linux one', () => {
+    expect(macos).not.toBe(selectPlatform('linux'));
+    expect(macos).not.toBe(selectPlatform('win32'));
+    expect(macos.platformInfo()).toBeInstanceOf(MacosPlatformInfo);
+    expect(macos.platformInfo().osName()).toBe('macos');
+    expect(macos.userDirectories()).toBeInstanceOf(MacosUserDirectories);
+  });
+
+  it('shares the POSIX classes Linux uses, under their neutral names', () => {
+    expect(macos.shellDetection()).toBeInstanceOf(PosixShellDetection);
+    expect(macos.directoryLock()).toBeInstanceOf(PosixDirectoryLock);
+    expect(macos.pathForms()).toBeInstanceOf(PosixPathForms);
+    expect(macos.elevation().isElevated()).toBe(false);
+    expect(macos.deElevatedLauncher().isAvailable()).toBe(false);
+    expect(macos.foregroundHandoff().allow()).toBe(false);
+  });
+
+  it('reports the concepts macOS lacks as absent (FR-013)', async () => {
+    expect(macos.hasTaskbarOverlay).toBe(false);
+    expect(macos.displaySwitches(false)).toEqual([]);
+    expect(macos.displaySwitches(true)).toEqual([]);
+    expect(macos.osPropertiesDialog().available).toBe(false);
+    expect((await macos.fileManagerRegistration({ execPath: '/x', home: '/Users/dev', installed: true }).status()).state).toBe('unavailable');
+    expect(await macos.lookupHolder('/Users/dev/p')).toBeUndefined();
+  });
+
+  it('ends a daemon whose bundle is gone, as Linux does (063 FR-013)', () => {
+    expect(macos.exitWhenEntryRemoved).toBe(true);
+  });
+
+  it('has a class of its own behind every entry, with no stand-in left (T062)', () => {
+    const built = buildEvery(macos);
+    expect(built.length).toBeGreaterThan(25);
+    for (const { name, made } of built) {
+      expect(() => (made as { constructor?: unknown } | null)?.constructor, name).not.toThrow();
+    }
+    const source = readFileSync(resolve(import.meta.dirname, '../../src/index.ts'), 'utf8');
+    expect(source).not.toMatch(/not yet implemented on macOS|notYetOnMacos/);
+  });
+});
+
+/** 070's three new entries carry every platform's value at once, so none needs a stand-in. */
+describe('the entries 070 adds', () => {
+  it('give Windows and Linux their frameless window and macOS the native traffic lights (FR-026, R16)', () => {
+    expect(selectPlatform('win32').windowChrome()).toEqual({ frame: false });
+    expect(selectPlatform('linux').windowChrome()).toEqual({ frame: false });
+    const chrome = selectPlatform('darwin').windowChrome();
+    expect(chrome.titleBarStyle).toBe('hidden');
+    expect(chrome.frame).toBeUndefined();
+    expect(chrome.trafficLightPosition).toEqual({ x: expect.any(Number), y: expect.any(Number) });
+  });
+
+  it('name the privacy-protected folders on macOS only (FR-025, R14)', () => {
+    expect(selectPlatform('win32').privacyProtectedRoots('C:\\Users\\dev')).toEqual([]);
+    expect(selectPlatform('linux').privacyProtectedRoots('/home/dev')).toEqual([]);
+    expect(selectPlatform('darwin').privacyProtectedRoots('/Users/dev/')).toEqual([
+      '/Users/dev/Desktop',
+      '/Users/dev/Documents',
+      '/Users/dev/Downloads',
+      '/Users/dev/Library/Mobile Documents/com~apple~CloudDocs',
+      '/Volumes',
+    ]);
+  });
+
+  it('offer no command install where the installer owns the command (FR-024a, R20)', async () => {
+    for (const os of ['win32', 'linux']) {
+      await runCommandLineInstallContract(() => selectPlatform(os).commandLineInstall({ execPath: '/x' }));
+      const install = selectPlatform(os).commandLineInstall({ execPath: '/x' });
+      expect(install.available).toBe(false);
+      expect(install.unavailableReason).toMatch(/installer/);
+      await expect(install.install({ replaceOther: false })).rejects.toThrow(/installer/);
+    }
+  });
+});
+
+/** What each factory entry of a set builds. `traits` makes this process's socket folder, so it is left out. */
+function buildEvery(services: PlatformServices): { name: string; made: unknown }[] {
+  const built: { name: string; made: unknown }[] = [];
+  for (const [name, entry] of Object.entries(services)) {
+    if (typeof entry !== 'function' || name === 'traits') continue;
+    const arg =
+      name === 'privacyProtectedRoots' || name === 'lookupHolder' ? '/Users/dev' : { execPath: '/x', home: '/Users/dev', installed: false };
+    built.push({ name, made: (entry as (arg: unknown) => unknown)(arg) });
+  }
+  return built;
+}
 
 describe('Windows values are byte-identical (062 FR-009, US6)', () => {
   it('path identity folds case and separators', () => {

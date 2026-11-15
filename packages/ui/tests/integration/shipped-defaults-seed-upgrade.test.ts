@@ -18,6 +18,7 @@ import {
 } from '@throng/core';
 import { FileConfigStore } from '../../src/main/config-store.js';
 import { ShippedDefaultsService } from '../../src/main/shipped-defaults-service.js';
+import { skipOnMacos } from '@throng/core/testing';
 
 /** First-run seeding + additive upgrade (010, US6 / FR-015/015a). */
 const tempDirs: string[] = [];
@@ -443,7 +444,7 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
  * root shaped like a real v11 install, the same reason the settings-leaf `describe` block above
  * exists for `planSettingsUpgrade`.
  */
-describe('ShippedDefaultsService.upgrade — the guarded zoom.reset keybinding leaf (046 FR-025)', () => {
+describe.skipIf(skipOnMacos('upgrades a Windows or Linux seed from before v14; no macOS install predates 1.0, and a Mac ships Cmd chords'))('ShippedDefaultsService.upgrade — the guarded zoom.reset keybinding leaf (046 FR-025)', () => {
   /** A config root as an installation on shipped-defaults v11 would have left it. */
   function v11KeybindingsInstall(bindings: Record<string, string[]>): { root: string; store: FileConfigStore } {
     const root = freshRoot();
@@ -498,7 +499,7 @@ describe('ShippedDefaultsService.upgrade — the guarded zoom.reset keybinding l
  * this proves the WIRING against a config root shaped like a real v12 install, the same reason the
  * v11 describe block above exists for the v12 rewrite.
  */
-describe('ShippedDefaultsService.upgrade — the v12 to v13 keybindings rows (046 FR-108)', () => {
+describe.skipIf(skipOnMacos('upgrades a Windows or Linux seed from before v14; no macOS install predates 1.0, and a Mac ships Cmd chords'))('ShippedDefaultsService.upgrade — the v12 to v13 keybindings rows (046 FR-108)', () => {
   /** A config root as an installation stamped 12, still on v11's chords for every guarded row. */
   function v12KeybindingsInstall(bindings: Record<string, string[]>): { root: string; store: FileConfigStore } {
     const root = freshRoot();
@@ -563,7 +564,7 @@ describe('ShippedDefaultsService.upgrade — the v12 to v13 keybindings rows (04
  * holding exactly what version 13 wrote. `shipped-defaults-upgrade-v14-keybindings.test.ts` proves
  * the guard; this proves the wiring and the idempotent re-run over the real file store.
  */
-describe('ShippedDefaultsService.upgrade — the v13 to v14 keybindings rows (046 FR-118)', () => {
+describe.skipIf(skipOnMacos('upgrades a Windows or Linux seed from before v14; no macOS install predates 1.0, and a Mac ships Cmd chords'))('ShippedDefaultsService.upgrade — the v13 to v14 keybindings rows (046 FR-118)', () => {
   /** What version 13 wrote for the five rows FR-117 moves. */
   const V13_FIVE: Record<string, string[]> = {
     'focus.notice': ['Ctrl+Shift+Alt+M'],

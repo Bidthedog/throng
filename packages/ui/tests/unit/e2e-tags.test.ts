@@ -220,7 +220,8 @@ describe('E2E significance and category tags', () => {
   });
 
   it('uses no category outside the vocabulary', () => {
-    const known = new Set<string>([...SIGNIFICANCE, ...CATEGORIES, ...RESERVE, '@admin', '@quarantine', '@linux']);
+    // `@linux` and `@macos` are platform lanes (062, 070 FR-036): each runs only on its own hosted runners.
+    const known = new Set<string>([...SIGNIFICANCE, ...CATEGORIES, ...RESERVE, '@admin', '@quarantine', '@linux', '@macos']);
     const offenders = all
       .flatMap((d) => d.tags.filter((t) => !known.has(t)).map((t) => `${d.file}:${d.line} ${t}`))
       .sort();

@@ -11,7 +11,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KEYBINDINGS_METADATA, formatGrouped } from '@throng/core';
+import { KEYBINDINGS_METADATA, descriptorsForThisPlatform, formatGrouped } from '@throng/core';
 import { KeybindingsTab } from '../../src/renderer/preferences/keybindings-tab.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
@@ -20,12 +20,17 @@ import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice
 const DEBOUNCE_MS = 150;
 const STORE = 'throng.preferences.folds';
 
-const GROUPS = [...new Set(KEYBINDINGS_METADATA.map((d) => d.group))];
+/**
+ * The descriptors the tab renders on this host: it filters by platform (070, `onlyOn`), so a macOS-only group such
+ * as Application has no section on Windows or Linux. Every group, count and target below comes from this list.
+ */
+const RENDERED = descriptorsForThisPlatform(KEYBINDINGS_METADATA);
+const GROUPS = [...new Set(RENDERED.map((d) => d.group))];
 const FIRST = GROUPS[0];
 const LAST = GROUPS[GROUPS.length - 1];
 const idOf = (group: string): string => `keybindings-group-${group}`;
 /** A binding in the LAST group, and a query that finds it. */
-const TARGET = [...KEYBINDINGS_METADATA].reverse().find((d) => d.group === LAST)!;
+const TARGET = [...RENDERED].reverse().find((d) => d.group === LAST)!;
 
 function mount() {
   return render(
@@ -75,7 +80,7 @@ describe('sections start folded (FR-016, FR-017, SC-006) — no seam', () => {
     mount();
     fireEvent.click(toggle(idOf(FIRST)));
     expect(expanded(idOf(FIRST))).toBe(true);
-    const keys = KEYBINDINGS_METADATA.filter((d) => d.group === FIRST).map((d) => `binding-${d.key}`);
+    const keys = RENDERED.filter((d) => d.group === FIRST).map((d) => `binding-${d.key}`);
     const inGroup = keys.map((id) => screen.getByTestId(id));
     expect(inGroup.length).toBeGreaterThan(0);
     expect(inGroup.filter((r) => isHidden(r))).toEqual([]);
@@ -99,9 +104,9 @@ describe('a group heading folds (FR-001, FR-006)', () => {
 
   it('shows its binding count, folds on click and restores on a second click', () => {
     mount();
-    const total = KEYBINDINGS_METADATA.filter((d) => d.group === FIRST).length;
+    const total = RENDERED.filter((d) => d.group === FIRST).length;
     expect(count(idOf(FIRST))).toBe(formatGrouped(total));
-    const first = KEYBINDINGS_METADATA.find((d) => d.group === FIRST)!;
+    const first = RENDERED.find((d) => d.group === FIRST)!;
     const rowId = `binding-${first.key}`;
     expect(isHidden(screen.getByTestId(rowId))).toBe(false);
 
@@ -178,7 +183,7 @@ describe('a search shows matches in folded groups (FR-008, FR-009)', () => {
     expect(expanded(idOf(LAST))).toBe(true);
     expect(isHidden(screen.getByTestId(`binding-${TARGET.key}`))).toBe(false);
     expect(count(idOf(LAST))).toMatch(/^[\d,]+ of [\d,]+$/);
-    const total = KEYBINDINGS_METADATA.filter((d) => d.group === LAST).length;
+    const total = RENDERED.filter((d) => d.group === LAST).length;
     expect(count(idOf(LAST)).endsWith(`of ${formatGrouped(total)}`)).toBe(true);
 
     fireEvent.click(screen.getByTestId('keybindings-search-clear'));

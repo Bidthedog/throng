@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
 import { cleanupTemp, createProject, firstPanelId, openApp, switchProject, TEST_SHELL } from '../e2e/harness.js';
+import { latencyFailure } from './latency-assert.js';
 
 /**
  * 061 FR-060 — what a window pays for terminals it is not showing.
@@ -12,7 +13,8 @@ import { cleanupTemp, createProject, firstPanelId, openApp, switchProject, TEST_
  *
  *   THRONG_MEASURE_BUSY=20 npx playwright test -c packages/ui/tests/measure/playwright.measure.config.ts
  *
- * Output: one JSON line starting `MEASURE `.
+ * Output: one JSON line starting `MEASURE `. With `THRONG_MEASURE_ASSERT_P95_MS` set it also fails when the echo p95
+ * exceeds that many ms, after printing the line (070 FR-050): the gate's macOS lane runs it that way.
  */
 
 const BUSY = Number(process.env.THRONG_MEASURE_BUSY ?? 1);
@@ -22,6 +24,8 @@ const ECHO_SAMPLES = Number(process.env.THRONG_MEASURE_ECHOES ?? 200);
 const VISIBLE_BUSY = process.env.THRONG_MEASURE_VISIBLE_BUSY === '1';
 /** Time how long returning to a terminal that kept 10,000 lines holds the window (Principle XII). */
 const REPLAY = process.env.THRONG_MEASURE_REPLAY === '1';
+/** 070 FR-050: when set, fail if the visible terminal's echo p95 exceeds this many ms. Unset, assert nothing. */
+const ASSERT_P95_MS = process.env.THRONG_MEASURE_ASSERT_P95_MS;
 
 /** Prints numbered lines forever at a steady rate; node, so it behaves the same on every shell. */
 const EMITTER = `let n = 0;
@@ -187,6 +191,7 @@ test('terminal load', async () => {
       });
     }
 
+    const echoP95Ms = percentile(echoes, 95);
     console.log(
       `MEASURE ${JSON.stringify({
         busy: BUSY,
@@ -195,12 +200,16 @@ test('terminal load', async () => {
         mainCpuPercent: Number(cpu.main.toFixed(1)),
         windowCpuPercent: Number(cpu.window.toFixed(1)),
         echoP50Ms: percentile(echoes, 50),
-        echoP95Ms: percentile(echoes, 95),
+        echoP95Ms,
         projectSwitchFailures: failures,
         visibleBusy: VISIBLE_BUSY,
         replayLongestTaskMs,
+        assertP95Ms: ASSERT_P95_MS || undefined,
       })}`,
     );
+    // After the line, so the figures are there whether this passes or fails (070 FR-050).
+    const tooSlow = latencyFailure(ASSERT_P95_MS, echoes, echoP95Ms);
+    expect(tooSlow, tooSlow ?? '').toBeNull();
   } finally {
     await h.close();
     cleanupTemp(root);

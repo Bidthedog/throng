@@ -14,6 +14,7 @@ import {
 } from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
 import { editDocument } from './helpers/edit-document.js';
+import { watchStarted } from './helpers/watch-started.js';
 
 /**
  * u4 (044 T043/T044) — the injected `DocumentLifecycleListener` `EditorCoordinator` gains for
@@ -413,6 +414,7 @@ describe('DocumentLifecycleListener — changed and dirtyChanged on resets (T043
     const path = join(root, 'a.txt');
     await writeFile(path, 'v1\n');
     await coord.load({ ...meta('p1', path), absPath: path });
+    await watchStarted();
     events.length = 0;
 
     await writeFile(path, 'v2 from another program\n');

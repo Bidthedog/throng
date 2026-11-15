@@ -103,7 +103,9 @@ test('with no project open the button is DRAWN AND DISABLED, its tooltip says wh
        * the default cannot leave this assertion checking a string nothing produces any more.
        */
       const disabledTitle = (await quickOpenToolbarButton(win).getAttribute('title')) ?? '';
-      const shownChord = QUICK_OPEN_CHORD.replace('Control', 'Ctrl');
+      // As the tooltip writes it: Ctrl on Windows and Linux; Cmd, in Apple's modifier order, on macOS (070 FR-029).
+      const shownChord =
+        process.platform === 'darwin' ? 'Shift+Cmd+T' : QUICK_OPEN_CHORD.replace('ControlOrMeta', 'Ctrl');
       expect(disabledTitle, 'the disabled tooltip must still name the action').toContain(
         'Quick Open',
       );

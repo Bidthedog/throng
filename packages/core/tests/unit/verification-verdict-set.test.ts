@@ -106,9 +106,10 @@ describe('the 058 steps and the unproven outcome (data-model.md, StepOutcome)', 
     }
   });
 
-  it('lists only the second account’s GUI half and the launch integrity check as runner-limited', () => {
+  it('lists only the second account’s GUI half, the launch integrity check and the Gatekeeper first launch as runner-limited', () => {
     // not-elevated-launch: a hosted runner is an administrator with UAC off, so its desktop is not medium.
-    expect([...RUNNER_LIMITED_STEPS].sort()).toEqual(['not-elevated-launch', 'second-account']);
+    // gatekeeper-first-launch (070 FR-010): a hosted runner cannot click Open Anyway.
+    expect([...RUNNER_LIMITED_STEPS].sort()).toEqual(['gatekeeper-first-launch', 'not-elevated-launch', 'second-account']);
   });
 
   it('allows unproven on not-elevated-launch, and still fails it anywhere else', () => {

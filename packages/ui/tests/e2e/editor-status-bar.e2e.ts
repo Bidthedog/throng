@@ -230,7 +230,7 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
        * chord asks the document AUTHORITY in UI main to revert, which broadcasts the canonical
        * change back to this view (016 FR-026c). Nothing below E2E has that round trip.
        */
-      await win.keyboard.press('Control+z');
+      await win.keyboard.press('ControlOrMeta+z');
       await expect(readout(win, 'chars', pid)).toHaveText('23 Chars.');
 
       /*

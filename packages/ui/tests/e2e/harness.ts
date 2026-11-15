@@ -43,6 +43,16 @@ const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.u
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
 
 /**
+ * Keep painting a window macOS considers hidden (070). On a hosted Mac a relaunched window can sit behind another, and
+ * Chromium then stops producing frames: Playwright's "stable" check needs two, so a click waited its full 30 s on a
+ * button that was plainly there. A person looks at the window they use, so this changes what a test sees, not the app.
+ */
+const MACOS_PAINT_SWITCHES: readonly string[] =
+  process.platform === 'darwin'
+    ? ['--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling']
+    : [];
+
+/**
  * `process.env` with every CLAUDE_* / ANTHROPIC_* variable removed.
  *
  * A suite driven FROM a Claude Code session inherits its variables, and they reach all the way down
@@ -521,6 +531,15 @@ async function stopTracing(app: ElectronApplication, flushNow = false): Promise<
   }
 }
 
+/**
+ * Stop tracing an app the test is about to make exit by itself (070). Playwright closes a context whose process
+ * exits, and deletes its trace file under a snapshot write still in flight: the write's ENOENT then fails the test,
+ * which happened on the hosted Macs after a Quit. Stopped first, the trace is kept as any other is.
+ */
+export async function stopTracingBeforeExit(app: ElectronApplication): Promise<void> {
+  await stopTracing(app);
+}
+
 /** Keep the pending traces under the test's own output dir, or delete them. */
 async function flushTraces(info: ReturnType<typeof test.info>, keep: boolean): Promise<void> {
   const diags = pendingDiagnostics.splice(0, pendingDiagnostics.length);
@@ -624,7 +643,7 @@ async function launchApp(opts: AppOptions): Promise<{
     app = await electron.launch({
     // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
     chromiumSandbox: true,
-      args: [mainEntry, `--user-data-dir=${userData}`, ...(opts.electronArgs ?? [])],
+      args: [...MACOS_PAINT_SWITCHES, mainEntry, `--user-data-dir=${userData}`, ...(opts.electronArgs ?? [])],
       env: {
         ...claudeFreeEnv(),
         THRONG_PIPE_NAME: pipeName,
@@ -1910,17 +1929,19 @@ export const TEST_SHELL = process.platform === 'win32' ? 'cmd' : 'bash';
 export const LONG_RUNNING_COMMAND = process.platform === 'win32' ? 'ping -n 30 127.0.0.1' : 'sleep 30';
 
 function probeShellChildren(parentPid: number): ConhostProbe {
+  // `-A -o pid=,ppid=,comm=` is the form GNU and BSD ps both take: macOS's has no `--ppid` (070). Its `comm` is the full
+  // path, and a login shell's is `-zsh`, so the shell is read from the basename with the dash dropped.
   try {
-    const out = execFileSync('ps', ['--ppid', String(parentPid), '-o', 'pid=,comm='], { encoding: 'utf8', timeout: 8000 });
+    const out = execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8', timeout: 8000, maxBuffer: 16 * 1024 * 1024 });
     const pids = out
       .split('\n')
-      .map((l) => /^\s*(\d+)\s+(\S+)/.exec(l))
-      .filter((m): m is RegExpExecArray => m !== null && /^(bash|zsh|fish|sh|dash)$/.test(m[2] ?? ''))
+      .map((l) => /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(l))
+      .filter((m): m is RegExpExecArray => m !== null && Number(m[2]) === parentPid)
+      .filter((m) => /^(bash|zsh|fish|sh|dash)$/.test(basename(m[3] ?? '').replace(/^-/, '')))
       .map((m) => Number(m[1]));
     return { ok: true, pids };
-  } catch (error) {
-    // `ps` exits 1 when the pid has no children, which is an answer.
-    return (error as { status?: number }).status === 1 ? { ok: true, pids: [] } : { ok: false, pids: [] };
+  } catch {
+    return { ok: false, pids: [] };
   }
 }
 

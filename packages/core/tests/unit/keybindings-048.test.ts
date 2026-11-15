@@ -191,6 +191,7 @@ describe('the terminal-tier rule judges a multi-stroke chord by its first stroke
         'search.findInFiles', 'search.replaceInFiles', 'navigate.back', 'navigate.forward',
         'panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft', 'panel.destroy', 'tabs.rename',
         'panel.toggleMaximise', 'view.resourceMonitor', // 055
+        'app.settings', 'app.installCommandLine', 'app.uninstallCommandLine', // 070 FR-024a, FR-027
       ].sort(),
     );
     expect(WINDOW_MULTI_STROKE_ACTIONS).toBe(WINDOW_HANDLED_ACTIONS);

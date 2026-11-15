@@ -161,6 +161,35 @@ describe('read scope equals write scope (SC-012)', () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.text).toBe('inside\n');
   });
+
+  it('a project whose root is reached through a link opens and saves its own files, even into a new folder (070)', async () => {
+    // Every project under /tmp or /var on macOS is one (/private/tmp, /private/var): the file is resolved, so the
+    // root must be too, or the project's own files are "outside" it.
+    const linked = join(outside, 'linked-project');
+    try {
+      await symlink(project, linked, 'dir');
+    } catch {
+      return;
+    }
+    const viaLink = req(join(linked, 'sub', 'in-sub.txt'), { ownerRoot: linked, allProjectRoots: [linked] });
+    await writeFile(join(project, 'sub', 'in-sub.txt'), 'deep\n');
+    const loaded = await service.load(viaLink);
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) expect(loaded.relativeFolder).toBe('sub');
+    const saved = await service.save({
+      absPath: join(linked, 'new', 'made.txt'),
+      text: 'x',
+      encoding: 'utf8',
+      hasBom: false,
+      lineEnding: 'lf',
+      ownerKind: 'project',
+      ownerRoot: linked,
+      allProjectRoots: [linked],
+    });
+    // The folder does not exist, so the write fails as I/O — not as a file outside the project.
+    expect(saved.ok).toBe(false);
+    if (!saved.ok) expect(saved.reason).toBe('io');
+  });
 });
 
 describe('the RESTORE route — no gesture at all (T103a, SC-012)', () => {

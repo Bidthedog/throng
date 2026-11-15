@@ -39,8 +39,9 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * (SC-012) can talk about "the default chord" and "some other chord" without either of them being a
  * literal buried in five files.
  */
-export const QUICK_OPEN_CHORD = 'Control+Shift+T';
-export const GOTO_LINE_CHORD = 'Control+G';
+// ControlOrMeta: Cmd on macOS (070 FR-029), Control everywhere else.
+export const QUICK_OPEN_CHORD = 'ControlOrMeta+Shift+T';
+export const GOTO_LINE_CHORD = 'ControlOrMeta+G';
 
 /**
  * Open Quick Open with its chord, from wherever focus currently is.

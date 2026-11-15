@@ -170,8 +170,28 @@ describe('README.md stays an entry point', () => {
     // badge sat on alpha9 through six releases.
     expect(release).toContain('include_prereleases');
     expect(release).toContain('sort=date');
-    for (const platform of ['Windows', 'Linux']) {
+    for (const platform of ['Windows', 'Linux', 'macOS']) {
       expect(readme, `README.md has no ${platform} platform badge`).toMatch(new RegExp(`img\\.shields\\.io/badge/[^)]*${platform}`));
+    }
+  });
+});
+
+describe('macOS coverage of the quick start (070 SC-007)', () => {
+  it('names, for every quick-start section, what proves it on macOS', () => {
+    const headings = read(join(DOCS, 'quick-start.md'))
+      .split('\n')
+      .filter((line) => /^#{2,3} /.test(line))
+      .map((line) => line.replace(/^#{2,3} /, '').trim());
+    const macos = read(join(DOCS, 'macos.md'));
+    const start = macos.indexOf('## Coverage of the quick start');
+    expect(start, 'docs/macos.md has no "## Coverage of the quick start" section').toBeGreaterThanOrEqual(0);
+    const rows = macos
+      .slice(start)
+      .split('\n')
+      .filter((line) => line.startsWith('| '))
+      .map((line) => line.split('|')[1]?.trim() ?? '');
+    for (const heading of headings) {
+      expect(rows, `docs/macos.md's coverage table has no row for "${heading}"`).toContain(heading);
     }
   });
 });

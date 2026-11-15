@@ -10,6 +10,7 @@ import { EditorService } from '../../src/main/editor-service.js';
 import { EditorCoordinator, type DocMeta, type EditorSyncMsg } from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
 import { editDocument } from './helpers/edit-document.js';
+import { watchStarted } from './helpers/watch-started.js';
 
 /**
  * The COORDINATOR half of #87 (019, US1 · FR-002/FR-004/FR-005/FR-008 · contracts/move-signal.md §3).
@@ -354,6 +355,7 @@ describe('a file moved by ANOTHER program is not followed (FR-099/AC7)', () => {
     await writeFile(from, 'MOVE-ME-BODY' + String.fromCharCode(10));
     await coord.load(meta('p1', from));
     expect(coord.getContent('p1')).toMatchObject({ dirty: false, fileMissing: false });
+    await watchStarted();
 
     // Not throng: a rename performed behind the app's back, with no bracket and no `markMoved`.
     await rename(from, away);

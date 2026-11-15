@@ -3,13 +3,14 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, onTestFinished, vi } from 'vitest';
+import { skipUnlessLinux } from '@throng/core/testing';
 import { WAIT_THEN_START } from '../../src/main/restart-installed-copy.js';
 
 /**
  * Layer: integration — what the wait does against a real process and a real /proc; a fake has no process
  * table to disagree with it.
  */
-it.skipIf(process.platform !== 'linux')('starts the launcher only after the old process has gone (058 FR-018, #610)', async () => {
+it.skipIf(skipUnlessLinux('waits on a real Linux process table'))('starts the launcher only after the old process has gone (058 FR-018, #610)', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'throng-restart-'));
   onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
   const record = join(dir, 'started');

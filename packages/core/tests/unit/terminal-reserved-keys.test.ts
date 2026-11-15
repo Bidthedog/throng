@@ -157,7 +157,8 @@ describe('terminal keys belong to the terminal (Constitution IV, #164)', () => {
     for (const c of live) {
       const strokes = parseChordStrokes(c.chord);
       expect(strokes?.length, c.chord).toBe(2);
-      expect(strokes?.[0]).toBe('Ctrl+Shift+Alt+End');
+      // macOS's tier 1 is the same keys with Cmd for Ctrl (070 FR-029); Windows and Linux are unchanged.
+      expect(strokes?.[0], c.platform).toBe(c.platform === 'macos' ? 'Shift+Alt+Meta+End' : 'Ctrl+Shift+Alt+End');
       expect(RESERVED).not.toContain(strokes?.[0]);
       expect(SHADOWABLE).not.toContain(strokes?.[0]);
     }

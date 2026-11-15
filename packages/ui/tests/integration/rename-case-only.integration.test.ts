@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -83,8 +84,9 @@ describe('case-only rename (026 / #194)', () => {
     expect(await svc.rename('one.txt', 'two.txt')).toMatchObject({
       error: 'A file or folder with this name already exists.',
     });
-    // 062 FR-020: on Linux `TWO.TXT` is a different name, and free.
-    if (process.platform === 'win32') {
+    // 062 FR-020, 070 FR-020: on a case-sensitive volume (Linux, a case-sensitive APFS volume) `TWO.TXT` is a
+    // different name, and free; on Windows and a default Mac volume it is `two.txt`. The volume is asked, not the OS.
+    if (existsSync(join(root, 'ONE.TXT'))) {
       expect(await svc.rename('one.txt', 'TWO.TXT')).toMatchObject({
         error: 'A file or folder with this name already exists.',
       });

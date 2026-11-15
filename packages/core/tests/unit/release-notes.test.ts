@@ -243,7 +243,7 @@ describe('composeReleaseBody — every artifact and its audience (058 FR-032/FR-
   const body = composeReleaseBody({ notes, artifacts: FOUR, commitSha: COMMIT });
 
   it('carries each artifact’s audience line beside its filename', () => {
-    expect(FOUR).toHaveLength(7);
+    expect(FOUR).toHaveLength(9);
     for (const artifact of FOUR) {
       const row = body.split('\n').find((l) => l.includes(artifact.filename));
       expect(row, artifact.filename).toBeDefined();
@@ -253,7 +253,7 @@ describe('composeReleaseBody — every artifact and its audience (058 FR-032/FR-
 
   it('has one SHA-256 row per artifact, the MSI’s against its own filename', () => {
     const rows = body.split('\n').filter((l) => /\|\s*`[0-9]{64}`\s*\|$/.test(l));
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(9);
     const msi = FOUR.find((a) => a.role === 'msi')!;
     expect(rows.find((l) => l.includes(msi.filename))).toContain(msi.sha256);
   });
@@ -280,6 +280,63 @@ describe('composeReleaseBody — every artifact and its audience (058 FR-032/FR-
     }
     expect(withGaps.search(/verification gaps/i)).toBeLessThan(withGaps.indexOf('SHA-256'));
     expect(withGaps.indexOf('Built from')).toBeGreaterThan(withGaps.indexOf('SHA-256'));
+  });
+});
+
+/**
+ * 070 FR-001, FR-003a, FR-006, FR-048, research R31 — wherever the body offers a macOS download it says how well macOS
+ * is supported, which releases, how to get past the first-launch block, and how to check the file on a Mac.
+ */
+describe('composeReleaseBody — the macOS downloads (070 FR-048)', () => {
+  const notes = lookupReleaseNotes(CHANGELOG, '1.2.3').found!;
+  const all = declareArtifactSet('1.2.3').artifacts.map((a, i) => ({ ...a, sha256: String(i + 1).repeat(64) }));
+  const body = composeReleaseBody({ notes, artifacts: all, commitSha: COMMIT });
+  const withoutMac = composeReleaseBody({ notes, artifacts: all.filter((a) => a.platform !== 'darwin'), commitSha: COMMIT });
+
+  it('offers both macOS files, each with its own checksum row', () => {
+    for (const artifact of all.filter((a) => a.platform === 'darwin')) {
+      const row = body.split('\n').find((l) => l.includes(artifact.filename));
+      expect(row, artifact.filename).toContain(artifact.sha256);
+      expect(row).toContain(artifact.label);
+    }
+  });
+
+  it('states the best-endeavours support level (FR-001)', () => {
+    expect(body).toMatch(/best-endeavours/);
+    expect(body).toMatch(/automated tests on hosted Macs/);
+  });
+
+  it('states the supported releases as a rule, not a list of versions (FR-003a)', () => {
+    expect(body).toMatch(/current or the previous macOS release/);
+    expect(body).toMatch(/older releases may work but are not supported/i);
+    expect(body).toMatch(/Intel Macs are not supported/);
+    expect(body).not.toMatch(/macOS \d+/);
+  });
+
+  it('gives the Open Anyway step, and why it is needed (FR-006)', () => {
+    expect(body).toMatch(/not signed with a developer identity or notarised/);
+    expect(body).toMatch(/Privacy & Security/);
+    expect(body).toMatch(/Open Anyway/);
+    expect(body).toMatch(/Never turn off Gatekeeper/);
+  });
+
+  it('says how to check a download on a Mac', () => {
+    expect(body).toContain('`shasum -a 256 <file>` on macOS');
+  });
+
+  it('puts the macOS statement inside the footer, after the Windows warning and before the table', () => {
+    const windows = body.search(/not code-signed/);
+    const mac = body.search(/best-endeavours/);
+    expect(windows).toBeGreaterThanOrEqual(0);
+    expect(windows).toBeLessThan(mac);
+    expect(mac).toBeLessThan(body.indexOf('| Artifact |'));
+  });
+
+  it('leaves a body with no macOS download exactly as it was (070 FR-039)', () => {
+    expect(withoutMac).not.toMatch(/macOS|Gatekeeper|shasum/);
+    expect(withoutMac).toContain(
+      'Verify your download matches its checksum below (`Get-FileHash <file> -Algorithm SHA256` on Windows, `sha256sum <file>` on Linux).',
+    );
   });
 });
 

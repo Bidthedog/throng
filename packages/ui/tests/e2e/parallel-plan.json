@@ -126,6 +126,9 @@
     "window-chord-resolution.e2e.ts": "UNATTRIBUTED",
     "linux-files.e2e.ts": "FOCUS",
     "linux-terminal.e2e.ts": "FOCUS",
-    "linux-window.e2e.ts": "FOCUS"
+    "linux-window.e2e.ts": "FOCUS",
+    "macos-files.e2e.ts": "FOCUS",
+    "macos-terminal.e2e.ts": "FOCUS",
+    "macos-window.e2e.ts": "FOCUS"
   }
 }

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { describe, expect, it } from 'vitest';
+import { skipUnlessWindows } from '@throng/core/testing';
 import { WindowsElevation } from '@throng/platform-windows';
 import {
   ElectronShellIntegration,
@@ -41,7 +42,7 @@ function runnerElevated(): boolean {
 
 const ELEVATED = runnerElevated();
 /** Only the case that needs a REAL high-integrity process. */
-const whenReallyElevated = ELEVATED ? describe : describe.skip;
+const whenReallyElevated = !skipUnlessWindows('de-elevation exists only on Windows') && ELEVATED ? describe : describe.skip;
 
 whenReallyElevated('@admin — a REALLY elevated process reads its own elevation and routes away', () => {
   it('uses the REAL elevation probe, not a literal true, and still does not call the shell', async () => {

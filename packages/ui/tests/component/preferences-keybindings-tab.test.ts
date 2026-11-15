@@ -56,8 +56,12 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   KEYBINDINGS_METADATA,
+  descriptorsForThisPlatform,
   resetBindingValue,
   THRONG_THEME,
+  WINDOWS_HOST_TRAITS,
+  configureHostTraits,
+  macosHostTraits,
   type Keybindings,
 } from '@throng/core';
 import { KeybindingsTab } from '../../src/renderer/preferences/keybindings-tab.js';
@@ -550,10 +554,11 @@ describe('Reassign moves a chord between two actions (FR-033/034)', () => {
  * — that the tab actually renders what the registry holds — which was not.
  */
 describe('the tab lists every rebindable command (SC-006)', () => {
-  it('renders a row for EVERY descriptor in the registry', () => {
+  it('renders a row for EVERY descriptor in the registry that this platform offers', () => {
     mountTab();
 
-    const missing = KEYBINDINGS_METADATA.filter(
+    // 070: a macOS-only command (installing the `throng` command) has no row elsewhere — `onlyOn` says so.
+    const missing = descriptorsForThisPlatform(KEYBINDINGS_METADATA).filter(
       (d) => screen.queryByTestId(`binding-${d.key}`) === null,
     ).map((d) => d.key);
 
@@ -561,6 +566,13 @@ describe('the tab lists every rebindable command (SC-006)', () => {
       missing,
       'a command in the registry with no row cannot be rebound by anyone, and nothing else notices',
     ).toEqual([]);
+  });
+
+  it('draws no row for a command this platform does not offer', () => {
+    mountTab();
+    const elsewhere = KEYBINDINGS_METADATA.filter((d) => !descriptorsForThisPlatform(KEYBINDINGS_METADATA).includes(d));
+    expect(elsewhere.length, 'the registry has macOS-only commands, so this is not vacuous').toBeGreaterThan(0);
+    expect(elsewhere.filter((d) => screen.queryByTestId(`binding-${d.key}`) !== null).map((d) => d.key)).toEqual([]);
   });
 
   it('sweeps a registry that is not empty — the check above is not vacuous', () => {
@@ -729,5 +741,22 @@ describe('zoom.reset ships its tier-1 default chord (046 US3, T048, FR-025/026, 
       expect(within(row).getByTestId('binding-zoom.reset-pill-0')).toHaveTextContent('Ctrl+Shift+Alt+Numpad0');
       expect(within(row).queryByTestId('binding-zoom.reset-pill-1')).toBeNull();
     });
+  });
+});
+
+/**
+ * 070 FR-029 — on macOS the stored `Meta` and `Alt` read as Cmd and Option, in Apple's modifier order; Windows and
+ * Linux keep the token as written (every case above runs under the default Windows traits).
+ */
+describe('chords on macOS (070 FR-029)', () => {
+  afterEach(() => configureHostTraits(WINDOWS_HOST_TRAITS));
+
+  it('shows Cmd and Option, never Meta or Alt', () => {
+    configureHostTraits(macosHostTraits('/tmp/throng', []));
+    mountTab();
+    expect(chordText('editor.save')).toContain('Cmd+S');
+    expect(chordText('search.replace')).toContain('Option+Cmd+F');
+    expect(chordText('focus.explorer')).toContain('Option+Shift+Cmd+M');
+    expect(chordText('editor.save')).not.toContain('Meta');
   });
 });

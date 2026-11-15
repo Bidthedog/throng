@@ -118,7 +118,7 @@ test('the scroll position is restored and the editor re-focuses on switch back (
 
       // Scroll to the very bottom (caret at end of the document).
       await content.click();
-      await win.keyboard.press('Control+End');
+      await win.keyboard.press('ControlOrMeta+End');
       const scroller = win.getByTestId(`editor-${pid}`).locator('.cm-scroller');
       /*
        * Ctrl+End moves the caret synchronously but scrolls on CodeMirror's NEXT MEASURE CYCLE, and

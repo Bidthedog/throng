@@ -13,6 +13,7 @@ import {
   type DetectedShell,
   type PtyHandle,
 } from '@throng/core';
+import { skipUnlessWindows } from '@throng/core/testing';
 import { WindowsShellDetection } from '@throng/platform-windows';
 import { PtyAgentHost } from '../../src/pty-agent-host.js';
 
@@ -69,7 +70,7 @@ afterEach(async () => {
   base = undefined;
 });
 
-describe('a remembered cmd command runs again through the PTY agent', () => {
+describe.skipIf(skipUnlessWindows('cmd.exe and the de-elevated PTY agent are Windows'))('a remembered cmd command runs again through the PTY agent', () => {
   it.skipIf(!cmd)('a quoted program path with a space, then a quoted argument', async () => {
     expect(existsSync(AGENT_ENTRY), `build the daemon first: ${AGENT_ENTRY} is missing`).toBe(true);
     base = mkdtempSync(join(tmpdir(), 'throng-agent-quoted-'));

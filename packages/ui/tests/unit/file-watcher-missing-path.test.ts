@@ -44,6 +44,8 @@ const watches: Watch[] = [];
 const present = new Set<string>();
 /** Directories whose `watch()` call should throw ENOENT. */
 const absent = new Set<string>();
+/** The live `watchFile` polls, by path: the macOS root guard. */
+const polls = new Map<string, () => void>();
 
 vi.mock('node:fs', () => ({
   watch: (
@@ -61,6 +63,12 @@ vi.mock('node:fs', () => ({
     return watcher;
   },
   existsSync: (p: string) => present.has(p),
+  watchFile: (p: string, _opts: unknown, listener: () => void) => {
+    polls.set(p, listener);
+  },
+  unwatchFile: (p: string, listener: () => void) => {
+    if (polls.get(p) === listener) polls.delete(p);
+  },
 }));
 
 const { NodeFileWatcher } = await import('../../src/main/node-file-watcher.js');
@@ -70,7 +78,8 @@ const { NodeFileWatcher } = await import('../../src/main/node-file-watcher.js');
  * they pin that strategy — on Linux the default is the per-directory watch (#585), tested in
  * `directory-tree-watch.integration.test.ts`.
  */
-const NATIVE = { recursiveStrategy: 'native' } as const;
+// …and pin the macOS root guard off: it adds a parent watch these call counts do not expect, and has its own test.
+const NATIVE = { recursiveStrategy: 'native', guardRoot: false } as const;
 
 const liveWatch = (): Watch | undefined => [...watches].reverse().find((w) => !w.watcher.closed);
 const watchOn = (dir: string): Watch | undefined =>
@@ -85,6 +94,7 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
     watches.length = 0;
     present.clear();
     absent.clear();
+    polls.clear();
     vi.useFakeTimers();
   });
 
@@ -255,5 +265,41 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(watchOn(ROOT)).toBeUndefined();
     expect(changes).toEqual([]);
+  });
+
+  it('where the watch goes silent when its own folder is renamed away (macOS), a poll notices and it waits (070)', async () => {
+    // FSEvents through libuv drops every event about the watched folder itself: no storm, no ENOENT,
+    // nothing. Only a poll of the folder sees it go.
+    present.add(PARENT);
+    present.add(ROOT);
+    const changes: string[] = [];
+    const handle = new NodeFileWatcher(50, { recursiveStrategy: 'native', guardRoot: true }).watch(ROOT, (p) => changes.push(p));
+    const live = watchOn(ROOT);
+    const poll = polls.get(ROOT);
+    expect(poll, 'the folder is not polled').toBeDefined();
+    expect(watchOn(PARENT), 'the guard opened a second FSEvents watch').toBeUndefined();
+
+    // A poll that finds the folder still there changes nothing.
+    poll!();
+    expect(live!.watcher.closed).toBe(false);
+
+    present.delete(ROOT);
+    absent.add(ROOT);
+    poll!();
+    expect(live!.watcher.closed, 'the silent watch was left open').toBe(true);
+    expect(polls.has(ROOT), 'the poll outlived the watch it guards').toBe(false);
+    const waiting = watchOn(PARENT);
+    expect(waiting, 'the renamed folder is not being waited for').toBeDefined();
+
+    present.add(ROOT);
+    absent.delete(ROOT);
+    waiting!.listener('rename', 'project');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(watchOn(ROOT)).toBeDefined();
+    expect(changes.length, 'the folder came back and nobody was told').toBeGreaterThan(0);
+
+    handle.dispose();
+    expect(watches.every((w) => w.watcher.closed), 'a watch outlived the handle').toBe(true);
+    expect(polls.size, 'a poll outlived the handle').toBe(0);
   });
 });

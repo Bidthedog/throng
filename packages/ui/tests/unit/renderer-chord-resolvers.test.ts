@@ -14,7 +14,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_KEYBINDINGS, shippedBindingsFor } from '@throng/core';
+import { DEFAULT_KEYBINDINGS, macosHostTraits, shippedBindingsFor } from '@throng/core';
+import { withHostTraits } from '@throng/core/testing';
 import { resolveKeydown } from '../../src/renderer/config/chord-key.js';
 import { resolveScoped } from '../../src/renderer/keybindings/scope.js';
 import { codeOnly } from '../shared/window-chords.js';
@@ -191,4 +192,38 @@ describe('every Ctrl+Shift+Alt default resolves on all five layouts (046 T106, F
     const mainRow = chordEventOnLayout('US', 'Digit0', { ctrlKey: true, shiftKey: true, altKey: true });
     expect(resolve(mainRow)).not.toBe('zoom.reset');
   });
+});
+
+/**
+ * 070 FR-029 — the same tier on macOS: Cmd stands where Ctrl stood, and the physical key is matched there too (Option
+ * would garble the produced character anyway). The Windows block above is unchanged and still runs under the default
+ * Windows traits.
+ */
+describe('every Shift+Alt+Meta default resolves on all five layouts on macOS (070 FR-029)', () => {
+  const LAYOUTS: Layout[] = ['US', 'UK', 'German', 'French', 'Polish'];
+  const NO_TABS = { tabs: [], activeTabId: null };
+  const MACOS = macosHostTraits('/tmp/throng', []);
+
+  const tier1 = Object.entries(shippedBindingsFor('macos').bindings).flatMap(([action, chords]) =>
+    (chords ?? [])
+      .filter((chord) => /^Shift\+Alt\+Meta\+[^,]+$/.test(chord))
+      .map((chord) => ({ action, chord, code: chordEvent(chord).code })),
+  );
+
+  it('finds shipped macOS tier-1 defaults to check — the discovery is not vacuous', () => {
+    expect(tier1.length).toBeGreaterThan(5);
+  });
+
+  for (const { action, chord, code } of tier1) {
+    for (const layout of LAYOUTS) {
+      it(`${action} (${chord}, physical ${code}) resolves on the ${layout} layout`, () => {
+        withHostTraits(MACOS, () => {
+          const e = chordEventOnLayout(layout, code, { metaKey: true, shiftKey: true, altKey: true });
+          expect(resolveKeydown(e, (ev) => resolveScoped(DEFAULT_KEYBINDINGS, ev, NO_TABS, { transientFocus: false }))).toBe(
+            action,
+          );
+        });
+      });
+    }
+  }
 });

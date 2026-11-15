@@ -5,8 +5,11 @@ import {
   combinationsOf,
   declareArtifactSet,
   END_STATE_STEPS,
+  MACOS_PACKAGE_STEPS,
+  MACOS_RUNNER_SLOTS,
   reconcileArtifactSet,
   resolveArtifact,
+  RUNNER_LIMITED_STEPS,
   VERIFICATION_STEPS,
 } from '../../src/index.js';
 
@@ -205,7 +208,7 @@ describe('combinationsOf (058 FR-028, FR-030)', () => {
     return found;
   };
 
-  it('yields exactly one combination per artifact-and-scope, in a fixed order', () => {
+  it('yields exactly one combination per artifact-and-scope, and per macOS runner, in a fixed order', () => {
     expect(combos.map((c) => c.id)).toEqual([
       'setup-user',
       'setup-machine',
@@ -216,6 +219,10 @@ describe('combinationsOf (058 FR-028, FR-030)', () => {
       'deb',
       'rpm',
       'tarball',
+      'dmg-current',
+      'dmg-previous',
+      'macarchive-current',
+      'macarchive-previous',
     ]);
   });
 
@@ -318,7 +325,9 @@ describe('the Linux artifacts (063)', () => {
 
   it('still holds a publish to every platform', () => {
     const linuxOnly = linux.artifacts.map((a) => a.filename);
-    expect(reconcileArtifactSet(set, linuxOnly).missing).toHaveLength(4);
+    const others = set.artifacts.filter((a) => a.platform !== 'linux').map((a) => a.filename);
+    expect(others.length).toBeGreaterThanOrEqual(4);
+    expect(reconcileArtifactSet(set, linuxOnly).missing).toEqual(others);
   });
 
   it('verifies the .rpm on an rpm-based distribution', () => {
@@ -337,5 +346,93 @@ describe('the Linux artifacts (063)', () => {
     const tarball = resolveArtifact(set, 'tarball').applicableSteps;
     for (const step of END_STATE_STEPS) expect(tarball).toContain(step);
     expect(tarball).not.toContain('uninstall');
+  });
+});
+
+/** 070 FR-003, FR-009, FR-010, FR-037, research R24 — the macOS copies join the set; nothing else moves. */
+describe('the macOS artifacts (070)', () => {
+  const set = declareArtifactSet('1.0.0-alpha17');
+  const mac = artifactSetForPlatform(set, 'darwin');
+  const before070 = set.artifacts.filter((a) => a.platform !== 'darwin');
+
+  it('declares a disk image and an archive for Apple silicon, each with the version and architecture in its name', () => {
+    expect(mac.artifacts.map((a) => [a.role, a.filename])).toEqual([
+      ['dmg', 'throng-1.0.0-alpha17-mac-arm64.dmg'],
+      ['macarchive', 'throng-1.0.0-alpha17-mac-arm64.zip'],
+    ]);
+  });
+
+  it('declares no Intel copy', () => {
+    expect(set.artifacts.filter((a) => /mac|darwin/.test(a.filename) && !a.filename.includes('arm64'))).toEqual([]);
+  });
+
+  it('keeps every Windows and Linux artifact, in order, after them nothing but the macOS two', () => {
+    expect(before070.map((a) => a.role)).toEqual(['setup', 'msi', 'portable', 'archive', 'deb', 'rpm', 'tarball']);
+    expect(set.artifacts.slice(-2).map((a) => a.platform)).toEqual(['darwin', 'darwin']);
+  });
+
+  it('holds the disk image to every macOS step, and the archive to all of them but the in-use upgrade', () => {
+    expect(resolveArtifact(set, 'dmg').applicableSteps).toEqual(MACOS_PACKAGE_STEPS);
+    expect(resolveArtifact(set, 'macarchive').applicableSteps).toEqual(MACOS_PACKAGE_STEPS.filter((s) => s !== 'in-use-upgrade'));
+  });
+
+  it('names the macOS steps in the order data-model.md gives them', () => {
+    expect(MACOS_PACKAGE_STEPS).toEqual([
+      'install',
+      'launch',
+      'version-match',
+      'self-contained',
+      'core-journey',
+      'reattach',
+      'in-use-upgrade',
+      'checksum-match',
+      'no-write',
+      'cli-command',
+      'uninstall',
+      'residue-scan',
+      'gatekeeper-first-launch',
+    ]);
+    for (const step of MACOS_PACKAGE_STEPS) expect(VERIFICATION_STEPS).toContain(step);
+    for (const step of END_STATE_STEPS) expect(MACOS_PACKAGE_STEPS).toContain(step);
+  });
+
+  it('lets only the Gatekeeper first launch be unproven among the macOS steps (FR-010)', () => {
+    expect(MACOS_PACKAGE_STEPS.filter((s) => RUNNER_LIMITED_STEPS.includes(s))).toEqual(['gatekeeper-first-launch']);
+  });
+
+  it('verifies each copy once on each supported release, by slot rather than by runner label (FR-010, FR-037)', () => {
+    expect(MACOS_RUNNER_SLOTS).toEqual(['current', 'previous']);
+    const combos = combinationsOf(mac);
+    expect(combos.map((c) => [c.id, c.role, c.runner, c.verdictFile])).toEqual([
+      ['dmg-current', 'dmg', 'current', 'verification-verdict-dmg-current.json'],
+      ['dmg-previous', 'dmg', 'previous', 'verification-verdict-dmg-previous.json'],
+      ['macarchive-current', 'macarchive', 'current', 'verification-verdict-macarchive-current.json'],
+      ['macarchive-previous', 'macarchive', 'previous', 'verification-verdict-macarchive-previous.json'],
+    ]);
+    for (const c of combos) {
+      expect(c).toMatchObject({ platform: 'darwin', container: '', scope: null });
+      expect(c.applicableSteps).toEqual(resolveArtifact(set, c.role).applicableSteps);
+    }
+  });
+
+  it('gives no Windows or Linux combination a runner slot, so their matrices do not change', () => {
+    for (const c of combinationsOf(set).filter((c) => c.platform !== 'darwin')) expect(c).not.toHaveProperty('runner');
+  });
+
+  it('holds a macOS build only to the macOS files, and a publish to all of them (FR-009)', () => {
+    const names = mac.artifacts.map((a) => a.filename);
+    expect(reconcileArtifactSet(mac, names).matched).toBe(true);
+    expect(reconcileArtifactSet(mac, names.slice(1)).missing).toEqual([names[0]]);
+    expect(reconcileArtifactSet(mac, [...names, 'throng-1.0.0-alpha17-mac-x64.dmg']).unexpected).toEqual([
+      'throng-1.0.0-alpha17-mac-x64.dmg',
+    ]);
+    expect(reconcileArtifactSet(set, before070.map((a) => a.filename)).missing).toEqual(names);
+  });
+
+  it('says who each one is for, and that it is for Apple silicon', () => {
+    for (const artifact of mac.artifacts) {
+      expect(artifact.label).toMatch(/macOS/);
+      expect(`${artifact.label} ${artifact.audience}`).toMatch(/Apple silicon/);
+    }
   });
 });

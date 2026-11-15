@@ -105,7 +105,9 @@ describe('watchChild', () => {
 
   it('keeps only the last 4 KB of a noisy stderr (FR-014)', async () => {
     const r = recorder();
-    watchChild(node("process.stderr.write('a'.repeat(100000) + 'THE-END'); process.exit(2)"), {
+    // Exit from the write's callback: a pipe write is asynchronous on macOS, so an exit straight after it can cut the
+    // 100 KB short before THE-END reaches the parent (synchronous on Linux, which is why this held there).
+    watchChild(node("process.stderr.write('a'.repeat(100000) + 'THE-END', () => process.exit(2))"), {
       name: 'noisy',
       log: r.log,
       longLived: false,

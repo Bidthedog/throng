@@ -9,6 +9,7 @@ import { EditorService } from '../../src/main/editor-service.js';
 import { EditorCoordinator, type DocMeta } from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
 import { editDocument } from './helpers/edit-document.js';
+import { watchStarted } from './helpers/watch-started.js';
 
 // FR-028 (replaces the removed dirty-file lock): soft external-change detection.
 // A CLEAN editor live-reloads the on-disk change; a DIRTY editor gets a one-shot
@@ -60,6 +61,7 @@ describe('editor soft external-change detection (FR-028)', () => {
     const file = join(root, 'doc.txt');
     await writeFile(file, 'v1\n');
     await coord.load({ ...meta('p1', file) });
+    await watchStarted();
     expect(coord.getContent('p1')).toMatchObject({ text: 'v1\n', dirty: false });
 
     await writeFile(file, 'v2-external\n'); // edited by another program
@@ -78,6 +80,7 @@ describe('editor soft external-change detection (FR-028)', () => {
     const file = join(root, 'doc.txt');
     await writeFile(file, 'base\n');
     await coord.load({ ...meta('p2', file) });
+    await watchStarted();
     editDocument(coord, meta('p2', file), 'my unsaved edit\n');
     synced.length = 0;
 
@@ -98,6 +101,7 @@ describe('editor soft external-change detection (FR-028)', () => {
     const file = join(root, 'doc.txt');
     await writeFile(file, 'x\n');
     await coord.load({ ...meta('p3', file) });
+    await watchStarted();
     await rm(file, { force: true });
     await until(() => (coord.getContent('p3')?.fileMissing ? true : undefined));
     expect(coord.getContent('p3')).toMatchObject({ fileMissing: true, dirty: true });
@@ -123,6 +127,7 @@ describe('the "changed on disk" notice is about the DISK, not the buffer', () =>
     await writeFile(mine, 'v1\n');
     await writeFile(other, 'unrelated\n');
     await coord.load({ ...meta('p1', mine) });
+    await watchStarted();
 
     // Unsaved changes — so the buffer and the disk now differ, legitimately.
     editDocument(coord, meta('p1', mine), 'v1 plus my unsaved edit\n');
@@ -142,6 +147,7 @@ describe('the "changed on disk" notice is about the DISK, not the buffer', () =>
     const file = join(root, 'doc.txt');
     await writeFile(file, 'v1\n');
     await coord.load({ ...meta('p1', file) });
+    await watchStarted();
     editDocument(coord, meta('p1', file), 'unsaved\n');
 
     // A new file appears in the folder — the sort of thing a build, a git checkout, or another
@@ -157,7 +163,9 @@ describe('the "changed on disk" notice is about the DISK, not the buffer', () =>
     const file = join(root, 'doc.txt');
     await writeFile(file, 'v1\n');
     await coord.load({ ...meta('p1', file) });
+    await watchStarted();
     editDocument(coord, meta('p1', file), 'my unsaved edit\n');
+    await watchStarted();
 
     await writeFile(file, 'changed by someone else\n');
 

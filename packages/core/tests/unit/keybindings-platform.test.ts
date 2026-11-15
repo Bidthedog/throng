@@ -1,30 +1,32 @@
 /**
  * Platform-keyed shipped chords (016, FR-017e / SC-010b — Principle II).
  *
- * Windows is the only platform this build ships, and the only one whose values are populated.
- * What must NOT happen is a macOS chord GUESSED here — an invented default is worse than an
- * absent one, because it looks decided.
+ * All three platforms are populated. macOS's table is DERIVED from Windows' by a stated rule (070 FR-029,
+ * superseding this file's earlier "no macOS chord is guessed"); `keybindings-macos.test.ts` holds its invariants.
  *
- * The requirement is about SHAPE: adding `macos` later must be an addition of VALUES, with no
- * existing key moving or changing type. That is what these assertions pin.
+ * The requirement is about SHAPE: adding `macos` was an addition of VALUES, with no existing key moving or changing
+ * type. That is what these assertions pin.
  */
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_BINDING_PLATFORM,
   DEFAULT_KEYBINDINGS,
+  MACOS_BINDINGS,
   SHIPPED_KEYBINDINGS_BY_PLATFORM,
   shippedBindingsFor,
 } from '../../src/config/keybindings.js';
 
 describe('platform-keyed shipped defaults (FR-017e)', () => {
   it('keys the shipped record by platform', () => {
-    expect(Object.keys(SHIPPED_KEYBINDINGS_BY_PLATFORM)).toEqual(['windows', 'linux']);
+    expect(Object.keys(SHIPPED_KEYBINDINGS_BY_PLATFORM)).toEqual(['windows', 'linux', 'macos']);
     expect(DEFAULT_BINDING_PLATFORM).toBe('windows');
   });
 
-  it('populates Windows and Linux (062 FR-033), and no macOS chord is guessed', () => {
-    expect(SHIPPED_KEYBINDINGS_BY_PLATFORM.macos).toBeUndefined();
+  it('populates Windows, Linux (062 FR-033) and macOS, whose table is the derived one (070 FR-029)', () => {
     expect(SHIPPED_KEYBINDINGS_BY_PLATFORM.linux).toBeDefined();
+    expect(SHIPPED_KEYBINDINGS_BY_PLATFORM.macos).toBe(MACOS_BINDINGS);
+    expect(shippedBindingsFor('macos').bindings['editor.save']).toEqual(['Meta+S']);
+    expect(shippedBindingsFor('macos').columnSelectModifier).toBe('Alt');
   });
 
   it('carries the chords AND the column-select mouse modifier per platform — the modifier is a default too', () => {
@@ -45,10 +47,9 @@ describe('platform-keyed shipped defaults (FR-017e)', () => {
     expect(Object.keys(withMac).sort()).toEqual(['linux', 'macos', 'windows']);
   });
 
-  it('resolves the current platform for an unpopulated one, rather than yielding nothing', () => {
-    // Running on macOS today must not leave the app with NO bindings; it falls back to the one
-    // populated platform. That is a stopgap the shape makes visible, not a guess baked into data.
-    expect(shippedBindingsFor('macos').bindings).toEqual(shippedBindingsFor('windows').bindings);
+  it('resolves macOS to its own table, not the Windows fallback', () => {
+    expect(shippedBindingsFor('macos')).not.toBe(shippedBindingsFor('windows'));
+    expect(shippedBindingsFor('macos').bindings['file.copy']).toEqual(['Meta+C']);
   });
 
   it('exposes `.bindings` as the resolved view every existing reader already uses', () => {
