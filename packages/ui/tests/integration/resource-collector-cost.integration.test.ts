@@ -22,8 +22,10 @@ import { fork } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { skipUnlessWindows } from '@throng/core/testing';
 import type { CollectorToMain, ResourceRoster } from '@throng/ipc-contract';
 import { LinuxGpuUsage, LinuxProcessMetrics } from '@throng/platform-linux';
+import { MacosProcessMetrics } from '@throng/platform-macos';
 import { WindowsElevation, WindowsProcessMetrics } from '@throng/platform-windows';
 
 const ENTRY = fileURLToPath(new URL('../../dist/collector/resource-collector-entry.js', import.meta.url));
@@ -72,7 +74,11 @@ async function measure(withTrace: boolean): Promise<void> {
     // Start measuring after the first tick, so process start-up is not counted as running cost.
     await until(() => summaries > 0);
     summaries = 0;
-    const metrics = process.platform === 'win32' ? new WindowsProcessMetrics() : new LinuxProcessMetrics(new LinuxGpuUsage());
+    const metrics = process.platform === 'win32'
+      ? new WindowsProcessMetrics()
+      : process.platform === 'darwin'
+        ? new MacosProcessMetrics()
+        : new LinuxProcessMetrics(new LinuxGpuUsage());
     const cpu = async () => (await metrics.snapshot()).readings.find((r) => r.pid === child.pid)!.cpuTime;
     const c0 = await cpu();
     const t0 = performance.now();
@@ -96,7 +102,7 @@ async function measure(withTrace: boolean): Promise<void> {
 describe('the collector’s own cost (055 SC-004)', { tags: ['regression'] }, () => {
   it('averages under 1% of one core in summary mode at the default 2 s interval', () => measure(false), WINDOW_MS + 15_000);
 
-  it.skipIf(!new WindowsElevation().isElevated())(
+  it.skipIf(skipUnlessWindows('the network trace is ETW, which needs an elevated Windows runner') || !new WindowsElevation().isElevated())(
     'stays under 1% of one core with the network trace running (SC-011)',
     () => measure(true),
     WINDOW_MS + 30_000,

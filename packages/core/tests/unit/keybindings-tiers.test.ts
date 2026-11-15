@@ -130,6 +130,10 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'preview.toggleSyncScroll': 'outside',
   // 059 FR-041 — unbound by default.
   'editor.reopenWithEncoding': 'outside',
+  // 070 FR-024a, FR-027 — unbound on Windows and Linux; on macOS Settings… is Cmd+, (no Ctrl tier applies).
+  'app.settings': 'outside',
+  'app.installCommandLine': 'outside',
+  'app.uninstallCommandLine': 'outside',
   'editor.changeEncoding': 'outside',
   'editor.convertLineEndingsToCr': 'outside',
   'editor.insertLineBreakLf': 'outside',
@@ -424,6 +428,10 @@ describe('the FR-101 tier guard', () => {
       'editor.toggleWhitespace': [],
       'editor.convertLineEndingsToLf': [],
       'editor.convertLineEndingsToCrlf': [],
+      // 070 FR-024a, FR-027 — unbound here; macOS binds Settings… to Cmd+, (MACOS_BINDING_OVERRIDES).
+      'app.settings': [],
+      'app.installCommandLine': [],
+      'app.uninstallCommandLine': [],
     };
     expect(DEFAULT_KEYBINDINGS.bindings).toEqual(EXPECTED);
   });

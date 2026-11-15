@@ -6,6 +6,7 @@ import { DEFAULT_APP_SETTINGS, THRONG_THEME, type IConfigSettings } from '@thron
 import { FileConfigStore } from '../../src/main/config-store.js';
 import { startConfigWatcher, type ConfigPayload } from '../../src/main/config-watcher.js';
 import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
+import { watchStarted } from './helpers/watch-started.js';
 
 /**
  * FR-041 (external-change reflection, clean side): when a config file is edited
@@ -52,6 +53,7 @@ describe('preferences external-change reflection (FR-041 clean side)', () => {
     const broadcasts: ConfigPayload[] = [];
     const sub = startConfigWatcher({ store, watcher: new NodeFileWatcher(20), config, broadcast: (p) => broadcasts.push(p) });
     try {
+      await watchStarted();
       // Simulate an external editor writing the file directly (not via config.write).
       writeFileSync(
         join(root, 'settings.json'),
@@ -75,6 +77,7 @@ describe('preferences external-change reflection (FR-041 clean side)', () => {
     const broadcasts: ConfigPayload[] = [];
     const sub = startConfigWatcher({ store, watcher: new NodeFileWatcher(20), config, broadcast: (p) => broadcasts.push(p) });
     try {
+      await watchStarted();
       writeFileSync(
         join(root, 'themes', 'throng.json'),
         JSON.stringify({ ...THRONG_THEME, colours: { ...THRONG_THEME.colours, accent: '#abcdef' } }, null, 2),

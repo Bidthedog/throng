@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_APP_SETTINGS, SHIPPED_PREVIEW_PROVIDERS, initialFold, type FoldState } from '@throng/core';
+import { DEFAULT_APP_SETTINGS, SHIPPED_PREVIEW_PROVIDERS, initialFold, pathCompareKey, type FoldState } from '@throng/core';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
 import { EditorService } from '../../src/main/editor-service.js';
@@ -93,7 +93,8 @@ describe('fold state is document state, held beside word wrap (047 R3)', () => {
     const a = await file('a.md', '# A\n');
     await coord.load({ ...meta('e1', a) });
     const key = coord.foldKeyForPanel('e1')!;
-    expect(key).toBe(`file:${process.platform === 'win32' ? a.replace(/\\/g, '/').toLowerCase() : a}`);
+    // The host's compare key: case-folded on Windows and a default Mac volume, as it is on disk (070 FR-020).
+    expect(key).toBe(`file:${pathCompareKey(a)}`);
 
     expect(coord.foldStateFor(key, 'expanded')).toEqual(initialFold('expanded'));
     // Seeded once: asking again with a different seed does not re-seed.

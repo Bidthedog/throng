@@ -221,6 +221,10 @@ describe('a stranded editor recovers when its path comes back (027 / #161)', () 
     // file on while it is away.
     await rename(dir, join(root, 'src-moved'));
     await writeFile(join(root, 'src-moved', 'code.txt'), 'CHANGED-WHILE-AWAY\n');
+    // sleep-justified: on macOS the folder's going is seen only by a poll every `ROOT_POLL_MS` (`guardsRootByDefault`,
+    // 070). Renamed back within the same FSEvents window, the kernel can file the write under the restored path and pass
+    // without that guard; a second apart, as a person does it, the poll is what the recovery rests on. Elsewhere, no wait.
+    if (process.platform === 'darwin') await new Promise((r) => setTimeout(r, 1000));
 
     // Rectify the cause, exactly as the user does.
     await rename(join(root, 'src-moved'), dir);

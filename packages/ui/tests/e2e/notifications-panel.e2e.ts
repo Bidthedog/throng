@@ -91,9 +91,9 @@ test('a kept notice raised in Preferences reaches the main window panel, and it 
       const saved = obstruct(settingsPath);
       try {
         const editor = prefs.getByTestId('json-editor-settings').locator('.cm-content');
-        await editor.click();
-        await prefs.keyboard.press('Control+A');
-        await editor.pressSequentially('{ "editor": { "autoSave": false } }');
+        // Set, not typed: typed into CodeMirror, select-all and its bracket closing came out as invalid JSON on a hosted
+        // Mac (line 1, column 10), and the save this test needs to fail was never attempted (070).
+        await editor.fill('{ "editor": { "autoSave": false } }');
         await prefs.getByTestId('prefs-mode-toggle').click();
         await expect(prefs.getByTestId('prefs-notice')).toBeVisible({ timeout: 20_000 });
       } finally {

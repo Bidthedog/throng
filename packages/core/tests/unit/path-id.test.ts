@@ -12,7 +12,9 @@
  * These cases are the ones raw `===` cannot see.
  */
 import { describe, it, expect } from 'vitest';
-import { normaliseForCompare, samePath, isUnderPath } from '../../src/fs/path-id.js';
+import { normaliseForCompare, pathCompareKey, remainderUnder, samePath, isUnderPath } from '../../src/fs/path-id.js';
+import { linuxHostTraits, macosHostTraits } from '../../src/platform/host-traits.js';
+import { withHostTraits } from '../../src/testing/with-host-traits.js';
 
 describe('normaliseForCompare', () => {
   it('spells every separator as `/`', () => {
@@ -102,6 +104,70 @@ describe('isUnderPath', () => {
       expect(isUnderPath('C:/project/..hidden', 'C:/project')).toBe(true);
       expect(isUnderPath('C:/project/a..b/one.txt', 'C:/project')).toBe(true);
       expect(isUnderPath('C:/project/notes...txt', 'C:/project')).toBe(true);
+    });
+  });
+});
+
+/** 070 FR-020, FR-021, research R4: the volume decides case, and Unicode normalisation never splits one file in two. */
+describe('macOS path identity', () => {
+  const macos = macosHostTraits('/var/folders/zz/T/throng', ['/Volumes/Work', '/Volumes/Work/Deep']);
+  // Built from code points: the two spellings must differ byte for byte, whatever an editor does to the source.
+  const nfc = `caf${String.fromCharCode(0xe9)}`;
+  const nfd = `cafe${String.fromCharCode(0x301)}`;
+
+  it('treats two cases of one name as one file on a default volume', () => {
+    withHostTraits(macos, () => {
+      expect(samePath('/Users/dev/p/README.md', '/Users/dev/p/readme.md')).toBe(true);
+      expect(isUnderPath('/Users/Dev/P/a.md', '/users/dev/p')).toBe(true);
+    });
+  });
+
+  it('treats them as two files under a case-sensitive volume', () => {
+    withHostTraits(macos, () => {
+      expect(samePath('/Volumes/Work/README.md', '/Volumes/Work/readme.md')).toBe(false);
+      expect(samePath('/Volumes/Work/README.md', '/Volumes/Work/README.md/')).toBe(true);
+      expect(isUnderPath('/Volumes/Work/Src/a.ts', '/Volumes/Work/src')).toBe(false);
+    });
+  });
+
+  it('matches the root itself by the case rule of the volume that holds it, so either spelling of the mount is under it', () => {
+    withHostTraits(macos, () => {
+      expect(samePath('/volumes/work/README.md', '/Volumes/Work/README.md')).toBe(true);
+      expect(samePath('/volumes/work/README.md', '/Volumes/Work/readme.md')).toBe(false);
+      // A sibling whose name merely starts like the root is not under it.
+      expect(samePath('/Volumes/Workshop/A.md', '/Volumes/Workshop/a.md')).toBe(true);
+    });
+  });
+
+  it('lets the longest root win', () => {
+    withHostTraits(macos, () => {
+      expect(pathCompareKey('/Volumes/Work/Deep/X.md')).toBe('/volumes/work/deep/X.md');
+    });
+  });
+
+  it('can treat the whole boot volume as case-sensitive', () => {
+    withHostTraits(macosHostTraits('/tmp/throng', ['/']), () => {
+      expect(samePath('/Users/dev/README.md', '/Users/dev/readme.md')).toBe(false);
+    });
+  });
+
+  it('treats NFD and NFC spellings of one name as the same file, for comparison only', () => {
+    withHostTraits(macos, () => {
+      expect(samePath(`/Users/dev/${nfd}.md`, `/Users/dev/${nfc}.md`)).toBe(true);
+      expect(samePath(`/Volumes/Work/${nfd}`, `/Volumes/Work/${nfc}`)).toBe(true);
+      expect(isUnderPath(`/Users/dev/${nfd}/x.md`, `/Users/dev/${nfc}`)).toBe(true);
+      // The remainder is cut from the path as spelled, never from its normalised form.
+      expect(remainderUnder(`/Users/dev/${nfd}/${nfd}.md`, `/Users/dev/${nfc}`)).toBe(`/${nfd}.md`);
+    });
+  });
+
+  it('leaves Windows and Linux results unchanged (FR-039)', () => {
+    expect(normaliseForCompare(`C:\\P\\${nfd}\\`)).toBe(`c:/p/${nfd}`);
+    expect(samePath(`C:/p/${nfd}`, `C:/p/${nfc}`)).toBe(false);
+    withHostTraits(linuxHostTraits('/run/user/1000/throng'), () => {
+      expect(samePath('/p/README.md', '/p/readme.md')).toBe(false);
+      expect(samePath(`/p/${nfd}`, `/p/${nfc}`)).toBe(false);
+      expect(pathCompareKey('/P/Note.txt')).toBe('/P/Note.txt');
     });
   });
 });

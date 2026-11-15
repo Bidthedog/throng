@@ -87,7 +87,7 @@ test('creates an editor, types, saves within the tree, and shows type + file pil
 
       // Ctrl+S on a new doc → save-location chooser (stubbed in-tree) → written LF.
       await stubSaveDialog(app, savePath);
-      await win.keyboard.press('Control+s');
+      await win.keyboard.press('ControlOrMeta+s');
 
       await expect
         .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
@@ -136,7 +136,7 @@ test('the File Explorer pane gates Ctrl+S (no-op) and highlights when active', {
 
       // Ctrl+S is now a no-op — no save dialog runs, nothing is written.
       await stubSaveDialog(app, savePath);
-      await win.keyboard.press('Control+s');
+      await win.keyboard.press('ControlOrMeta+s');
       // sleep-justified: gated at the keybinding-scope layer, before it ever reaches the editor's
       // sleep-justified: save handler — so there is no event, notice or file write to observe. The
       // sleep-justified: absence itself is the claim, and only outrunning the clock can show it.

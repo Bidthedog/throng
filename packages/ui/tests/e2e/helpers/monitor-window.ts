@@ -1,7 +1,8 @@
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 
 /** `view.resourceMonitor`'s default. */
-export const MONITOR_CHORD = 'Control+Shift+Alt+Y';
+// ControlOrMeta: Cmd on macOS (070 FR-029), Control everywhere else.
+export const MONITOR_CHORD = 'ControlOrMeta+Shift+Alt+Y';
 
 /**
  * 055 R14 (FR-081) — the Resource Monitor is its own window, so a spec finds it the way the

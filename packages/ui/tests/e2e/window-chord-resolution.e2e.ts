@@ -82,7 +82,8 @@ const KEEP_SHIFT = discoverKeepShiftChords();
  */
 function press(token: string): string {
   const key = keyOf(token);
-  const mods = token.slice(0, token.length - key.length).replace(/Ctrl\+/g, 'Control+');
+  // ControlOrMeta: the Windows token's Ctrl is Cmd on macOS (070 FR-029), and still Control everywhere else.
+  const mods = token.slice(0, token.length - key.length).replace(/Ctrl\+/g, 'ControlOrMeta+');
   const shifted = /(^|\+)Shift\+/.test(token);
   /*
    * A DIGIT is pressed by its physical code (046 T049). Measured on this engine: `Control+Shift+0`

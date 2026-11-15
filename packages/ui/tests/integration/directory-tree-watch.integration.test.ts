@@ -14,11 +14,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Disposable } from '@throng/core';
 import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
+import { skipUnlessLinux } from '@throng/core/testing';
 
 /** How long a report may take: the watcher's 30 ms debounce, with room for a loaded CI runner. */
 const REPORT_BOUND_MS = 3000;
 
-describe.runIf(process.platform !== 'win32')('per-directory recursive watch (#585)', () => {
+describe.skipIf(skipUnlessLinux('the per-directory watch is the strategy only Linux uses (#585); macOS watches natively'))('per-directory recursive watch (#585)', () => {
   let root = '';
   let handle: Disposable | null = null;
   const reported: string[] = [];

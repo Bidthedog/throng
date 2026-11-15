@@ -444,7 +444,10 @@ export function shippedTwoStroke(action: string): PlaywrightTwoStroke {
  * rather than pressing nothing, which would pass any negative assertion that followed.
  */
 export function shippedPresses(action: string): string[] {
-  const token = shippedBindingsFor().bindings[action]?.[0];
+  // The table of the OS the app under test runs on: a Mac ships Cmd chords (070 FR-029), and pressing the Windows
+  // default there reaches no binding at all.
+  const os = process.platform === 'darwin' ? 'macos' : process.platform === 'linux' ? 'linux' : 'windows';
+  const token = shippedBindingsFor(os).bindings[action]?.[0];
   if (token === undefined) throw new Error(`${action} ships no binding — nothing to press`);
   return toPlaywrightPresses(token);
 }

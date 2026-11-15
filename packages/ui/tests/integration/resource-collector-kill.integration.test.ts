@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { killOrder, type ResourceNode } from '@throng/core';
 import type { CollectorToMain, DetailFrame, KillResult, ResourceRoster } from '@throng/ipc-contract';
 import { LinuxGpuUsage, LinuxProcessMetrics } from '@throng/platform-linux';
+import { MacosProcessMetrics } from '@throng/platform-macos';
 import { WindowsProcessMetrics } from '@throng/platform-windows';
 import { ResourceCollector } from '../../src/collector/collector.js';
 
@@ -53,7 +54,11 @@ async function setUp() {
   };
   const frames: DetailFrame[] = [];
   const kills = new Map<number, (r: KillResult) => void>();
-  const metrics = process.platform === 'win32' ? new WindowsProcessMetrics() : new LinuxProcessMetrics(new LinuxGpuUsage());
+  const metrics = process.platform === 'win32'
+      ? new WindowsProcessMetrics()
+      : process.platform === 'darwin'
+        ? new MacosProcessMetrics()
+        : new LinuxProcessMetrics(new LinuxGpuUsage());
   const c: ResourceCollector = new ResourceCollector({
     metrics,
     collectorPid: process.pid,

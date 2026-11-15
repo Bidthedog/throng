@@ -161,6 +161,17 @@ async function caretReadout(win: Page, panelId: string): Promise<CaretReadout> {
     editor.locator('.cm-editor.cm-focused .cm-cursor-primary'),
     'the editor never drew a caret — focus did not come back to the view',
   ).toBeVisible();
+  // The caret and the gutter are drawn by separate measure cycles: after a jump that scrolls, the caret can stand at
+  // its new line one cycle before the gutter has rows for the new viewport, which the hosted Macs caught on every run
+  // (070). The reading is retried until both agree, and a gutter that never catches up still fails, after 5 s.
+  let readout: CaretReadout | undefined;
+  await expect(async () => {
+    readout = await readCaret(editor);
+  }).toPass({ timeout: 5_000 });
+  return readout as CaretReadout;
+}
+
+function readCaret(editor: ReturnType<Page['getByTestId']>): Promise<CaretReadout> {
   return editor.evaluate((root) => {
     const caret = root.querySelector('.cm-cursor-primary') as HTMLElement | null;
     if (!caret) throw new Error('no caret is drawn — is the editor focused?');
@@ -330,7 +341,7 @@ test('the chord opens a modal with the caret in its input, and the line reached 
       await openFile(win, pid, 'plain.txt');
       await setWordWrap(win, pid, false);
       await focusContent(win, pid);
-      await win.keyboard.press('Control+Home');
+      await win.keyboard.press('ControlOrMeta+Home');
 
       const notices = await noticeCount(win);
 
@@ -381,7 +392,7 @@ test('in a WRAPPED document the number typed is still the number the gutter draw
       await openFile(win, pid, 'wrapped.txt');
       await setWordWrap(win, pid, true);
       await focusContent(win, pid);
-      await win.keyboard.press('Control+Home');
+      await win.keyboard.press('ControlOrMeta+Home');
 
       const notices = await noticeCount(win);
 
@@ -468,10 +479,10 @@ test('an open find bar keeps its query, its match count and its highlights, and 
       await openFile(win, pid, 'plain.txt');
       await setWordWrap(win, pid, false);
       await focusContent(win, pid);
-      await win.keyboard.press('Control+Home');
+      await win.keyboard.press('ControlOrMeta+Home');
 
       // A find session the user has built: a query, a count, and highlights on screen.
-      await win.keyboard.press('Control+f');
+      await win.keyboard.press('ControlOrMeta+f');
       await expect(win.getByTestId(`find-bar-${pid}`)).toBeVisible();
       // `line-001` matches line-0010 to line-0019 and nothing else — ten hits, all near the top of
       // the document, so they are on screen from the start and stay there across the short jump

@@ -61,6 +61,9 @@ vi.mock('node:fs', () => ({
   // says yes. Absent from the mock it would be `undefined`, and the first call a future change
   // made would fail as a TypeError rather than as the assertion it belongs to.
   existsSync: () => true,
+  // The macOS root guard polls; it is pinned off here, so these only have to exist.
+  watchFile: () => undefined,
+  unwatchFile: () => undefined,
 }));
 
 const { NodeFileWatcher } = await import('../../src/main/node-file-watcher.js');
@@ -70,7 +73,8 @@ const { NodeFileWatcher } = await import('../../src/main/node-file-watcher.js');
  * they pin that strategy — on Linux the default is the per-directory watch (#585), tested in
  * `directory-tree-watch.integration.test.ts`.
  */
-const NATIVE = { recursiveStrategy: 'native' } as const;
+// …and pin the macOS root guard off: it adds a parent watch these call counts do not expect, and has its own test.
+const NATIVE = { recursiveStrategy: 'native', guardRoot: false } as const;
 
 /** The watch the OS would currently be delivering events through — i.e. the newest one still open. */
 const liveWatch = (): Watch | undefined => [...watches].reverse().find((w) => !w.watcher.closed);

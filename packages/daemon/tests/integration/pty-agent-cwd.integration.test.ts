@@ -6,6 +6,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { DetectedShell, IPtyHost } from '@throng/core';
+import { skipUnlessWindows } from '@throng/core/testing';
 import { WindowsProcessCwd, WindowsShellDetection } from '@throng/platform-windows';
 import { PtyAgentHost } from '../../src/pty-agent-host.js';
 import { RpcRouter } from '../../src/rpc-router.js';
@@ -47,7 +48,7 @@ afterEach(async () => {
   root = undefined;
 });
 
-describe('a terminal started through the PTY agent reports its directory', () => {
+describe.skipIf(skipUnlessWindows('cmd.exe and the de-elevated PTY agent are Windows'))('a terminal started through the PTY agent reports its directory', () => {
   it.skipIf(!cmd)('cmd, through the agent, reports the folder it moved to — not the one it was started in', async () => {
     expect(existsSync(AGENT_ENTRY), `build the daemon first: ${AGENT_ENTRY} is missing`).toBe(true);
     root = realpathSync(mkdtempSync(join(tmpdir(), 'throng-agent-cwd-')));

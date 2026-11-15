@@ -82,6 +82,20 @@ describe('FilesService mutations confined to the project root (004 T038/T046)', 
     expect(await svc.delete([''], 'recycle')).toMatchObject({ error: expect.any(String) });
   });
 
+  it('says why a delete failed, in the system’s own words, not only which item', async () => {
+    await write('held.txt');
+    const refusing = new FilesService(
+      new NodeFileSystem(async () => {
+        throw new Error('macOS would not move the item to the Trash: permission denied');
+      }),
+      new ElectronShellIntegration({ showItemInFolder: () => {}, openPath: async () => '', openExternal: async () => {} }),
+    );
+    refusing.setRoot(root);
+    expect(await refusing.delete(['held.txt'], 'recycle')).toEqual({
+      error: 'Could not delete 1 item (held.txt). macOS would not move the item to the Trash: permission denied',
+    });
+  });
+
   it('creates a new folder with a de-duplicated name', async () => {
     const first = await svc.newFolder('');
     expect(first).toEqual({ relPath: 'New folder' });

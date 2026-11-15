@@ -70,6 +70,10 @@ describe('artifact-set list --combinations (058 FR-028, FR-030)', () => {
     ['deb', 'deb', '-', 'verification-verdict-deb.json'],
     ['rpm', 'rpm', '-', 'verification-verdict-rpm.json'],
     ['tarball', 'tarball', '-', 'verification-verdict-tarball.json'],
+    ['dmg-current', 'dmg', '-', 'verification-verdict-dmg-current.json'],
+    ['dmg-previous', 'dmg', '-', 'verification-verdict-dmg-previous.json'],
+    ['macarchive-current', 'macarchive', '-', 'verification-verdict-macarchive-current.json'],
+    ['macarchive-previous', 'macarchive', '-', 'verification-verdict-macarchive-previous.json'],
   ];
 
   it('prints one tab-separated line per combination — id, role, scope or "-", verdict file — and exits 0', () => {
@@ -178,6 +182,7 @@ describe('artifact-set, unknown input', () => {
 describe('artifact-set --platform (063 FR-016)', () => {
   const WINDOWS = ['throng-setup-1.2.3.exe', 'throng-1.2.3.msi', 'throng-portable-1.2.3.exe', 'throng-1.2.3.zip'];
   const LINUX = ['throng-1.2.3-amd64.deb', 'throng-1.2.3-x86_64.rpm', 'throng-1.2.3-linux-x64.tar.gz'];
+  const MAC = ['throng-1.2.3-mac-arm64.dmg', 'throng-1.2.3-mac-arm64.zip'];
 
   it('reconciles a Windows build against the Windows files only', () => {
     const r = runArtifactSet({ argv: ['reconcile', '--platform', 'win32'], version: VERSION, filenames: WINDOWS });
@@ -191,9 +196,34 @@ describe('artifact-set --platform (063 FR-016)', () => {
     expect(missing.stderr).toContain(LINUX[0]);
   });
 
-  it('holds a release to both platforms when no platform is named', () => {
+  it('holds a release to every platform when no platform is named', () => {
     expect(runArtifactSet({ argv: ['reconcile'], version: VERSION, filenames: LINUX }).code).toBe(4);
-    expect(runArtifactSet({ argv: ['reconcile'], version: VERSION, filenames: [...WINDOWS, ...LINUX] }).code).toBe(0);
+    expect(runArtifactSet({ argv: ['reconcile'], version: VERSION, filenames: [...WINDOWS, ...LINUX] }).code).toBe(4);
+    expect(runArtifactSet({ argv: ['reconcile'], version: VERSION, filenames: [...WINDOWS, ...LINUX, ...MAC] }).code).toBe(0);
+  });
+
+  it('reconciles a macOS build against the macOS files only, and names one that is missing (070 T055)', () => {
+    expect(runArtifactSet({ argv: ['reconcile', '--platform', 'darwin'], version: VERSION, filenames: MAC }).code).toBe(0);
+    // The Windows archive is a .zip too: a Mac's build is not held to it.
+    expect(runArtifactSet({ argv: ['reconcile', '--platform', 'darwin'], version: VERSION, filenames: [...MAC, WINDOWS[3]] }).code).toBe(4);
+    const missing = runArtifactSet({ argv: ['reconcile', '--platform', 'darwin'], version: VERSION, filenames: MAC.slice(1) });
+    expect(missing.code).toBe(4);
+    expect(missing.stderr).toContain(MAC[0]);
+  });
+
+  it('gives the macOS matrix one leg per copy per supported release, by slot (070 FR-010, FR-037)', () => {
+    const r = runArtifactSet({ argv: ['list', '--combinations', '--json', '--platform', 'darwin'], version: VERSION, filenames: [] });
+    expect(JSON.parse(r.stdout).map((c: { id: string; runner: string }) => [c.id, c.runner])).toEqual([
+      ['dmg-current', 'current'],
+      ['dmg-previous', 'previous'],
+      ['macarchive-current', 'current'],
+      ['macarchive-previous', 'previous'],
+    ]);
+  });
+
+  it('lists the macOS roles, which the build job checks it uploads', () => {
+    const r = runArtifactSet({ argv: ['list', '--platform', 'darwin'], version: VERSION, filenames: [] });
+    expect(r.stdout.split('\n').map((l: string) => l.split('\t')[0])).toEqual(['dmg', 'macarchive']);
   });
 
   it('narrows the verification matrix to the platform that runs it', () => {
@@ -202,9 +232,9 @@ describe('artifact-set --platform (063 FR-016)', () => {
   });
 
   it('refuses a platform it does not know', () => {
-    const r = runArtifactSet({ argv: ['list', '--platform', 'darwin'], version: VERSION, filenames: [] });
+    const r = runArtifactSet({ argv: ['list', '--platform', 'freebsd'], version: VERSION, filenames: [] });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain('darwin');
+    expect(r.stderr).toContain('freebsd');
   });
 
   it('does not read the platform value as the role to resolve', () => {

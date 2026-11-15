@@ -193,12 +193,11 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
     host.onExit(handle, () => {
       exited = true;
     });
-    let ticks = 0;
-    const ticker = setInterval(() => (ticks += 1), 10);
-    await host.end(handle, 8000);
-    clearInterval(ticker);
+    // Loop turns, as for the probes above, not 10 ms interval ticks: an end that resolves within 10 ms has blocked
+    // nothing, yet counted no tick, which failed the hosted Linux gate once when the shell left on SIGHUP at once.
+    const { turns: endTurns } = await loopTurnsDuring(() => host.end(handle, 8000));
     assert(exited, 'end() must resolve only once the exit has been observed');
-    assert(ticks > 0, 'end() must not block the event loop');
+    assert(endTurns > 0, 'end() must not block the event loop');
 
     // 6a. ending a terminal that is already gone resolves (edge case: ending one already exiting).
     await host.end(handle, 8000);

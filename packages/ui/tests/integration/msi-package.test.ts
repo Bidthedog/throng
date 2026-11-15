@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { declareArtifactSet } from '@throng/core';
+import { skipUnlessWindows } from '@throng/core/testing';
 
 /**
  * 058 FR-006 — a per-user MSI install never requests elevation. A dual-purpose package can only start
@@ -26,7 +27,7 @@ const msi = declareArtifactSet(version).artifacts.find((a) => a.role === 'msi')!
 const msiPath = join(repoRoot, 'dist', 'installer', msi.filename);
 
 const skipReason =
-  process.platform !== 'win32'
+  skipUnlessWindows('Windows Installer automation is Windows-only')
     ? 'Windows Installer automation is Windows-only'
     : !existsSync(msiPath)
       ? `${msi.filename} is not built — run npm run package first`

@@ -37,6 +37,8 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberCommand: false,
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
+      // 070 FR-031 — asserted on its own in settings-inertness-070.test.ts.
+      macOptionIsMeta: false,
       reloadMode: 'automatic',
       // 053 FR-014 — asserted on their own in `terminal-title-settings.test.ts`.
       titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
@@ -62,6 +64,8 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberCommand: false,
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
+      // 070 FR-031 — asserted on its own in settings-inertness-070.test.ts.
+      macOptionIsMeta: false,
       reloadMode: 'automatic',
       // 053 FR-014 — asserted on their own in `terminal-title-settings.test.ts`.
       titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
@@ -204,6 +208,8 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberCommand: false,
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
+      // 070 FR-031 — asserted on its own in settings-inertness-070.test.ts.
+      macOptionIsMeta: false,
       reloadMode: 'automatic',
       // 053 FR-014 — asserted on their own in `terminal-title-settings.test.ts`.
       titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,

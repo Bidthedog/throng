@@ -216,6 +216,9 @@ describe('#482 — the targeted rescan alone keeps the index current', () => {
       },
       ['**/node_modules'],
     );
+    // sleep-justified: FSEvents can hand over the setup's own mkdir and write after the watch has started, and the
+    // listing that follows is the setup's, not the churn's (once on a hosted Mac, 070). Elsewhere, no wait.
+    if (process.platform === 'darwin') await pause(600);
     const before = calls();
     for (let i = 0; i < 3; i += 1) {
       await writeFile(join(r, 'node_modules', 'foo', `f${i}.js`), String(i));

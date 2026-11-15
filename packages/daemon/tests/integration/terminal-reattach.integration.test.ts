@@ -85,6 +85,13 @@ describe('reattach + idle/busy close (US3)', () => {
       return l.result.sessions.find((s: any) => s.panelId === 'busy1')?.busy === true;
     };
     await waitFor(isBusyNow, 15_000, 'the daemon to classify busy1 as busy (its child pid to appear)');
+    // The other precondition, stated the same way: idle1 has finished starting. A login zsh on a hosted Mac runs
+    // children from its profile for a while after it opens, and closeIdle rightly kept it while one lived (070).
+    const isIdleNow = async (): Promise<boolean> => {
+      const l = await rpcCall(daemon.pipeName, 'terminal.list', { includeBusy: true });
+      return l.result.sessions.find((s: any) => s.panelId === 'idle1')?.busy === false;
+    };
+    await waitFor(isIdleNow, 15_000, 'the daemon to classify idle1 as idle (its startup children to finish)');
 
     // A plain list (no includeBusy) must NOT probe child pids — busy stays false
     // even for the busy session — so a bare count (the app-close prompt) is cheap.

@@ -135,6 +135,8 @@ interface Violation {
 
 /** Pulled out of `findViolations` so the literal/heuristic patterns can be proven on sample strings. */
 function hasRetiredSpelling(text: string): boolean {
+  // Apple's own settings pane (System Settings → Privacy & Security → Files & Folders) is not throng's tree (070 FR-025).
+  if (text.includes('Privacy & Security')) return false;
   return RETIRED_SPELLINGS.some((re) => re.test(text));
 }
 
@@ -169,6 +171,13 @@ describe('FR-002/SC-001 — the literal Title Case retired name is flagged anywh
    * `RETIRED_SPELLINGS`): all three spell it lower-case, as an ordinary plural noun, never
    * Title Case. A case-SENSITIVE literal match must not start flagging them.
    */
+  it.each([
+    ['names macOS’s own settings pane through Privacy & Security', 'Allow throng in System Settings, under Privacy & Security, Files & Folders.', false],
+    ['still names the tree when Privacy & Security is absent', 'Open it in Files & Folders.', true],
+  ])('%s (070 FR-025)', (_label, sample, flagged) => {
+    expect(hasRetiredSpelling(sample)).toBe(flagged);
+  });
+
   it('still does not flag the lower-case "files and/&amp; folders" false positives', () => {
     expect(hasRetiredSpelling('// rename directly for both files and folders. A temp-name dance would…')).toBe(false);
     expect(hasRetiredSpelling('// terminal takes any tree drag, files and folders alike, as text at the prompt.')).toBe(false);

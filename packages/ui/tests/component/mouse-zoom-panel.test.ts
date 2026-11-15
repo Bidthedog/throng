@@ -43,7 +43,11 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   THRONG_THEME,
+  WINDOWS_HOST_TRAITS,
   ZOOM_STEP,
+  configureHostTraits,
+  macosHostTraits,
+  shippedBindingsFor,
   type Keybindings,
   type Panel,
   type WorkspaceLayout,
@@ -324,5 +328,37 @@ describe('046 fix round — a horizontal wheel/tilt event (deltaY 0) is ignored,
     expect(notPrevented, 'not a vertical zoom gesture — nothing here claims it').toBe(true);
     expect(zoomOf('p2')).toBe(SEEDED_ZOOM);
     expect(zoomBy).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 070 FR-030 — on macOS the gesture is Cmd's, the platform's primary modifier, as the shipped `Meta+WheelUp` says;
+ * Ctrl+wheel is left alone there. Every case above runs under the default Windows traits, unchanged.
+ */
+describe('Cmd+Wheel / Cmd+MiddleClick zoom the panel under the pointer on macOS (070 FR-030)', () => {
+  beforeEach(() => configureHostTraits(macosHostTraits('/tmp/throng', [])));
+  afterEach(() => configureHostTraits(WINDOWS_HOST_TRAITS));
+  const MAC_BINDINGS: Keybindings = { version: 1, bindings: shippedBindingsFor('macos').bindings };
+
+  it('Cmd+WheelUp bumps the panel under the pointer IN; Ctrl+WheelUp does nothing', async () => {
+    await mount(MAC_BINDINGS);
+    let ctrlNotPrevented = true;
+    act(() => {
+      ctrlNotPrevented = fireEvent.wheel(p2El, { ctrlKey: true, deltaY: -100, bubbles: true, cancelable: true });
+    });
+    expect(ctrlNotPrevented).toBe(true);
+    expect(zoomOf('p2')).toBe(SEEDED_ZOOM);
+    act(() => {
+      fireEvent.wheel(p2El, { metaKey: true, deltaY: -100, bubbles: true, cancelable: true });
+    });
+    await waitFor(() => expect(zoomOf('p2')).toBe(SEEDED_ZOOM + ZOOM_STEP));
+  });
+
+  it('Cmd+MiddleClick resets the panel under the pointer', async () => {
+    await mount(MAC_BINDINGS);
+    act(() => {
+      fireEvent.mouseDown(p2El, { metaKey: true, button: 1, bubbles: true, cancelable: true });
+    });
+    await waitFor(() => expect(zoomOf('p2')).toBe(0));
   });
 });

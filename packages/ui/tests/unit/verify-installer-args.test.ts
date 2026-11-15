@@ -83,7 +83,8 @@ describe('verify-installer arguments (058 FR-028)', () => {
   });
 
   it('resolves the combination id for each legal pair, matching the declared set', () => {
-    const wanted = combinationsOf(declareArtifactSet(VERSION));
+    // The macOS copies have their own harness (scripts/verify-macos-package.mjs), one machine per supported release.
+    const wanted = combinationsOf(declareArtifactSet(VERSION)).filter((c) => c.platform !== 'darwin');
     for (const c of wanted) {
       const argv = ['x', '--role', c.role, ...(c.scope ? ['--scope', c.scope] : [])];
       const r = parseVerifyArgs(argv);

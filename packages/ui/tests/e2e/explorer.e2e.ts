@@ -608,9 +608,12 @@ test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', { ta
       // a.txt moved into the folder, which the paste opened to reveal it (050 FR-025b): present
       // once, a level down, and selected. The folder can list it before the root's listing drops the
       // old row, and a strict locator fails at once on two matches rather than waiting, so wait for one.
+      // A count of one alone is also true BEFORE the paste lands (the old root row), so wait for the whole state: one
+      // row, and it a level down. Two strict checks in a row raced the window where both rows show (070, Windows gate).
       const moved = tree.getByRole('treeitem', { name: 'a.txt', exact: true });
-      await expect(moved).toHaveCount(1, { timeout: 8000 });
-      await expect(moved).toHaveAttribute('aria-level', '3', { timeout: 8000 });
+      await expect
+        .poll(() => moved.evaluateAll((rows) => rows.map((r) => r.getAttribute('aria-level')).join(',')), { timeout: 8000 })
+        .toBe('3');
       await expect(moved).toHaveAttribute('aria-selected', 'true');
       await expect(tree.getByText('b.txt', { exact: true })).toBeVisible(); // untouched
       await expect.poll(() => existsSync(join(root, 'sub', 'a.txt'))).toBe(true);

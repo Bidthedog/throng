@@ -34,7 +34,7 @@ import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FieldDescriptor } from '@throng/core';
+import { descriptorsForThisPlatform, type FieldDescriptor } from '@throng/core';
 import { KeybindingsTab } from '../../src/renderer/preferences/keybindings-tab.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
@@ -231,7 +231,8 @@ describe('the shipped key bindings are unchanged by this feature (US3 scenario 9
 
   it('still renders every shipped binding as a row under its own group', () => {
     mountTab();
-    for (const d of held.real) {
+    // 070: a macOS-only command has no row on another platform (`onlyOn`).
+    for (const d of descriptorsForThisPlatform(held.real)) {
       const row = screen.getByTestId(`binding-${d.key}`);
       expect(screen.getByTestId(`keybindings-group-${d.group}`), d.key).toContainElement(row);
     }

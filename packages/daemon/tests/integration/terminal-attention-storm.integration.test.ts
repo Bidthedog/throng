@@ -34,8 +34,8 @@ describe('terminal.attention producer cost (057)', () => {
     const hOn = await harness();
     await hOff.rpc('terminal.attentionConfig', config({ enabled: false }));
     await hOn.rpc('terminal.attentionConfig', config({ enabled: true }));
-    let offMs = 0;
-    let onMs = 0;
+    const offTicks: number[] = [];
+    const onTicks: number[] = [];
     const started = Date.now();
     let tick = 0;
     while (Date.now() - started < STORM_MS) {
@@ -45,13 +45,20 @@ describe('terminal.attention producer cost (057)', () => {
         const t0 = performance.now();
         for (let i = 0; i < PER_TICK; i++) h.host.emit(payload);
         const spent = performance.now() - t0;
-        if (h === hOn) onMs += spent;
-        else offMs += spent;
+        if (h === hOn) onTicks.push(spent);
+        else offTicks.push(spent);
       }
       tick += 1;
       const wait = started + tick * TICK_MS - Date.now();
       if (wait > 0) await sleep(wait);
     }
+    // Each run's work is its ticks summed without the slowest 1%: a GC pause or a busy neighbour on a hosted runner lands
+    // on one tick of one run (320 ms against 76 once on a hosted Mac, where the two runs otherwise differ by 20 to 50),
+    // while a cost attention really adds is in every tick and survives the trim (070).
+    const steady = (ticks: number[]): number =>
+      [...ticks].sort((a, b) => a - b).slice(0, Math.ceil(ticks.length * 0.99)).reduce((a, b) => a + b, 0);
+    const offMs = steady(offTicks);
+    const onMs = steady(onTicks);
     const off = { workMs: offMs, signals: hOff.signals.length, bytes: hOff.outputs.join('').length };
     const on = { workMs: onMs, signals: hOn.signals.length, bytes: hOn.outputs.join('').length };
     console.log(

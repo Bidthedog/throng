@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect } from '@playwright/test';
 import { TERMINAL_OUTPUT_TIMEOUT_MS } from '../harness.js';
 
@@ -19,6 +21,7 @@ export interface Proc {
 /** Every process on the machine. Throws when the query itself fails, so a broken probe never reads as "none". */
 export function processTable(): Proc[] {
   if (process.platform === 'linux') return linuxProcessTable();
+  if (process.platform === 'darwin') return darwinProcessTable();
   const out = execFileSync(
     'powershell.exe',
     [
@@ -41,6 +44,18 @@ function linuxProcessTable(): Proc[] {
     if (m) rows.push({ pid: Number(m[1]), parent: Number(m[2]), name: m[3] ?? '', cmd: m[4] ?? '' });
   }
   return rows;
+}
+
+/**
+ * 070 FR-047, research R27: macOS's table comes from BSD `ps`, read by `scripts/process-table.mjs` — the one parser the
+ * CI clean-up uses too, unit-tested against macOS's output shape. `comm` there is the executable's full path, so the
+ * name is its last part, as Linux's `comm` already is.
+ */
+function darwinProcessTable(): Proc[] {
+  const script = fileURLToPath(new URL('../../../../../scripts/process-table.mjs', import.meta.url));
+  const out = execFileSync(process.execPath, [script, '--json'], { encoding: 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024 });
+  const rows = JSON.parse(out) as Array<{ pid: number; ppid: number; comm: string; args: string }>;
+  return rows.map((r) => ({ pid: r.pid, parent: r.ppid, name: basename(r.comm), cmd: r.args }));
 }
 
 /** The processes named `image` (e.g. `ping.exe`) whose command line contains `marker`. */

@@ -8,8 +8,15 @@
  * reader can see what it depends on.
  */
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
+
+/**
+ * Every `waitFor` and `findBy*` bound, above testing-library's 1 s. The hosted macOS runners run this layer up to seven
+ * times slower than Linux (`field-note.test.ts`: 0.6 s there, 4.1 s on macOS 26), so a Mac waits 8 s, about twice the
+ * slowest file seen, and every other host 3 s (070). Still a bound: a condition that never holds fails.
+ */
+configure({ asyncUtilTimeout: process.platform === 'darwin' ? 8_000 : 3_000 });
 
 /** Generous against dnd-kit's own 50 ms, and still a bound: a suppressor that never lifts fails loudly. */
 const CLICK_SUPPRESSION_BOUND_MS = 1_000;
