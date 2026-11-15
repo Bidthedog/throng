@@ -4,7 +4,7 @@
  *
  * This is a MAINTAINER script, deliberately NOT part of `npm run build`: it needs
  * Inkscape on the machine, which no build or CI box is required to have. Its
- * outputs (`packages/ui/assets/throng.ico` and `throng-256.png`) are COMMITTED, so
+ * outputs (`packages/ui/assets/throng.ico`, `throng-256.png` and `throng-1024.png`) are COMMITTED, so
  * the app and CI just consume them. Re-run it whenever the artwork changes:
  *
  *     node scripts/build-app-icons.mjs          # inkscape must be on PATH
@@ -112,8 +112,10 @@ try {
   // The standalone PNG serves the platforms whose BrowserWindow `icon:` cannot read
   // an .ico (Linux), and is the obvious source for a future .icns.
   copyFileSync(join(scratch, 'throng-256.png'), join(outDir, 'throng-256.png'));
+  // macOS (070): electron-builder turns a PNG of at least 512px into the .icns itself; 1024 is Retina's largest size.
+  rasterise(LARGE_SVG, 1024, join(outDir, 'throng-1024.png'));
 
-  console.log(`\nwrote ${ico} (${SIZES.length} sizes) and throng-256.png`);
+  console.log(`\nwrote ${ico} (${SIZES.length} sizes), throng-256.png and throng-1024.png`);
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

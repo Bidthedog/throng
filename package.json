@@ -21,6 +21,7 @@
     "packages/*"
   ],
   "scripts": {
+    "postinstall": "node scripts/fix-node-pty-helper.mjs",
     "build": "tsc -b && npm run generate:defaults && npm run build:renderer --workspace @throng/ui && npm run stamp:build && npm run generate:version && npm run generate:licenses",
     "generate:defaults": "node scripts/generate-shipped-defaults.mjs",
     "generate:version": "node scripts/generate-version.mjs",

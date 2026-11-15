@@ -17,6 +17,7 @@
   "dependencies": {
     "@throng/core": "*",
     "@throng/platform-linux": "*",
+    "@throng/platform-macos": "*",
     "@throng/platform-node": "*",
     "@throng/platform-windows": "*"
   }

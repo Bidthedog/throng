@@ -18,6 +18,9 @@
       "path": "../platform-linux"
     },
     {
+      "path": "../platform-macos"
+    },
+    {
       "path": "../platform-windows"
     }
   ]
