@@ -16,8 +16,9 @@
 //   node scripts/artifact-set.mjs resolve <role> [--dir <path>]
 //   node scripts/artifact-set.mjs reconcile [--dir <path>]
 //
-// `list` and `reconcile` take `--platform win32|linux`, for what one OS's build produces and verifies
-// (063 FR-016). Without it they mean the whole release, as the publish gate does.
+// `list` and `reconcile` take `--platform win32|linux|darwin`, for what one OS's build produces and verifies
+// (063 FR-016, 070). Without it they mean the whole release, as the publish gate does. A macOS combination's JSON
+// carries `runner` (`current` or `previous`), which the workflow maps to a label from .github/macos-runners.json.
 //
 // Exit codes: 0 success · 2 unknown role or subcommand · 3 declared artifact missing · 4 reconcile
 // failed. A non-zero exit ALWAYS writes a reason naming the artifact or role — a silent failure here
@@ -35,6 +36,9 @@ import {
 import { sha256OfFile } from './checksum.mjs';
 
 const SUBCOMMANDS = ['list', 'resolve', 'reconcile', 'checksums'];
+
+/** The platforms a build or a verification runs on (063 FR-016, 070 T055), in `process.platform`'s spelling. */
+const PLATFORMS = ['win32', 'linux', 'darwin'];
 
 /** Read a `--flag value` pair out of argv, or `undefined`. */
 function flagValue(argv, name) {
@@ -54,8 +58,8 @@ export function runArtifactSet({ argv, version, filenames, dir = '' }) {
   const [subcommand, ...rest] = argv;
   const whole = declareArtifactSet(version);
   const platform = flagValue(rest, '--platform');
-  if (platform !== undefined && platform !== 'win32' && platform !== 'linux') {
-    return { code: 2, stdout: '', stderr: `[artifact-set] unknown platform '${platform}' — expected win32 or linux` };
+  if (platform !== undefined && !PLATFORMS.includes(platform)) {
+    return { code: 2, stdout: '', stderr: `[artifact-set] unknown platform '${platform}' — expected ${PLATFORMS.join(', ')}` };
   }
   const set = platform ? artifactSetForPlatform(whole, platform) : whole;
 

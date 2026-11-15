@@ -9,9 +9,11 @@
 // binary whose ABI the freshly-installed native modules were built against — copying it
 // guarantees the bundled runtime and the natives match. The release build therefore pins the
 // runtime to whatever Node the release is built with (recorded in the release notes).
+import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, mkdirSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { darwinRuntimeProblem } from './stage-runtime-lib.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(repoRoot, 'packages', 'ui', 'build', 'resources', 'runtime');
@@ -37,6 +39,16 @@ if (process.platform === 'linux' && statSync(source).size < 10 * 1024 * 1024) {
     `[stage-runtime] refusing to stage ${source}: it is not a self-contained node. Use an official build, such as nvm's.`,
   );
   process.exit(1);
+}
+// 070 FR-004, research R23: on a Mac the runner's own arm64 node, and only one that loads nothing from outside the
+// system, since the copy ships to Macs that have nothing else installed. Signing it is packaging/macos/after-sign.cjs's.
+if (process.platform === 'darwin') {
+  const otool = spawnSync('otool', ['-L', source], { encoding: 'utf8' });
+  const problem = darwinRuntimeProblem({ source, arch: process.arch, otoolText: otool.status === 0 ? otool.stdout : '' });
+  if (problem) {
+    console.error(`[stage-runtime] ${problem}`);
+    process.exit(1);
+  }
 }
 copyFileSync(source, outExe);
 chmodSync(outExe, 0o755);

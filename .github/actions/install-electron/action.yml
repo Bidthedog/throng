@@ -16,12 +16,22 @@ runs:
       run: echo "version=$(node -p "require('./node_modules/electron/package.json').version")" >> "$GITHUB_OUTPUT"
 
     - name: Restore Electron's download
+      if: runner.os != 'macOS'
       uses: actions/cache@v6
       with:
         # @electron/get's default cache folder on Linux and on Windows.
         path: |
           ~/.cache/electron
           ~/AppData/Local/electron/Cache
+        key: electron-${{ runner.os }}-${{ steps.electron.outputs.version }}
+
+    # 070 FR-046: @electron/get's default cache folder on macOS. A step of its own, so the Windows and Linux cache
+    # above keeps its paths, and with them the entries it has already saved.
+    - name: Restore Electron's download (macOS)
+      if: runner.os == 'macOS'
+      uses: actions/cache@v6
+      with:
+        path: ~/Library/Caches/electron
         key: electron-${{ runner.os }}-${{ steps.electron.outputs.version }}
 
     - name: Install Electron's binary
