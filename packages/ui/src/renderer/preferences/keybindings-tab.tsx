@@ -5,6 +5,8 @@ import {
   applyRemove,
   bindingDiffersFromEntry,
   buildShippedDefaults,
+  chordLabel,
+  descriptorsForThisPlatform,
   filterFields,
   isBindingOverridden,
   scopeNames,
@@ -93,15 +95,23 @@ export function KeybindingsTab({
     setApplied('');
   };
 
+  // The commands this platform has: one that means nothing here is hidden, as a setting is (062; 070 FR-024a). Read
+  // at render, not import, because the renderer configures its host traits after its modules load.
+  const platformKeybindings = useMemo(() => descriptorsForThisPlatform(KEYBINDINGS_METADATA), []);
   const matches = useMemo(
     // The chords ARE the value here, so they land in the haystack: searching "ctrl+shift+p"
     // finds the action bound to it.
-    () => filterFields(applied, KEYBINDINGS_METADATA, (d) => keybindings.bindings[d.key] ?? []),
-    [applied, keybindings],
+    () =>
+      filterFields(applied, platformKeybindings, (d) => {
+        const chords = keybindings.bindings[d.key] ?? [];
+        // The stored token and the label the row shows (Cmd+S on macOS, 070 FR-029) both find it.
+        return [...chords, ...chords.map((c) => chordLabel(c))];
+      }),
+    [applied, keybindings, platformKeybindings],
   );
   // 056 — the same fold wiring the Settings tab uses (FR-013), in this tab's own namespace (FR-010). The
   // unfiltered grouping is reused as the shown one while no query is applied.
-  const allGroups = useMemo(() => groupDescriptors(KEYBINDINGS_METADATA), []);
+  const allGroups = useMemo(() => groupDescriptors(platformKeybindings), [platformKeybindings]);
   const groups = useMemo(
     () => (applied.trim() === '' ? allGroups : groupDescriptors(matches)),
     [applied, allGroups, matches],
@@ -134,7 +144,7 @@ export function KeybindingsTab({
       e.clientY,
       [
         {
-          label: `Remove “${token}”`,
+          label: `Remove “${chordLabel(token)}”`,
           icon: 'destroy',
           // 033 US5 (FR-052, T066): exempt from GROUPING while it holds one item — one section has
           // no boundary, so there is nothing to draw — but not exempt from FR-049. The section is
@@ -299,12 +309,13 @@ export function KeybindingsTab({
                           data-testid={`binding-${d.key}-pill-${i}`}
                           onContextMenu={(e) => openChordMenu(e, action, c)}
                         >
-                          <span className="kb-pill__chord">{c}</span>
+                          {/* Cmd and Option on macOS (070 FR-029); the stored token is untouched. */}
+                          <span className="kb-pill__chord">{chordLabel(c)}</span>
                           <IconButton
                             token="destroy"
                             className="kb-pill__x"
                             testId={`binding-${d.key}-remove-${i}`}
-                            title={`Remove ${c}`}
+                            title={`Remove ${chordLabel(c)}`}
                             onClick={() => removeChord(action, c)}
                           />
                         </span>

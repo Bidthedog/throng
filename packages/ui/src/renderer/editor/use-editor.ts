@@ -15,7 +15,6 @@ import { ensureSyntaxTree } from '@codemirror/language';
 import {
   caretPosition,
   columnSelectHeld,
-  DEFAULT_BINDING_PLATFORM,
   effectiveActivePanelId,
   effectiveIndent,
   encodingLabel,
@@ -33,7 +32,6 @@ import {
   PLAIN_TEXT_ID,
   resolveIconAsset,
   selectedCharacters,
-  shippedBindingsFor,
   toggleSection,
   type ActionId,
   type CanonicalChangeMsg,
@@ -49,6 +47,7 @@ import {
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useActiveTheme, useAppSettings, useIconPacks } from '../config/config-store.js';
+import { columnSelectModifier, crosshairKey } from '../config/host-modifiers.js';
 import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
 import {
   allEditorStates,
@@ -238,17 +237,11 @@ const readOnlyCompartment = new Compartment();
 const movedOutExtensions = (movedOut: boolean): [] | [ReturnType<typeof EditorState.readOnly.of>, ReturnType<typeof EditorView.editable.of>] =>
   movedOut ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [];
 
-/**
- * The modifier the column-select DRAG answers to (FR-017e/FR-025), from the shipped-defaults record.
- *
- * Windows ships `Alt`; the record's shape already carries the others, so macOS and Linux need no
- * breaking change here — only a value.
+/*
+ * The modifier the column-select DRAG answers to (FR-017e/FR-025) is the HOST platform's shipped value (070 FR-030,
+ * `columnSelectModifier()` / `crosshairKey()` in config/host-modifiers.ts), read when an editor is built — not at
+ * import, which runs before the renderer has configured its host traits.
  */
-const COLUMN_SELECT_MODIFIER = shippedBindingsFor(DEFAULT_BINDING_PLATFORM).columnSelectModifier;
-
-/** The same modifier, in the spelling CodeMirror's crosshair cursor wants. */
-const CROSSHAIR_KEY: 'Alt' | 'Control' | 'Meta' =
-  COLUMN_SELECT_MODIFIER === 'Ctrl' ? 'Control' : COLUMN_SELECT_MODIFIER === 'Meta' ? 'Meta' : 'Alt';
 
 export interface UseEditorParams {
   panel: Panel;
@@ -1975,13 +1968,13 @@ export function useEditor(params: UseEditorParams): void {
             // have quietly stopped agreeing the day a second platform shipped.
             eventFilter: (event) =>
               event.button === 0 &&
-              columnSelectHeld(COLUMN_SELECT_MODIFIER, {
+              columnSelectHeld(columnSelectModifier(), {
                 alt: event.altKey,
                 ctrl: event.ctrlKey,
                 meta: event.metaKey,
               }),
           }),
-          crosshairCursor({ key: CROSSHAIR_KEY }),
+          crosshairCursor({ key: crosshairKey() }),
           /** The keyboard half's goal columns (`Shift+Alt+Arrow…`). */
           columnBlockField,
           /**

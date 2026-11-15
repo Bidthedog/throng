@@ -214,6 +214,11 @@ export interface TerminalSettings {
    *  implies or grants elevation (FR-008). */
   defaultRunAsAdmin: boolean;
   /**
+   * 070 FR-031 (research R22): whether Option sends Meta (ESC-prefixed) to a terminal on macOS, read into xterm's own
+   * `macOptionIsMeta`. Ships **OFF**, so Option types the characters the keyboard layout puts on it. macOS only.
+   */
+  macOptionIsMeta: boolean;
+  /**
    * 039 FR-020 (#293): whether opening a project reloads its terminals.
    *
    * `'automatic'` is today's behaviour and the shipped default — every terminal in every tab
@@ -874,6 +879,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultRememberCommand: false,
     defaultRememberDirectory: true,
     defaultRunAsAdmin: false,
+    // 070 FR-031: Option types the layout's characters unless the user asks for Meta.
+    macOptionIsMeta: false,
     // 039 FR-021: the default is exactly what throng does today, so this setting is a no-op until
     // a user goes looking for it.
     reloadMode: 'automatic',
@@ -1333,6 +1340,7 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
       : fallback.defaultRememberDirectory;
   const defaultRunAsAdmin =
     typeof v.defaultRunAsAdmin === 'boolean' ? v.defaultRunAsAdmin : fallback.defaultRunAsAdmin;
+  const macOptionIsMeta = boolOr(v.macOptionIsMeta, fallback.macOptionIsMeta);
   // A value outside the closed set falls back rather than throwing, which is this parser's contract
   // everywhere else. Checked against TERMINAL_RELOAD_MODES so the parser and the descriptor cannot
   // disagree about what is accepted.
@@ -1358,6 +1366,7 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     defaultRememberCommand,
     defaultRememberDirectory,
     defaultRunAsAdmin,
+    macOptionIsMeta,
     reloadMode,
     titleTemplate,
     titleCommandMaxLength,
@@ -1433,6 +1442,8 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     defaultRememberCommand: t.defaultRememberCommand,
     defaultRememberDirectory: t.defaultRememberDirectory,
     defaultRunAsAdmin: t.defaultRunAsAdmin,
+    // 070 FR-031 — the same note applies.
+    macOptionIsMeta: t.macOptionIsMeta,
     reloadMode: t.reloadMode,
     // 053 FR-014 — the same note applies.
     titleTemplate: t.titleTemplate,

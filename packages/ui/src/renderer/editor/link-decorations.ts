@@ -7,8 +7,8 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import {
-  DEFAULT_BINDING_PLATFORM,
   MAX_LINK_CANDIDATES_PER_LINE,
+  hostTraits,
   linkHoverText,
   scanLinkLine,
   shippedBindingsFor,
@@ -445,9 +445,10 @@ export function linkModifierFromChord(token: string): 'Ctrl' | 'Meta' {
  * FR-040's "Cmd on macOS" clause, read from ONE place: the Open Link command's own shipped chord.
  *
  * Writing `ctrlKey` into the handler would be a second home for the platform answer, and the two
- * would disagree the day macOS bindings are populated.
+ * would disagree the day macOS bindings are populated. The platform is the host's (070 FR-030), not the
+ * build's default, so a macOS editor follows a link on Cmd+click.
  */
-export function linkModifierName(platform: OsName = DEFAULT_BINDING_PLATFORM): 'Ctrl' | 'Meta' {
+export function linkModifierName(platform: OsName = hostTraits().os): 'Ctrl' | 'Meta' {
   const token = shippedBindingsFor(platform).bindings['preview.followLink']?.[0];
   return token ? linkModifierFromChord(token) : 'Ctrl';
 }

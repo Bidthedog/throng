@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir, hostname, tmpdir, userInfo } from 'node:os';
-import { createAnonymiser, logExpected, type Anonymiser } from '@throng/core';
+import { createAnonymiser, logExpected, osNameFor, type Anonymiser } from '@throng/core';
 import { reportOwnFailure } from './node-file-log.js';
 
 /**
@@ -145,7 +145,7 @@ export function createProcessAnonymiser(options: ProcessAnonymiserOptions): { an
     (options.saltDir ? readOrCreateSalt(options.saltDir, options.logDir) : randomBytes(32).toString('hex'));
   const anonymiser = createAnonymiser({
     salt,
-    os: process.platform === 'win32' ? 'windows' : 'linux',
+    os: osNameFor(process.platform),
     hash: hmacHash,
   });
   registerMachineIdentity(anonymiser, options);

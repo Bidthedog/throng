@@ -21,5 +21,33 @@ export function skipUnlessLinux(reason: string): boolean {
   return nodePlatform() !== 'linux';
 }
 
+/**
+ * True (skip) off macOS. `reason` says what macOS behaviour the test covers. There is no Mac on a developer machine
+ * here, so such a test runs on the hosted macOS runners only (070 FR-038).
+ */
+export function skipUnlessMacos(reason: string): boolean {
+  requireReason(reason);
+  return nodePlatform() !== 'darwin';
+}
+
+/**
+ * True (skip) ON macOS: for a test of a failure path a Mac cannot reach, such as signing with no `codesign`. `reason`
+ * says why macOS cannot show it (070 FR-038).
+ */
+export function skipOnMacos(reason: string): boolean {
+  requireReason(reason);
+  return nodePlatform() === 'darwin';
+}
+
+/**
+ * True (skip) ON Windows: for a POSIX behaviour (modes, sockets, symlinks) that Linux and macOS share and a Windows
+ * host cannot show. `reason` says what Windows lacks (070 FR-038).
+ */
+export function skipOnWindows(reason: string): boolean {
+  requireReason(reason);
+  return nodePlatform() === 'win32';
+}
+
 export const isLinuxHost = (): boolean => nodePlatform() === 'linux';
 export const isWindowsHost = (): boolean => nodePlatform() === 'win32';
+export const isMacosHost = (): boolean => nodePlatform() === 'darwin';

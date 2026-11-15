@@ -8,6 +8,7 @@
  * throng focuses the one window rather than opening a second.
  */
 import { BrowserWindow } from 'electron';
+import type { SecondaryWindowChrome } from './window-chrome.js';
 import type { IShellIntegration } from '@throng/core';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
@@ -28,6 +29,11 @@ export interface AboutWindowDeps {
   /** The current main window — used to parent the About window and refocus throng
    *  when it closes. Resolved lazily at open time. */
   getMainWindow?: () => BrowserWindow | null;
+  /**
+   * The platform's window frame (070 FR-026, `PlatformServices.windowChrome()`): frameless where throng draws the
+   * whole title bar, the hidden title bar with native traffic lights on macOS. Absent → frameless.
+   */
+  chrome?: () => SecondaryWindowChrome;
 }
 
 let aboutWindow: BrowserWindow | null = null;
@@ -66,7 +72,7 @@ export function openAbout(deps: AboutWindowDeps): BrowserWindow {
     // A dialog that opens on a different screen from the app that raised it is a small thing that
     // feels broken every single time.
     ...placeOverParent(parent, size),
-    frame: false,
+    ...(deps.chrome?.() ?? { frame: false }),
     parent,
     movable: true,
     resizable: false,

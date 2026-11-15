@@ -363,6 +363,10 @@ import { setAtPath } from './metadata.js';
 // Bumped by 068 T103–T105 (32 → 33): four icon tokens for the type icon at the top left of a Notifications panel entry —
 // `noticeError`, `noticeAttention`, `noticeInfo` and `noticeSuccess` (FR-074; a warning entry draws the existing `warning`).
 // The additive case again: every payload arrives, no existing value moves.
+//
+// NOT bumped by 070, for 045 round five's reason above. Its one setting, `terminals.macOptionIsMeta` (FR-031),
+// reaches every install through the per-field parse with no version gate, and its macOS key-binding table (FR-029)
+// is seeded fresh: no macOS install exists for an upgrade to reach. A bump would carry no payload.
 export const SHIPPED_DEFAULTS_VERSION = 33;
 
 /**

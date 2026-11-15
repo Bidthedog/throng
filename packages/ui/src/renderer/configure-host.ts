@@ -1,10 +1,9 @@
-import { configureHostTraits, linuxHostTraits, WINDOWS_HOST_TRAITS } from '@throng/core';
+import { configureHostTraits } from '@throng/core';
+import { hostTraitsFromPreload } from './host-traits-from-preload.js';
 
 /**
- * The renderer's host traits (062 contracts/host-traits.md), from what preload exposes. Imported first by `main.tsx`,
- * so path identity and the shipped bindings are right before the first render. The renderer opens no sockets, so it
- * has no socket folder to name. An OS with no set here keeps Windows' traits only until main, which has already refused
- * to start on one (FR-050), would have stopped it reaching this line.
+ * The renderer's host traits (062 contracts/host-traits.md), from what preload exposes: main's own traits, whole (070
+ * FR-011, research R32), so a macOS renderer gets macOS traits and not Windows ones. Imported first by `main.tsx`, so
+ * path identity and the shipped bindings are right before the first render.
  */
-const osName = window.throng?.osName;
-configureHostTraits(osName === 'linux' ? linuxHostTraits('') : WINDOWS_HOST_TRAITS);
+configureHostTraits(hostTraitsFromPreload(window.throng?.hostTraits, window.throng?.osName));

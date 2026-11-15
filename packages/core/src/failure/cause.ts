@@ -17,6 +17,7 @@
  * Pure — no OS, no DOM, no I/O. Errno strings are data here, not platform calls, which is what keeps
  * Principle II satisfied while still knowing what `EBUSY` means.
  */
+import { isUnderPath, remainderUnder } from '../fs/path-id.js';
 
 /**
  * The CLOSED set (FR-011a).
@@ -31,7 +32,9 @@ export type FailureKind =
   | 'path-missing'
   | 'permission-denied'
   | 'not-empty'
-  | 'daemon-stopped';
+  | 'daemon-stopped'
+  /** 070 FR-025: the OS withholds a folder until the user allows throng in its privacy settings (macOS's TCC). */
+  | 'privacy-withheld';
 
 /**
  * What kind of operation failed. Decides how an ambiguous `EPERM` resolves.
@@ -65,6 +68,10 @@ export interface ClassifyOptions {
   subject: string;
   operation: FailureOperation;
   holder?: Holder;
+  /** The path the operation was on. Needed only to tell a privacy refusal from a permissions one (070 FR-025). */
+  path?: string;
+  /** `PlatformServices.privacyProtectedRoots(home)`: folders the OS withholds until the user allows them. */
+  privacyProtectedRoots?: readonly string[];
 }
 
 function errnoOf(error: unknown): string | undefined {
@@ -89,10 +96,36 @@ export function classifyFailure(error: unknown, opts: ClassifyOptions): FailureC
   const code = errnoOf(error);
   if (code === undefined) return null;
 
+  const withheld = code === 'EPERM' && opts.operation === 'access' ? protectedRootOf(opts.path, opts.privacyProtectedRoots) : null;
+  if (withheld !== null) return { kind: 'privacy-withheld', subject: withheld, raw: rawOf(error) };
+
   const kind = kindOf(code, opts.operation);
   if (kind === null) return null;
 
   return { kind, subject: opts.subject, holder: opts.holder, raw: rawOf(error) };
+}
+
+/** The folder name the user knows a protected root by, for the sentence and the one-notice key. */
+const PROTECTED_ROOT_NAMES: Readonly<Record<string, string>> = {
+  'com~apple~CloudDocs': 'iCloud Drive',
+};
+
+/**
+ * The name of the protected folder `path` lies in, or null (070 FR-025, R14). macOS answers a read it withholds under
+ * its privacy rules with a bare `EPERM`, the same code an ACL refusal gives, so only where the path is can tell them
+ * apart. A path under `/Volumes` is named by its volume, which is what the user granted or did not.
+ */
+function protectedRootOf(path: string | undefined, roots: readonly string[] | undefined): string | null {
+  if (path === undefined || roots === undefined) return null;
+  const root = roots.filter((r) => isUnderPath(path, r)).sort((a, b) => b.length - a.length)[0];
+  if (root === undefined) return null;
+  const name = (p: string): string => p.replace(/\/+$/, '').split('/').pop() ?? p;
+  const own = name(root);
+  if (root.replace(/\/+$/, '') === '/Volumes') {
+    const volume = remainderUnder(path, root)?.split('/')[1];
+    return volume && volume.length > 0 ? volume : own;
+  }
+  return PROTECTED_ROOT_NAMES[own] ?? own;
 }
 
 function kindOf(code: string, operation: FailureOperation): FailureKind | null {
@@ -187,6 +220,9 @@ export function causeMessage(cause: FailureCause, opts: CauseMessageOptions = {}
       // No subject in this sentence at all: the daemon is named because it IS the subject, and a
       // notice about it presents `{ kind: 'none' }` — there is no daemon member of `NoticeSubject`.
       return `throng's daemon has stopped. Restart it from the status bar to continue.`;
+    case 'privacy-withheld':
+      // Names the protected folder, never the path below it (FR-017), and where the user allows it.
+      return `${it} is a folder macOS has not let throng open. Allow throng in System Settings, under Privacy & Security, Files & Folders.`;
   }
 }
 

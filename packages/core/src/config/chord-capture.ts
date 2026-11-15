@@ -5,8 +5,10 @@
  * replace/reassign write plans. Builds on `keybindings.ts` `normalizeToken`; the
  * modal writes the resulting `keybindings.json` via `config.write`. No OS/DOM.
  */
+import { hostTraits } from '../platform/host-traits.js';
 import {
   COMMAND_SCOPES,
+  MACOS_RESERVED_CHORDS,
   formatChord,
   normalizeToken,
   sameBindingToken,
@@ -275,6 +277,9 @@ export const RESERVED_CHORDS: ReadonlySet<string> = new Set([
 ]);
 
 export function isReservedChord(token: string): boolean {
+  // macOS (070 FR-029): Cmd is the primary modifier, so a Cmd-only chord is throng's to bind; what macOS keeps for
+  // itself is its own list.
+  if (hostTraits().os === 'macos') return MACOS_RESERVED_CHORDS.includes(normalizeToken(token));
   if (RESERVED_CHORDS.has(token)) return true;
   const { mods, key } = splitChord(token);
   // The Windows/Super key is OS-owned: any chord whose only modifier is Meta.

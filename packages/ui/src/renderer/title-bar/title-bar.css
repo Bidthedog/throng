@@ -38,6 +38,13 @@
   -webkit-app-region: drag;
 }
 
+/* 070 FR-026 (research R16) — macOS: the native traffic lights sit at the bar's left (`trafficLightPosition`
+   { x: 12, y: 11 } in platform's `windowChrome()`), three 12 px lights 8 px apart: 12 + 3×12 + 2×8 = 64 px, plus the
+   gap Finder leaves before its own content. A layout measure, not a colour, so not a theme token. */
+.title-bar--traffic-lights .title-bar__drag-zone {
+  padding-left: 78px;
+}
+
 .title-bar__identity {
   display: flex;
   align-items: center;

@@ -1,4 +1,5 @@
 import { type ReactElement } from 'react';
+import { hostTraits } from '@throng/core';
 import { WindowControls } from './window-controls.js';
 import { CogMenu } from './cog-menu.js';
 import { ThrongMark } from './throng-mark.js';
@@ -11,6 +12,9 @@ import './title-bar.css';
  * empty area is the OS drag handle (`-webkit-app-region: drag`, title-bar.css);
  * double-clicking it toggles maximise/restore (FR-004). Sub-workspace windows use
  * the same bar with `showCog={false}` (FR-007).
+ *
+ * On macOS (070 FR-026, research R16) the window keeps its native traffic lights inside this bar (`windowChrome()`
+ * in main), so throng draws no window controls of its own and the bar reserves the lights' inset on the left.
  */
 export interface TitleBarProps {
   /** Window-identity text: `throng — <project · context>` or a sub-workspace name. */
@@ -40,8 +44,11 @@ export function TitleBar({
     if (!closeOnly) window.throng?.window?.maximize?.();
   };
 
+  // macOS: the native lights close, minimise and zoom; drawing throng's too would put two sets on one bar.
+  const trafficLights = hostTraits().os === 'macos';
+
   return (
-    <header className="title-bar" data-testid="title-bar">
+    <header className={trafficLights ? 'title-bar title-bar--traffic-lights' : 'title-bar'} data-testid="title-bar">
       <div className="title-bar__drag-zone" onDoubleClick={onDoubleClick}>
         <div className="title-bar__identity" data-testid="title-bar-identity">
           <ThrongMark />
@@ -53,7 +60,9 @@ export function TitleBar({
       </div>
       <div className="title-bar__actions">
         {showCog ? <CogMenu /> : null}
-        <WindowControls closeOnly={closeOnly} showMinimise={showMinimise} onMinimise={onMinimise} />
+        {trafficLights ? null : (
+          <WindowControls closeOnly={closeOnly} showMinimise={showMinimise} onMinimise={onMinimise} />
+        )}
       </div>
     </header>
   );

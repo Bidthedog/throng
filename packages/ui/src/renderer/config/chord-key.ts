@@ -4,7 +4,42 @@
 // again the way they did (review fix round CRITICAL/MINOR): a duplicated Ctrl+Alt same-binding match
 // shipped here without core's AltGr guard, folding a German AltGr+ß or an AZERTY AltGr+= onto
 // panel.zoomOut/panel.zoomIn and eating the keystroke.
-import { keypadHidesShift, keypadNavKey, sameBindingSymbolOfCode, tier1PhysicalKey } from '@throng/core';
+import { hostTraits, keypadHidesShift, keypadNavKey, sameBindingSymbolOfCode, tier1PhysicalKey } from '@throng/core';
+
+/**
+ * Whether a held Meta key is the platform's primary modifier (070 FR-029): Cmd on macOS. Elsewhere Meta is the
+ * Windows/Super key, which the OS owns, and every resolver below declines an event with it held (046 FR-104 —
+ * superseded on macOS only, where the Office-key case that clause protects does not exist).
+ */
+function metaIsPrimary(): boolean {
+  return hostTraits().os === 'macos';
+}
+
+/** Off macOS, a held Meta declines the event outright (046 FR-104). */
+function declinesMeta(e: { metaKey?: boolean }): boolean {
+  return (e.metaKey ?? false) && !metaIsPrimary();
+}
+
+/**
+ * The physical key name on macOS, where Option composes a character from almost every key (`ß` for S, `≠` for =), so
+ * the produced `key` names nothing a binding could hold. `=`/`-` are the same-binding `+`/`-` (046 FR-105) whatever
+ * Option made them type; everything else is {@link tier1PhysicalKey}'s name.
+ */
+function macPhysicalKey(code: string, key: string): string {
+  if (code === 'Equal') return '+';
+  if (code === 'Minus') return '-';
+  return tier1PhysicalKey(code, key);
+}
+
+/** The held modifiers as a token prefix, in canonical order (`Ctrl+Shift+Alt+Meta`). */
+function modifierPrefix(e: ChordEventLike, shift: boolean = e.shiftKey): string[] {
+  const parts: string[] = [];
+  if (e.ctrlKey) parts.push('Ctrl');
+  if (shift) parts.push('Shift');
+  if (e.altKey) parts.push('Alt');
+  if (e.metaKey) parts.push('Meta');
+  return parts;
+}
 
 /**
  * The layout-independent key segment for a keyboard chord.
@@ -70,6 +105,15 @@ export function effectiveShift(e: ChordEventLike): boolean {
  * matching on an empty physical key.
  */
 function samePhysicalCandidate(e: ChordEventLike): string | undefined {
+  if (metaIsPrimary()) {
+    // macOS (070 FR-029): Option with Cmd or Ctrl held types nothing, but it still changes `key`, so every such chord
+    // is matched on the physical key — tier 1 (`Shift+Alt+Meta+…`), the zoom pair, `Alt+Meta+S` alike. There is no
+    // AltGr to guard against: Option is the only third-level key, and with Cmd or Ctrl held it is not typing.
+    if (e.altKey && (e.metaKey || e.ctrlKey) && e.code) {
+      return [...modifierPrefix(e), macPhysicalKey(e.code, e.key)].join('+');
+    }
+    return undefined;
+  }
   if (e.metaKey) return undefined;
 
   // Rule 1: Ctrl+Shift+Alt, matched on the PHYSICAL code — the whole navigation/application tier.
@@ -104,14 +148,13 @@ function samePhysicalCandidate(e: ChordEventLike): string | undefined {
  * resolves exactly as before.
  */
 function digitCandidate(e: ChordEventLike): string | undefined {
-  if (e.metaKey) return undefined;
+  if (declinesMeta(e)) return undefined;
   const digitCode = /^Digit([0-9])$/.exec(e.code);
   const digit = digitCode ? digitCode[1] : e.code === 'Numpad0' ? 'Numpad0' : undefined;
-  if (digit === undefined || !e.ctrlKey || e.altKey) return undefined;
-  const parts = ['Ctrl'];
-  if (e.shiftKey) parts.push('Shift');
-  parts.push(digit);
-  return parts.join('+');
+  // On macOS Cmd is the primary modifier, so Cmd+digit is matched physically too (070 FR-029).
+  const primary = e.ctrlKey || (metaIsPrimary() && (e.metaKey ?? false));
+  if (digit === undefined || !primary || e.altKey) return undefined;
+  return [...modifierPrefix(e), digit].join('+');
 }
 
 /**
@@ -134,7 +177,7 @@ function digitCandidate(e: ChordEventLike): string | undefined {
  * §2 and §4 are the source of truth for every rule below and for the example tables.
  */
 export function chordCandidates(event: ChordEventLike): string[] {
-  if (event.metaKey) return [];
+  if (declinesMeta(event)) return [];
   const e = withKeypadShift(event);
 
   const same = samePhysicalCandidate(e);
@@ -156,12 +199,7 @@ export function chordCandidates(event: ChordEventLike): string[] {
     // 054 FR-071a — Enter produces no character that could carry Shift: `Alt+Shift+Enter`
     // (`panel.toggleMaximise`) must not arrive as `Alt+Enter`.
     e.key === 'Enter';
-  const parts: string[] = [];
-  if (e.ctrlKey) parts.push('Ctrl');
-  if (keepShift && e.shiftKey) parts.push('Shift');
-  if (e.altKey) parts.push('Alt');
-  parts.push(chordKey(e));
-  candidates.push(parts.join('+'));
+  candidates.push([...modifierPrefix(e, keepShift && e.shiftKey), chordKey(e)].join('+'));
 
   // Rule 4 (§2.3): duplicates removed, the physical digit token first.
   return [...new Set(candidates)];
@@ -280,6 +318,8 @@ export interface ResolverEvent {
   ctrl: boolean;
   alt: boolean;
   shift: boolean;
+  /** Cmd, on macOS only (070 FR-029); a resolver elsewhere never sees Meta held (046 FR-104). */
+  meta?: boolean;
 }
 
 /**
@@ -317,9 +357,9 @@ export function resolveKeydown<T>(
   resolve: (ev: ResolverEvent) => T | null | undefined,
   produced?: ResolverEvent,
 ): T | null {
-  if (event.metaKey) return null;
+  if (declinesMeta(event)) return null;
   const e = withKeypadShift(event);
-  produced ??= { key: e.key, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
+  produced ??= { key: e.key, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, ...(e.metaKey ? { meta: true } : {}) };
   const physical = samePhysicalCandidate(e) ?? digitCandidate(e);
   if (physical !== undefined) {
     const hit = resolve(candidateEvent(physical));
@@ -340,14 +380,15 @@ export function windowProducedEvent(e: ChordEventLike): ResolverEvent {
  * takes. The key is whatever follows the modifiers, so `Ctrl++` gives `+` and `Ctrl+ ` gives the
  * spacebar's `' '` (which `eventToToken` canonicalises to `Space`).
  */
-export function candidateEvent(token: string): { key: string; ctrl: boolean; alt: boolean; shift: boolean } {
-  const ev = { key: token, ctrl: false, alt: false, shift: false };
+export function candidateEvent(token: string): ResolverEvent {
+  const ev: ResolverEvent = { key: token, ctrl: false, alt: false, shift: false };
   for (;;) {
-    const mod = /^(Ctrl|Shift|Alt)\+(?=.)/.exec(ev.key);
+    const mod = /^(Ctrl|Shift|Alt|Meta)\+(?=.)/.exec(ev.key);
     if (!mod) return ev;
     if (mod[1] === 'Ctrl') ev.ctrl = true;
     else if (mod[1] === 'Shift') ev.shift = true;
-    else ev.alt = true;
+    else if (mod[1] === 'Alt') ev.alt = true;
+    else ev.meta = true; // only a macOS candidate carries Meta (070 FR-029)
     ev.key = ev.key.slice(mod[0].length);
   }
 }

@@ -231,7 +231,15 @@ export type ActionId =
    * 047 (research R7) — opens the Go to Heading pop-down. `preview`-only: the editor's own outline is
    * #375's, not this spec's.
    */
-  | 'preview.goToHeading';
+  | 'preview.goToHeading'
+  /*
+   * 070 FR-027, FR-024a — the application commands the macOS app menu carries, each also in the key bindings list
+   * (Principle VI): Settings opens Preferences; Install and Uninstall put the `throng` command on the PATH and take it
+   * off (macOS only, where no installer does it).
+   */
+  | 'app.settings'
+  | 'app.installCommandLine'
+  | 'app.uninstallCommandLine';
 
 export interface Keybindings {
   version: number;
@@ -371,6 +379,10 @@ export const COMMAND_SCOPES: CommandScopes = {
   // 024 US6: the keyboard "open context menu" works wherever a focusable item has one (explorer,
   // editor, terminal) — EVERYWHERE covers those three scopes.
   'menu.open': EVERYWHERE,
+  // 070 — application commands: live wherever you are, like the window toggles.
+  'app.settings': EVERYWHERE,
+  'app.installCommandLine': EVERYWHERE,
+  'app.uninstallCommandLine': EVERYWHERE,
   // 031 FR-032a: the tab picker is a WINDOW-level navigation aid, and must work at any tab count
   // from any surface — a user with six visible tabs may still prefer to type a name than aim at one.
   // PANELS would make it dead in the file tree, which is precisely where a user loses their place.
@@ -587,6 +599,11 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     // 057 (R15) — G for "go": tier 1, in neither the reserved nor the shadowable terminal tier.
     'focus.nextMarkedPanel': ['Ctrl+Shift+Alt+G'],
     'menu.open': ['Shift+F10', 'ContextMenu'],
+    // 070 — unbound here: the cog menu opens Preferences on Windows and Linux. macOS binds Cmd+, (its override).
+    'app.settings': [],
+    // 070 FR-024a — macOS only, and unbound there too: the app menu is the route.
+    'app.installCommandLine': [],
+    'app.uninstallCommandLine': [],
     /*
      * 046 iterate round 1 (FR-102) — TIER 1, moved from its pre-round Ctrl+Alt+T (031 FR-032a):
      * the tab picker is a window-level navigation aid, and the whole navigation family now shares
@@ -797,17 +814,120 @@ const LINUX_BINDINGS: PlatformBindings = {
 };
 
 /**
+ * The chords macOS keeps for itself (070 FR-029, research R21): a default on one never reaches throng, or does
+ * something else first. Sources: Apple's "Mac keyboard shortcuts" (support.apple.com/HT201236) and the defaults in
+ * System Settings > Keyboard > Keyboard Shortcuts (Mission Control, Accessibility, Screenshots, Spotlight).
+ *
+ * Beyond R21's list: `Shift+Meta+Tab` and `Shift+Meta+\`` (the reverse app and window switchers), `Meta+F5`
+ * (VoiceOver on and off), `Alt+Meta+F5` (the Accessibility Shortcuts panel) and `F11` (Show Desktop).
+ *
+ * R21's `Ctrl+Meta+F` is NOT here: macOS reserves it for entering full screen, which is exactly what
+ * `view.fullscreen` does, so throng binds that action to it (`MACOS_BINDING_OVERRIDES`) rather than refusing it.
+ */
+export const MACOS_RESERVED_CHORDS: readonly string[] = [
+  'Meta+Tab',
+  'Shift+Meta+Tab',
+  'Meta+Space',
+  'Meta+H',
+  'Alt+Meta+H',
+  'Meta+M',
+  'Meta+Q',
+  'Meta+`',
+  'Shift+Meta+`',
+  'Alt+Meta+Escape',
+  'Shift+Meta+3',
+  'Shift+Meta+4',
+  'Shift+Meta+5',
+  'Ctrl+Meta+Q',
+  'Alt+Meta+D',
+  'Meta+F5',
+  'Alt+Meta+F5',
+  'F11',
+  'Ctrl+ArrowLeft',
+  'Ctrl+ArrowRight',
+  'Ctrl+ArrowUp',
+  'Ctrl+ArrowDown',
+  'Ctrl+Space',
+];
+
+/** Canonical modifier order, inlined: {@link MODIFIER_ORDER} is declared below and not yet initialised here. */
+function ctrlToMetaStroke(stroke: string): string {
+  if (stroke === '+' || !stroke.includes('+')) return stroke;
+  const mods = stroke.endsWith('++') ? stroke.slice(0, -2).split('+').filter(Boolean) : stroke.slice(0, stroke.lastIndexOf('+')).split('+');
+  const key = stroke.endsWith('++') ? '+' : stroke.slice(stroke.lastIndexOf('+') + 1);
+  const swapped = new Set(mods.map((m) => (m === 'Ctrl' ? 'Meta' : m)));
+  const ordered = ['Ctrl', 'Shift', 'Alt', 'Meta'].filter((m) => swapped.has(m));
+  const unknown = [...swapped].filter((m) => !ordered.includes(m));
+  return [...ordered, ...unknown, key].join('+');
+}
+
+/**
+ * A Windows chord in its macOS form (070 FR-029): Ctrl becomes Cmd (`Meta`) in every stroke, every other modifier
+ * stays (`Alt` is Option), and the result is in canonical order (`Ctrl+Shift+Alt+K` → `Shift+Alt+Meta+K`).
+ */
+export function ctrlToMeta(token: string): string {
+  const strokes = splitStrokes(token);
+  if (!strokes) return token;
+  return strokes.map(ctrlToMetaStroke).join(',');
+}
+
+/**
+ * Where macOS differs from the plain Ctrl→Cmd form (070 FR-029). Every entry is listed in docs/key-bindings.md's
+ * macOS section (`keybindings-macos.test.ts` holds the docs to it).
+ *
+ * - Reserved by macOS ({@link MACOS_RESERVED_CHORDS}): `focus.cycle`/`focus.cycleBack` keep Windows' own Ctrl+backtick,
+ *   because Cmd+backtick is macOS's window switcher; `search.replace` takes Option+Cmd+F, the Mac convention, because
+ *   Cmd+H hides the app; the Markdown fold chords keep Ctrl+M (Cmd+M minimises; their scope never includes a terminal);
+ *   `terminal.redraw` takes Shift+Cmd+F5, because Cmd+F5 turns VoiceOver on.
+ * - Taken from macOS's own text navigation, which Option+Arrow drives in every text field: `navigate.back`/`forward`
+ *   take Cmd+[ and Cmd+] (the Mac convention for back and forward), and the column-select moves take
+ *   Ctrl+Shift+Option+Arrow, so Option+Arrow and Shift+Option+Arrow still move and select by word.
+ */
+export const MACOS_BINDING_OVERRIDES: Readonly<Record<string, readonly string[]>> = {
+  'focus.cycle': ['Ctrl+`'],
+  'focus.cycleBack': ['Ctrl+Shift+`'],
+  'search.replace': ['Alt+Meta+F'],
+  // F11 is Show Desktop on macOS; Ctrl+Cmd+F is the system's own full-screen chord.
+  'view.fullscreen': ['Ctrl+Meta+F'],
+  'markdown.toggleSection': ['Ctrl+M,M'],
+  'markdown.toggleAll': ['Ctrl+M,L'],
+  'markdown.collapseSection': ['Ctrl+M,S'],
+  'markdown.collapseAll': ['Ctrl+M,A'],
+  'terminal.redraw': ['Shift+Meta+F5'],
+  'navigate.back': ['Meta+['],
+  'navigate.forward': ['Meta+]'],
+  'editor.columnSelectUp': ['Ctrl+Shift+Alt+ArrowUp'],
+  'editor.columnSelectDown': ['Ctrl+Shift+Alt+ArrowDown'],
+  'editor.columnSelectLeft': ['Ctrl+Shift+Alt+ArrowLeft'],
+  'editor.columnSelectRight': ['Ctrl+Shift+Alt+ArrowRight'],
+  // Unbound on Windows and Linux; Cmd+, is where every Mac app keeps Settings.
+  'app.settings': ['Meta+,'],
+};
+
+/**
+ * macOS's shipped defaults (070 FR-029, contracts/keybindings-macos.md): derived from Windows', never hand-written,
+ * so a Windows default added later reaches macOS in its Cmd form without a second edit. Option drags the column
+ * selection, as it does in every Mac editor (016 FR-017e).
+ */
+export const MACOS_BINDINGS: PlatformBindings = {
+  columnSelectModifier: 'Alt',
+  bindings: {
+    ...Object.fromEntries(Object.entries(WINDOWS_BINDINGS.bindings).map(([action, chords]) => [action, chords.map(ctrlToMeta)])),
+    ...Object.fromEntries(Object.entries(MACOS_BINDING_OVERRIDES).map(([action, chords]) => [action, [...chords]])),
+  },
+};
+
+/**
  * Shipped input defaults, KEYED BY PLATFORM (016, FR-017e — Principle II).
  *
- * Windows and Linux are populated. macOS joins by ADDING VALUES — no existing key moves, and no
- * consumer of the record changes shape.
- * That is the whole point: a flat action→chords record would have to be RESHAPED to gain a
- * platform, and by then ~19 call sites read it. No macOS chord is guessed here; an invented
- * default is worse than an absent one, because it looks decided.
+ * Every platform joined by ADDING VALUES — no existing key moved, and no consumer of the record changed shape. That
+ * is the whole point: a flat action→chords record would have to be RESHAPED to gain a platform, and by then ~19 call
+ * sites read it. macOS's values are derived from Windows' by a stated rule (070 FR-029), not guessed.
  */
 export const SHIPPED_KEYBINDINGS_BY_PLATFORM: Readonly<Partial<Record<OsName, PlatformBindings>>> = {
   windows: WINDOWS_BINDINGS,
   linux: LINUX_BINDINGS,
+  macos: MACOS_BINDINGS,
 };
 
 /** The platform whose values this build resolves. */
@@ -843,6 +963,8 @@ export interface KeyEvent {
   ctrl?: boolean;
   shift?: boolean;
   alt?: boolean;
+  /** Cmd on macOS (070 FR-029); a renderer elsewhere declines an event with it held (046 FR-104). */
+  meta?: boolean;
   /** Mouse-zoom gesture token, if any. */
   gesture?: 'WheelUp' | 'WheelDown' | 'MiddleClick';
 }
@@ -887,7 +1009,7 @@ export function parseKeybindings(raw: unknown): Keybindings {
   };
 }
 
-/** Build the canonical binding token for an event: `Ctrl+Shift+Alt+<key|gesture>`. */
+/** Build the canonical binding token for an event: `Ctrl+Shift+Alt+Meta+<key|gesture>`. */
 export function eventToToken(ev: KeyEvent): string | null {
   const raw = ev.gesture ?? ev.key;
   if (!raw) return null;
@@ -898,8 +1020,36 @@ export function eventToToken(ev: KeyEvent): string | null {
   if (ev.ctrl) parts.push('Ctrl');
   if (ev.shift) parts.push('Shift');
   if (ev.alt) parts.push('Alt');
+  if (ev.meta) parts.push('Meta');
   parts.push(tail);
   return parts.join('+');
+}
+
+/** How each modifier reads on macOS, in Apple's order (Control, Option, Shift, Command). */
+const MACOS_MODIFIER_LABELS: readonly (readonly [string, string])[] = [
+  ['Ctrl', 'Ctrl'],
+  ['Alt', 'Option'],
+  ['Shift', 'Shift'],
+  ['Meta', 'Cmd'],
+];
+
+/**
+ * A binding token as the user reads it on `os` (070 FR-029): on macOS `Meta` reads `Cmd` and `Alt` reads `Option`,
+ * in Apple's modifier order; elsewhere the token is its own label. Display only — never stored or matched.
+ */
+export function chordLabel(token: string, os: OsName = hostTraits().os): string {
+  if (os !== 'macos') return token;
+  const strokes = splitStrokes(token);
+  if (!strokes) return token;
+  return strokes
+    .map((stroke) => {
+      const mods = strokeMods(stroke);
+      const key = strokeKey(stroke);
+      const labelled = MACOS_MODIFIER_LABELS.filter(([m]) => mods.includes(m)).map(([, label]) => label);
+      const unknown = mods.filter((m) => !MACOS_MODIFIER_LABELS.some(([known]) => known === m));
+      return [...labelled, ...unknown, key].join('+');
+    })
+    .join(',');
 }
 
 /**
@@ -1227,6 +1377,9 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'panel.destroy',
   'tabs.rename',
   'panel.toggleMaximise',
+  'app.settings',
+  'app.installCommandLine',
+  'app.uninstallCommandLine',
 ]);
 
 /**
@@ -1351,11 +1504,12 @@ export function resolveAction(
 /**
  * The FIRST bound chord token for a command (US1, #125), or undefined if it is unbound. Context
  * menus render this in brackets after the label (e.g. "Copy (Ctrl+C)"). Tokens are already the
- * display form the keybindings editor shows, so no formatting is applied; only the first is used
- * even when a command has several (FR-002).
+ * display form the keybindings editor shows, read through {@link chordLabel} so macOS shows Cmd and
+ * Option (070 FR-029); only the first is used even when a command has several (FR-002).
  */
 export function firstBinding(kb: Keybindings, action: ActionId): string | undefined {
-  return kb.bindings[action]?.[0];
+  const token = kb.bindings[action]?.[0];
+  return token === undefined ? undefined : chordLabel(token);
 }
 
 /** Two commands that want the same chord in a context where both are live (FR-017b1). */

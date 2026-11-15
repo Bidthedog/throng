@@ -148,8 +148,18 @@ export class FilesService {
    * Only when a cause was found. An UNCLASSIFIED failure is reported verbatim (FR-011b), so its raw
    * text is already in front of the user and logging it would add a line saying what the notice says.
    */
+  /**
+   * 070 FR-025: the folders the OS withholds until the user allows throng (`PlatformServices.privacyProtectedRoots`).
+   * Empty off macOS, so every failure there classifies exactly as before.
+   */
+  private privacyProtectedRoots: readonly string[] = [];
+
+  setPrivacyProtectedRoots(roots: readonly string[]): void {
+    this.privacyProtectedRoots = roots;
+  }
+
   private failed(e: unknown, operation: FailureOperation = 'access', holder?: Holder): FailureEnvelope {
-    const envelope = failure(e, operation, holder);
+    const envelope = failure(e, operation, holder, this.privacyProtectedRoots);
     if (envelope.cause) this.logRaw?.(`[files] ${envelope.cause.raw}`);
     else logCaught(`files-service: ${operation}`, e);
     return envelope;
@@ -275,7 +285,11 @@ export class FilesService {
       // it recommends is NOT needed. Measured on this platform, `fs.rename` performs a case-only
       // rename directly for both files and folders. A temp-name dance would open a window in which
       // the user's file exists under neither name, which is strictly worse (research R1).
-      const isSelfRename = pathCompareKey(name) === pathCompareKey(basename(abs));
+      //
+      // 070 T067 (FR-020): FULL paths, not leaves. The host's rules are per volume on macOS — a case-sensitive root
+      // keeps case below it — and a root can match only an absolute path. Compared as leaves, every Mac volume read as
+      // case-insensitive, and a rename onto a differently-cased SIBLING on a case-sensitive volume replaced it.
+      const isSelfRename = pathCompareKey(dest) === pathCompareKey(abs);
       if (!isSelfRename && (await this.fs.exists(dest))) {
         return { error: 'A file or folder with this name already exists.' };
       }
@@ -388,6 +402,8 @@ export class FilesService {
     // abort the rest of a mixed files+folders selection. Items already gone are a
     // success (nothing to do); real failures are collected and reported once.
     const failures: string[] = [];
+    /** The first system reason a failure carried: the notice says what went wrong, not only which item. */
+    let reason: string | null = null;
     const removed: string[] = [];
     for (const rel of relPaths) {
       if (rel === '') {
@@ -410,13 +426,14 @@ export class FilesService {
       } catch (error) {
         logCaught(`files-service: delete ${abs}`, error);
         failures.push(basename(abs));
+        reason ??= error instanceof Error ? error.message : String(error);
       }
     }
     // Let the editor coordinator mark any open editor of a removed file dirty (FR-099).
     if (removed.length > 0) this.onDeleted?.(removed);
     if (failures.length === 0) return { ok: true };
     return {
-      error: `Could not delete ${failures.length} item${failures.length === 1 ? '' : 's'} (${failures.join(', ')}).`,
+      error: `Could not delete ${failures.length} item${failures.length === 1 ? '' : 's'} (${failures.join(', ')}).${reason ? ` ${reason}` : ''}`,
     };
   }
 
@@ -661,9 +678,12 @@ export function failure(
   e: unknown,
   operation: FailureOperation = 'access',
   holder?: Holder,
+  privacyProtectedRoots?: readonly string[],
 ): FailureEnvelope {
   const raw = e instanceof Error ? e.message : String(e);
-  const cause = classifyFailure(e, { subject: subjectOf(raw), operation, holder });
+  // 070 FR-025: the errno's own path, because only where it lies tells a privacy refusal from an ACL one.
+  const path = e instanceof Error ? (e as NodeJS.ErrnoException).path : undefined;
+  const cause = classifyFailure(e, { subject: subjectOf(raw), operation, holder, path, privacyProtectedRoots });
   return cause ? { error: causeMessage(cause), cause } : { error: raw };
 }
 

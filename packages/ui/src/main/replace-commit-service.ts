@@ -43,6 +43,7 @@ import {
   type MatchModes,
   type SnippetView,
 } from '@throng/core';
+import { realRoots } from './real-roots.js';
 import { rewriteFailureFor, textFileRewrite, type RewriteFailure } from './text-file-rewrite.js';
 
 /** One file's worth of intended writes, as the panel listed them (data-model §6). */
@@ -281,7 +282,7 @@ export class ReplaceCommitService {
   async commit(request: CommitRequest): Promise<CommitResult> {
     const confinement = resolveSaveConfinement(
       { ownerKind: 'project' },
-      { ownerRoot: request.projectRoot, allProjectRoots: [request.projectRoot] },
+      await realRoots(this.fs, { ownerRoot: request.projectRoot, allProjectRoots: [request.projectRoot] }),
     );
 
     const changedInBuffer: string[] = [];

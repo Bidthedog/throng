@@ -6,6 +6,7 @@
  */
 import {
   BASH_ENTER_START_DIR,
+  BUILTIN_FLAVOUR_COMMAND_RECIPES,
   COMMAND_PLACEHOLDER,
   LAUNCHER_HOLDS_START_DIR,
   START_DIR_ENV,
@@ -14,6 +15,7 @@ import {
   prepareStartupCommand,
   NEEDS_VERBATIM_COMMAND_LINE,
 } from './command-recipe.js';
+import { hostTraits } from '../platform/host-traits.js';
 
 /** What the daemon needs to spawn a PTY (cwd = project root). Never persisted. */
 export interface LaunchSpec {
@@ -125,7 +127,7 @@ export function resolveLaunchSpec(
   if (projectRoot === null) {
     throw new Error('Cannot resolve a terminal launch spec without a project root');
   }
-  const args = [...flavour.args, ...tokenizeParams(shellArguments)];
+  const given = [...flavour.args, ...tokenizeParams(shellArguments)];
   const userCommand = prepareStartupCommand(flavour.id ?? '', startupCommand?.trim() ?? '');
   const integration = flavour.shellIntegration?.trim() ?? '';
   const historyOff = flavour.historySuppression?.trim() ?? '';
@@ -148,6 +150,7 @@ export function resolveLaunchSpec(
   const command = [historyOff, integration, spawnCwd && userCommand ? BASH_ENTER_START_DIR : '', userCommand]
     .filter((part) => part !== '')
     .join('; ');
+  const args = [...loginSwitch(flavour.id, given, command !== ''), ...given];
   const finish = (spec: LaunchSpec): LaunchSpec => (spawnCwd ? { ...spec, spawnCwd } : spec);
 
   // Nothing to run → byte-for-byte today's behaviour (FR-006): no extra args, no PTY write.
@@ -169,7 +172,7 @@ export function resolveLaunchSpec(
   // A recipe puts the command in argv. It goes LAST so the recipe's terminator (`/K`,
   // `-Command`, `-c`) still consumes the command rather than a user-supplied argument.
   if (isValidCommandRecipe(flavour.commandRecipe)) {
-    const recipe = flavour.commandRecipe!;
+    const recipe = loginRecipe(flavour.id, flavour.commandRecipe!);
     // FR-014: a flavour's Shell Arguments and its recipe must not contradict each other. They do
     // by default for `cmd`, whose shipped Shell Arguments are `/K` — the very switch its recipe
     // supplies. Passing both yields `cmd /K /K echo hi`, where cmd takes `/K echo hi` as the
@@ -209,6 +212,53 @@ export function resolveLaunchSpec(
       ? { file: flavour.file, args, cwd: projectRoot, ...(env ? { env } : {}) }
       : { file: flavour.file, args, cwd: projectRoot, writeOnReady: userCommand, ...(env ? { env } : {}) },
   );
+}
+
+/** Shells that take `-l` alongside other flags to start as a login shell, by flavour id. */
+const LOGIN_SWITCH_SHELLS: ReadonlySet<string> = new Set(['bash', 'zsh', 'fish', 'sh', 'dash', 'ksh']);
+const LOGIN_SWITCHES: ReadonlySet<string> = new Set(['-l', '--login']);
+/** tcsh honours `-l` only as its sole flag (tcsh(1)), so it cannot be added beside `-c` or the user's own flags. */
+const SOLE_FLAG_LOGIN_SHELL = 'tcsh';
+
+/**
+ * `['-l']` where a shell must start as a login shell, else nothing (070 FR-017, research R9). On macOS every terminal
+ * app starts its shell that way, and throng launched from the Dock inherits launchd's short PATH, so without it a
+ * terminal would not see the user's `~/.zprofile` (Homebrew's PATH lives there). First, so a recipe's `-c` still
+ * takes the command; never twice, so a user's own `--login` is left as it is. tcsh gets it only when it would be the
+ * one flag: with a command, its recipe's re-exec makes the login shell instead ({@link loginRecipe}).
+ */
+function loginSwitch(flavourId: string | undefined, given: readonly string[], hasCommand: boolean): string[] {
+  if (hostTraits().os !== 'macos') return [];
+  if (flavourId === SOLE_FLAG_LOGIN_SHELL) return given.length === 0 && !hasCommand ? ['-l'] : [];
+  if (!LOGIN_SWITCH_SHELLS.has(flavourId ?? '')) return [];
+  return given.some((arg) => LOGIN_SWITCHES.has(arg)) ? [] : ['-l'];
+}
+
+/** A shipped recipe's closing re-exec, and the login form macOS uses instead. fish's recipe has no re-exec. */
+const LOGIN_REEXEC: Readonly<Record<string, readonly [string, string]>> = {
+  bash: ['exec bash -i', 'exec bash -il'],
+  zsh: ['exec zsh -i', 'exec zsh -il'],
+  sh: ['exec sh -i', 'exec sh -il'],
+  dash: ['exec dash -i', 'exec dash -il'],
+  ksh: ['exec ksh -i', 'exec ksh -il'],
+  // A terminal is a tty, so `tcsh -l` is interactive without `-i`, which it would refuse beside `-l`.
+  tcsh: ['exec tcsh -i', 'exec tcsh -l'],
+};
+
+/**
+ * The recipe a macOS shell runs a Startup Command (or shell integration) through (070 FR-017). The shipped recipe ends
+ * by re-executing an interactive shell, which replaced the login shell `-l` started with a non-login one, so bash never
+ * read `~/.bash_profile`. On macOS the re-exec is a login shell too. A recipe the user wrote is theirs and runs as
+ * written; Windows and Linux recipes are unchanged (FR-039).
+ */
+function loginRecipe(flavourId: string | undefined, recipe: readonly string[]): readonly string[] {
+  const id = flavourId ?? '';
+  const reexec = LOGIN_REEXEC[id];
+  const shipped = BUILTIN_FLAVOUR_COMMAND_RECIPES[id];
+  if (hostTraits().os !== 'macos' || !reexec || !shipped) return recipe;
+  if (recipe.length !== shipped.length || recipe.some((part, i) => part !== shipped[i])) return recipe;
+  const [from, to] = reexec;
+  return recipe.map((part) => (part.endsWith(from) ? `${part.slice(0, -from.length)}${to}` : part));
 }
 
 /** The directory part of an absolute executable path, or undefined for a bare name. */

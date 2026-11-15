@@ -9,12 +9,23 @@ export interface IUserDirectories {
   dataDir(devMode: boolean): string;
   /** Make a folder ready to hold user data, private to its owner where the platform can say so. */
   prepare(dir: string): void;
+  /**
+   * Where logs go, when the platform has its own place for them (070 R5: `~/Library/Logs` on macOS, so Console.app
+   * shows them). Absent means `<dataDir>/logs`, which is where Windows and Linux keep them, so nothing moves there.
+   */
+  logDir?(devMode: boolean): string;
 }
 
 /** Puts a deleted item back. Rejects with a plain reason when it cannot, and never replaces what is there now. */
 export interface ITrashRestore {
   /** `deletedAt` (epoch ms) picks among several deletions of one path: the closest at or before it. */
   restore(originalPath: string, deletedAt: number): Promise<void>;
+  /**
+   * Move an item to the trash, where this platform must do it itself to be able to restore it (070 R6: macOS's
+   * `trashItemAtURL` names where the item went, which Electron's `shell.trashItem` discards). Absent means the
+   * caller's own trash function (Electron's) is the one to use, as on Windows and Linux.
+   */
+  trash?(path: string): Promise<void>;
 }
 
 /** Which volume a path is on, for gating checks that may hang (045 FR-121). */

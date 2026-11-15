@@ -24,6 +24,7 @@ import {
   logCaught,
   logExpected,
   parseKeybindings,
+  hostTraits,
   parseSettingsGuarded,
   // 033 FR-069a — the index is keyed by root, the daemon keys projects by id; this is what makes
   // the two line up (no two projects may share a root, so the map is total).
@@ -42,6 +43,7 @@ import {
   type ShutdownView,
   type IUiSettings,
   type ShippedDefaults,
+  type Keybindings,
   type Theme,
   NOT_A_MISSING_FILE,
   SHIPPED_PREVIEW_PROVIDERS,
@@ -113,6 +115,8 @@ import { openInEditorOrPreview } from './open-document-check.js';
 // calls were accidentally providing is now handled app-level inside `preferences-window.ts`.
 import { openPreferences, isPreferencesTab, type PreferencesWindowDeps } from './preferences-window.js';
 import { buildAppMenu } from './app-menu.js';
+import { appMenuRebuilder } from './app-menu-template.js';
+import { monitorWindowChrome, routeMonitorMinimise, secondaryWindowChrome } from './window-chrome.js';
 import { openAbout, type AboutWindowDeps } from './about-window.js';
 import { createInstanceGuard } from './instance-guard.js';
 import { readUiSettings } from './ui-settings.js';
@@ -130,6 +134,11 @@ import {
 import { checkoutOfDaemonEntry, ensureDaemon, pingDaemon, resolveDaemonNodeExe } from './daemon-lifecycle.js';
 import { fork, spawn } from 'node:child_process';
 import { watchChild } from '@throng/platform-node';
+import { isDevToolsToggle } from './devtools-toggle.js';
+import { createMacLifecycle } from './mac-lifecycle.js';
+import { openFileHandler } from './open-file.js';
+import { refusalPresentation } from './startup-refusal.js';
+import { createCommandLineInstallController, createOutcomeRelay, registerCommandLineIpc } from './command-line-install-ipc.js';
 import type { DaemonRoster, RosterUiProcess } from '@throng/ipc-contract';
 import { RESOURCES_ROSTER_METHOD } from '@throng/ipc-contract';
 import { ResourceMonitorHost } from './resource-monitor-host.js';
@@ -424,7 +433,7 @@ async function createMainWindow(
     show: false,
     // The application draws its own full-width title bar + window controls (007,
     // FR-001/002); there is no OS-drawn title bar in addition.
-    frame: false,
+    ...platform.windowChrome(), // 070 FR-026: frameless, or macOS's hidden title bar with its lights
     webPreferences: {
       preload: resolveFromHere('../preload/preload.cjs'),
       contextIsolation: true,
@@ -445,10 +454,8 @@ async function createMainWindow(
    */
   if (isDevInstance) {
     window.webContents.on('before-input-event', (event, input) => {
-      const toggle =
-        input.key === 'F12' ||
-        (input.control && input.shift && input.key.toLowerCase() === 'i');
-      if (input.type !== 'keyDown' || !toggle) return;
+      // F12, or the primary modifier + Shift + I: Cmd on macOS (070 research R21).
+      if (!isDevToolsToggle(input, hostTraits().os)) return;
       event.preventDefault();
       if (window.webContents.isDevToolsOpened()) window.webContents.closeDevTools();
       else window.webContents.openDevTools({ mode: 'detach' });
@@ -570,7 +577,7 @@ function createSubWorkspaceWindow(
     // Hidden until painted, so it never flashes an empty black frame on open (issue 132).
     show: false,
     // Sub-workspace windows share the custom title bar (007, FR-007) — no OS frame.
-    frame: false,
+    ...platform.windowChrome(), // 070 FR-026: frameless, or macOS's hidden title bar with its lights
     webPreferences: {
       preload: resolveFromHere('../preload/preload.cjs'),
       contextIsolation: true,
@@ -643,7 +650,9 @@ const platform = startPlatform();
 const startupRefusal = platform.startupRefusal();
 if (startupRefusal !== null) {
   // FR-019. Normally the preflight says this first: Electron itself aborts as root before any of this runs.
-  dialog.showErrorBox('throng', startupRefusal);
+  // 070 FR-007: a refusal raised through the package check's test seam is logged, not shown in a modal nobody answers.
+  if (refusalPresentation(process.env) === 'dialog') dialog.showErrorBox('throng', startupRefusal);
+  else console.error(`[throng-ui] startup refused: ${startupRefusal}`);
   app.exit(1);
 }
 
@@ -736,6 +745,9 @@ const startupVersion = readProductInfo([
   join(app.getAppPath(), 'package.json'),
 ]).version;
 
+// 070 R5: macOS keeps logs in ~/Library/Logs, where Console.app finds them. A launch that chose its own
+// --user-data-dir (the E2E harness) keeps them inside it, as everywhere else.
+const platformLogDir = hasUserDataDirSwitch(process.argv) ? undefined : platform.userDirectories().logDir?.(isDevInstance);
 const diagnostics = startUiDiagnostics({
   level: startupLogLevel,
   retention: {
@@ -744,6 +756,7 @@ const diagnostics = startUiDiagnostics({
     maxTotalBytes: startupDiagnostics.maxTotalMb * 1024 * 1024,
   },
   userDataDir: app.getPath('userData'),
+  ...(platformLogDir ? { logDir: platformLogDir } : {}),
   version: startupVersion,
   buildId: readBuildId(resolveFromHere('../../../daemon/dist/BUILD_ID')),
 });
@@ -916,6 +929,25 @@ const openFolderRequests = new OpenFolderQueue((absPath) => {
 });
 if (launchFolder) openFolderRequests.push(launchFolder);
 ipcMain.on('throng:openFolder:ready', () => openFolderRequests.ready());
+/*
+ * 070 FR-024 (research R19): a folder dropped on the Dock icon or opened with Finder's Open With. Registered here,
+ * before `ready`, because the event that launched throng arrives before it. macOS only emits it; elsewhere it is inert.
+ */
+app.on(
+  'open-file',
+  openFileHandler({
+    kindOf: (absPath) => {
+      try {
+        return statSync(absPath).isDirectory() ? 'folder' : 'file';
+      } catch (error) {
+        logExpected('main: open-file', 'a path macOS hands over can be gone by now; it is reported as missing', error);
+        return 'missing';
+      }
+    },
+    push: (absPath) => openFolderRequests.push(absPath),
+    bringForward: () => bringMainWindowForward(),
+  }),
+);
 
 const instanceGuard = createInstanceGuard({
   lockName: instanceLockName(instanceUiSettings.pipeName),
@@ -1124,6 +1156,8 @@ if (isPrimaryInstance)
     iconPackService.listIconPacks(),
   );
   let currentSettings = initialPayload.settings;
+  // Set once the menu's handlers exist (below); the config broadcast calls it to move Settings…'s chord (070 FR-027).
+  let installAppMenu: (keybindings: Keybindings) => void = () => {};
   // 044 Layer 4 (contracts/security-policy.md): installed here, before ANY window exists, so no
   // renderer ever makes a request the filter did not see. The settings getter is read on every request
   // (FR-092); `rendererDir` is the directory every window's `index.html` loads from.
@@ -1137,6 +1171,11 @@ if (isPrimaryInstance)
   // it SYNCHRONOUSLY before first paint and applies it to <html>, so no window or
   // modal ever flashes the default theme before the saved one resolves (issue 132).
   let currentTheme = initialPayload.theme;
+  // 070 FR-011 (research R32): every renderer configures its host traits from main's own, asked for synchronously by
+  // its preload before any renderer code runs.
+  ipcMain.on('throng:host:traits', (event) => {
+    event.returnValue = hostTraits();
+  });
   ipcMain.on('throng:theme:bootstrap', (event) => {
     // 066 T026: the panel-throw dev seam rides on this one synchronous ask rather than adding its own.
     event.returnValue = { ...themeBootstrap(currentTheme), testPanelThrow: testPanelThrow };
@@ -1217,6 +1256,8 @@ if (isPrimaryInstance)
 
   const broadcast = (payload: ConfigPayload): void => {
     const previous = currentSettings;
+    // 070 FR-027: Settings…'s chord follows a rebinding.
+    installAppMenu(payload.keybindings);
     currentSettings = payload.settings;
     if (currentSettings.terminals.formHistory.maxEntries < previous.terminals.formHistory.maxEntries) {
       logFormHistory(formHistory.applyLimit());
@@ -1348,6 +1389,8 @@ if (isPrimaryInstance)
     backgroundColor: themeBackground,
     // Resolved lazily at open time, so this yields the current main window (FR-013/013a).
     getMainWindow: currentMainWindow,
+    // 070 FR-026: on macOS the lights Preferences does not offer (minimise, full screen) are greyed.
+    chrome: () => secondaryWindowChrome(platform.windowChrome(), hostTraits().os, { maximise: true }),
     // The `foldDefault` test seam (056 FR-016); empty in every real run.
     query: prefsQuery(),
   };
@@ -1419,8 +1462,59 @@ if (isPrimaryInstance)
     shellIntegration,
     backgroundColor: themeBackground,
     getMainWindow: currentMainWindow,
+    // 070 FR-026: About is close-only, so on macOS only its close light is live.
+    chrome: () => secondaryWindowChrome(platform.windowChrome(), hostTraits().os, { maximise: false }),
   };
-  Menu.setApplicationMenu(buildAppMenu(() => openAbout(aboutDeps)));
+  /*
+   * 070 FR-024a — Install and Uninstall 'throng' command. The seam is unavailable where an installer already puts the
+   * command on the PATH (Windows, Linux), so the actions appear only on macOS. Each action comes to one outcome, shown
+   * by the main window (`CommandLineNotice`); one found at start waits in the relay until that window listens.
+   */
+  const commandLineSeam = platform.commandLineInstall({ execPath: process.execPath });
+  const commandLineRelay = createOutcomeRelay();
+  const commandLine = createCommandLineInstallController({
+    seam: commandLineSeam,
+    confirmReplace: async ({ linkPath, target }) => {
+      const options = {
+        type: 'question' as const,
+        buttons: ['Replace', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        message: `Replace the throng command at ${linkPath}?`,
+        detail: `It opens ${target}, which is not this copy of throng.`,
+      };
+      const parent = currentMainWindow();
+      const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+      return response === 0;
+    },
+    report: (outcome) => commandLineRelay.report(outcome),
+  });
+  registerCommandLineIpc(ipcMain, commandLine, commandLineRelay);
+  void commandLine.checkAtStart();
+  /*
+   * 070 FR-027 — the menu per platform: Help-only on Windows and Linux, the full menu bar on macOS. Settings… shows
+   * `app.settings`'s own chord, so it is rebuilt when the key bindings change (a rebinding moves it).
+   */
+  // Rebuilt only when what it shows changed, not on every config write (an open menu would close under the user).
+  const rebuildAppMenu = appMenuRebuilder(({ os, settingsChord, commandLine: canInstall }) =>
+    Menu.setApplicationMenu(
+      buildAppMenu(os, {
+        onAbout: () => openAbout(aboutDeps),
+        onSettings: () => openPreferences('settings', preferencesDeps),
+        ...(settingsChord === undefined ? {} : { settingsChord }),
+        ...(canInstall
+          ? { commandLine: { onInstall: () => void commandLine.install(), onUninstall: () => void commandLine.uninstall() } }
+          : {}),
+      }),
+    ),
+  );
+  installAppMenu = (keybindings: Keybindings): void =>
+    rebuildAppMenu({
+      os: hostTraits().os,
+      settingsChord: keybindings.bindings['app.settings']?.[0],
+      commandLine: commandLineSeam.available,
+    });
+  installAppMenu(initialPayload.keybindings);
   // The DISCOVERABLE entry point (020, FR-003): the cog menu's "About throng" item.
   // throng draws its own title bar (`frame: false`), so the native application menu
   // above never renders on screen — the cog is where users actually reach About.
@@ -1555,6 +1649,8 @@ if (isPrimaryInstance)
   // FR-018 — a raw error that a classified message replaces still reaches the log, so it outlives
   // the notice being dismissed. `diagnostics.log` is the same rotating file the daemon writes to.
   filesService.setDiagnosticLog((message) => diagnostics.log.warn(message));
+  // 070 FR-025: a listing macOS withholds is named as that, with where to allow it, not as a permissions failure.
+  filesService.setPrivacyProtectedRoots(platform.privacyProtectedRoots(app.getPath('home')));
   registerFilesIpc(filesService, explorerWatcher);
   const fileManagerItem = container.get<IFileManagerRegistration>(UI_TYPES.FileManagerRegistration);
   ipcMain.handle('throng:fileManagerItem:status', () => fileManagerItem.status());
@@ -2628,12 +2724,12 @@ if (isPrimaryInstance)
         ...bounds,
         minWidth: MONITOR_MIN_SIZE.width,
         minHeight: MONITOR_MIN_SIZE.height,
-        frame: false,
+        // The monitor's Minimise is its own (FR-085): it closes into the status bar. Windows and Linux draw that button
+        // and turn the OS minimise off; on macOS the yellow light is it (070 FR-026, routed below).
+        ...monitorWindowChrome(platform.windowChrome(), hostTraits().os),
         ...(parent ? { parent: parent as BrowserWindow } : {}),
         movable: true,
         resizable: true,
-        // The title bar's Minimise is the monitor's own (FR-085): it closes into the status bar.
-        minimizable: false,
         title: 'Resource Monitor — throng',
         icon: appIcon(),
         backgroundColor: themeBackground(),
@@ -2646,6 +2742,8 @@ if (isPrimaryInstance)
         },
       });
       wireWindowMaximizeEvents(win);
+      // 070 FR-026: on macOS the yellow light sends the monitor to the status bar, as the Minimise button does elsewhere.
+      routeMonitorMinimise(win, hostTraits().os, (opts) => void monitorWindow.minimise(opts));
       denyRendererWindows(win.webContents, shellIntegration);
       revealWhenPainted(win);
       const unwireLayering = wireFloatingLayering(win);
@@ -2765,6 +2863,16 @@ if (isPrimaryInstance)
   let allowClose = false;
   // 067 FR-037: the shutdown in progress, if any, so Cancel can reach it. A fresh one per close.
   let activeShutdown: ShutdownDriver | null = null;
+  /*
+   * 070 FR-028 (contracts/app-lifecycle-macos.md, research R18): on macOS closing the window hides it and the QUIT runs
+   * this shutdown; null everywhere else, where the window close runs it as it always has.
+   */
+  const macLifecycle = hostTraits().os === 'macos' ? createMacLifecycle() : null;
+  /** A shutdown that will not finish: the app keeps running (and, on macOS, a later quit starts afresh). */
+  const shutdownCancelled = (): void => {
+    activeShutdown = null;
+    macLifecycle?.onShutdownCancelled();
+  };
   // The running terminals (with display metadata) for the close warning. Returns
   // null when the query itself fails (daemon hiccup) — the caller then still WARNS
   // rather than silently closing, so a running terminal is never lost to an error.
@@ -2903,7 +3011,7 @@ if (isPrimaryInstance)
   /** Run a shutdown, then close, unless Cancel took it back. Past this point Cancel does nothing. */
   const finishShutdown = async (driver: ShutdownDriver, steps: readonly ShutdownStep[], delayMs: number): Promise<void> => {
     if ((await driver.run(steps)) === 'cancelled') {
-      activeShutdown = null;
+      shutdownCancelled();
       broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:appClose:cancelled', null);
       return;
     }
@@ -2912,19 +3020,53 @@ if (isPrimaryInstance)
     // A launch from here on must not be told about this instance (067 edge case: opening a folder while closing).
     await instanceGuard.release();
     setTimeout(() => {
+      // macOS: the quit asked for this shutdown, so finishing it is quitting (the window close alone would only hide).
+      if (macLifecycle) {
+        macLifecycle.onShutdownFinished();
+        app.quit();
+        return;
+      }
       if (!mainWindow.isDestroyed()) mainWindow.close();
     }, delayMs);
   };
   ipcMain.on('throng:appClose:cancel', () => activeShutdown?.cancel());
+  /*
+   * 070 FR-028 — macOS: a quit (Cmd+Q, the app menu, the Dock, logout) is held and runs the shutdown above through the
+   * window's own close, closing progress and the terminals prompt included; its finish quits. A Dock click shows the
+   * hidden window again.
+   */
+  if (macLifecycle) {
+    app.on('before-quit', (e) => {
+      // A main window already destroyed (the E2E harness's teardown, a crash) has no shutdown left to show: let it go.
+      if (mainWindow.isDestroyed()) return;
+      const decision = macLifecycle.onBeforeQuit();
+      if (decision === 'allow') return;
+      e.preventDefault();
+      if (decision === 'start-shutdown' && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.close();
+      }
+    });
+    app.on('activate', () => {
+      if (macLifecycle.onActivate() === 'show' && !mainWindow.isDestroyed()) mainWindow.show();
+    });
+  }
 
   // A reloaded or crashed renderer cannot answer a prompt, so it must not leave the window unclosable.
   mainWindow.webContents.on('did-start-loading', () => {
     activeShutdown = null;
+    // 070 FR-028: the quit that renderer was prompting for is gone with it, so the next Cmd+Q can start one.
+    macLifecycle?.onRendererReloaded();
   });
 
   mainWindow.on('close', (e) => {
     if (allowClose) return;
     e.preventDefault();
+    // 070 FR-028: on macOS a close with no quit in progress leaves throng in the Dock, renderer and layout alive.
+    if (macLifecycle?.onMainWindowClose() === 'hide') {
+      mainWindow.hide();
+      return;
+    }
     // 067 FR-038: one shutdown at a time. A second close (Alt+F4, the taskbar) must not start another, whose driver
     // would take the Cancel while the first one carried on and closed the window.
     if (activeShutdown) return;
@@ -2935,6 +3077,7 @@ if (isPrimaryInstance)
     if (pastes.running + pastes.queued > 0) {
       void transferQuitGate.check().then((proceed) => {
         if (proceed && !mainWindow.isDestroyed()) mainWindow.close();
+        else if (!proceed) macLifecycle?.onShutdownCancelled();
       });
       return;
     }
@@ -2954,7 +3097,7 @@ if (isPrimaryInstance)
         // REMAINS, and is no longer a correctness device: it lets the overlay paint.
         await finishShutdown(driver, [drainStep], 250);
       } else if (driver.cancelled) {
-        activeShutdown = null;
+        shutdownCancelled();
         broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:appClose:cancelled', null);
       } else {
         // Some terminals, or null (query failed → assume terminals may be running).
@@ -2967,7 +3110,7 @@ if (isPrimaryInstance)
   });
   ipcMain.on('throng:appClose:choice', (_event, choice: unknown) => {
     if (choice !== 'terminate' && choice !== 'leave') {
-      activeShutdown = null; // cancel/unknown → stay open
+      shutdownCancelled(); // cancel/unknown → stay open
       return;
     }
     const driver = new ShutdownDriver(publishShutdown, () => Date.now());

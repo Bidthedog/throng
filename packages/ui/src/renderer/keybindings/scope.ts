@@ -220,6 +220,9 @@ export function isPanelScoped(action: ActionId): boolean {
     action === 'tabs.openPicker' ||
     // 067 FR-075 — Rename Tab is a window command too: it must reach the strip from a focused terminal (FR-076).
     action === 'tabs.rename' ||
+    // 070 FR-024a, FR-027 — Settings… and the `throng` command are APPLICATION commands, which macOS reaches with
+    // Cmd+, from wherever the focus is, a terminal's textarea included.
+    action.startsWith('app.') ||
     /*
      * 043 (#220, #153) — find and replace in files are WINDOW commands, for Quick Open's reason.
      *

@@ -28,6 +28,7 @@
 import { useEffect, useRef } from 'react';
 import { eventToToken, normalizeToken, type ActionId, type Keybindings } from '@throng/core';
 import { useKeybindings } from '../config/config-store.js';
+import { primaryModifierHeld, primaryModifierToken } from '../config/host-modifiers.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { zoomFocusedDiagram, zoomPanelDiagram, type DiagramZoomPoint } from '../preview/diagram/diagram-zoom.js';
 
@@ -35,7 +36,8 @@ type Gesture = 'WheelUp' | 'WheelDown' | 'MiddleClick';
 
 /** The action bound to a Ctrl+`gesture`, read from the LIVE keybindings — or null if none is. */
 function actionForGesture(kb: Keybindings, gesture: Gesture): ActionId | null {
-  const token = eventToToken({ ctrl: true, gesture });
+  // The host's primary modifier: `Meta+WheelUp` on macOS, where the shipped gesture is Cmd's (070 FR-029).
+  const token = eventToToken(primaryModifierToken() === 'Meta' ? { meta: true, gesture } : { ctrl: true, gesture });
   if (!token) return null;
   const norm = normalizeToken(token);
   for (const [action, tokens] of Object.entries(kb.bindings)) {
@@ -117,7 +119,7 @@ export function MouseZoomHandler(): null {
     const onWheel = (event: WheelEvent): void => {
       // A tilt-wheel / horizontal-swipe event (deltaY 0) carries no vertical zoom intent at all —
       // ignored outright, not read as WheelDown (046 fix round, MINOR review finding).
-      if (!event.ctrlKey || event.deltaY === 0) return;
+      if (!primaryModifierHeld(event) || event.deltaY === 0) return;
       event.preventDefault(); // suppress Chromium's own page zoom, hit or miss
       dispatch(
         actionForGesture(kbRef.current, event.deltaY < 0 ? 'WheelUp' : 'WheelDown'),
@@ -127,7 +129,7 @@ export function MouseZoomHandler(): null {
     };
     let gestureHeld = false;
     const onMouseDown = (event: MouseEvent): void => {
-      if (!event.ctrlKey || event.button !== 1) return;
+      if (!primaryModifierHeld(event) || event.button !== 1) return;
       event.preventDefault(); // suppress middle-click autoscroll, hit or miss
       gestureHeld = true;
       dispatch(actionForGesture(kbRef.current, 'MiddleClick'), panelIdUnder(event.target));

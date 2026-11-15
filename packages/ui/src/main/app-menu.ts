@@ -1,33 +1,18 @@
 /**
- * app-menu — the minimal native application menu (020, FR-003).
+ * app-menu — the native application menu (020 FR-003; 070 FR-027).
  *
- * The bootstrap removed Electron's auto-generated menu bar (`Menu.setApplicationMenu(null)`)
- * because throng draws its own full-width title bar and had no application commands. Feature 020
- * reintroduces exactly one command — **Help → About throng** — the spec-required entry point to the
- * About dialog (FR-003). This is a NATIVE OS menu, so it is exempt from the themeable-icon rule
- * (constitution): its item is a plain OS menu entry, not an in-window action control.
- *
- * The menu carries nothing else: keeping it to the single required item avoids reintroducing the
- * File/Edit/View/Window bar the app deliberately dropped.
+ * The bootstrap removed Electron's auto-generated menu bar (`Menu.setApplicationMenu(null)`) because throng draws its
+ * own full-width title bar. Feature 020 reintroduced one command, Help → About throng, and that is still all Windows
+ * and Linux carry. macOS always shows a menu bar, so there throng gives it the app, Edit, Window and Help menus. The
+ * template, and why each item registers its chord or does not, is in `app-menu-template.ts`.
  */
-import { Menu, type MenuItemConstructorOptions } from 'electron';
+import { Menu } from 'electron';
+import type { OsName } from '@throng/core';
+import { appMenuTemplate, type AppMenuHandlers } from './app-menu-template.js';
 
-/**
- * Build the application menu. `onAbout` is invoked when the user chooses
- * Help → About throng; the caller wires it to open the shared About window.
- */
-export function buildAppMenu(onAbout: () => void): Menu {
-  const template: MenuItemConstructorOptions[] = [
-    {
-      label: 'Help',
-      role: 'help',
-      submenu: [
-        {
-          label: 'About throng',
-          click: () => onAbout(),
-        },
-      ],
-    },
-  ];
-  return Menu.buildFromTemplate(template);
+export type { AppMenuHandlers } from './app-menu-template.js';
+
+/** Build the application menu for `os`; the caller wires each handler (About, Settings…, the throng command). */
+export function buildAppMenu(os: OsName, handlers: AppMenuHandlers): Menu {
+  return Menu.buildFromTemplate(appMenuTemplate(os, handlers));
 }

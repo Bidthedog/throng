@@ -6,6 +6,7 @@ import {
   MAX_CHORD_KEYS,
   captureChordToken,
   captureToken,
+  chordLabel,
   isBindableChord,
   isReservedChord,
   isValidTwoStrokeToken,
@@ -142,7 +143,7 @@ export function CaptureModal({ action, label, bindings, onApply, onClose }: Capt
         }
         const reserved = strokes.find((stroke) => isReservedChord(stroke));
         if (reserved) {
-          setError(`${reserved} is reserved by the system and can’t be bound.`);
+          setError(`${chordLabel(reserved)} is reserved by the system and can’t be bound.`);
           return;
         }
         const other = findConflict(bindings, token, action);
@@ -170,7 +171,7 @@ export function CaptureModal({ action, label, bindings, onApply, onClose }: Capt
         return;
       }
       if (isReservedChord(token)) {
-        setError(`${token} is reserved by the system and can’t be bound.`);
+        setError(`${chordLabel(token)} is reserved by the system and can’t be bound.`);
         return;
       }
       const other = findConflict(bindings, token, action);
@@ -266,12 +267,12 @@ export function CaptureModal({ action, label, bindings, onApply, onClose }: Capt
         </p>
         <div className="capture-modal__chord-row">
           <div className="capture-modal__chord" data-testid="capture-live">
-            {live || '—'}
+            {live ? chordLabel(live) : '—'}
           </div>
         </div>
         {pending ? (
           <p className="capture-modal__pending" data-testid="capture-pending">
-            {pending} — release every key to record it.
+            {chordLabel(pending)} — release every key to record it.
           </p>
         ) : null}
         {error ? (
@@ -282,7 +283,7 @@ export function CaptureModal({ action, label, bindings, onApply, onClose }: Capt
         {conflict ? (
           <div className="capture-modal__conflict" data-testid="capture-conflict">
             <p>
-              <code>{conflict.token}</code> is already bound to <strong>{conflict.action}</strong>.
+              <code>{chordLabel(conflict.token)}</code> is already bound to <strong>{conflict.action}</strong>.
               {conflict.firstStroke ? ' Choose a different first key.' : ''}
               {conflict.prefixOfOther
                 ? ` It is the first stroke of ${conflict.action}'s key binding — choose a different key.`

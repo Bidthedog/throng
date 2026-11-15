@@ -162,6 +162,23 @@ export interface ComposeReleaseBodyInput {
   maxLength?: number;
 }
 
+/**
+ * What a macOS reader needs before downloading (070 FR-001, FR-003a, FR-006, FR-048, research R31). The supported
+ * releases are a rule, never a list of versions: the body would otherwise go stale the day a new macOS ships (FR-037).
+ */
+const MACOS_FOOTER: readonly string[] = [
+  '**macOS is supported at a best-endeavours level.** The macOS downloads are for Apple silicon Macs running the',
+  'current or the previous macOS release. Older releases may work but are not supported,',
+  'and Intel Macs are not supported. The macOS copies are checked only by automated tests on hosted Macs, with no',
+  'manual test pass on a Mac.',
+  '',
+  '**The macOS copies are not signed with a developer identity or notarised**, so the first time you open throng macOS',
+  'blocks it. Open **System Settings → Privacy & Security**, click **Open Anyway** beside the message about throng, and',
+  'confirm. You need to do this once. Never turn off Gatekeeper to install. The exact steps for each supported release',
+  'are in the [macOS install guide](https://github.com/Bidthedog/throng/blob/master/docs/install-macos.md).',
+  '',
+];
+
 /** Render the notes half of the body. */
 function renderNotes(notes: ReleaseNotes): string {
   return notes.sections
@@ -198,14 +215,21 @@ function renderFooter(
           '',
         ];
 
+  // 070 FR-001, FR-003a, FR-006, FR-048: wherever a macOS download is offered, what it is for and how to open it. A body
+  // with no macOS download reads exactly as it did before 070.
+  const offersMac = artifacts.some((a) => a.platform === 'darwin');
+  const macLines = offersMac ? MACOS_FOOTER : [];
+  const macChecksum = offersMac ? ', `shasum -a 256 <file>` on macOS' : '';
+
   return [
     '---',
     '',
     '**These downloads are not code-signed.** Windows will show an "unrecognised app" warning',
     '(SmartScreen) — click **More info → Run anyway**. Never disable a security feature to install.',
     '',
+    ...macLines,
     ...gapLines,
-    'Verify your download matches its checksum below (`Get-FileHash <file> -Algorithm SHA256` on Windows, `sha256sum <file>` on Linux).',
+    `Verify your download matches its checksum below (\`Get-FileHash <file> -Algorithm SHA256\` on Windows, \`sha256sum <file>\` on Linux${macChecksum}).`,
     '',
     '| Artifact | Who it is for | File | SHA-256 |',
     '|---|---|---|---|',

@@ -25,6 +25,7 @@ import {
   type TaskToggleResponse,
   type CodePageId,
 } from '@throng/core';
+import { realRoots } from './real-roots.js';
 import { textFileRewrite } from './text-file-rewrite.js';
 
 /** What the service needs from the editor authority — `EditorCoordinator` satisfies it structurally. */
@@ -77,7 +78,7 @@ export class TaskToggleService {
 
     const confinement = resolveSaveConfinement(
       { ownerKind: 'project' },
-      { ownerRoot: run.projectRoot, allProjectRoots: [run.projectRoot] },
+      await realRoots(this.fs, { ownerRoot: run.projectRoot, allProjectRoots: [run.projectRoot] }),
     );
     const outcome = await textFileRewrite(
       this.fs,
