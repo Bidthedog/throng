@@ -1,6 +1,31 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.5.0 → 6.6.0
+Bump rationale: MINOR — Principle II makes macOS a supported target and extends the v6.1.0 delivery rule to it: a
+                feature with per-OS code ships Windows, Linux and macOS together, each passing the shared contract.
+                New: macOS is proved by CI on hosted runners only, no feature may require a manual test on a Mac,
+                and what no test can show goes in the macOS known differences. From spec 070 FR-002 and the
+                maintainer's clarification of 2026-11-15 ("Ship all three"). Additive obligation within an existing
+                principle; no stated guarantee is withdrawn — the removed "macOS implementations are not required"
+                was a waiver, not a guarantee. Existing code fails the new rule (no macOS implementations) — the
+                ordinary MINOR case (v6.1.0, v6.3.0); spec 070 closes the gap in the same change.
+Modified principles: II (supported targets; delivery rule names all three; new "macOS is proved by CI"; known
+                violations replaced: 062's Linux gap is closed, 070's macOS gap recorded); VI ("Name the OS
+                generically" example list gains macOS — PATCH-level, carried in this bump).
+Added sections: none. Removed sections: none.
+Audit (2026-11-15, at 9a39a482): `selectPlatform('darwin')` throws `UnsupportedPlatformError`; 26 PlatformServices
+                entries have no macOS implementation; the renderer configures Windows traits on macOS. Spec 070 fixes
+                each (specs/070-macos-support/tasks.md T004–T062).
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+           ⚠ .claude/skills/throng-spec-governance/SKILL.md — its one-line summary of II names "Windows and Linux
+              together"; brought current in the same change (spec 070 T001).
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.4.0 → 6.5.0
 Bump rationale: MINOR — Principle VI gains "Name the OS generically", a SHOULD: user-visible text calls the operating
                 system "the OS", never "Windows" or "Linux"; product and format names containing the word are kept.
@@ -2063,26 +2088,30 @@ application logic MUST remain platform-independent.
   with OS-specific concrete implementations selected at runtime.
 - Core logic (project model, terminal lifecycle orchestration, edit-list state,
   layout state) MUST NOT contain direct OS calls or hardcoded OS assumptions.
-- Windows and Linux are the supported targets. No design decision MAY foreclose a
-  future macOS implementation.
-- **A feature that needs distinct code per OS delivers both (v6.1.0).** A feature that
-  requires distinct code for Linux and Windows MUST ship both implementations in that
-  feature, each passing the same shared contract and each tested on its own platform.
-  It MUST NOT be declared done with one side missing, and Incremental Delivery staging
-  applies inside the feature only, never across to a later one. Where a capability
-  genuinely does not exist on one platform, the abstraction MUST report it as absent and
-  the feature's spec MUST say so. macOS implementations are not required, but each seam
-  MUST admit one without changing core logic.
+- Windows, Linux and macOS are the supported targets (v6.6.0). macOS is supported on
+  Apple silicon, at the level its docs state.
+- **A feature that needs distinct code per OS delivers every platform (v6.1.0, v6.6.0).**
+  A feature that requires distinct code per operating system MUST ship its Windows,
+  Linux and macOS implementations in that feature, each passing the same shared contract
+  and each tested on its own platform. It MUST NOT be declared done with one side
+  missing, and Incremental Delivery staging applies inside the feature only, never across
+  to a later one. Where a capability genuinely does not exist on one platform, the
+  abstraction MUST report it as absent and the feature's spec MUST say so.
+- **macOS is proved by CI (v6.6.0).** The project has no macOS hardware. The macOS side of
+  a feature is tested on hosted macOS CI runners, at the lowest layer that can show it, and
+  no feature MAY require a manual test on a Mac. A macOS behaviour no automated test can
+  show MUST be listed in the macOS known differences, never left unverified in silence.
   *Known violations at adoption — end-state requirement under Incremental Delivery:*
-  no abstraction implemented in `packages/platform-windows` has a Linux implementation.
-  Spec 062 (#23, #499) closes them, and all other feature work is on hold until it lands
-  (maintainer, 2026-11-02), so no feature adds to this list in the meantime.
+  no seam has a macOS implementation. Spec 070 (#22, #551) adopts this rule and closes
+  them in the same change, so no feature adds to this list.
 
 Rationale: The user explicitly requires a technology choice that supports
 multiple operating systems and code structured so OS-specific concrete
-implementations can be added later without rewriting the core. With Linux supported,
-a feature shipped for one platform alone is a regression on the other: the work of
-catching up grows with every feature, which is exactly the debt spec 062 exists to clear.
+implementations can be added later without rewriting the core. With more than one
+platform supported, a feature shipped for one alone is a regression on the others: the
+work of catching up grows with every feature, which is the debt specs 062 and 070 exist to
+clear. macOS is held to the same delivery rule with CI as its only proof, because a third
+platform that features may skip decays with each one.
 
 ### III. Detached, Tagged & Persistent Terminals
 
@@ -2778,7 +2807,7 @@ copy that names one of them reads as wrong, or as a missing feature, on the othe
 
 - User-visible text — preference descriptions, notices and toasts, menus, dialogs, tooltips
   and status text — SHOULD refer to the operating system as **the OS** ("an OS
-  notification", "the OS blocks files dragged in…"), never as "Windows" or "Linux".
+  notification", "the OS blocks files dragged in…"), never as "Windows", "Linux" or "macOS".
 - Product and format names that contain the word are names, not references to the OS, and
   stay as they are: **Windows PowerShell**, **Windows-1252** and the other code-page names,
   **Git for Windows**, and the **Absolute (Windows)** / **Relative (Windows)** path-form labels.
@@ -3286,7 +3315,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.5.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-13
+**Version**: 6.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-15
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
