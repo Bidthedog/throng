@@ -12,6 +12,7 @@ export { runDisplayInfoContract } from './display-info-contract.js';
 export { runConfigStoreContract } from './config-store-contract.js';
 export type { ConfigStoreHarness } from './config-store-contract.js';
 export { runFileWatcherContract } from './file-watcher-contract.js';
+export { watchStarted } from './watch-started.js';
 export type { FileWatcherHarness } from './file-watcher-contract.js';
 export { runFileSystemContract } from './file-system-contract.js';
 export type { FileSystemHarness } from './file-system-contract.js';
