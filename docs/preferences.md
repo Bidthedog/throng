@@ -159,9 +159,9 @@ Each project remembers for itself which side panes are expanded.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Show editor status bar | `editor.showStatusBar` | on | on · off | The bar along the bottom of each editor: the language control, the word-wrap and View Whitespace toggles, the encoding and line-ending indicators, the cursor position and the character and word counts. Hiding it hides all of them, whatever the two settings below say; wrap, language, encoding and line endings stay reachable from the content menu and the [key bindings](key-bindings.md#editor). |
-| Show cursor position | `editor.statusBar.showCursorPosition` | on | on · off | The caret's line and column. |
-| Show character and word counts | `editor.statusBar.showCounts` | on | on · off | Characters selected, and the characters and words the document holds. |
+| Show panel status bar | `editor.showStatusBar` | on | on · off | The bar along the bottom of editor and preview panels. Off hides all of it, whatever the two settings below say. Terminals have their own: [Show terminal status bar](#terminal). |
+| Show cursor position | `editor.statusBar.showCursorPosition` | on | on · off | The caret's line and column, or the source lines a preview selection spans. |
+| Show character and word counts | `editor.statusBar.showCounts` | on | on · off | The document's lines, characters and words, and how many characters are selected. |
 
 The encoding indicator (`UTF-8`, `UTF-8 with BOM`, `UTF-16 LE`, `UTF-16 BE`, `Windows-1250 (Central European)` … `Windows-1258 (Vietnamese)`) and the
 line-ending indicator (`LF`, `CRLF`, `CR`, or `Mixed (…)` naming the dominant one) have no setting of
@@ -462,9 +462,10 @@ VSCode, VI-VIM, English Garden, Matrix, Cyberpunk, Claude, Debian and Ubuntu. Th
 edits every token of a theme — colours, fonts and sizes, syntax colours, icons — each with a
 plain-language label, using colour, size and icon pickers drawn from the theme itself. **Clone** is
 how you make a theme of your own. Contrast is guarded automatically. The
-link underline's colours are the **Link Underline** and **Link Hover Underline** tokens, and the
-plain-click hint's are **Link Hint Background**, **Link Hint Text** and **Link Hint Border**, all in
-the General area; unset, they follow the theme's accent colour. The tint on other occurrences of a
+link underline's colours are the **Link Underline** and **Link Hover Underline** tokens, in the
+General area; unset, they follow the theme's accent colour. Every tooltip, hover popover, hint and
+indicator shares one look, coloured by **Popup Background**, **Popup Text** and **Popup Border**
+(General area; unset, they follow the raised surface, text and border colours). The tint on other occurrences of a
 selection is **Selection Occurrence Highlight**, and its quieter form in a panel without focus is
 **Inactive Selection Occurrence Highlight** (both in the Search area, derived from the same colours as
 search matches); a selection kept in a panel without focus is **Editor Inactive Selection** (Editor

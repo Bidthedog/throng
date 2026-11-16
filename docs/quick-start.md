@@ -68,11 +68,13 @@ The centre pane is a dock of **tabs**, each holding **panels**.
 - A new panel starts **untyped**: choose what it is from its **Panel Type** drop-down and press
   **Confirm**.
 - Panels name themselves after what they show; an empty one is a **Blank Panel** until you give it something.
+- Rest the pointer on any control to read what it does.
 - **Focus Mode**: let a panel fill its tab with the **⤢** in its header, **Enter Focus Mode** in its menu,
   or [Shift+Alt+Enter](key-bindings.md#focus--zoom); the same again (**Exit Focus Mode**), or **Esc**, puts it
-  back. While Focus Mode is on the panel's status bar says so, the tab's other panels are hidden, nothing can be added
-  to that tab, and the panel cannot be split, moved or destroyed. It lasts across tab and project
-  switches, but not a restart.
+  back. While Focus Mode is on the panel's status bar says so, the tab's other panels are hidden, both side panes
+  fold away (each pane's own button still opens it, and leaving Focus Mode puts each back as it was),
+  nothing can be added to that tab, and the panel cannot be split, moved or destroyed. It lasts across tab and
+  project switches, but not a restart.
 
 Move between panels with **Ctrl+Shift+Alt+Arrows** — the caret goes with you, into whatever you land
 on. Your whole layout, splits, sizes and zoom included, is saved per project and restored next time.
@@ -172,6 +174,8 @@ can keep browsing or press **F2** to rename the file.
   way **Default open action** says. Right-click a note — in the tree or in Find in Files' results — and
   choose **Open In › Last Preview Panel** to show it in the preview named beside the item, or **New
   Preview Panel** for a fresh one; once the note has its preview open, **Current Preview** goes to it.
+  A preview's status bar counts the document's lines, characters and words, and while you select text it
+  shows how much and which source lines.
 - **Fold** a Markdown document's sections from the gutter beside each heading, the right-click menu's
   **Outlining** submenu, or **Ctrl+M** chords ([Markdown bindings](key-bindings.md#markdown)); an editor
   and its preview fold together. **Collapse All Inside This Section** folds just one branch.
