@@ -16,7 +16,7 @@
  * component layer that actually knows the order) and simply reach `disabled` here.
  *
  * Minimise Category follows the editor's Word Wrap idiom (`content-menu.ts:217-218`): the checkmark
- * lives in the LABEL ("Minimise Category" / "Minimise Category ✓"), and the test id is pinned to the
+ * lives in the LABEL ("Minimise Category", with `checked` while minimised), and the test id is pinned to the
  * bare label so it stays the same row while the state it reports changes.
  */
 import type { MenuAction } from '../workspace/context-menu.js';
@@ -73,7 +73,8 @@ export function categoryMenu(args: CategoryMenuArgs): MenuAction[] {
       onClick: onMoveDown,
     },
     {
-      label: minimised ? 'Minimise Category ✓' : 'Minimise Category',
+      label: 'Minimise Category',
+      checked: minimised,
       testId: 'menu-item-Minimise Category',
       icon: minimised ? 'expand' : 'collapse',
       section: 'viewState',

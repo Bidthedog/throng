@@ -119,7 +119,7 @@ function LineGraph({ subject, metric }: { subject: Subject; metric: FigureId }):
 export function LineGraphs({ subject }: { subject: Subject }): ReactElement {
   return (
     <section className="line-graphs" data-testid="line-graphs" aria-label={`Usage over time: ${subject.node.label}`}>
-      <h4 className="line-graphs__heading">Over time</h4>
+      <h4 className="section-heading line-graphs__heading">Over time</h4>
       <div className="line-graphs__grid">
         {FIGURE_ORDER.map((metric) => (
           <LineGraph key={metric} subject={subject} metric={metric} />

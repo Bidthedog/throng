@@ -37,7 +37,7 @@ export function HeldFolders(): ReactElement {
   const held = frame?.held ?? [];
   return (
     <section className="held-folders" data-testid="held-folders" aria-label="Held folders">
-      <h3 className="breakdown__heading">
+      <h3 className="section-heading breakdown__heading">
         Held folders<InfoHelper topic="heldFolders" />
       </h3>
       {held.length === 0 ? (

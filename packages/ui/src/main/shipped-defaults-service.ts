@@ -17,6 +17,7 @@ import {
   parseKeybindings,
   planSettingsUpgrade,
   planThemeUpgrade,
+  planThemeIconSetUpgrade,
   planThemeValueUpgrade,
   reservedThemeNames,
   resetBindingValue,
@@ -413,6 +414,9 @@ export class ShippedDefaultsService {
       ],
       async () => {
         const present = await this.readPresentThemes();
+        // 069 — the version this configuration was last brought to, before this upgrade moves the marker on.
+        // A missing marker means nothing was ever applied, so it counts as predating icon sets.
+        const appliedVersion = (await this.readAppliedVersion()) ?? 0;
         const plan = planThemeUpgrade({ shipped: this.shipped, present, throngBase: this.shipped.themes.throng });
         /*
          * One entry per theme, not one per plan. A theme can be owed BOTH an additive fill and a
@@ -433,6 +437,15 @@ export class ShippedDefaultsService {
           if (!theme) continue;
           for (const leaf of leaves) theme = setAtPath(theme, leaf.path, leaf.value);
           toWrite.set(name, theme);
+        }
+        // 069 FR-017, FR-018 — the glyph map and the per-icon overrides leave every theme, built-in and the
+        // user's own, and so does the choice of set when this configuration predates icon sets. Composed last, on
+        // top of whatever the plans above produced, so one theme is still one entry; a second pass finds nothing (FR-020).
+        for (const name of new Set([...Object.keys(present), ...toWrite.keys()])) {
+          const current = toWrite.get(name) ?? present[name];
+          if (!current) continue;
+          const iconSets = planThemeIconSetUpgrade(current, appliedVersion);
+          if (iconSets) toWrite.set(name, iconSets.theme as Theme);
         }
         const files: Array<{ path: string; content: string }> = [];
         for (const [name, theme] of toWrite) {

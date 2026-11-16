@@ -197,6 +197,51 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The draggable part you grab to move through a long list or file — on every scrollbar in the application.',
   },
+  'colours.fileIconCode': {
+    label: 'Code File Icons',
+    description:
+      'The colour of the File Explorer and Find in Files icons for source code in a programming language, such as TypeScript, Python or C#. Leave it empty and they take the Icon Colour.',
+  },
+  'colours.fileIconMarkup': {
+    label: 'Markup File Icons',
+    description:
+      'The colour of the File Explorer and Find in Files icons for web pages and their styles: HTML, CSS and Sass. Leave it empty and they take the Icon Colour.',
+  },
+  'colours.fileIconData': {
+    label: 'Data File Icons',
+    description:
+      'The colour of the File Explorer and Find in Files icons for data and settings files: JSON, YAML and other configuration, spreadsheets, databases and SQL. Leave it empty and they take the Icon Colour.',
+  },
+  'colours.fileIconDocument': {
+    label: 'Document File Icons',
+    description:
+      'The colour of the File Explorer and Find in Files icons for plain text, Markdown and diffs. Leave it empty and they take the Icon Colour.',
+  },
+  'colours.fileIconMedia': {
+    label: 'Media File Icons',
+    description:
+      'The colour of the File Explorer and Find in Files icons for images, sound, video, fonts and 3D models. Leave it empty and they take the Icon Colour.',
+  },
+  'colours.fileIconArchive': {
+    label: 'Archive File Icons',
+    description:
+      'The colour of the File Explorer and Find in Files icons for archives and installers. Leave it empty and they take the Icon Colour.',
+  },
+  'colours.fileIconScript': {
+    label: 'Script File Icons',
+    description:
+      'The colour of the File Explorer and Find in Files icons for shell and PowerShell scripts, keys and certificates. Leave it empty and they take the Icon Colour.',
+  },
+  'colours.titleBarSurface': {
+    label: 'Title Bar Background',
+    description:
+      'The bar across the top of every window, under its title and window controls. Leave it empty and the bar is a shade apart from the window background, lighter on a dark theme and darker on a light one.',
+  },
+  'colours.iconButtonSurface': {
+    label: 'Icon Button Background',
+    description:
+      'What an icon button sits on before you point at it, in every window. Leave it empty and icon buttons show only their icon until the pointer reaches them.',
+  },
   'colours.iconColour': {
     label: 'Icon Colour',
     description: 'Ink for the artwork. Leave it empty and every glyph simply takes the colour of whatever holds it.',
@@ -495,519 +540,6 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
 
   // — Typography roles — generated below (spread in) to the US5 convention.
   ...typographyCopy(),
-
-  // — Icons — (named nouns; exempt from the property suffix, so labels read as the thing they mark) —
-  'icons.destroy': {
-    label: 'Destroy control icon',
-    description: 'The glyph on the control that permanently closes and discards a terminal, panel, or project.',
-  },
-  'icons.dismiss': {
-    label: 'Dismiss message icon',
-    description:
-      'The glyph on the control that clears a transient message such as an error bar or notice, without destroying anything.',
-  },
-  'icons.cancel': {
-    label: 'Cancel action icon',
-    description:
-      'The glyph on the control that stops a running operation, such as cancelling a paste in progress.',
-  },
-  'icons.retry': {
-    label: 'Retry action icon',
-    description:
-      'The glyph on the control that re-runs a failed or interrupted action, such as reconnecting a dropped terminal session.',
-  },
-  'icons.save': {
-    label: 'Save icon',
-    description: 'The glyph on the editor title bar button that saves the document.',
-  },
-  'icons.saveAs': {
-    label: 'Save As icon',
-    description: 'The glyph on the editor title bar button that saves the document under a new name.',
-  },
-  'icons.notifications': {
-    label: 'Notifications icon',
-    description: 'The glyph that marks the Notifications panel and the count of notifications waiting while it is minimised.',
-  },
-  'icons.dismissAll': {
-    label: 'Dismiss all icon',
-    description: 'The glyph on the Notifications panel control that dismisses every notification at once.',
-  },
-  'icons.sortOrder': {
-    label: 'Notification order icon',
-    description: 'The glyph on the Notifications panel control that chooses the order notifications are listed in.',
-  },
-  'icons.minimisePanel': {
-    label: 'Minimise panel icon',
-    description: 'The icon on the Minimise menu item of a side panel, which shrinks the panel to its header and gives its space to the panel above. The button itself draws the side panes\' chevron.',
-  },
-  'icons.restorePanel': {
-    label: 'Restore panel icon',
-    description: 'The icon on the Restore menu item of a side panel, which brings a minimised panel back to the height it had. The button itself draws the side panes\' chevron.',
-  },
-  'icons.noticeError': {
-    label: 'Error notification icon',
-    description: 'The icon at the top left of an error entry in the Notifications panel, before its title.',
-  },
-  'icons.noticeAttention': {
-    label: 'Attention notification icon',
-    description: 'The icon at the top left of an attention entry in the Notifications panel, before its title.',
-  },
-  'icons.noticeInfo': {
-    label: 'Information notification icon',
-    description: 'The icon at the top left of an information entry in the Notifications panel, before its title.',
-  },
-  'icons.noticeSuccess': {
-    label: 'Success notification icon',
-    description: 'The icon at the top left of a success entry in the Notifications panel, before its title. A warning entry draws the Warning icon.',
-  },
-  'icons.restoreAll': {
-    label: 'Restore all defaults icon',
-    description:
-      'The glyph on the control that returns every built-in theme to the values it was shipped with, leaving your own themes untouched.',
-  },
-  'icons.revert': {
-    label: 'Revert item icon',
-    description:
-      'The glyph on the control that undoes your changes to a single preference, putting it back to the value it had when you opened this window — which is not necessarily the value Throng ships with.',
-  },
-  'icons.editJson': {
-    label: 'Edit as JSON icon',
-    description:
-      'The glyph on the preferences toggle that swaps the visual editor for the raw configuration text, so you can type the underlying values by hand.',
-  },
-  'icons.editVisual': {
-    label: 'Edit visually icon',
-    description:
-      'The glyph on the preferences toggle that swaps the raw configuration text back for the visual editor, with its labelled rows and controls.',
-  },
-  'icons.moveUp': {
-    label: 'Move up icon',
-    description:
-      'The glyph on the control that moves an entry one place earlier in a list you are editing, such as a folder-exclusion rule.',
-  },
-  'icons.moveDown': {
-    label: 'Move down icon',
-    description:
-      'The glyph on the control that moves an entry one place later in a list you are editing, such as a folder-exclusion rule.',
-  },
-  'icons.zoomIn': {
-    label: 'Zoom in icon',
-    description: 'The glyph on the panel menu control that enlarges that panel’s text.',
-  },
-  'icons.zoomOut': {
-    label: 'Zoom out icon',
-    description: 'The glyph on the panel menu control that shrinks that panel’s text.',
-  },
-  'icons.zoomReset': {
-    label: 'Reset zoom icon',
-    description: 'The glyph on the panel menu control that returns that panel’s text to its default size.',
-  },
-  'icons.collapse': {
-    label: 'Collapse icon',
-    description: 'The glyph on the control that folds a pane or section closed.',
-  },
-  'icons.expand': {
-    label: 'Expand icon',
-    description: 'The glyph on the control that opens a collapsed pane or section.',
-  },
-  'icons.rename': {
-    label: 'Rename icon',
-    description: 'The glyph on the control that starts editing the name of a project, tab, or panel.',
-  },
-  'icons.send': {
-    label: 'Send icon',
-    description: 'The glyph on the control that submits the typed input to its target.',
-  },
-  'icons.tab': {
-    label: 'Tab icon',
-    description: 'The glyph that marks a workspace tab.',
-  },
-  'icons.add': {
-    label: 'Add icon',
-    description: 'The glyph on the control that creates a new tab, terminal, or entry.',
-  },
-  'icons.detach': {
-    label: 'Detach icon',
-    description: 'The glyph on the control that tears a tab or panel out into its own window.',
-  },
-  'icons.folder': {
-    label: 'Folder icon',
-    description: 'The glyph shown beside a closed folder in the File Explorer tree.',
-  },
-  'icons.folderOpen': {
-    label: 'Open folder icon',
-    description: 'The glyph shown beside an expanded folder in the File Explorer tree.',
-  },
-  'icons.chevron': {
-    label: 'Tree chevron icon',
-    description: "The small arrow that twists to reveal or hide a folder's children in the tree.",
-  },
-  'icons.file': {
-    label: 'File icon',
-    description: 'The glyph shown beside an ordinary file in the tree.',
-  },
-  'icons.fileCode': {
-    label: 'Code file icon',
-    description: 'The glyph shown beside a source-code file in the tree.',
-  },
-  'icons.fileJson': {
-    label: 'Data file icon',
-    description: 'The glyph shown beside a structured-data file in the tree.',
-  },
-  'icons.fileMarkdown': {
-    label: 'Markdown file icon',
-    description: 'The glyph shown beside a Markdown document in the tree.',
-  },
-  'icons.fileImage': {
-    label: 'Image file icon',
-    description: 'The glyph shown beside an image file in the tree.',
-  },
-  'icons.fileText': {
-    label: 'Text file icon',
-    description: 'The glyph shown beside a plain-text file in the tree.',
-  },
-  'icons.symlink': {
-    label: 'Symbolic link icon',
-    description: 'The badge marking a tree entry that points to another location.',
-  },
-  'icons.editorPanel': {
-    label: 'Editor panel type icon',
-    description: 'The glyph at the head of an editor panel’s title marking it as a text editor.',
-  },
-  'icons.expandAll': {
-    label: 'Expand all icon',
-    description:
-      'The glyph on the toolbar control that opens every folder in the tree, and on the Preferences control that unfolds every section.',
-  },
-  'icons.collapseAll': {
-    label: 'Collapse all icon',
-    description:
-      'The glyph on the toolbar control that folds every folder in the tree closed, and on the Preferences control that folds every section.',
-  },
-  'icons.newFolder': {
-    label: 'New folder icon',
-    description: 'The glyph on the toolbar control that creates a folder in the tree.',
-  },
-  'icons.quickOpen': {
-    label: 'Quick Open icon',
-    description:
-      'The glyph on the toolbar control that opens any file in the project by typing part of its path.',
-  },
-  'icons.terminal': {
-    label: 'Terminal icon',
-    description: 'The glyph that marks a terminal panel or a new-terminal control.',
-  },
-  'icons.search': {
-    label: 'Find icon',
-    description: 'The glyph on the control that opens the find bar over the active panel.',
-  },
-  'icons.findInFiles': {
-    label: 'Find in Files icon',
-    description:
-      'The glyph on the toolbar control and folder menu item that searches every file in the project for a piece of text.',
-  },
-  'icons.searchScope': {
-    label: 'Search scope icon',
-    description:
-      'The glyph on the control that shows which folders and files a Find in Files search is looking through, and lets you change them.',
-  },
-  'icons.findNext': {
-    label: 'Find next icon',
-    description: 'The glyph on the control that steps forward to the following match.',
-  },
-  'icons.findPrevious': {
-    label: 'Find previous icon',
-    description: 'The glyph on the control that steps back to the preceding match.',
-  },
-  'icons.matchCase': {
-    label: 'Match case toggle icon',
-    description:
-      'The glyph on the toggle that makes the search distinguish capital letters from small ones.',
-  },
-  'icons.wholeWord': {
-    label: 'Whole word toggle icon',
-    description:
-      'The glyph on the toggle that restricts the search to complete words rather than fragments.',
-  },
-  'icons.replace': {
-    label: 'Replace match icon',
-    description: 'The glyph on the control that swaps the current match for the replacement text.',
-  },
-  'icons.replaceAll': {
-    label: 'Replace all icon',
-    description: 'The glyph on the control that swaps every match for the replacement text at once.',
-  },
-  'icons.settings': {
-    label: 'Settings icon',
-    description: 'The gear that opens preferences from the title bar, and a project’s own options from its pane.',
-  },
-  'icons.windowMinimise': {
-    label: 'Minimise window icon',
-    description: 'The mark on the control that drops a window out of sight without closing it.',
-  },
-  'icons.windowMaximise': {
-    label: 'Maximise window icon',
-    description: 'The mark on the control that grows a window to fill the whole display.',
-  },
-  'icons.windowRestore': {
-    label: 'Restore window icon',
-    description: 'The mark on the control that brings a filled window back to the size it was before.',
-  },
-  'icons.windowClose': {
-    label: 'Close window icon',
-    description: 'The mark on the control that shuts a window for good.',
-  },
-  'icons.cut': {
-    label: 'Cut icon',
-    description:
-      'The glyph on the menu row that lifts the selected text or files onto the clipboard and removes them from where they were.',
-  },
-  'icons.copy': {
-    label: 'Copy icon',
-    description:
-      'The glyph on the menu row that places the selected text or files onto the clipboard, leaving the originals in place.',
-  },
-  'icons.paste': {
-    label: 'Paste icon',
-    description:
-      'The glyph on the menu row that drops whatever the clipboard holds in at the cursor or the chosen folder.',
-  },
-  'icons.selectAll': {
-    label: 'Select all icon',
-    description: 'The glyph on the menu row that highlights the whole document at once, ready to act on together.',
-  },
-  'icons.undo': {
-    label: 'Undo icon',
-    description: 'The glyph on the editor menu row that steps the last change back out of the document.',
-  },
-  'icons.redo': {
-    label: 'Redo icon',
-    description: 'The glyph on the editor menu row that reapplies a change you had just stepped back out.',
-  },
-  'icons.language': {
-    label: 'Set language icon',
-    description: 'The glyph on the editor menu row that opens the picker for which language colours and folds the file.',
-  },
-  'icons.keybindings': {
-    label: 'Key bindings icon',
-    description: 'The glyph on the title-bar menu row that opens the editor for the keyboard shortcuts you can rebind.',
-  },
-  'icons.themes': {
-    label: 'Themes icon',
-    description: 'The glyph on the title-bar menu row that opens the editor for the colours, fonts, and glyphs the app wears.',
-  },
-  'icons.about': {
-    label: 'About icon',
-    description: 'The glyph on the title-bar menu row that opens the window naming the release and its build details.',
-  },
-  'icons.hide': {
-    label: 'Hide entry icon',
-    description: 'The glyph on the tree menu row that drops a file or folder out of view for this project only.',
-  },
-  'icons.resourceMonitor': {
-    label: 'Resource monitor icon',
-    description: 'The glyph on the status-bar item that shows throng\'s CPU, memory, GPU and I/O, and on the title-bar menu row that opens the Resource Monitor.',
-  },
-  'icons.resourceCpu': {
-    label: 'CPU icon',
-    description: 'The glyph beside the CPU figure in the status bar, and on the Resource Monitor\'s "show by CPU" choice.',
-  },
-  'icons.resourceMemory': {
-    label: 'Memory icon',
-    description: 'The glyph beside the memory figure in the status bar, and on the Resource Monitor\'s "show by memory" choice.',
-  },
-  'icons.resourceGpu': {
-    label: 'GPU icon',
-    description: 'The glyph beside the GPU figure in the status bar, and on the Resource Monitor\'s "show by GPU" choice.',
-  },
-  'icons.resourceIo': {
-    label: 'I/O icon',
-    description: 'The glyph beside the I/O figure in the status bar, and on the Resource Monitor\'s "show by I/O" choice.',
-  },
-  'icons.resourceHideIdle': {
-    label: 'Hide idle processes icon',
-    description: 'The glyph on the Resource Monitor control that hides processes doing nothing.',
-  },
-  'icons.resourceKill': {
-    label: 'Kill process icon',
-    description: 'The glyph on the Resource Monitor row that ends one process.',
-  },
-  'icons.resourceKillBelow': {
-    label: 'Kill all below icon',
-    description: 'The glyph on the Resource Monitor row that ends every process beneath a project, tab, panel or process.',
-  },
-  'icons.help': {
-    label: 'Help icon',
-    description: 'The glyph on the Resource Monitor control that explains what it shows and how to use it.',
-  },
-  'icons.activate': {
-    label: 'Activate icon',
-    description: 'The glyph on the Resource Monitor control that goes to the project, tab or panel a row names, bringing its window forward.',
-  },
-  'icons.resourceHideEnded': {
-    label: 'Hide ended processes icon',
-    description: 'The glyph on the Resource Monitor control that hides processes that have ended.',
-  },
-  'icons.resourceNetwork': {
-    label: 'Network icon',
-    description: 'The glyph on the Resource Monitor\'s "order by Network" choice.',
-  },
-  'icons.showHidden': {
-    label: 'Show hidden entries icon',
-    description: 'The glyph on the Quick Open control that brings the files this project hides back into the list, for that one search.',
-  },
-  /*
-   * 031 / FR-032 — the tab strip's own controls. Named for the strip, not for tree state: the
-   * collapse and expand entries above describe folding a pane, and a user re-skinning those must not
-   * find the tab strip changed underneath them.
-   */
-  'icons.chevronLeft': {
-    label: 'Tab step left icon',
-    description: 'The glyph on the control at the left end of the tab strip that brings the tabs hidden off that edge back into view.',
-  },
-  'icons.chevronRight': {
-    label: 'Tab step right icon',
-    description: 'The glyph on the control at the right end of the tab strip that brings the tabs hidden off that edge back into view.',
-  },
-  'icons.chevronDown': {
-    label: 'Show all tabs icon',
-    description: 'The glyph on the tab strip control that drops open a searchable list of every tab in the window, however many are on screen.',
-  },
-  /*
-   * 044 — file previews and panel navigation history. Each description names where the glyph appears,
-   * because two of these sit beside a look-alike action (Refresh beside Try again, Back beside a tab
-   * strip arrow) and the description is how a user re-skinning one knows which one they have.
-   */
-  'icons.preview': {
-    label: 'Preview icon',
-    description:
-      'The glyph on the editor status bar button and menu rows that open a rendered, read-only view of a file such as a Markdown document, and at the head of that preview panel’s title.',
-  },
-  'icons.refresh': {
-    label: 'Refresh preview icon',
-    description:
-      'The glyph on the preview panel menu row that reads the file or its open document again and redraws the preview straight away.',
-  },
-  'icons.navigateBack': {
-    label: 'Navigate back icon',
-    description:
-      'The glyph on the button at the top left of an editor or preview panel, and its menu row, that returns the panel to the file it showed before.',
-  },
-  'icons.navigateForward': {
-    label: 'Navigate forward icon',
-    description:
-      'The glyph on the button at the top left of an editor or preview panel, and its menu row, that moves the panel on again to a file you stepped back from.',
-  },
-  'icons.syncScroll': {
-    label: 'Synchronise scrolling icon',
-    description:
-      "The glyph on the Synchronise Scrolling button on the editor's and the preview's status bars, and on the Synchronise Scrolling menu rows, that turns scrolling an editor and its preview together on or off.",
-  },
-  /*
-   * 046 — the Projects pane's context menu. Two tokens for two distinct MENU ROWS: unload (a
-   * project's three Unload rows) and category (a project's Move to Category row) — neither draws
-   * anywhere else. Kept as separate tokens so retheming "unload" can never also retheme "Move to
-   * Category" by accident.
-   *
-   * A third token, `projectList`, originally shipped beside these two — retired (branch-review
-   * finding, 046 iterate round 2): its description named the title bar's cog-menu "Focus Projects"
-   * row, a row FR-074/FR-107 had already retired before the description was written, and no call
-   * site in the renderer ever drew it. `theme.ts` no longer defines `THRONG_THEME.icons.projectList`
-   * and `theme-ops.ts`'s `migrateTheme` drops the stray key from an install that already has it.
-   */
-  'icons.unload': {
-    label: 'Unload project icon',
-    description:
-      "The glyph on a project's two Unload context-menu rows, which detach it from the window without deleting anything on disk.",
-  },
-  'icons.category': {
-    label: 'Project category icon',
-    description:
-      "The glyph on a project's Move to Category context-menu row, which reassigns it to a different category.",
-  },
-  /*
-   * 047 (research R10, R4, R6) — Markdown section folding. Two pairs, not one shared toggle pair:
-   * the editor's gutter marker and the preview's disclosure triangle are drawn by different code and
-   * a reader may want to retheme one without the other.
-   */
-  'icons.foldSectionExpanded': {
-    label: 'Expanded section marker',
-    description:
-      "The marker on an expanded heading's line in a Markdown editor's fold gutter. Clicking it collapses the section.",
-  },
-  'icons.foldSectionCollapsed': {
-    label: 'Collapsed section marker',
-    description:
-      "The marker on a collapsed heading's line in a Markdown editor's fold gutter. Clicking it expands the section.",
-  },
-  'icons.foldPreviewExpanded': {
-    label: 'Expanded preview section marker',
-    description:
-      'The disclosure triangle beside an expanded heading in a Markdown preview’s fold gutter. Clicking it collapses the section.',
-  },
-  'icons.foldPreviewCollapsed': {
-    label: 'Collapsed preview section marker',
-    description:
-      'The disclosure triangle beside a collapsed heading in a Markdown preview’s fold gutter. Clicking it expands the section.',
-  },
-  /*
-   * 054 — maximising (FR-071) and the diagram view controls (FR-046b). The panel pair is kept apart
-   * from the window pair so a theme can draw the two kinds of maximise differently.
-   */
-  'icons.panelMaximise': {
-    label: 'Maximise panel icon',
-    description:
-      "The glyph on a panel header's Maximise button and its menu row, which puts the panel in Focus Mode: it fills its tab's middle section until it is restored.",
-  },
-  'icons.panelRestore': {
-    label: 'Restore panel icon',
-    description:
-      'The glyph on the Restore control of a maximised panel, and on the Minimise control of a maximised diagram, which leaves Focus Mode and puts it back where it was.',
-  },
-  'icons.diagramFit': {
-    label: 'Fit diagram icon',
-    description: "The glyph on a diagram's Fit control, which shrinks the diagram to fit the width of its box.",
-  },
-  'icons.diagramZoomReset': {
-    label: 'Diagram zoom 100% icon',
-    description:
-      "The glyph on a diagram's Zoom 100% control, which shows the diagram at its actual size, between the zoom-out and zoom-in controls.",
-  },
-  'icons.diagramFullPane': {
-    label: 'Diagram maximise icon',
-    description:
-      "The glyph on a diagram's Maximise control, which puts the diagram in Focus Mode over the whole middle section until it is minimised.",
-  },
-  'icons.warning': {
-    label: 'Warning icon',
-    description:
-      'The marker on a folded Preferences section or subsection that hides a setting holding an invalid entry.',
-  },
-  'icons.busy': {
-    label: 'Search in progress icon',
-    description:
-      'The glyph on the Find in Files cancel control while a search is running. It turns while the search runs; clicking it cancels.',
-  },
-  'icons.groupFolderTree': {
-    label: 'Folder structure grouping icon',
-    description:
-      'The glyph on the Find in Files control that arranges results in the File Explorer’s folder tree.',
-  },
-  'icons.projectSettings': {
-    label: 'Project settings icon',
-    description:
-      'The glyph on the File Explorer control that opens the active project’s settings — what it hides from the tree and from Find in Files.',
-  },
-  'icons.searchExclusions': {
-    label: 'Search exclusions icon',
-    description:
-      'The glyph on the Find in Files toggle that switches the search exclusion list on or off for that panel.',
-  },
-  'icons.whitespace': {
-    label: 'View whitespace icon',
-    description:
-      'The glyph on the editor status bar toggle that shows or hides a symbol for every space, tab, line break and invisible character.',
-  },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {
     label: 'Icon Size',

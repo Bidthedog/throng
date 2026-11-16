@@ -46,6 +46,7 @@ import './notification.css';
 import { copyToClipboard } from './clipboard-copy.js';
 import { effectiveToastDurationMs, toastPointerHoldEnabled } from './toast-duration.js';
 import { IconButton } from './icon-button.js';
+import { useHoverIntent } from './use-hover-intent.js';
 import {
   headingIsPlace,
   noticeHeading,
@@ -219,6 +220,9 @@ export interface Notice {
    * Controls of the notice's own, drawn before Copy and Dismiss at the card's top-right and styled as
    * they are (`notice__control`) — e.g. an attention toast's go-to-panel (057 FR-122). Not part of the
    * notice's content, so never in the copied text.
+   *
+   * EVERY button a notice offers goes here, never in `body` (constitution, toast controls; 069 FR-050):
+   * one group, at one place on every card, read right to left as Dismiss, Copy, then the notice's own.
    */
   controls?: ReactNode;
   /**
@@ -733,6 +737,8 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
    * whose text fits never sets it.
    */
   const [cutText, setCutText] = useState<{ id: string; el: HTMLElement; text: string } | null>(null);
+  /** 069 FR-052 — the pointer opens the popover only once it has stayed on the toast; focus opens it at once. */
+  const cutHover = useHoverIntent(settings.hoverDelayMs);
   const checkCut = useCallback((n: Notice, el: HTMLElement): void => {
     const block = el.querySelector<HTMLElement>('.notice__text');
     if (!block || block.scrollHeight <= block.clientHeight) return;
@@ -1423,15 +1429,18 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             onPointerEnter={(e) => {
               if (toastPointerHoldEnabled()) setHold(n.id, 'pointer', true);
               checkLink(n);
-              checkCut(n, e.currentTarget);
+              const card = e.currentTarget;
+              cutHover.arm(n.id, () => checkCut(n, card));
             }}
             onPointerLeave={() => {
               setHold(n.id, 'pointer', false);
+              cutHover.cancel(n.id);
               setCutText((cur) => (cur?.id === n.id ? null : cur));
             }}
             onFocus={(e) => {
               setHold(n.id, 'focus', true);
               checkLink(n);
+              cutHover.cancel(n.id);
               checkCut(n, e.currentTarget);
             }}
             onBlur={(e) => {
@@ -1485,6 +1494,8 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
                 need somewhere else — in an issue, in a message to us — and it is also the one thing
                 they cannot accurately retype: a path, an errno, a daemon's own words. Selecting text
                 out of a toast that may auto-dismiss is not a serious answer. */}
+            {/* The card's one control group, top-right: the notice's own controls, then Copy, then Dismiss. */}
+            <span className="notice__controls" data-testid="notice-controls">
             {n.controls}
             <IconButton
               token="copy"
@@ -1516,6 +1527,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
                 onClick={() => dismiss(n.id)}
               />
             )}
+            </span>
           </div>
         ))}
       </div>
@@ -1696,6 +1708,11 @@ function AffectedList({
       ) : null}
     </div>
   );
+}
+
+/** {@link useNotify} for a hook that may run outside a provider (a pane drawn before one exists): `null` there. */
+export function useNotifyOptional(): NotifyContextValue | null {
+  return useContext(NotifyContext);
 }
 
 export function useNotify(): NotifyContextValue {

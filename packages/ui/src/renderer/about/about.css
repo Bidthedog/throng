@@ -6,12 +6,15 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--throng-colour-surface);
+  /* 069 FR-054 (#639): every secondary window sits on the app background, as Preferences does. */
+  background: var(--bg);
   color: var(--throng-colour-text);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
   /* The shared TitleBar reads its height from this var, which is otherwise only defined on the
      main window's `.throng-root`. Without it here the About bar collapses to its glyph height and
      the window controls are clipped — define it so the bar renders at full height. */
-  --title-bar-height: 38px;
+  --title-bar-height: var(--pane-header-height, 34px);
 }
 
 /* In the About realm the title bar is a normal column child (the main window positions it
@@ -53,7 +56,7 @@
 
 .about-meta dd {
   margin: 0;
-  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-family: var(--throng-font-editor-family, monospace);
   color: var(--throng-colour-text);
 }
 
@@ -84,12 +87,9 @@
   text-decoration: underline;
 }
 
-/* A caption above each scroll region (Licence / Third-party packages). */
+/* A caption above each scroll region (Licence / Third-party packages): the shared `.section-heading`. */
 .about-section-label {
   margin: 0;
-  color: var(--throng-colour-textMuted);
-  font-size: 12px;
-  font-weight: var(--throng-font-weight-bold);
 }
 
 /* The full AGPL-3.0 licence text: read-only, scrollable, selectable (FR-003a). A
@@ -106,7 +106,7 @@
   border-radius: 4px;
   background: var(--throng-colour-inputSurface);
   color: var(--throng-colour-text);
-  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-family: var(--throng-font-editor-family, monospace);
   font-size: 12px;
   line-height: 1.4;
   white-space: pre;
@@ -160,13 +160,35 @@
 
 .about-thirdparty__version {
   color: var(--throng-colour-textMuted);
-  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-family: var(--throng-font-editor-family, monospace);
+}
+
+.about-thirdparty__licence-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 069 FR-022 — a package's own licence text, opened under its row, by the shared `.icon-button` (FR-054). */
+
+.about-thirdparty__text {
+  grid-column: 1 / -1;
+  margin: 2px 0 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--throng-font-editor-family, monospace);
+  font-size: 11px;
+  user-select: text;
 }
 
 .about-thirdparty__licence {
   color: var(--throng-colour-accent);
   text-decoration: none;
-  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-family: var(--throng-font-editor-family, monospace);
 }
 
 .about-actions {
@@ -176,13 +198,13 @@
 
 /* A dialog-decision control (constitution exception): a text label, colours from
    theme tokens. */
+/* The same text button as every dialog's (`.modal__buttons button`, 069 FR-054). */
 .about-close {
-  padding: 6px 16px;
+  padding: 6px 14px;
   border: 1px solid var(--throng-colour-cancelButtonBorder);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--throng-colour-cancelButtonBg);
   color: var(--throng-colour-cancelButtonText);
-  font: inherit;
   cursor: pointer;
 }
 

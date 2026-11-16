@@ -48,6 +48,26 @@ declare global {
         ) => void;
       };
       /**
+       * 069 — user icon sets (contracts/icon-sets-ipc.md). The renderer names a set and never sends a
+       * path. A successful change is followed by a config broadcast carrying the sets.
+       */
+      iconSets?: {
+        create: (name: string, from: string) => Promise<IconSetsResult>;
+        override: (set: string, key: string, replace: boolean) => Promise<IconSetsResult>;
+        /** Read every set from disk again (069 FR-041). */
+        reload: () => Promise<IconSetsResult>;
+        rename: (from: string, to: string) => Promise<IconSetsResult>;
+        /** The set's folder goes to the OS trash (FR-043). */
+        remove: (set: string) => Promise<IconSetsResult>;
+        /** The set's <key>.svg goes to the OS trash, so the key draws the default icon (FR-044). */
+        resetIcon: (set: string, key: string) => Promise<IconSetsResult>;
+        /** Absent `set` opens the icon sets folder itself. */
+        openFolder: (set?: string) => Promise<IconSetsResult>;
+        /** FR-038 — the upgrade backups present at startup; held by main until `backupsReady`. */
+        onBackupsPresent: (cb: (payload: { count: number }) => void) => () => void;
+        backupsReady: () => void;
+      };
+      /**
        * 058 FR-018 — a launch of a different copy reached this running instance. `onDifferentCopy`
        * subscribes; `differentCopyReady` tells main this window is listening, so a launch that
        * arrived before it loaded is delivered rather than dropped.
@@ -175,6 +195,7 @@ declare global {
             license: string;
             licenseUrl: string;
             projectUrl: string;
+            licenseText?: string;
           }>
         >;
         openExternal: (url: string) => void;
@@ -327,7 +348,6 @@ declare global {
         resetSettings?: () => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
         resetKeybindings?: () => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
         listFonts?: () => Promise<string[]>;
-        listIconPacks?: () => Promise<IconPackInfo[]>;
       };
       // Typed panels — Terminal (005 Phase B): the Flavour dropdown's catalogue
       // (machine-detected built-ins ∪ user-defined), served by UI main.
@@ -1249,35 +1269,16 @@ export type ThrongConfigDocId =
   | { kind: 'keybindings' }
   | { kind: 'theme'; name: string };
 
+/** The reply of every `window.throng.iconSets` call that can fail (contracts/icon-sets-ipc.md). */
+export type IconSetsResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: 'invalid-name' | 'exists' | 'source-unavailable' | 'unknown-set' | 'unknown-key' | 'io';
+      message: string;
+    };
+
 /** Result of `window.throng.config.write` (FR-016/017/042). */
 export type ConfigWriteResult = { ok: true } | { ok: false; error: string; detail?: string };
-
-/** An icon value: a glyph, or a pack-relative image filename (mirrors core IconValue). */
-export type IconValueDto = { glyph: string } | { image: string };
-
-/**
- * What an icon token RENDERS AS (017 / #54). `svg` carries sanitised MARKUP, not a path: an SVG
- * inside an `<img>` is an isolated document whose `currentColor` resolves to black instead of to
- * the theme, so inlining is the only way a pack icon can take the theme's colour.
- */
-export type IconAssetDto =
-  | { kind: 'glyph'; glyph: string }
-  | { kind: 'svg'; markup: string }
-  | { kind: 'raster'; dataUri: string }
-  | { kind: 'missing' };
-
-/**
- * One discovered icon pack (007; assets added by 017).
- *
- * Note there is no `assetBase`: the renderer must not be able to reach the disk on the render path,
- * so it receives loaded assets rather than a directory to read from.
- */
-export interface IconPackInfo {
-  name: string;
-  tokens: Record<string, IconValueDto>;
-  assets: Record<string, IconAssetDto>;
-  /** Why the pack could not be loaded — shown in the Icons picker (FR-004a). */
-  error?: string;
-}
 
 export {};

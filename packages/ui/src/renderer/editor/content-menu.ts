@@ -149,7 +149,8 @@ export function encodingMenuItems(a: EncodingMenuArgs): MenuAction[] {
   const row = (c: (typeof ENCODING_CHOICES)[number]): MenuAction => {
     const current = c.encoding === a.current.encoding && c.hasBom === a.current.hasBom;
     return {
-      label: current ? `${c.label} ✓` : c.label,
+      label: c.label,
+      checked: current,
       testId: `menu-item-encoding-${encodingKey(c)}`,
       section: 'viewState' as const,
       group: 'change',
@@ -165,7 +166,8 @@ export function encodingMenuItems(a: EncodingMenuArgs): MenuAction[] {
   const rows: MenuAction[] = [
     ...ENCODING_CHOICES.filter((c) => c.group === 'unicode').map(row),
     {
-      label: inPages ? `${CODE_PAGES_LABEL} ✓` : CODE_PAGES_LABEL,
+      label: CODE_PAGES_LABEL,
+      checked: inPages,
       testId: 'menu-item-encoding-codepages',
       section: 'viewState',
       group: 'change',
@@ -201,7 +203,8 @@ export function lineEndingMenuItems(a: LineEndingMenuArgs): MenuAction[] {
     const current = !a.mixed && a.lineEnding === target;
     const name = ENDING_NAME[target];
     return {
-      label: current ? `${name} ✓` : name,
+      label: name,
+      checked: current,
       testId: `menu-item-line-ending-${target}`,
       section: 'viewState' as const,
       group: 'convert',
@@ -212,7 +215,8 @@ export function lineEndingMenuItems(a: LineEndingMenuArgs): MenuAction[] {
     };
   });
   rows.push({
-    label: a.mixed ? 'Mixed ✓' : 'Mixed',
+    label: 'Mixed',
+    checked: a.mixed,
     testId: 'menu-item-line-ending-mixed',
     section: 'viewState',
     group: 'convert',
@@ -292,21 +296,21 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
     // obvious thing.
     {
       label: 'Cut',
-      icon: 'cut',
+      icon: 'cut' as const,
       section: 'content',
       shortcut: 'Ctrl+X',
       onClick: () => copyOrCut(args, true),
     },
     {
       label: 'Copy',
-      icon: 'copy',
+      icon: 'copy' as const,
       section: 'content',
       shortcut: 'Ctrl+C',
       onClick: () => copyOrCut(args, false),
     },
     {
       label: 'Paste',
-      icon: 'paste',
+      icon: 'paste' as const,
       section: 'content',
       shortcut: 'Ctrl+V',
       onClick: () => {
@@ -324,7 +328,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
     },
     {
       label: 'Select All',
-      icon: 'selectAll',
+      icon: 'selectAll' as const,
       section: 'content',
       shortcut: 'Ctrl+A',
       onClick: () => {
@@ -334,14 +338,14 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
     },
     {
       label: 'Undo',
-      icon: 'undo',
+      icon: 'undo' as const,
       section: 'content',
       shortcut: 'Ctrl+Z',
       onClick: () => win()?.editor?.undo({ panelId, viewId }),
     },
     {
       label: 'Redo',
-      icon: 'redo',
+      icon: 'redo' as const,
       section: 'content',
       shortcut: 'Ctrl+Y',
       onClick: () => win()?.editor?.redo({ panelId, viewId }),
@@ -369,7 +373,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       ? [
           {
             label: 'Open Preview',
-            icon: 'preview',
+            icon: 'preview' as const,
             section: 'navigate' as const,
             shortcut: args.openPreview.chord,
             disabled: args.openPreview.affordance.state === 'disabled',
@@ -387,7 +391,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       // language changing, exactly as the Word Wrap item pins its own.
       label: args.languageName ? `Set Language… (${args.languageName})` : 'Set Language…',
       testId: 'menu-item-Set Language…',
-      icon: 'language',
+      icon: 'language' as const,
       section: 'viewState',
       onClick: () => requestLanguagePicker(panelId),
     },
@@ -401,7 +405,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
           {
             label: 'Reset Language',
             testId: 'menu-item-Reset Language',
-            icon: 'destroy',
+            icon: 'destroy' as const,
             section: 'viewState' as const,
             disabled: !args.resetLanguage.enabled,
             onClick: () => args.resetLanguage?.reset(),
@@ -437,8 +441,9 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       : []),
     {
       // 024 US1 (#152) / Principle VI: every panel action has a menu item, even one also on the
-      // status bar — so it survives a hidden status bar. The leading ✓ renders the current state.
-      label: args.wordWrap.on ? 'Word Wrap ✓' : 'Word Wrap',
+      // status bar — so it survives a hidden status bar. The checked mark renders the current state.
+      label: 'Word Wrap',
+      checked: args.wordWrap.on,
       testId: 'menu-item-Word Wrap',
       section: 'viewState',
       shortcut: args.wordWrap.chord,
@@ -451,7 +456,8 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
     ...(args.whitespace
       ? [
           {
-            label: args.whitespace.on ? 'View Whitespace ✓' : 'View Whitespace',
+            label: 'View Whitespace',
+            checked: args.whitespace.on,
             testId: 'menu-item-View Whitespace',
             section: 'viewState' as const,
             shortcut: args.whitespace.chord,
@@ -472,9 +478,10 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
     isFlowingDocument(args.openPreview.affordance.provider)
       ? [
           {
-            label: args.syncScroll.on ? 'Synchronise Scrolling ✓' : 'Synchronise Scrolling',
+            label: 'Synchronise Scrolling',
+            checked: args.syncScroll.on,
             testId: 'menu-item-Synchronise Scrolling',
-            icon: 'syncScroll',
+            icon: 'syncScroll' as const,
             section: 'viewState' as const,
             shortcut: args.syncScroll.chord,
             onClick: () => args.syncScroll?.toggle(),

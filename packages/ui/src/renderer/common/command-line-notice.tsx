@@ -70,7 +70,7 @@ export function CommandLineNotice(): null {
         outcome.kind === 'broken' ? (
           <IconButton
             token="retry"
-            className="notice__action"
+            className="notice__control"
             testId="command-line-install"
             title="Install 'throng' command"
             onClick={() => commandLine.install()}
@@ -81,7 +81,8 @@ export function CommandLineNotice(): null {
         subject,
         message,
         testId: TEST_ID,
-        ...(install ? { body: install, sticky: true } : {}),
+        // The card's own control, beside Copy and Dismiss (constitution 6.8.0, toast controls; 069 FR-050).
+        ...(install ? { controls: install, sticky: true } : {}),
       });
     });
     commandLine.ready();

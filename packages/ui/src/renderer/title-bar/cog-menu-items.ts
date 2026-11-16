@@ -24,7 +24,7 @@
  * (`zoom.in` / `zoom.out` / `zoom.reset`) and from the panel header's own Zoom submenu
  * (`panel.zoomIn` / `panel.zoomOut` / `panel.zoomReset`); it simply has no cog-menu mouse route.
  */
-import type { Keybindings } from '@throng/core';
+import type { IconKey, Keybindings } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 /*
  * IMPORTED, not re-declared (Principle VIII). The extraction from `cog-menu.tsx` first wrote
@@ -39,7 +39,7 @@ import type { MenuAction } from '../workspace/context-menu.js';
  */
 import type { PreferencesTab } from '../preferences/preferences-app.js';
 
-const PREFERENCES_ITEMS: readonly { tab: PreferencesTab; label: string; icon: string }[] = [
+const PREFERENCES_ITEMS: readonly { tab: PreferencesTab; label: string; icon: IconKey }[] = [
   { tab: 'settings', label: 'Settings', icon: 'settings' },
   { tab: 'keybindings', label: 'Key Bindings', icon: 'keybindings' },
   { tab: 'themes', label: 'Themes', icon: 'themes' },

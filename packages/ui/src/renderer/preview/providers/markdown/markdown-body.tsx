@@ -88,7 +88,7 @@ import {
 import {
   buildSymbolTree,
   initialFold,
-  resolveIconAsset,
+  resolveIcon,
   revealing,
   splitFrontMatter,
   toggleSection,
@@ -109,7 +109,7 @@ import {
 } from '../../diagram/diagram-host.js';
 import { linkHintAnchor } from '../../../links/link-hint-anchor.js';
 import { showLinkHint } from '../../../links/link-hint-store.js';
-import { useActiveTheme, useAppSettings, useIconPacks } from '../../../config/config-store.js';
+import { useActiveTheme, useAppSettings, useIconSets } from '../../../config/config-store.js';
 import { linkScanOptions } from '../../../links/link-scan-options.js';
 import type { MarkdownRenderer } from './markdown-renderer.js';
 import { placeOnStep, shouldDrive, shouldFollow } from '../../scroll-sync-policy.js';
@@ -437,7 +437,7 @@ export function MarkdownBody({
    */
   const tableHandSetRef = useRef(new Map<number, TableHandSet>());
   const theme = useActiveTheme();
-  const packs = useIconPacks();
+  const sets = useIconSets();
   /*
    * ── 054 US4 — diagrams (FR-040 – FR-048, research R5) ──
    *
@@ -489,8 +489,8 @@ export function MarkdownBody({
   }, [panelId]);
   const themeRef = useRef(theme);
   themeRef.current = theme;
-  const packsRef = useRef(packs);
-  packsRef.current = packs;
+  const setsRef = useRef(sets);
+  setsRef.current = sets;
   /**
    * Insert/remove the gutter's toggles and hide a collapsed section's blocks over `body`'s CURRENT
    * children — never `replaceChildren`, so calling this from a fold-only update (no new render) never
@@ -508,7 +508,7 @@ export function MarkdownBody({
         const current = foldStateRef.current ?? initialFold('expanded');
         onFoldChangeRef.current?.(toggleSection(current, slug));
       },
-      iconFor: (token) => resolveIconAsset(themeRef.current, packsRef.current, token),
+      iconFor: (token) => resolveIcon(themeRef.current, setsRef.current, token),
     });
   }, []);
   /**
@@ -1017,7 +1017,7 @@ export function MarkdownBody({
     drawFoldGutter(body, lastHeadingsRef.current);
     // 048 FR-083 — fold state seeded late (main's answer after the draw) is a settle point too.
     reanchor(scrollerOf(body));
-  }, [foldState, gutter, theme, packs, drawFoldGutter, reanchor]);
+  }, [foldState, gutter, theme, sets, drawFoldGutter, reanchor]);
 
   /*
    * FR-040 — the chrome's way to expand one section's collapsed ancestors and itself, and bring it to

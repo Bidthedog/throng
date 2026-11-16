@@ -8,6 +8,7 @@
 import { hostTraits, trashTerm } from '../platform/host-traits.js';
 import {
   DEFAULT_APP_SETTINGS,
+  EXPLORER_POPOVER_DELAY_MAX_MS,
   FIND_IN_FILES_GROUPINGS,
   FIND_IN_FILES_SHOW_RESULTS,
   FIND_IN_FILES_OPEN_TARGETS,
@@ -20,6 +21,8 @@ import { codePageName } from '../editor/text-fidelity.js';
 import {
   DISPLAY_MODES,
   DISPLAY_MODE_LABELS,
+  NOTICE_HOVER_DELAY_MAX_MS,
+  NOTICE_HOVER_DELAY_MIN_MS,
   PANEL_LIMIT_MAX,
   PANEL_LIMIT_MIN,
   TOAST_WIDTH_MAX_PX,
@@ -601,6 +604,18 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description: 'Offer Open in OS Default Program on the File Explorer menu and on the panel title menu.',
     group: 'File Explorer',
     control: 'toggle',
+  },
+  {
+    // 069 FR-059 — the same stops as `tabs.popoverDelayMs`, the other hover popover's delay.
+    key: 'explorer.popoverDelayMs',
+    label: 'File Explorer popover delay',
+    description:
+      'How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path, in milliseconds. Zero shows it as soon as the pointer arrives.',
+    group: 'File Explorer',
+    control: 'slider',
+    min: 0,
+    max: EXPLORER_POPOVER_DELAY_MAX_MS,
+    step: 25,
   },
 
   // Terminals
@@ -1590,6 +1605,21 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: TOAST_WIDTH_MIN_PX,
     max: TOAST_WIDTH_MAX_PX,
     step: 10,
+  },
+  {
+    /*
+     * 069 FR-052: the hover delay on notices. 25 ms steps across 0–1500, as `tabs.popoverDelayMs` (the same kind of
+     * dwell, tuned the same way); the shipped 250 lands on 0 + 25×10.
+     */
+    key: 'notifications.hoverDelayMs',
+    label: 'Notification hover delay',
+    description:
+      'How long the pointer must rest on a notification before it shows more, in milliseconds: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. Zero shows it as soon as the pointer arrives; a longer delay keeps the notifications still while you move the pointer across them. Keyboard focus never waits.',
+    group: 'Notifications',
+    control: 'slider',
+    min: NOTICE_HOVER_DELAY_MIN_MS,
+    max: NOTICE_HOVER_DELAY_MAX_MS,
+    step: 25,
   },
   {
     // 068 FR-026c: Dismiss all asks first, unless the user turns that off.

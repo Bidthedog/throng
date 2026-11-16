@@ -152,9 +152,9 @@ export function DaemonIndicator(): ReactElement | null {
       onClick={() => void (showForeign ? onReplace() : onRestart())}
     >
       {/*
-        Always the RETRY glyph, in every state, because that is what this control DOES: restart the
-        daemon. There is no `error` token in the registry, and inventing one would mean touching the
-        theme copy and every shipped icon pack for a decoration. The state is already carried by the
+        Always the RETRY icon, in every state, because that is what this control DOES: restart the
+        daemon. There is no `error` icon key, and inventing one would mean new art in the default
+        icon set for a decoration. The state is already carried by the
         hover title and by `data-status`, which is what styling keys off.
       */}
       <Icon token="retry" />

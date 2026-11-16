@@ -326,7 +326,7 @@ import { setAtPath } from './metadata.js';
 // Bumped by 060's hand-test round (25 → 26): existing icon VALUES move — the glyphs Find in Files and
 // the File Explorer toolbar draw become plain (FR-011a, FR-011c), `busy` becomes ◜ (FR-001a) and
 // `groupFolderTree` ⋔ (FR-011b). Every version up to 25 wrote the old glyphs into each built-in theme
-// file, so this is 049 round 2's guarded value rewrite again: {@link V25_MOVED_ICONS} records what 25
+// file, so this is 049 round 2's guarded value rewrite again: V25_MOVED_ICONS (gone with the glyph map, 069) recorded what 25
 // wrote and {@link planThemeValueUpgrade} moves a glyph only where the file still holds exactly that.
 // 26 rather than editing 25: the maintainer's hand-testing install already holds a 25 marker.
 //
@@ -350,7 +350,7 @@ import { setAtPath } from './metadata.js';
 //
 // Bumped by 067's hand-test round (30 → 31): existing icon VALUES move — every default icon becomes a
 // monochrome glyph (maintainer, 2026-11-10). Every version up to 30 wrote the old emoji into each
-// built-in theme file, so this is 060's guarded value rewrite again: {@link V30_MOVED_ICONS} records
+// built-in theme file, so this is 060's guarded value rewrite again: V30_MOVED_ICONS (gone with the glyph map, 069) recorded
 // what 30 wrote, and {@link planThemeValueUpgrade} moves a glyph only where the file still holds it.
 // The additive half also fills `save` and `saveAs` (067 FR-069), which no seed has written yet.
 //
@@ -367,58 +367,12 @@ import { setAtPath } from './metadata.js';
 // NOT bumped by 070, for 045 round five's reason above. Its one setting, `terminals.macOptionIsMeta` (FR-031),
 // reaches every install through the per-field parse with no version gate, and its macOS key-binding table (FR-029)
 // is seeded fresh: no macOS install exists for an upgrade to reach. A bump would carry no payload.
-export const SHIPPED_DEFAULTS_VERSION = 33;
-
-/**
- * The icon glyphs shipped-defaults version 30 wrote for the tokens 067's hand-test round moved, the
- * same in every built-in theme. A frozen literal copy for {@link V25_MOVED_ICONS}' reason.
- */
-export const V30_MOVED_ICONS: Readonly<Record<string, string>> = Object.freeze({
-  send: '↪',
-  activate: '↪',
-  settings: '⚙',
-  cut: '✂',
-  paste: '📋',
-  undo: '↩',
-  language: '🗣',
-  keybindings: '⌨',
-  themes: '🎨',
-  showHidden: '👁',
-  preview: '👓',
-  unload: '⏏',
-  category: '🏷',
-  warning: '⚠',
-  resourceMonitor: '📊',
-  resourceCpu: '🖥',
-  resourceMemory: '🧠',
-  resourceGpu: '🎮',
-  resourceHideIdle: '💤',
-  resourceHideEnded: '⏹',
-  resourceNetwork: '🌐',
-  resourceKill: '✖',
-});
-
-/**
- * The icon glyphs shipped-defaults version 25 wrote for the tokens 060's hand-test round moved, the
- * same in every built-in theme. A frozen literal copy for {@link V19_MOVED_COLOURS}' reason: the live
- * values are the NEW ones, and a guard reading them would match nothing and pass every test.
- */
-export const V25_MOVED_ICONS: Readonly<Record<string, string>> = Object.freeze({
-  folder: '📁',
-  folderOpen: '📂',
-  file: '📄',
-  fileCode: '🗎',
-  fileJson: '🗎',
-  fileMarkdown: '📝',
-  fileImage: '🖼',
-  fileText: '📄',
-  newFolder: '📁',
-  quickOpen: '🔎',
-  search: '🔍',
-  findInFiles: '📚',
-  busy: '◌',
-  groupFolderTree: '🗂',
-});
+//
+// Bumped by 069 (33 → 34): a THEMES payload only, and the first that removes keys. A theme no longer holds a glyph map, per-icon
+// overrides or a choice of icon set: every icon is a file in the one default set (FR-017, FR-018). {@link planThemeIconSetUpgrade}
+// deletes `icons`, `iconOverrides` and `iconPack` from every theme on disk, built-in and user alike, and a second pass finds nothing.
+// The guarded icon-value rewrites of versions 6, 25 and 30 are retired with the map they rewrote.
+export const SHIPPED_DEFAULTS_VERSION = 34;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved
@@ -581,12 +535,6 @@ export const SEARCH_MATCH_TOKENS: readonly (keyof SearchMatchColours)[] = Object
   'searchMatchCurrent',
   'searchMatchCurrentBorder',
 ] as const);
-
-/**
- * `icons.findInFiles` as shipped-defaults version 6 wrote it into every theme file on disk — a
- * frozen copy for {@link V6_SEARCH_MATCH_COLOURS}' reasons (043 R28, FR-065).
- */
-export const V6_FIND_IN_FILES_ICON = '⌕';
 
 /**
  * The whole `search.inFiles` section as shipped-defaults version 6 materialised it into every
@@ -1105,7 +1053,7 @@ export function applyKeybindingsUpgrade(
 /** The authoritative shipped-defaults record (immutable/frozen once built). */
 export interface ShippedDefaults {
   readonly version: number;
-  /** Built-in themes keyed by name (includes `throng`, carrying its default icon pack). */
+  /** Built-in themes keyed by name (includes `throng`). */
   readonly themes: Readonly<Record<string, Theme>>;
   readonly settings: AppSettings;
   readonly keybindings: Keybindings;
@@ -1129,9 +1077,8 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 /**
  * Assemble the frozen authoritative record from the live definitions. The
- * `throng` theme is wrapped with `iconPack: 'throng'` so a seeded/restored
- * `throng` selects the bundled glyph pack out of the box (matching prior startup
- * behaviour) WITHOUT editing `theme.ts`. Returns a fresh, deep-frozen object each
+ * `throng` theme is the live definition as it stands; no theme names an icon set, and
+ * absence means the default set (069 FR-014). Returns a fresh, deep-frozen object each
  * call (repeated calls deep-equal).
  */
 export function buildShippedDefaults(): ShippedDefaults {
@@ -1139,8 +1086,8 @@ export function buildShippedDefaults(): ShippedDefaults {
   for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
     themes[name] = clone(theme);
   }
-  // throng carries its bundled icon pack in the shipped record.
-  themes[THRONG_THEME.name] = { ...clone(THRONG_THEME), iconPack: 'throng' };
+  // No theme names an icon set: absent means the default set (069 FR-014).
+  themes[THRONG_THEME.name] = clone(THRONG_THEME);
   return deepFreeze({
     version: SHIPPED_DEFAULTS_VERSION,
     themes,
@@ -1287,8 +1234,8 @@ export interface ThemeValueUpgrade {
 /**
  * The **first non-additive theme upgrade** in the project (043 R28, plan D1/D4): four values a
  * built-in theme file already holds are rewritten — `colours.searchMatch`,
- * `colours.searchMatchCurrent`, `colours.searchMatchCurrentBorder` (FR-067) and `icons.findInFiles`
- * (FR-065) — and only where the on-disk value is still byte-identical to what version 6 shipped for
+ * `colours.searchMatchCurrent` and `colours.searchMatchCurrentBorder` (FR-067); version 6's
+ * `icons.findInFiles` rewrite went with the glyph map in 069 — and only where the on-disk value is still byte-identical to what version 6 shipped for
  * that theme.
  *
  * ══ WHY IT CANNOT BE {@link planThemeUpgrade} ══
@@ -1308,8 +1255,8 @@ export interface ThemeValueUpgrade {
  *   the `throng` base, so they often are).
  * - **Per token.** Each of the four is compared on its own, so a user who recoloured one keeps that
  *   one and still receives the other three.
- * - **Against a frozen record, never the live definitions.** {@link V6_SEARCH_MATCH_COLOURS} and
- *   {@link V6_FIND_IN_FILES_ICON} are literal copies for the reason {@link V4_EXCLUDE_GLOBS}
+ * - **Against a frozen record, never the live definitions.** {@link V6_SEARCH_MATCH_COLOURS} is a
+ *   literal copy for the reason {@link V4_EXCLUDE_GLOBS}
  *   records: FR-067 RE-DERIVES fourteen of these fifteen themes, so a guard reading the live value
  *   would compare the new colour against itself, match no install ever, rewrite nothing, and pass
  *   every test — a migration that plans nothing looks exactly like one that had nothing to do.
@@ -1343,21 +1290,12 @@ export function planThemeValueUpgrade(args: {
     };
     if (v6) {
       for (const token of SEARCH_MATCH_TOKENS) moveIfStill(`colours.${token}`, v6[token], shippedTheme.colours[token]);
-      moveIfStill('icons.findInFiles', V6_FIND_IN_FILES_ICON, shippedTheme.icons.findInFiles);
     }
     // 049 round 2 (19 → 20): the same guard against version 19's record.
     if (v19) {
       for (const [token, was] of Object.entries(v19)) {
         moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
       }
-    }
-    // 060 hand-test round (25 → 26): the same guard against version 25's icons, in every built-in.
-    for (const [token, was] of Object.entries(V25_MOVED_ICONS)) {
-      moveIfStill(`icons.${token}`, was, shippedTheme.icons[token]);
-    }
-    // 067 hand-test round (30 → 31): the same guard against version 30's icons.
-    for (const [token, was] of Object.entries(V30_MOVED_ICONS)) {
-      moveIfStill(`icons.${token}`, was, shippedTheme.icons[token]);
     }
 
     if (leaves.length > 0) plans.push({ name, leaves });

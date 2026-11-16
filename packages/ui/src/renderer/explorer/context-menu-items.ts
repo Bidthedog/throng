@@ -211,7 +211,8 @@ export function buildContextMenuItems(args: {
   // Destructive section. The root has none, and an EMPTY group draws no divider — which is why the
   // tree's empty space still opens with two boundaries rather than four (M5).
   if (!isRoot) {
-    items.push({ label: 'Delete', icon: 'destroy', section: 'destroy', shortcut: sc('file.delete'), onClick: () => ops.remove(targets) });
+    // 069 FR-055: the rubbish bin, the same icon as the toolbar's Delete. `section` is the menu's destructive group, not an icon.
+    items.push({ label: 'Delete', icon: 'deleteFile', section: 'destroy', shortcut: sc('file.delete'), onClick: () => ops.remove(targets) });
   }
 
   // Location section (US5/#158, FR-018a): a single "Open In" submenu, "OS File Explorer" FIRST,

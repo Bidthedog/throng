@@ -54,6 +54,8 @@ function descriptor(raw: unknown): NotificationActionDescriptor | undefined {
     return { kind: 'openFile', projectId: raw.projectId, relPath: raw.relPath, label };
   }
   if (raw.kind === 'openPreferences' && typeof raw.section === 'string') return { kind: 'openPreferences', section: raw.section, label };
+  // 069 R7: the icon set backup notice's Open folder, kept so the Notifications panel still carries it.
+  if (raw.kind === 'openIconSetsFolder') return { kind: 'openIconSetsFolder', label };
   return undefined;
 }
 

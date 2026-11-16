@@ -26,8 +26,8 @@ import { type ReactElement } from 'react';
  * correct on all 15 bundled themes and any the user writes. This also sidesteps the
  * renderer CSP, which forbids the `data:` URI a bundled SVG import would produce.
  *
- * A brand mark is chrome, not an action control, so it is not an icon-pack token
- * (constitution: themeable icons apply to action controls) — a user's icon pack must
+ * A brand mark is chrome, not an action control, so it is not an icon key
+ * (constitution: themeable icons apply to action controls) — a user's icon set must
  * not be able to replace the application's own identity. It matches the sibling
  * inline glyphs (cog, window controls) in construction.
  */

@@ -4,6 +4,8 @@ import { getAttentionMarks } from '../attention/attention-store.js';
 import { openFileInTab } from '../editor/editor-open.js';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspaceOptional } from '../state/workspace-store.js';
+import { useNotifyOptional } from '../common/notification.js';
+import { openIconSetsFolder } from '../common/open-icon-sets-folder.js';
 import { useNotifications } from './use-notifications.js';
 
 /**
@@ -27,6 +29,7 @@ export function useNotificationActions(): {
   const { activeProject } = useProjects();
   const layout = ws?.layout ?? null;
   const { entries } = useNotifications();
+  const notify = useNotifyOptional()?.notify ?? null;
 
   // The panels the entries relate to, asked of main whenever the set (or this window's layout) changes.
   const refs = useMemo(() => {
@@ -69,6 +72,7 @@ export function useNotificationActions(): {
         case 'openFile':
           return activeProject?.id === action.projectId && layout !== null;
         case 'openPreferences':
+        case 'openIconSetsFolder':
           return true;
       }
     },
@@ -93,9 +97,13 @@ export function useNotificationActions(): {
         case 'openPreferences':
           window.throng?.openPreferences?.('settings', action.section);
           return;
+        case 'openIconSetsFolder':
+          // No set named: main opens the icon sets directory itself (contracts/icon-sets-ipc.md).
+          void openIconSetsFolder(notify);
+          return;
       }
     },
-    [activeProject, layout, ws],
+    [activeProject, layout, ws, notify],
   );
 
   return { targetExists, runAction };

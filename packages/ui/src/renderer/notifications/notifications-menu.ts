@@ -1,4 +1,4 @@
-import type { NotificationActionDescriptor, NotificationEntry, NotificationOrder } from '@throng/core';
+import type { IconKey, NotificationActionDescriptor, NotificationEntry, NotificationOrder } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 
 /**
@@ -16,10 +16,11 @@ export const ORDER_LABELS: Readonly<Record<NotificationOrder, string>> = {
 
 const ORDERS = Object.keys(ORDER_LABELS) as NotificationOrder[];
 
-/** The four orders as menu rows; the current one carries a tick, and keeps the same test id. */
+/** The four orders as menu rows; the current one is checked, and keeps the same test id. */
 export function orderMenuItems(order: NotificationOrder, onSetOrder: (order: NotificationOrder) => void): MenuAction[] {
   return ORDERS.map((o) => ({
-    label: o === order ? `${ORDER_LABELS[o]} ✓` : ORDER_LABELS[o],
+    label: ORDER_LABELS[o],
+    checked: o === order,
     testId: `menu-item-${ORDER_LABELS[o]}`,
     icon: 'sortOrder',
     section: 'viewState' as const,
@@ -80,7 +81,7 @@ export function buildEntryMenu(input: EntryMenuInput): MenuAction[] {
 }
 
 /** The theme token an action descriptor is drawn with. */
-export function iconFor(action: NotificationActionDescriptor): string {
+export function iconFor(action: NotificationActionDescriptor): IconKey {
   switch (action.kind) {
     case 'goToPanel':
       return 'activate';
@@ -88,5 +89,7 @@ export function iconFor(action: NotificationActionDescriptor): string {
       return 'quickOpen';
     case 'openPreferences':
       return 'settings';
+    case 'openIconSetsFolder':
+      return 'folderOpen';
   }
 }

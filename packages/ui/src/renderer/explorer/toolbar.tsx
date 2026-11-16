@@ -151,7 +151,8 @@ export function ExplorerToolbar({
         disabled={onDelete === undefined}
         onClick={onDelete}
       >
-        <Icon token="destroy" />
+        {/* 069 FR-055 — a rubbish bin of its own, not `destroy`'s ✕, which closes and discards elsewhere. */}
+        <Icon token="deleteFile" />
       </button>
     </div>
   );

@@ -22,7 +22,13 @@
   align-items: stretch;
   box-sizing: border-box;
   /* Distinct from the panes bar below it: a slightly darker app-chrome shade. */
-  background: var(--throng-colour-appBg, var(--bg));
+  /* 069 FR-060 — a background of its own, so the bar reads as the bar even when a window is maximised and
+     the window's own edge is gone: the Title Bar Background token, or unset, the app background a tenth of
+     the way toward the text colour. Every window's title bar is this one rule. */
+  background: var(
+    --throng-colour-titleBarSurface,
+    color-mix(in srgb, var(--throng-colour-appBg, var(--bg)) 90%, var(--throng-colour-text, var(--text)))
+  );
   border-bottom: 1px solid var(--border);
   /* The bar is the OS window drag handle; interactive children opt out below. */
   -webkit-app-region: drag;

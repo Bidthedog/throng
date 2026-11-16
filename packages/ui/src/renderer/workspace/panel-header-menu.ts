@@ -244,7 +244,7 @@ function historyItems(
   return [
     {
       label: 'Back',
-      icon: 'navigateBack',
+      icon: 'navigateBack' as const,
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'navigate.back'),
       disabled: !(history?.canGoBack ?? false),
@@ -252,7 +252,7 @@ function historyItems(
     },
     {
       label: 'Forward',
-      icon: 'navigateForward',
+      icon: 'navigateForward' as const,
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'navigate.forward'),
       disabled: !(history?.canGoForward ?? false),
@@ -281,7 +281,7 @@ function failureItems(actions: PanelHeaderMenuActions): MenuAction[] {
   return [
     {
       label: 'Try again',
-      icon: 'retry',
+      icon: 'retry' as const,
       section: 'viewState',
       onClick: () => actions.tryAgain(),
     },
@@ -290,13 +290,13 @@ function failureItems(actions: PanelHeaderMenuActions): MenuAction[] {
       // Panel, and a copy control reachable only as a glyph on a banner is unreachable to anyone who
       // does not recognise the glyph. The text is the BANNER'S, assembled once.
       label: 'Copy details',
-      icon: 'copy',
+      icon: 'copy' as const,
       section: 'viewState',
       onClick: () => actions.copyDetails(),
     },
     {
       label: 'Clear panel type',
-      icon: 'dismiss',
+      icon: 'dismiss' as const,
       section: 'viewState',
       onClick: () => actions.clearPanelType(),
     },
@@ -305,14 +305,15 @@ function failureItems(actions: PanelHeaderMenuActions): MenuAction[] {
 
 /**
  * Synchronise Scrolling (044 FR-122b; contracts/menus-and-controls.md §10) — View & state, after Zoom and
- * before the failure-banner items. A checked toggle in the Word Wrap idiom: the ✓ is in the label and the test
- * id is pinned to the bare label so it survives the state changing. Never disabled (FR-122a).
+ * before the failure-banner items. A checked toggle in the Word Wrap idiom: the state is the item's `checked` flag and the test
+ * id is pinned to the bare label. Never disabled (FR-122a).
  */
 function syncScrollItem(on: boolean, keybindings: Keybindings, actions: PanelHeaderMenuActions): MenuAction {
   return {
-    label: on ? 'Synchronise Scrolling ✓' : 'Synchronise Scrolling',
+    label: 'Synchronise Scrolling',
+    checked: on,
     testId: 'menu-item-Synchronise Scrolling',
-    icon: 'syncScroll',
+    icon: 'syncScroll' as const,
     section: 'viewState',
     shortcut: firstBinding(keybindings, 'preview.toggleSyncScroll'),
     onClick: () => actions.toggleSyncScroll(),
@@ -376,13 +377,13 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       const disabled = (args.panel.config as { movedOut?: unknown } | undefined)?.movedOut === true;
       items.push(
         args.preview.parented
-          ? { label: 'Go to Editor', icon: 'editorPanel', section: 'navigate', disabled, onClick: () => actions.goToEditor() }
-          : { label: 'Open in Editor', icon: 'editorPanel', section: 'navigate', disabled, onClick: () => actions.openInEditor() },
+          ? { label: 'Go to Editor', icon: 'editorPanel' as const, section: 'navigate', disabled, onClick: () => actions.goToEditor() }
+          : { label: 'Open in Editor', icon: 'editorPanel' as const, section: 'navigate', disabled, onClick: () => actions.openInEditor() },
       );
     }
     items.push({
       label: 'Find…',
-      icon: 'search',
+      icon: 'search' as const,
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'search.find'),
       ...documentCovered,
@@ -398,7 +399,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     items.push(...historyItems(args.history, keybindings, actions));
     items.push({
       label: 'Refresh',
-      icon: 'refresh',
+      icon: 'refresh' as const,
       section: 'viewState',
       onClick: () => actions.refreshPreview(),
     });
@@ -432,26 +433,26 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   if (panel.kind !== undefined && KINDS_THAT_ZOOM.includes(panel.kind)) {
     items.push({
       label: 'Zoom',
-      icon: 'zoomIn',
+      icon: 'zoomIn' as const,
       section: 'viewState',
       submenu: [
         {
           label: 'Zoom In',
-          icon: 'zoomIn',
+          icon: 'zoomIn' as const,
           section: 'viewState',
           shortcut: firstBinding(keybindings, 'panel.zoomIn'),
           onClick: () => actions.zoomIn(),
         },
         {
           label: 'Zoom Out',
-          icon: 'zoomOut',
+          icon: 'zoomOut' as const,
           section: 'viewState',
           shortcut: firstBinding(keybindings, 'panel.zoomOut'),
           onClick: () => actions.zoomOut(),
         },
         {
           label: 'Reset Zoom',
-          icon: 'zoomReset',
+          icon: 'zoomReset' as const,
           section: 'viewState',
           shortcut: firstBinding(keybindings, 'panel.zoomReset'),
           onClick: () => actions.resetZoom(),
@@ -465,7 +466,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     // confirmation (FR-075). Revert is disabled when there is nothing to undo.
     items.push({
       label: 'Save',
-      icon: 'send',
+      icon: 'send' as const,
       section: 'content',
       shortcut: firstBinding(keybindings, 'editor.save'),
       disabled: editor?.movedOut === true,
@@ -473,14 +474,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     });
     items.push({
       label: 'Save As…',
-      icon: 'send',
+      icon: 'send' as const,
       section: 'content',
       shortcut: firstBinding(keybindings, 'editor.saveAs'),
       onClick: () => actions.saveAs(),
     });
     items.push({
       label: 'Revert',
-      icon: 'rename',
+      icon: 'rename' as const,
       section: 'content',
       disabled: !editor?.dirty,
       onClick: () => actions.revert(),
@@ -498,7 +499,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
      */
     items.push({
       label: 'Reload from disk',
-      icon: 'retry',
+      icon: 'retry' as const,
       section: 'content',
       disabled: !editor?.hasFilePath,
       onClick: () => actions.reloadFromDisk(),
@@ -538,7 +539,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     if (openPreview !== undefined && openPreview.state !== 'absent') {
       items.push({
         label: 'Open Preview',
-        icon: 'preview',
+        icon: 'preview' as const,
         section: 'navigate',
         shortcut: firstBinding(keybindings, 'preview.open'),
         disabled: openPreview.state === 'disabled',
@@ -592,14 +593,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     if (panel.dormant === true) {
       items.push({
         label: 'Reload',
-        icon: 'retry',
+        icon: 'retry' as const,
         section: 'viewState',
         onClick: () => actions.reloadTerminal(),
       });
     }
     items.push({
       label: 'Refresh / redraw terminal',
-      icon: 'retry',
+      icon: 'retry' as const,
       section: 'viewState',
       shortcut: firstBinding(keybindings, 'terminal.redraw'),
       onClick: () => actions.redraw(),
@@ -646,7 +647,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   if (panel.kind === 'editor' || panel.kind === 'terminal') {
     items.push({
       label: 'Find',
-      icon: 'search',
+      icon: 'search' as const,
       section: 'content',
       shortcut: firstBinding(keybindings, 'search.find'),
       onClick: () => actions.find(),
@@ -655,14 +656,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   if (panel.kind === 'editor') {
     items.push({
       label: 'Replace',
-      icon: 'replace',
+      icon: 'replace' as const,
       section: 'content',
       shortcut: firstBinding(keybindings, 'search.replace'),
       onClick: () => actions.replace(),
     });
     items.push({
       label: 'Replace All',
-      icon: 'replaceAll',
+      icon: 'replaceAll' as const,
       section: 'content',
       shortcut: firstBinding(keybindings, 'search.replaceAll'),
       onClick: () => actions.replaceAll(),
@@ -671,15 +672,15 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
 
   items.push({
     label: 'Send to Tab',
-    icon: 'send',
+    icon: 'send' as const,
     section: 'navigate',
     ...lockedOut,
     submenu: [
       // New Tab == dragging the Panel onto the tab-strip `+` (005 FR-027).
-      { label: 'New Tab', icon: 'add', section: 'navigate', onClick: () => actions.sendToNewTab() },
+      { label: 'New Tab', icon: 'add' as const, section: 'navigate', onClick: () => actions.sendToNewTab() },
       ...otherTabs.map((t) => ({
         label: t.title,
-        icon: 'tab',
+        icon: 'tab' as const,
         section: 'navigate' as const,
         // 054 FR-074 — a maximised tab takes no panel; drawn disabled, not absent (Constitution VI).
         disabled: t.disabled ?? false,
@@ -695,13 +696,13 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   if (detach) {
     items.push({
       label: 'Sync to',
-      icon: 'send',
+      icon: 'send' as const,
       section: 'navigate',
       ...lockedOut,
       submenu: [
         {
           label: 'New Sub-workspace',
-          icon: 'detach',
+          icon: 'detach' as const,
           section: 'navigate',
           onClick: () => detach.detachToNew(),
         },
@@ -709,22 +710,22 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
         // there, the entry is greyed out (no submenu).
         ...detach.subWorkspaces.map((s): MenuAction => {
           if (s.alreadyHasPanel) {
-            return { label: s.name, icon: 'tab', section: 'navigate', disabled: true };
+            return { label: s.name, icon: 'tab' as const, section: 'navigate', disabled: true };
           }
           return {
             label: s.name,
-            icon: 'tab',
+            icon: 'tab' as const,
             section: 'navigate',
             submenu: [
               {
                 label: 'New Tab',
-                icon: 'add',
+                icon: 'add' as const,
                 section: 'navigate',
                 onClick: () => detach.syncToExisting(s.id),
               },
               ...s.tabs.map((t) => ({
                 label: t.title,
-                icon: 'tab',
+                icon: 'tab' as const,
                 section: 'navigate' as const,
                 onClick: () => detach.syncToExisting(s.id, t.id),
               })),
@@ -737,7 +738,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
 
   items.push({
     label: `${panelVerb} Panel`,
-    icon: 'destroy',
+    icon: 'destroy' as const,
     section: 'destroy',
     // 048 FR-131 — the chord that runs this same item from the keyboard, as bound now.
     shortcut: firstBinding(keybindings, 'panel.destroy'),

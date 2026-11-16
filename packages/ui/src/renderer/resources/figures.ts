@@ -13,6 +13,7 @@ import {
   type ResourceNode,
   type UsageBand,
   type UsageThresholds,
+  type IconKey,
 } from '@throng/core';
 import { METRIC_LABEL, combineIo, formatMetric, formatRate } from './format.js';
 
@@ -32,7 +33,7 @@ export const STATUS_FIGURE_ORDER: readonly StatusFigureId[] = ['cpu', 'memory', 
 export const DROP_ORDER: readonly StatusFigureId[] = ['gpu', 'io', 'memory', 'cpu'];
 
 /** The status bar's glyphs and the toolbar's Order by controls (the status bar draws the first four). */
-export const FIGURE_ICON: Readonly<Record<FigureId, string>> = {
+export const FIGURE_ICON: Readonly<Record<FigureId, IconKey>> = {
   cpu: 'resourceCpu',
   memory: 'resourceMemory',
   gpu: 'resourceGpu',

@@ -99,19 +99,18 @@ export function PasteProgressNotice(): ReactElement | null {
       // A themed ICON with a hover title (the constitution's action-control rule) — this is a
       // control on a notice, not a dialog decision button, so it carries no text label.
       // Its own `cancel` token (FR-039) — never the dismiss glyph, so re-skinning one leaves the other.
-      <span className="paste-progress__cancel">
-        <IconButton
-          token="cancel"
-          className="notice__action"
-          testId="paste-cancel"
-          title="Cancel paste"
-          onClick={() => transfer.cancel(jobId)}
-        />
-      </span>
+      // In the card's control group at the top-right, beside Copy (constitution, toast controls).
+      <IconButton
+        token="cancel"
+        className="notice__control"
+        testId="paste-cancel"
+        title="Cancel paste"
+        onClick={() => transfer.cancel(jobId)}
+      />
     );
 
-    /** The card's content for a progress report: message and body, nothing about identity. */
-    const content = (p: TransferProgress): Pick<NoticeInput, 'message' | 'body'> => {
+    /** The card's content for a progress report: message, body and Cancel, nothing about identity. */
+    const content = (p: TransferProgress): Pick<NoticeInput, 'message' | 'body' | 'controls'> => {
       const folder = formatSubject({ kind: 'folder', name: leaf(p.targetDir) });
       if (p.state === 'queued') {
         return {
@@ -119,14 +118,14 @@ export function PasteProgressNotice(): ReactElement | null {
           body: (
             <div className="paste-progress__body">
               <span>{earlier(p.queuedBehind)}</span>
-              {cancelControl(p.jobId)}
             </div>
           ),
+          controls: cancelControl(p.jobId),
         };
       }
       if (p.state === 'awaiting-cancel-choice' || p.state === 'rolling-back') {
         // The choice dialog is up (or the undo is under way): nothing left to cancel from here.
-        return { message: 'Cancelling paste…', body: undefined };
+        return { message: 'Cancelling paste…', body: undefined, controls: undefined };
       }
       const { bytesDone, bytesTotal } = p;
       const sizes =
@@ -146,10 +145,9 @@ export function PasteProgressNotice(): ReactElement | null {
             </span>
             <ProgressBar bytesDone={bytesDone} bytesTotal={bytesTotal} />
           </div>
-          {cancelControl(p.jobId)}
         </div>
       );
-      return { message: `Pasting into ${folder}`, body };
+      return { message: `Pasting into ${folder}`, body, controls: cancelControl(p.jobId) };
     };
 
     const raise = (run: Run): void => {
@@ -203,6 +201,7 @@ export function PasteProgressNotice(): ReactElement | null {
           const found = update(run.noticeId, {
             ...failure,
             body: undefined,
+            controls: undefined,
             // The failure uses the user's own setting for an error again, not the live-run override.
             display: undefined,
             // …and the report leaves with the duration like any toast (the panel keeps it under `panel`).

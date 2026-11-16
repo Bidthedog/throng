@@ -46,7 +46,7 @@ import {
   toggleSection,
   type FoldState,
   type HeadingRecord,
-  type IconAsset,
+  type IconKey,
 } from '@throng/core';
 import { markdownHeadingRecords } from './markdown-headings.js';
 import { documentFoldState, setDocumentFoldState } from './fold-state-store.js';
@@ -154,8 +154,8 @@ export function liveSections(view: EditorView): EditorFoldSection[] {
 const ICON_EXPANDED = 'foldSectionExpanded';
 const ICON_COLLAPSED = 'foldSectionCollapsed';
 
-/** Resolves an icon token to what it renders as, bound to the active theme and packs by the caller. */
-export type IconResolver = (token: string) => IconAsset;
+/** Resolves an icon key to its svg markup, bound to the active theme and icon sets by the caller. */
+export type IconResolver = (token: IconKey) => string;
 
 export interface MarkdownFoldDeps {
   readonly getFoldState: () => FoldState;
@@ -167,12 +167,11 @@ export interface MarkdownFoldDeps {
 }
 
 /** The `<span class="icon">` a marker carries, built exactly as the shared `Icon` component would. */
-function renderIconInto(host: HTMLElement, asset: IconAsset): void {
+function renderIconInto(host: HTMLElement, markup: string): void {
   const span = host.ownerDocument.createElement('span');
   span.className = 'icon';
   span.setAttribute('aria-hidden', 'true');
-  if (asset.kind === 'svg') span.innerHTML = asset.markup; // sanitised in main at pack-load time (017/#54)
-  else if (asset.kind === 'glyph') span.textContent = asset.glyph;
+  span.innerHTML = markup; // default set compiled in; user sets sanitised in main at load time (017/#54, 069)
   host.append(span);
 }
 
@@ -182,7 +181,7 @@ class HeadingFoldMarker extends GutterMarker {
      *  can identify which heading a marker belongs to without inferring it from DOM position. */
     private readonly slug: string,
     private readonly collapsed: boolean,
-    private readonly asset: IconAsset,
+    private readonly markup: string,
   ) {
     super();
   }
@@ -196,7 +195,7 @@ class HeadingFoldMarker extends GutterMarker {
     el.className = 'cm-throng-fold-marker';
     el.dataset.slug = this.slug;
     el.title = this.collapsed ? 'Expand section' : 'Collapse section';
-    renderIconInto(el, this.asset);
+    renderIconInto(el, this.markup);
     return el;
   }
 }

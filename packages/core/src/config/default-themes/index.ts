@@ -9,6 +9,7 @@
  * colour token set, so each theme is complete without hand-listing 22 colours.
  */
 import { THRONG_THEME, TOKEN_PARENT, type Theme } from '../theme.js';
+import { deriveFileIconColours } from '../file-icon-colours.js';
 import {
   CURRENT_MATCH_SEPARATION,
   INACTIVE_SELECTION_FROM_PAGE,
@@ -752,6 +753,9 @@ function makeTheme(name: string, p: Palette): Theme {
       // every other surface the same ones.
       scrollbarTrack: p.bg,
       scrollbarThumb: p.border ?? THRONG_THEME.colours.border,
+      // 069 FR-061 — the file icon categories: each keeps its hue, its lightness set for this theme so it
+      // clears 4.5:1 on the tree's pane, a hovered or selected row and the app background.
+      ...deriveFileIconColours([p.sidebar ?? p.bg, p.surface, p.surfaceActive ?? p.surface, p.bg]),
     },
     fonts: {
       family: p.fontFamily ?? THRONG_THEME.fonts.family,
@@ -770,7 +774,6 @@ function makeTheme(name: string, p: Palette): Theme {
     // `isThemeTokenOverridden` saw no shipped value and reported Reset permanently disabled for icon size
     // and scrollbar width on every bundled theme — the exact defect this pass fixes.
     sizes: { ...THRONG_THEME.sizes },
-    icons: { ...THRONG_THEME.icons },
   };
 }
 

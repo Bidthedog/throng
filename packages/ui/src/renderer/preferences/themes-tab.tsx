@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
+  ICON_KEYS,
+  ICON_KEY_DESCRIPTIONS,
   THEME_METADATA,
   buildShippedDefaults,
   classifyThemes,
   cloneName,
+  cloneTheme,
   emptyValueFor,
   filterFields,
   getAtPath,
@@ -13,7 +16,7 @@ import {
   setAtPath,
   themeTokenDiffersFromEntry,
   type FieldDescriptor,
-  type IconValue,
+  type IconKey,
   type Theme,
 } from '@throng/core';
 import { useActiveTheme, useAppSettings } from '../config/config-store.js';
@@ -58,27 +61,27 @@ const SEARCH_DEBOUNCE_MS = 150;
 /** The shipped record, once — the factory baseline a per-token Reset returns a built-in to (#76). */
 const SHIPPED = buildShippedDefaults();
 
-/** The theme's editable token descriptors — icons excluded, the icon section owns those. */
-const THEME_TOKEN_FIELDS: readonly FieldDescriptor[] = THEME_METADATA.filter(
-  (d) => d.control !== 'icon',
-);
+/** The theme's editable token descriptors (icons are not tokens; the icon section owns them). */
+const THEME_TOKEN_FIELDS: readonly FieldDescriptor[] = THEME_METADATA;
 
-/** The icon tokens — same registry, same descriptors, filtered by the same typeahead (FR-021). */
-const THEME_ICON_FIELDS: readonly FieldDescriptor[] = THEME_METADATA.filter(
-  (d) => d.control === 'icon',
-);
+/** The icon keys — searchable by name and description, filtered by the same typeahead (FR-021). */
+const THEME_ICON_FIELDS: readonly { key: IconKey; label: string; description: string }[] = ICON_KEYS.map((key) => ({
+  key,
+  label: key,
+  description: ICON_KEY_DESCRIPTIONS[key],
+}));
 
-/** The icon-pack selector is a Theme property, not a token, so it needs its own searchable text. */
+/** The icon-set selector is a Theme property, not a token, so it needs its own searchable text. */
 const ICON_PACK_FIELD = {
   key: 'iconPack',
-  label: 'Icon pack',
-  description: 'Map all icon tokens at once; override individual tokens below.',
+  label: 'Icon set',
+  description: 'The set of icons the app draws; keys a set does not hold use the default set.',
 };
 
 /**
  * Tokens the generic Colours group must NOT render, because they have a home of their own.
  *
- * `iconColour` is edited BESIDE THE ICON-PACK SELECTOR (FR-027) — which is where the user is
+ * `iconColour` is edited BESIDE THE ICON-SET SELECTOR (FR-027) — which is where the user is
  * standing when the icons look wrong, and is why the requirement puts it there. But it is also a
  * real colour token with a derived descriptor (that is what makes it editable at all, and what
  * satisfies the constitution's configuration-editor-completeness rule), so the generic loop would
@@ -173,9 +176,9 @@ export function ThemesTab(): ReactElement {
    */
   const iconFilter = useMemo(() => {
     if (!applied.trim()) return null; // no search (a blank query is none: `searchTokens`) → show it all
-    const fields = filterFields(applied, THEME_ICON_FIELDS, (d) => getAtPath(activeTheme, d.key));
+    const fields = filterFields(applied, THEME_ICON_FIELDS, () => '');
     return {
-      tokens: fields.map((d) => d.key.replace(/^icons\./, '')),
+      tokens: fields.map((d) => d.key),
       packRowMatches: matchesQuery(applied, ICON_PACK_FIELD, activeTheme.iconPack ?? ''),
     };
   }, [applied, activeTheme]);
@@ -317,7 +320,7 @@ export function ThemesTab(): ReactElement {
   const isBuiltIn = target?.kind === 'built-in';
   const isCustom = target?.kind === 'custom';
 
-  // Optimistic latest theme: rapid edits (e.g. select a pack then override a
+  // Optimistic latest theme: rapid edits (e.g. select a set then change a
   // token, or drag the colour swatch) compound off this ref within one debounce
   // window instead of being lost to a stale render. It RESYNCS to `activeTheme`
   // whenever the active theme's content changes for any reason — a reset, an
@@ -415,19 +418,11 @@ export function ThemesTab(): ReactElement {
     return Array.isArray(value) ? value.length > 0 : value !== '';
   };
 
-  const setIconPack = (pack: string | undefined): void => {
+  const setIconSet = (name: string | undefined): void => {
     const next: Theme = { ...themeRef.current };
-    if (pack) next.iconPack = pack;
+    if (name) next.iconPack = name;
     else delete next.iconPack;
     applyTheme(next);
-  };
-
-  const overrideIcon = (token: string, raw: string): void => {
-    const overrides: Record<string, IconValue> = { ...(themeRef.current.iconOverrides ?? {}) };
-    const trimmed = raw.trim();
-    if (trimmed.length === 0) delete overrides[token];
-    else overrides[token] = /\.(svg|png)$/i.test(trimmed) ? { image: trimmed } : { glyph: trimmed };
-    applyTheme({ ...themeRef.current, iconOverrides: overrides });
   };
 
   /**
@@ -487,7 +482,7 @@ export function ThemesTab(): ReactElement {
       setError(`“${source}” is not valid JSON — nothing was created.`);
       return;
     }
-    const next: Theme = { ...base, name: newName };
+    const next = cloneTheme(base, newName); // starts on the default icon set, FR-014
     const res = await writeConfig({ kind: 'theme', name: newName }, JSON.stringify(next));
     if (!res.ok) {
       setError(`Could not create “${newName}”: ${res.error}.`);
@@ -532,38 +527,46 @@ export function ThemesTab(): ReactElement {
 
         {/* Actions on the SELECTED theme… */}
         <span className="themes-toolbar__actions">
-          {/* Undo this sitting's edits — offered for EVERY theme, built-in or custom, and only when
-              there is actually something to undo (a no-op affordance is noise, FR-016a). */}
-          {dirtyTheme ? (
-            <IconButton
-              token={ROW_ACTION_TOKENS.revert}
-              title={`Revert “${targetName}” to how it was when this window opened`}
-              testId="theme-revert"
-              onClick={() => askRevertTheme(targetName)}
-            />
-          ) : null}
-          {isBuiltIn ? (
-            <IconButton
-              token="retry"
-              title={`Restore “${targetName}” to default`}
-              testId="theme-restore"
-              onClick={() => askRestoreTheme(targetName)}
-            />
-          ) : null}
+          {/*
+            069 FR-049 — every action is always on screen, greyed out with its reason as the title when
+            it cannot be used, so the toolbar never changes shape as the selection or the edits change.
+            Undo this sitting's edits is offered for every theme, and usable once there is something to undo.
+          */}
+          <IconButton
+            token={ROW_ACTION_TOKENS.revert}
+            title={
+              dirtyTheme
+                ? `Revert “${targetName}” to how it was when this window opened`
+                : `“${targetName}” has not changed since this window opened`
+            }
+            testId="theme-revert"
+            disabled={!dirtyTheme}
+            onClick={() => askRevertTheme(targetName)}
+          />
+          <IconButton
+            token="retry"
+            title={
+              isBuiltIn
+                ? `Restore “${targetName}” to default`
+                : `“${targetName}” is your own theme; only a built-in theme has a default to restore`
+            }
+            testId="theme-restore"
+            disabled={!isBuiltIn}
+            onClick={() => askRestoreTheme(targetName)}
+          />
           <IconButton
             token="add"
             title={`Clone “${targetName}”`}
             testId="theme-clone"
             onClick={() => setNameFlow({ mode: 'clone', source: targetName })}
           />
-          {isCustom ? (
-            <IconButton
-              token="rename"
-              title={`Rename “${targetName}”`}
-              testId="theme-rename"
-              onClick={() => setNameFlow({ mode: 'rename', source: targetName })}
-            />
-          ) : null}
+          <IconButton
+            token="rename"
+            title={isCustom ? `Rename “${targetName}”` : `“${targetName}” is built in and cannot be renamed`}
+            testId="theme-rename"
+            disabled={!isCustom}
+            onClick={() => setNameFlow({ mode: 'rename', source: targetName })}
+          />
           <IconButton
             token="destroy"
             title={`Delete “${targetName}”`}
@@ -654,15 +657,14 @@ export function ThemesTab(): ReactElement {
             value={query}
             onChange={(e) => onSearchChange(e.target.value)}
           />
-          {query ? (
-            <IconButton
-              token="dismiss"
-              className="settings-search__clear"
-              testId="themes-search-clear"
-              title="Clear search"
-              onClick={clearSearch}
-            />
-          ) : null}
+          <IconButton
+            token="dismiss"
+            className="settings-search__clear"
+            testId="themes-search-clear"
+            title={query ? 'Clear search' : 'The search is empty'}
+            disabled={!query}
+            onClick={clearSearch}
+          />
         </div>
         {/* 056 FR-011b — beside the search box, disabled while it has text. Collapse All and Expand All
             cover the Icons key too (it is in `EXTRA_FOLD_KEYS`). */}
@@ -741,8 +743,7 @@ export function ThemesTab(): ReactElement {
         folded={folds.isFolded(ICONS_FOLD_KEY)}
         onToggleFold={() => folds.toggle(ICONS_FOLD_KEY)}
         theme={activeTheme}
-        onSetPack={setIconPack}
-        onOverride={overrideIcon}
+        onSetIconSet={setIconSet}
         // An ordinary token edit — the same debounced, theme-captured write path every colour uses,
         // so the icon colour cannot misfile itself into another theme any more than a colour can.
         onSetIconColour={(hex) => commitToken('colours.iconColour', hex)}

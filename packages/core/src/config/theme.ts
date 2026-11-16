@@ -4,6 +4,7 @@
  * resolved tokens into CSS custom properties (`--throng-*`). No OS/DOM here.
  */
 import { readableTextOn } from './colour-math.js';
+import { deriveFileIconColours } from './file-icon-colours.js';
 
 export interface ThemeFonts {
   family: string;
@@ -130,9 +131,6 @@ export function fieldsForRole(role: TypographyRole): readonly string[] {
   return TYPOGRAPHY_FIELDS;
 }
 
-/** An icon value: a glyph string, or an image referenced by a pack-relative filename (007). */
-export type IconValue = { glyph: string } | { image: string };
-
 export interface Theme {
   name: string;
   /** Colour tokens (hex/rgb strings). */
@@ -149,15 +147,17 @@ export interface Theme {
    * the application could give, and it was too thin.
    */
   sizes?: ThemeSizes;
-  /** Icon tokens → glyph (the base, always-present glyph defaults). */
-  icons: Record<string, string>;
-  /** (007, FR-039) Name of the chosen icon pack — maps all tokens to the pack. */
+  /**
+   * (069) The name of the user icon set this theme uses. ABSENT means the default set, which is what a
+   * new or cloned theme gets. The key keeps its name on disk; the user-visible text says "icon set".
+   */
   iconPack?: string;
-  /** (007, FR-039) Per-token overrides on top of the pack (glyph or image). */
-  iconOverrides?: Record<string, IconValue>;
 }
 
 /** The default, always-complete theme. Missing tokens in any theme fall back here. */
+/** The backgrounds a file icon is drawn on in the throng theme: the tree's pane, a hovered row, a selected row, the app. */
+const THRONG_FILE_ICON_BACKGROUNDS = ['#161b25', '#1b2230', '#222c3d', '#10131a'];
+
 export const THRONG_THEME: Theme = {
   name: 'throng',
   colours: {
@@ -358,6 +358,8 @@ export const THRONG_THEME: Theme = {
     destroyButtonHoverBg: '#e5534b',
     destroyButtonHoverBorder: '#e5534b',
     destroyButtonHoverText: '#ffffff',
+    /* 069 FR-061 — the file icon categories, derived to clear 4.5:1 on every background they sit on. */
+    ...deriveFileIconColours(THRONG_FILE_ICON_BACKGROUNDS),
   },
   fonts: {
     family: "'Segoe UI', system-ui, sans-serif",
@@ -384,311 +386,9 @@ export const THRONG_THEME: Theme = {
     editor: { family: "Consolas, 'Courier New', monospace", sizePx: 14 },
     terminal: { family: "Consolas, 'Courier New', monospace", sizePx: 14 },
   },
-  // Icon glyphs (themeable). Plain glyphs for now so they render without an icon
-  // font; a future theme may map these tokens to an icon set.
   sizes: {
     iconPx: 16,
     scrollbarPx: 12,
-  },
-  icons: {
-    destroy: '✕',
-    // Dismiss a transient message (error bar / notice). Same default glyph as
-    // `destroy` but a distinct token so re-skinning one never affects the other
-    // (009 addition; consumed by 011 main-window affordances).
-    dismiss: '✕',
-    // Cancel a running operation (050 FR-039) — the paste notice's Cancel. A circle with a slash,
-    // deliberately NOT the `dismiss` cross: dismissing a message and stopping a run are different
-    // actions, and re-skinning one must never re-skin the other.
-    cancel: '⊘',
-    collapse: '‹',
-    expand: '›',
-    rename: '✎',
-    send: '⤷',
-    tab: '▭',
-    add: '＋',
-    /* 067 FR-069, FR-118: the editor title bar's two save buttons. Two floppy disks, filled for Save
-       and outlined for Save As; monochrome like the rest of the set, so they take the icon colour. */
-    save: '🖪',
-    saveAs: '🖫',
-    /* 068 US3/US4: the Notifications panel (its header and the pending badge), Dismiss all, the order menu,
-       and the minimise / restore control every minimisable side panel carries. Monochrome, and none of them
-       is the `dismiss` cross, the `cancel` slashed circle or the `collapse`/`expand` chevrons. */
-    notifications: '◈',
-    dismissAll: '⊠',
-    sortOrder: '⇵',
-    minimisePanel: '⌄',
-    restorePanel: '⌃',
-    /* 068 T103–T105 (FR-074): the icon at the top left of a Notifications panel entry, one per type. A warning entry
-       draws the existing `warning` glyph. Monochrome, and none is the `dismiss` cross or the `cancel` slashed circle. */
-    noticeError: '⨂',
-    noticeAttention: '◉',
-    noticeInfo: 'ⓘ',
-    noticeSuccess: '✓',
-    detach: '⧉',
-    // Retry a terminal attach that is still starting (008 FR-005) — a themeable action
-    // icon (constitution v3.12.0), auto-exposed in the Themes editor like every token.
-    retry: '↻',
-    // Restore a configuration to its shipped defaults (014). Deliberately NOT the `retry`
-    // circular arrow: the Themes editor shows "restore this theme" and "restore ALL themes"
-    // side by side, so they must read as different actions at a glance.
-    restoreAll: '⎌',
-    // Undo one item back to the value it had when the preferences window was opened (015,
-    // FR-016). It sits in the same row gutter as `retry` (reset to shipped) and `destroy`
-    // (clear), so it has to read as a THIRD action: a plain undo arrow, not another circular
-    // one. "Back to where I started" is not "back to what Throng ships".
-    revert: '↶',
-    // Preferences UI⇄JSON mode toggle (015). The toggle was the last text-labelled
-    // control in the window ("{ }" / "UI"). Deliberately NOT `fileJson`/`fileCode`:
-    // those mean "a JSON/code FILE" in the explorer tree, and re-skinning them for
-    // the tree would silently re-skin the preferences toolbar too.
-    editJson: '{ }',
-    editVisual: '▤',
-    // Reorder controls on the preferences array editor (015) — the last hard-coded glyphs
-    // in the window. `collapse`/`expand` are horizontal chevrons and read wrong here.
-    moveUp: '↑',
-    moveDown: '↓',
-    // Per-panel zoom controls (012) — themeable action icons on the panel context
-    // menu (constitution v3.12.0). Circled +/-/dot read as in / out / reset.
-    zoomIn: '⊕',
-    zoomOut: '⊖',
-    zoomReset: '⊙',
-    // File Explorer tree (004, FR-005/FR-031). Folder/file glyphs, a symlink
-    // indicator, by-type file icons, and toolbar actions — all themeable and
-    // rendered in a fixed-size box so dimensions stay uniform.
-    folder: '▰',
-    folderOpen: '▱',
-    chevron: '▸',
-    file: '▯',
-    fileCode: '⟨⟩',
-    fileJson: '{}',
-    fileMarkdown: '¶',
-    fileImage: '◩',
-    fileText: '≡',
-    symlink: '↳',
-    // Panel-type markers shown at the head of each panel's title (012). Terminal
-    // reuses the terminal glyph below; the editor gets its own themeable token.
-    editorPanel: '🖉',
-    expandAll: '⊞',
-    collapseAll: '⊟',
-    newFolder: '▰⁺',
-    // 033 US1 (#219, FR-018b) — the File Explorer toolbar's Quick Open control. A magnifier over a
-    // document: the gesture is "find a FILE", which the bare magnifier (`search`, the find bar) does
-    // not say. Two tokens because they are two actions, not one action drawn twice.
-    quickOpen: '⊳',
-    terminal: '▣',
-    // Find-bar action controls (013, FR-018). Every control in the find bar is a
-    // themeable icon carrying a hover title — never a text label. Closing the bar
-    // reuses the shared `dismiss` glyph above.
-    search: '⌕',
-    findNext: '↓',
-    findPrevious: '↑',
-    /* 043 (FR-029a/FR-029b, FR-030). Two more tokens for two more ACTIONS, on the same rule that
-       gave `quickOpen` its own rather than reusing `search`: a new token means a new action, never a
-       glyph reused for a second meaning.
-
-       There are now THREE searches in this application and they answer different questions —
-       `search` finds text in the panel you are looking at, `quickOpen` finds a file by its name, and
-       `findInFiles` finds text across every file in the project. A user meeting two of them in one
-       toolbar has to be able to tell which is which, so the glyphs are held apart as well as the
-       tokens: 🔍 tilts left, 🔎 tilts right, and this one is not a lens at all — it names the
-       CORPUS rather than the act, which is the half that distinguishes it from the other two.
-
-       FR-065 CHANGED THIS GLYPH, and the reason is one derivable property rather than taste. It
-       shipped as `'⌕'`, and the maintainer reported the toolbar control as dwarfed by Quick Open
-       beside it. The box was never at fault — both are the same 22×22 control at the same 16 px icon
-       size. `⌕` is a TEXT-presentation character, so a text font draws it as a hairline outline,
-       while `🔎` is Emoji_Presentation and fills its em box. Same box, half the ink.
-
-       A third magnifier would have fixed the weight and broken the constraint above: 🔍 and 🔎 are
-       already told apart by nothing but the tilt of one handle, and a third lens at 16 px would be
-       told apart by nothing at all. `default-themes.test.ts` holds both halves — Emoji_Presentation,
-       and not a member of the lens family.
-
-       `searchScope` is its neighbour in the same block, and a crosshair rather than a folder: the
-       panel's scope control answers "where does this search look", which is aiming rather than
-       finding, and the answer may be a file or a glob as easily as a folder — so `newFolder` ▰⁺'s
-       vocabulary would be wrong as well as borrowed.
-
-       060 FR-011c SUPERSEDES the FR-065 weight fix above, at the maintainer's direction: every icon
-       Find in Files and the File Explorer toolbar draw is a PLAIN glyph (no Extended_Pictographic,
-       no Emoji_Presentation), so `quickOpen` and `newFolder` went plain with this one and the toolbar
-       is one weight again — the intent FR-065 served, reached from the other side. The three searches
-       stay three glyphs, none of them a lens emoji. `theme-plain-glyphs.test.ts` holds it. */
-    findInFiles: '⧈',
-    searchScope: '⌖',
-    // The two match-mode toggles read as the thing they match on: "Aa" for letter case,
-    // "ab" for a whole word. Both are two characters, so the pair reads as a set.
-    matchCase: 'Aa',
-    wholeWord: 'ab',
-    replace: '⇄',
-    replaceAll: '⇶',
-    /* 018 / FR-015. The cog menu drew a hard-coded inline gear because the theme had no settings
-       glyph — which is exactly the #56 defect, and exactly why the project-settings options icon
-       (FR-040) needs one too. One token, two consumers. */
-    settings: '⛭',
-    /* 018 / FR-014b. The window controls drew four hard-coded inline vectors. SC-002 claims ZERO
-       icons in the application come from an inline vector, so deferring these would have made a
-       success criterion false on the day it shipped. Icon tokens do not participate in the colour
-       distinctness metric, so they cost nothing against FR-006. */
-    windowMinimise: '─',
-    windowMaximise: '☐',
-    windowRestore: '❐',
-    windowClose: '✕',
-    /* 023 / #126–#127. The editor content menu and terminal menu drew Cut/Copy/Paste and the rest
-       against tokens the shipped set never had, so every one resolved to an empty glyph — the icon
-       column was reserved but blank. These are the clipboard + editing actions those menus need.
-       Cut is scissors; Copy is a distinct doubled-page (NOT `detach` ⧉, which tears a panel out);
-       Paste is a clipboard. Select All is a filled grid (NOT `editVisual` ▤, the preferences
-       toggle). Undo/Redo are plain directional arrows kept clear of `revert` ↶, `retry` ↻ and
-       `send` ⤷ so no two ever read the same in one menu. */
-    cut: '✁',
-    copy: '⎘',
-    paste: '⎀',
-    selectAll: '▦',
-    undo: '⟲',
-    redo: '⤼',
-    // The editor's "Set Language…" item (016, FR-010) — a speaking head reads as "which language",
-    // and never collides with a file-type glyph in the same menu.
-    language: '文',
-    /* 023. The cog menu's Key Bindings / Themes / About rows were destinations with no glyph, so
-       three of its four rows sat blank beside `settings` ⛭. A keyboard for the bindings editor, a
-       palette for the theme editor, and a circled information mark for the About window. */
-    keybindings: '⌘',
-    themes: '◐',
-    about: 'ⓘ',
-    // The explorer's "Hide in this project" row (004) had no token either — a circled slash reads as
-    // "kept out of view", distinct from every other glyph in the tree menu.
-    hide: '⊘',
-    /* 033 / FR-069. `hide`'s counterpart: Quick Open's exclusion toggle wears `hide` while it is
-       excluding and this while it is not, so the control reads as the same IDEA the tree menu row
-       names rather than as a second vocabulary for it. An eye, because "these are visible to me"
-       is what the flipped state means — and deliberately not `search` ⌕, which is the find bar's. */
-    showHidden: '◉',
-    /* 055. The resource monitor: its status-bar item and cog-menu row, one glyph per metric (the
-       status bar's figures and the modal's "show by" choice), the hide-idle filter, and the two
-       kill rows. A chart for the monitor itself; a chip, a stack of memory, a screen and arrows for
-       the four metrics; a crescent moon for idle; all monochrome, so they take the icon colour; a cross and a cross over a branch for the kills. */
-    resourceMonitor: '🗠',
-    resourceCpu: '▩',
-    resourceMemory: '≣',
-    resourceGpu: '⎚',
-    resourceIo: '⇅',
-    resourceHideIdle: '☾',
-    resourceKill: '✗',
-    resourceKillBelow: '⨯',
-    /* 031 / FR-032. The tab strip's step-left, step-right and show-all controls. Every control in
-       the strip is a themeable icon carrying a hover title — never a text label, never an inline
-       vector (SC-002).
-
-       Deliberately NOT `collapse` ‹ / `expand` ›, whose default glyphs are the same two characters.
-       Those mean TREE-NODE STATE in the explorer, and one token serving both would mean a user
-       re-skinning their tree chevrons silently re-skinned the tab strip as well — the same reasoning
-       that keeps `dismiss` apart from `destroy` and `editJson` apart from `fileJson`. The glyphs
-       coinciding today is a coincidence of the shipped set, not a shared meaning.
-
-       `chevronDown` is the show-all control: it opens the picker downwards, so it reads as "more
-       below", distinct from the horizontal pair beside it and from the tree's `chevron` ▸.
-
-       It is ▾ and NOT ⌄ (U+2304 DOWN ARROWHEAD), which shipped first and sat visibly low beside its
-       neighbours. The cause is the GLYPH, not the box: ‹ and › are centred within their em box,
-       while U+2304's ink sits near the baseline. Centring the container — which is what the CSS
-       does, and what a box-versus-box measurement confirms — cannot move ink that is off-centre
-       inside its own advance. ▾ is centred in its em box, so it lines up with the pills and the two
-       horizontal chevrons without a per-glyph nudge that a re-skin would invalidate. */
-    chevronLeft: '‹',
-    chevronRight: '›',
-    chevronDown: '▾',
-    /* 044 (R17). Four tokens for four ACTIONS, each held apart from the glyph it would otherwise be
-       mistaken for.
-
-       `preview` is the editor status-bar button, Open Preview, Open In → Preview and the preview
-       panel's type icon: reading glasses, because a preview is the file READ rather than edited, and
-       deliberately not `showHidden` ◉ (make hidden entries visible) or `findInFiles` ⧈ (a corpus).
-
-       `refresh` is the preview header's Refresh — re-read the source now. It is NOT `retry` ↻, which
-       means "try again" and is offered BESIDE Refresh while the failure banner is up (030 FR-042c), so
-       the two would otherwise sit next to each other wearing the same arrow.
-
-       `navigateBack` / `navigateForward` are the header's history buttons and menu items (FR-104,
-       FR-111). Plain horizontal arrows: not `chevronLeft` ‹ / `chevronRight` ›, which step the tab
-       strip, and not `undo` ⟲ / `redo` ⤼, which change a document — Back changes which file you are
-       looking at and nothing else. */
-    preview: '◎',
-    refresh: '⟳',
-    navigateBack: '←',
-    navigateForward: '→',
-    /* 044, 2026-09-16 iteration (FR-122c). Synchronise Scrolling — the toggle on both status bars (before
-       the preview button on an editor's, before Open in Editor / Go to Editor on a preview's), and the item
-       in the editor's and the preview's four menus. A pair of
-       opposed vertical arrows: two views moving together, either one leading. Not `moveUp` ↑ /
-       `moveDown` ↓ (reorder a list), nor `replace` ⇄ (swap a match), nor `preview` ◎ beside it. */
-    syncScroll: '⇅',
-    /* 046 (FR-061, R11) — two tokens for two distinct things, on the same rule the block above
-       states: an ACTION (`unload`) and a structural row in a list (`category`).
-       `projectList`, a third token for a panel-type marker, shipped alongside these two but was
-       retired (branch-review finding, 046 iterate round 2): its description named the title bar's
-       cog-menu "Focus Projects" row, a row FR-074/FR-107 had already retired before the description
-       was ever written, and no call site in the renderer ever drew the token. `theme-ops.ts`'s
-       `migrateTheme` drops a stray `projectList` key from a theme that received it via the
-       version-12 seed. */
-    unload: '⏶',
-    category: '⌗',
-    /* 047 (research R10, R4, R6) — four tokens for Markdown section folding.
-       `foldSectionExpanded`/`foldSectionCollapsed` mark the editor's heading-only gutter (R4);
-       `foldPreviewExpanded`/`foldPreviewCollapsed` mark the preview's soft gutter (R6). Two pairs,
-       not one, because the two gutters draw different affordances: the editor's is a fold MARKER a
-       user clicks to toggle a section, the preview's is a DISCLOSURE triangle rotated by state — the
-       same distinction VS Code and a native tree view each draw with. `collapseAll`/`expandAll`
-       above are REUSED for the status-bar Collapse/Expand All toggle; no fifth or sixth token. */
-    foldSectionExpanded: '−',
-    foldSectionCollapsed: '+',
-    foldPreviewExpanded: '▾',
-    foldPreviewCollapsed: '▸',
-    /* 054 (FR-071, FR-046b). `panelMaximise`/`panelRestore` are the panel header's maximise toggle and
-       the Restore control on a maximised panel (a maximised diagram's Minimise wears it too). Not the
-       window tokens (`windowMaximise`/`windowRestore`), which act on the OS window: retheming one must
-       never retheme the other. The three diagram tokens are the view controls with no existing meaning;
-       diagram Zoom In / Zoom Out reuse `zoomIn`/`zoomOut`. `diagramFullPane` is the diagram's Maximise
-       control (its name predates the wording). `diagramFullSize` ("Fill the panel") was retired by
-       054's MT-04 round and `diagramZoomReset` (Zoom 100%) took its place. */
-    panelMaximise: '⤢',
-    panelRestore: '⤡',
-    diagramFit: '⊡',
-    diagramZoomReset: '1:1',
-    diagramFullPane: '⇱',
-    /* 056 (FR-007, research R7). The marker on a folded Preferences heading while a row it hides holds
-       an invalid entry. No warning GLYPH existed — only the `warning` colour, which still paints it. */
-    warning: '△',
-    /* 059 (FR-059). The editor status bar's View Whitespace toggle: the pilcrow, the mark every editor
-       draws for an invisible line break. */
-    whitespace: '¶',
-    /* 057 added `attention`, `attentionFailed` and `goToPanel` (R11). All three are retired: `goToPanel`
-       by round 12 (FR-124, the toast card is the link), the two flag glyphs by round 13 (FR-135,
-       FR-139), when the mark became a numbered circle drawn in CSS. */
-    /* 060 (FR-001, FR-001a, FR-001b). The app's ONE busy glyph — the Find in Files cancel control while
-       a scan runs, the loading spinner and the closing overlay all draw it through `BusyGlyph`, which
-       turns it about its centre and holds it still under reduced motion. Not `refresh`: that means
-       "re-read now". */
-    busy: '◜',
-    /* 060 (FR-018, FR-011b). The Folder structure grouping control: a fork, for a tree. Its two
-       siblings draw `file` and `folderOpen`, so a third grouping takes a glyph of its own. */
-    groupFolderTree: '⋔',
-    /* 060 #532 (FR-037). The File Explorer's project settings control. It drew `settings` ⛭, the
-       app's Preferences glyph — two different dialogs behind one picture. A house: THIS project's. */
-    projectSettings: '⌂',
-    /* 060 #532 (FR-038). The Find in Files panel's exclusions toggle. Not `cancel`/`hide`'s ⊘. */
-    searchExclusions: '⊝',
-    /* 055 (FR-093, research R15). The Resource Monitor's help button, which explains what the monitor
-       shows and how to use it. No question glyph existed. */
-    help: '?',
-    /* 055, Session 2026-10-23 (FR-110, FR-105). The Resource Monitor's Activate — go to the project, tab
-       or panel a row names — and its Hide ended processes toggle. A hooked arrow reads "take me there";
-       a stop square reads "has ended", distinct from Hide idle's ☾. */
-    activate: '⤷',
-    resourceHideEnded: '■',
-    /* 055, Session 2026-10-23 (FR-113, FR-099). Network as an Order-by choice in the toolbar, beside the
-       four metrics' glyphs: two-way harpoons for traffic leaving and reaching the machine, distinct from I/O's ⇅. */
-    resourceNetwork: '⇌',
   },
 };
 
@@ -710,16 +410,8 @@ export function resolveColour(theme: Theme, token: string): string {
 }
 
 /*
- * `resolveIcon` used to live here. It is DELETED (017 / #54).
- *
- * It returned `theme.icons[token]` — never consulting `theme.iconPack` or `theme.iconOverrides` —
- * and its `string` return type structurally could not express an image. Every icon in the app went
- * through it, so the user's icon-pack choice was honoured nowhere they could see it.
- *
- * It is deleted rather than deprecated because leaving it exported is precisely what would let a
- * fourteenth call site quietly reintroduce the bug. Use `resolveIconAsset` (icon-pack.ts), which is
- * pack-aware and can return an image. A source guard fails the build if anything reaches for the old
- * name again.
+ * Icons are not part of a theme (069). Every icon resolves through `resolveIcon` in
+ * `icons/resolve-icon.ts`, from the theme's selected icon set or the default set.
  */
 
 /**
@@ -767,6 +459,24 @@ export const OPTIONAL_THEME_COLOUR_TOKENS: readonly string[] = Object.freeze([
   // So its absence means "follow the project", not "use a default" — which is why it cannot simply
   // be a token with a value, and why it has no entry in TOKEN_PARENT.
   'menuItemHoverSurface',
+  // 069 FR-054 (#638) — an icon button's RESTING background. Unset, an icon button is transparent, as every
+  // one has always been, so no bundled theme changes the day it lands; set, every icon button in every window
+  // sits on it. It is not a child of `surface` (TOKEN_PARENT): inheriting `surface` would paint a box behind
+  // every icon in the application.
+  'iconButtonSurface',
+  // 069 FR-060 — the title bar's background. Unset, the bar is the app background mixed a tenth of the way
+  // toward the text colour, so every theme's bar stands apart from the window beneath it — lighter on a dark
+  // theme, darker on a light one — without any bundled theme carrying a value.
+  'titleBarSurface',
+  // 069 FR-061 — the seven file icon categories (file-icon-colours.ts). Unset, a category's icons take
+  // the Icon Colour, as every icon did before; the bundled themes carry derived values.
+  'fileIconCode',
+  'fileIconMarkup',
+  'fileIconData',
+  'fileIconDocument',
+  'fileIconMedia',
+  'fileIconArchive',
+  'fileIconScript',
 ]);
 
 export const TOKEN_PARENT: Readonly<Record<string, string>> = Object.freeze({
@@ -853,6 +563,9 @@ export function toCssVariables(theme: Theme): Record<string, string> {
   //
   //   iconColour           unset ⇒ `inherit`      ⇒ a glyph takes the colour of its host (FR-029)
   //   menuItemHoverSurface unset ⇒ `var(--accent)` ⇒ the highlight follows the ACTIVE PROJECT
+  //   iconButtonSurface    unset ⇒ `transparent`   ⇒ an icon button shows only its icon until pointed at
+  //   titleBarSurface      unset ⇒ the app background a tenth of the way toward the text ⇒ a bar apart from its window
+  //   fileIcon*            unset ⇒ the Icon Colour ⇒ that category's file icons look like every other icon
   //
   // Emptiness counts as unset, not as a colour: clearing the field in the Themes editor is exactly
   // how a user says "go back to inheriting", and the resolver already agrees (see resolveSplitColour).

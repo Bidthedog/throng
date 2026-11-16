@@ -21,7 +21,7 @@
  */
 import { createContext, useContext, useMemo, useRef, type MouseEvent as ReactMouseEvent, type ReactElement, type ReactNode } from 'react';
 import { actionsFor, type ResourceAction, type ResourceActionId, type ResourceNode } from '@throng/core';
-import type { MenuSection } from '@throng/core';
+import type { IconKey, MenuSection } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -37,7 +37,7 @@ export type ActionRowId = ResourceActionId | 'activate';
 export interface ActionRow {
   readonly id: ActionRowId;
   readonly label: string;
-  readonly icon: string;
+  readonly icon: IconKey;
   readonly section: MenuSection;
   readonly enabled: boolean;
   /** Why it is disabled; also the row's hover text then. */
@@ -45,7 +45,7 @@ export interface ActionRow {
   readonly run: () => void;
 }
 
-const ICON: Readonly<Record<ResourceActionId, string>> = {
+const ICON: Readonly<Record<ResourceActionId, IconKey>> = {
   unloadProject: 'unload',
   unloadProjectOther: 'unload',
   destroyTab: 'destroy',
