@@ -4,7 +4,7 @@
 
 Every setting throng has, in the groups the **Settings** editor shows them in, with its key in
 `settings.json`, its shipped default, what it accepts and what it does. Key bindings have a page of
-their own — [Key bindings](key-bindings.md) — and themes, icon packs and the config files are at the
+their own — [Key bindings](key-bindings.md) — and themes, icon sets and the config files are at the
 end of this one.
 
 ## The preferences window
@@ -74,7 +74,7 @@ when it writes the file; a retired key it once used is dropped.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Theme | `appearance.theme` | `throng` | Any theme on disk | The active theme, applied across the whole app. See [Themes and icon packs](#themes-and-icon-packs). |
+| Theme | `appearance.theme` | `throng` | Any theme on disk | The active theme, applied across the whole app. See [Themes and icon sets](#themes-and-icon-sets). |
 
 ## Confirmations
 
@@ -123,6 +123,7 @@ Each project remembers for itself which side panes are expanded.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Show Open in OS Default Program | `explorer.showOpenInOsDefaultProgram` | on | on · off | Offer Open in OS Default Program on the File Explorer menu and on the panel title menu. |
+| File Explorer popover delay | `explorer.popoverDelayMs` | 500 | 0 – 1,500 ms, step 25 | How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path. |
 | Open files with | `editor.openOnClick` | `single` | `single` · `double` · `none` | Which file-tree click opens a file into the last active editor. |
 | Open files in | `editor.openTarget` | `lastActive` | `lastActive` · `new` | Where an opened file lands: the last active editor, reused, or a new editor panel. |
 | Delete files to | `explorer.deleteMode` | `recycle` | `recycle` · `permanent` | Send deleted files to the Recycle Bin, or delete them permanently. |
@@ -223,7 +224,7 @@ when the link names a line and column; a folder, a network path, a `file:` URL a
 disk is shown in OS Explorer; and an allowed protocol goes to its own handler. **A click never runs a
 file and never opens one in its default program** — that is reached only by choosing *Open in OS
 Default Program* or, for an executable, *Open Program* from the Link menu. The link underline and the
-plain-click hint take their colours from the theme (see [Themes](#themes-and-icon-packs)).
+plain-click hint take their colours from the theme (see [Themes](#themes-and-icon-sets)).
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
@@ -361,7 +362,8 @@ failed write reports itself; whatever the mode, the outcome is still written to 
 ## Notifications
 
 Every notice appears as a toast in the corner of the window that raised it, with a close control, a
-copy control and a link to what it is about. **Every toast leaves after one toast duration** unless
+copy control and a link to what it is about. A notice's own controls, such as a paste's **Cancel** or
+the backups notice's **Open folder**, sit beside Copy and Dismiss at the toast's top-right. **Every toast leaves after one toast duration** unless
 the pointer is over it or keyboard focus is inside it; it leaves the full duration after both have
 gone. Four toasts stay until you act on them: a paste in progress (its Cancel), a different copy of
 throng, a newly installed version, and the warning that the Notifications panel is full.
@@ -395,6 +397,7 @@ toast, if one is showing, and raises nothing new.
 | Operating system notifications | `notifications.os` | on | on · off | Allow throng to send OS notifications at all. Off, nothing reaches the OS and every OS Notify is unavailable, though each keeps its setting. |
 | Toast duration | `notifications.toastDurationMs` | 3,000 | 1,000 – 30,000 ms, step 500 | How long every toast stays on screen. A toast stays while the pointer is over it or focus is inside it. |
 | Toast width | `notifications.toastWidthPx` | 520 | 300 – 800 px, step 10 | How wide every toast is, and never wider than half the window. A toast shows at most three lines of text and cuts the rest with an ellipsis; hovering a cut-off toast shows all of it in a popover. The Notifications panel always shows a notification whole, with the date and time it was first raised. |
+| Notification hover delay | `notifications.hoverDelayMs` | 250 | 0 – 1,500 ms, step 25 | How long the pointer must rest on a notification before it shows more: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. At 0 it shows at once. Keyboard focus never waits. |
 | Confirm before dismissing all notifications | `notifications.confirmDismissAll` | on | on · off | Ask before **Dismiss all** clears the Notifications panel. |
 | Notifications panel limit | `notifications.panelLimit` | 100 | 20 – 500, step 10 | The most entries the panel keeps. Past it the oldest are dropped, and a warning — once, until you dismiss it — suggests turning notifications down, with a link to this section. |
 | Error: Toast | `notifications.error.toast` | on | on · off | Show error notices as a toast. |
@@ -455,13 +458,19 @@ executable, arguments), `terminals.disabledBuiltins` (built-in flavour ids to hi
 flavour id). `settings.json` also carries bookkeeping throng writes for itself — a `version` marker
 and the last folder chosen for a new project — which is not a preference.
 
-## Themes and icon packs
+## Themes and icon sets
 
 **Themes** — throng ships 14: **throng** (the default), Light, Snake, Gothic, Windows Terminal, Bash,
 VSCode, VI-VIM, English Garden, Matrix, Cyberpunk, Claude, Debian and Ubuntu. The **Themes** tab
-edits every token of a theme — colours, fonts and sizes, syntax colours, icons — each with a
-plain-language label, using colour, size and icon pickers drawn from the theme itself. **Clone** is
-how you make a theme of your own. Contrast is guarded automatically. The
+edits every token of a theme — colours, fonts and sizes, syntax colours, the icon colour and icon
+set — each with a plain-language label, using colour and size pickers drawn from the theme itself. **Clone** is
+how you make a theme of your own. Contrast is guarded automatically. The seven **File Icons** colours, under File Explorer, colour file icons by kind — code, markup,
+data, documents, media, archives and scripts — in the File Explorer and Find in Files; every bundled
+theme sets them, and clearing one gives that kind the Icon Colour. **Title Bar Background**, under General, is
+the bar across the top of every window; left empty, it is a shade apart from the window background.
+**Icon Button Background**, under
+General › Buttons, is what every icon button sits on in every window; left empty, an icon button shows only its
+icon until you point at it. The
 link underline's colours are the **Link Underline** and **Link Hover Underline** tokens, in the
 General area; unset, they follow the theme's accent colour. Every tooltip, hover popover, hint and
 indicator shares one look, coloured by **Popup Background**, **Popup Text** and **Popup Border**
@@ -477,9 +486,45 @@ theme is your choice, from the theme editor's restore controls — **Restore All
 a per-theme restore or recreate on a single built-in. Every restore is all-or-nothing: if a theme file
 cannot be written, nothing changes.
 
-**Icon packs** — a theme chooses an icon pack, selected beside the theme's icon colour in the Themes
-tab. A `throng` glyph pack and an SVG image pack ship built in, and a pack re-skins every icon in the
-application live. Your own packs live in the `icon-packs` folder below.
+**Icon sets** — every icon in throng comes from one icon set. The default set, **throng**, is simple
+line art from [Lucide](https://lucide.dev), built into the app; it cannot be changed, and every theme
+uses it unless the theme picks one of your own. The **Icons** area of the Themes tab picks the theme's
+set and lists every icon as a read-only row: the icon, its key, its file name (`<key>.svg`) and what it
+stands for, with each one your set replaces marked **Overridden**. Your own sets are marked with an
+asterisk in the picker.
+
+To change icons, make a set of your own and replace files in its folder:
+
+1. **New set from this set** (beside the picker) asks for a name. A set made from **throng** starts
+   empty; one made from your own set starts with a copy of its files.
+2. **Override this icon** on a row copies the default art into your set's folder as `<key>.svg`. If
+   the file is already there, throng asks before replacing it.
+3. **Open folder** opens the set's folder (or the icon sets folder while **throng** is picked). Replace
+   any `<key>.svg` with your own SVG, or copy a file with the right name straight in — a file being
+   there is all an override needs.
+4. **Reload the icon sets from disk** loads your changes. throng does not watch the folders: it reads
+   every set again when it starts and on every icon set control here — picking a set, the buttons
+   beside the picker, and **Override** and **Reset** on a row.
+5. **Reset this icon to the default** on an overridden row moves its file to the trash, and the
+   default art comes back.
+
+Every control here is always shown; one that cannot be used now, such as **Reset** on an icon your set
+does not override or **Rename** while **throng** is picked, is greyed out and its hover title says why.
+
+While one of your sets is picked, **Rename this icon set** renames its folder, and every theme using it
+follows. **Delete this icon set** asks first, then moves the folder to the trash; every theme that used
+it draws the default set again.
+
+An icon your set does not override uses the default art, including icons a later version of throng
+adds or redraws. A file throng cannot use falls back to the default art and says why on its row; a set
+throng cannot read falls back to the default set, with a notice saying why. Sets live in the `icon-packs` folder below, and `README.txt` there lists
+every key and the steps above.
+
+**Backups of older icon packs.** throng converted nothing from the old icon packs, glyph maps
+or per-theme icon overrides. Folders in `icon-packs` that held anything you made or changed were
+renamed with a `.bak` suffix and are hidden from throng; a notice with an **Open folder** action
+appears at every start until they are gone. Move what you want to keep into a new set as above, then
+delete the `.bak` folders or move them out of `icon-packs`.
 
 ## Where the files live
 
@@ -491,7 +536,7 @@ hand, and the preferences window writes those same files.
 | Settings | `%USERPROFILE%\.throng\settings.json` | `%USERPROFILE%\.throng-dev\settings.json` |
 | Key bindings | `%USERPROFILE%\.throng\keybindings.json` | `%USERPROFILE%\.throng-dev\keybindings.json` |
 | Themes | `%USERPROFILE%\.throng\themes\<name>.json` | `%USERPROFILE%\.throng-dev\themes\<name>.json` |
-| Icon packs | `%USERPROFILE%\.throng\icon-packs\<pack>\` | `%USERPROFILE%\.throng-dev\icon-packs\<pack>\` |
+| Icon sets | `%USERPROFILE%\.throng\icon-packs\<set>\` | `%USERPROFILE%\.throng-dev\icon-packs\<set>\` |
 | Applied-defaults marker | `%USERPROFILE%\.throng\defaults-state.json` | `%USERPROFILE%\.throng-dev\defaults-state.json` |
 | Font cache, shipped default-theme source | `%APPDATA%\throng\` | `%APPDATA%\throng-dev\` |
 

@@ -75,7 +75,7 @@ packaged.
 | | Installed (packaged) | Dev (`npm start`) |
 |---|---|---|
 | User data — window state, editor recovery, font cache, logs | `%APPDATA%\throng` | `%APPDATA%\throng-dev` |
-| Config — settings, key bindings, themes, icon packs | `%USERPROFILE%\.throng` | `%USERPROFILE%\.throng-dev` |
+| Config — settings, key bindings, themes, icon sets | `%USERPROFILE%\.throng` | `%USERPROFILE%\.throng-dev` |
 | Database | `%APPDATA%\throng\throng.db` | `%APPDATA%\throng-dev\throng.db` |
 | Daemon pipe | `\\.\pipe\throng.<user>.<hash>.daemon` | …`.daemon.dev` |
 

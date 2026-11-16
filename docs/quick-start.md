@@ -23,7 +23,7 @@ throng opens as one window with three panes:
 | **Centre** — Workspace | Tabs of panels: terminals, editors, previews, searches |
 | **Right** — File Explorer | The active project's file tree |
 
-Collapse either side pane to a rail with its chevron, or **Ctrl+Shift+Alt+J** (left) and
+Collapse either side pane to a rail with the arrow button at its edge, or **Ctrl+Shift+Alt+J** (left) and
 **Ctrl+Shift+Alt+K** (right). Jump focus between them, left to right, with **Ctrl+Shift+Alt+B**,
 **N** and **M**. Whichever pane has focus wears the outline.
 
@@ -230,7 +230,7 @@ them, or start an empty one with the **+** in that panel's header.
 The **cog** in the title bar opens **Settings**, **Key Bindings** and **Themes** — tabs of one
 preferences window that applies changes as you make them and can reset anything to its default.
 
-- [Preferences](preferences.md) lists every setting and what it does, with themes and icon packs.
+- [Preferences](preferences.md) lists every setting and what it does, with themes and icon sets.
 - [Key bindings](key-bindings.md) lists every chord, how they are laid out, and how to record your
   own — including multi-key chords such as `Ctrl+E,W`.
 - Everything is also a human-editable file that reloads live; where each lives is in

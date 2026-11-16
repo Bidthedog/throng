@@ -51,7 +51,7 @@ goes away.
 - **Clickable links** — paths, URLs and hyperlinks in terminals, editors and previews open where they belong.
 - **Resource Monitor** — throng's own CPU, memory, GPU and I/O in the status bar, and a visual task manager that drills from project to tab to panel to every process your terminals started.
 - **Keyboard-first** — every pane, panel and project reachable from one consistent set of chords, all rebindable.
-- **Make it yours** — a visual preferences window, 14 bundled themes, icon packs and live-reloading config files.
+- **Make it yours** — a visual preferences window, 14 bundled themes, your own icon sets and live-reloading config files.
 
 ## Getting started
 
