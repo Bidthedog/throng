@@ -94,7 +94,7 @@ const parseCategoryDragId = (id: string): string | null =>
 function ProjectGrip({ id }: { id: string }): ReactElement {
   return (
     <span className="project-item__grip" data-testid={`project-grip-${id}`} title="Drag to reorder" tabIndex={-1}>
-      ⠿
+      <Icon token="dragHandle" />
     </span>
   );
 }
@@ -1391,9 +1391,10 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                   </button>
                 )}
                 <span className="project-item__controls">
-                  <button
-                    type="button"
-                    data-testid={`project-edit-${project.id}`}
+                  <IconButton
+                    token="rename"
+                    className=""
+                    testId={`project-edit-${project.id}`}
                     title="Edit"
                     // Review finding 5 — out of Tab order; still reachable by click, or by focus()
                     // (e.g. right after that click), per the WAI-ARIA tree view pattern.
@@ -1410,21 +1411,17 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                         rootFolder: project.rootFolder,
                       })
                     }
-                  >
-                    ✎
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`project-delete-${project.id}`}
+                  />
+                  <IconButton
+                    token="destroy"
+                    className=""
+                    testId={`project-delete-${project.id}`}
                     title="Remove project"
-                    aria-label="Remove project"
                     tabIndex={-1}
                     // FR-075 — a drag started on Remove must not move the project.
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => void confirmDelete(project.id, project.name)}
-                  >
-                    ✕
-                  </button>
+                  />
                 </span>
                 </DraggableProjectRow>
               );

@@ -191,10 +191,12 @@
   overflow-wrap: anywhere;
 }
 
+/* 069 FR-051 — the same spacing as a toast's control group. */
 .notification-entry__controls {
   flex: 0 0 auto;
   display: inline-flex;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
 }
 
 /* A link inside a notice's body (the limit warning's): it follows on Ctrl+click and Ctrl+Enter (constitution 5.5.0). */

@@ -276,7 +276,7 @@ function Section({
 }): ReactElement {
   return (
     <section className="breakdown__section" data-testid={`breakdown-section-${section.id}`} aria-label={section.title}>
-      <h3 className="breakdown__heading">{section.title}</h3>
+      <h3 className="section-heading breakdown__heading">{section.title}</h3>
       {section.rows.length === 0 ? (
         <p className="breakdown__empty" data-testid="breakdown-empty">
           Nothing to show here

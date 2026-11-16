@@ -169,21 +169,9 @@
   font-size: 11px;
 }
 
-/* 018 / FR-014a — the pane collapse/expand chevrons now come from the theme's `chevron` icon token
-   (they were hard-coded inline vectors). The token's artwork points RIGHT, so the left-facing
-   control is the same themed glyph rotated. Rotating a themed icon keeps it themed. */
-.pane-chevron--left {
-  transform: rotate(180deg);
-}
-/* 068 FR-058 — the Notifications and Sub-workspaces panels point it down to minimise and up to restore. */
-.pane-chevron--down {
-  transform: rotate(90deg);
-}
-.pane-chevron--up {
-  transform: rotate(-90deg);
-}
-/* ...and centre it, horizontally and vertically, in its button. */
-.panel__action--chevron {
+/* 069 FR-040 — the collapse / restore icon of the Notifications and Sub-workspaces panels, centred
+   horizontally and vertically in its button. Its turn is set by `RotatedIcon`, per edge. */
+.panel__action--collapse {
   display: inline-flex;
   align-items: center;
   justify-content: center;

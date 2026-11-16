@@ -34,6 +34,7 @@ import { PasteProgressNotice } from './explorer/paste-progress-notice.js';
 import { DifferentCopyNotice } from './common/different-copy-notice.js';
 import { InstalledVersionNotice } from './common/installed-version-notice.js';
 import { CommandLineNotice } from './common/command-line-notice.js';
+import { IconSetBackupNotice } from './common/icon-set-backup-notice.js';
 import { ClashPrompt } from './explorer/clash-prompt.js';
 import { PasteQuitPrompt } from './explorer/paste-quit-prompt.js';
 import { useResize } from './util/use-resize.js';
@@ -46,7 +47,7 @@ import {
 import { Spinner, useDelayedFlag } from './common/loading.js';
 import { StatusBar } from './statusbar/status-bar.js';
 import { EstimatesReporterMount, UnloadRouteMount } from './resources/use-estimates-reporter.js';
-import { Chevron } from './panes/chevron.js';
+import { CollapseIcon } from './panes/collapse-icon.js';
 import { CollapsedRail } from './panes/collapsed-rail.js';
 import { useCollapsedHover } from './panes/use-collapsed-hover.js';
 import { VerticalPanelStack } from './panes/vertical-panel-stack.js';
@@ -247,7 +248,7 @@ function WorkspacePane(): ReactElement {
 /**
  * Whether the shell has the data it needs to render fully-formed (issue 132
  * follow-up). Both signals are single mount-time IPC round-trips: the config
- * payload (theme, settings, keybindings AND icon packs) and the project list.
+ * payload (theme, settings, keybindings AND icon sets) and the project list.
  * Holding the shell until both land means the window never shows the default theme
  * being corrected, the project list flashing "No projects yet" then filling, or
  * every icon swapping from a fallback glyph to its pack art — all three resolve
@@ -518,7 +519,7 @@ export function App(): ReactElement {
                 title={`${leftShown ? 'Hide' : 'Show'} Projects & Sub-workspaces`}
                 onClick={toggleLeft}
               >
-                <Chevron dir={leftShown ? 'left' : 'right'} />
+                <CollapseIcon edge="left" collapsed={!leftShown} />
               </button>
               {leftShown ? (
                 <>
@@ -605,7 +606,7 @@ export function App(): ReactElement {
                 title={`${rightShown ? 'Hide' : 'Show'} File Explorer`}
                 onClick={toggleRight}
               >
-                <Chevron dir={rightShown ? 'right' : 'left'} />
+                <CollapseIcon edge="right" collapsed={!rightShown} />
               </button>
               {rightShown ? (
                 <FileExplorerPane
@@ -640,6 +641,7 @@ export function App(): ReactElement {
           <InstalledVersionNotice />
           {/* 070 FR-024a — the throng command's install, uninstall and start-up outcomes, main window only. */}
           <CommandLineNotice />
+          <IconSetBackupNotice />
           <ClashPrompt />
           <PasteQuitPrompt />
         </div>

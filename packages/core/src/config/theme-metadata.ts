@@ -2,7 +2,7 @@
  * Themes editor metadata (feature 007, FR-025a/038). Descriptors for every theme
  * token, driving the grouped Themes form with a control matched to each token's
  * type: colours → colour picker, font family → font-family typeahead, sizes →
- * px picker, weights/numbers → number, `case` → enum, icons → icon.
+ * px picker, weights/numbers → number, `case` → enum.
  *
  * The registry is DERIVED from the theme structure (one descriptor per token of
  * {@link THRONG_THEME}) so every token is inherently exposed — the structural
@@ -43,10 +43,6 @@ export function mechanicalCopy(key: string): { label: string; description: strin
   if (key.startsWith('colours.')) {
     const name = humanise(lastSegment(key));
     return { label: name, description: `The “${name}” colour token.` };
-  }
-  if (key.startsWith('icons.')) {
-    const name = humanise(lastSegment(key));
-    return { label: name, description: `The “${name}” icon (glyph or pack image).` };
   }
   const field = lastSegment(key);
   let group = 'Fonts';
@@ -137,9 +133,10 @@ function namingLabelPattern(): RegExp {
   return new RegExp(`^([A-Z][\\w&]*(?: [A-Za-z&]+)*) (${props.join('|')})$`);
 }
 
-/** A token whose label is a named noun (an icon or the icon-ink colour), exempt from the property suffix. */
+/** A token whose label is a named noun (the icon-ink colour), exempt from the property suffix. */
 function isNamedIconToken(key: string): boolean {
-  return key.startsWith('icons.') || key === 'colours.iconColour';
+  // 069 FR-061 — the file icon categories are named the same way: "Code File Icons", not a property.
+  return key === 'colours.iconColour' || /^colours\.fileIcon[A-Z]/.test(key);
 }
 
 /**
@@ -272,10 +269,12 @@ const GENERAL_COLOURS: ReadonlySet<string> = new Set([
  * The app AREA a theme token belongs to (021, FR-001/FR-007). Returns `undefined` for a token no rule
  * places — there is NO silent default. `descriptorForThemeToken` turns that into the sentinel group,
  * so an unplaced (typically new) token fails {@link assertThemeAreaGroups}, forcing its author to
- * declare where it appears. Icons form their own area; the icon-COLOUR token rides with them.
+ * declare where it appears. The Icons area holds the icon-COLOUR token (a theme carries no icon tokens since 069).
  */
 export function areaForToken(key: string): string | undefined {
-  if (key.startsWith('icons.') || key === 'colours.iconColour') return 'Icons';
+  if (key === 'colours.iconColour') return 'Icons';
+  // 069 FR-061 — they colour the File Explorer's and Find in Files' icons, so they sit with the File Explorer.
+  if (/^colours\.fileIcon[A-Z]/.test(key)) return 'File Explorer · File Icons';
   if (key.startsWith('typography.')) return TYPOGRAPHY_AREA[key.split('.')[1] ?? ''];
   if (key.startsWith('fonts.')) return 'General'; // base fonts are app-wide (data-model §2)
   // The size tokens are placed EXPLICITLY, not by a `sizes.*` blanket — so a NEW size token fails the
@@ -287,6 +286,10 @@ export function areaForToken(key: string): string | undefined {
     const name = lastSegment(key);
     // The three-type button model (021, FR-027): each token nests under its type's sub-group so the
     // Themes editor renders Confirm / Cancel / Destroy as distinct blocks within General.
+    // 069 FR-054 — the icon button's resting background sits with the other button tokens.
+    if (name === 'iconButtonSurface') return 'General · Buttons';
+    // 069 FR-060 — the title bar is part of every window, so it sits with the app-wide colours.
+    if (name === 'titleBarSurface') return 'General';
     const button = /^(confirm|cancel|destroy)Button/.exec(name);
     if (button) {
       const type = button[1];
@@ -331,9 +334,6 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
 
   if (key.startsWith('colours.')) {
     return { key, label: copy.label, description: copy.description, group, control: 'colour' };
-  }
-  if (key.startsWith('icons.')) {
-    return { key, label: copy.label, description: copy.description, group, control: 'icon' };
   }
 
   // Fonts + typography roles share the same field inference.

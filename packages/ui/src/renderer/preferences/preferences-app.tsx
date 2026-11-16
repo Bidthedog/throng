@@ -403,7 +403,7 @@ export function PreferencesApp({ initialTab, initialSection }: { initialTab: Tab
        *
        * It costs one line. There is exactly one renderer bundle, routed by query string, so the
        * provider was always importable and its stylesheet was always loaded — everything it needs
-       * (settings, theme, icon packs) is already in scope. The issue assumed this window was a
+       * (settings, theme, icon sets) is already in scope. The issue assumed this window was a
        * separate renderer that could not reach the shared provider. It is not.
        */}
       {/*

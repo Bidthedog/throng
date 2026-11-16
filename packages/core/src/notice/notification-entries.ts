@@ -30,7 +30,9 @@ export type NotificationActionDescriptor =
   /** `projectId`: the panel's project, when known — set on a link built from an entry's origin, never stored. */
   | { kind: 'goToPanel'; panelId: string; label: string; projectId?: string }
   | { kind: 'openFile'; projectId: string; relPath: string; label: string }
-  | { kind: 'openPreferences'; section: string; label: string };
+  | { kind: 'openPreferences'; section: string; label: string }
+  /** 069: opens the user's icon sets folder in the OS file manager (the backup notice's action). */
+  | { kind: 'openIconSetsFolder'; label: string };
 
 export interface NotificationAffected {
   panelId?: string;
@@ -319,6 +321,7 @@ function parseAction(raw: unknown): NotificationActionDescriptor | undefined {
     return { kind: 'openFile', projectId: raw.projectId, relPath: raw.relPath, label };
   }
   if (raw.kind === 'openPreferences' && typeof raw.section === 'string') return { kind: 'openPreferences', section: raw.section, label };
+  if (raw.kind === 'openIconSetsFolder') return { kind: 'openIconSetsFolder', label };
   return undefined;
 }
 

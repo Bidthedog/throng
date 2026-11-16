@@ -6,6 +6,7 @@
  * so a future type plugs in with no change to the selection/confirm/clear flow
  * (SC-010).
  */
+import type { IconKey } from '../icons/icon-keys.js';
 import type { PanelConfig, PanelKind } from '../workspace/model.js';
 
 /**
@@ -141,9 +142,9 @@ export type PanelTypeValues = Record<string, string>;
 export interface PanelTypeDescriptor<V extends PanelTypeValues = PanelTypeValues> {
   id: PanelKind;
   label: string;
-  /** Theme icon token marking this panel type in its header (012). Optional so a
+  /** Icon key marking this panel type in its header (012). Optional so a
    *  future type can omit it; the renderer falls back to no icon. */
-  icon?: string;
+  icon?: IconKey;
   /**
    * Whether the New Panel form OFFERS this type. Absent means yes (043 FR-017).
    *

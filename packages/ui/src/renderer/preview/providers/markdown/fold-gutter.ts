@@ -28,7 +28,7 @@
  * the one thing drawn into it today. A later control (e.g. a diagnostics marker) can share the slot
  * without this module's class name implying "folding" is the only thing a gutter can hold.
  */
-import { buildSymbolTree, isCollapsed, visibleSections, type FoldState, type HeadingRecord, type IconAsset } from '@throng/core';
+import { buildSymbolTree, isCollapsed, visibleSections, type FoldState, type HeadingRecord, type IconKey } from '@throng/core';
 
 /** The class `.preview-markdown` carries while the gutter is shown (R6, contracts "Gutter controls"). */
 export const GUTTER_CLASS = 'preview-markdown--gutter';
@@ -37,12 +37,12 @@ export const GUTTER_CLASS = 'preview-markdown--gutter';
 export const TOGGLE_CLASS = 'preview-fold-toggle';
 
 /**
- * Resolves an icon token to what it renders as — `@throng/core`'s `resolveIconAsset`, bound to the
- * active theme and icon packs by the caller. Injected rather than imported so this module stays free
+ * Resolves an icon token to what it renders as — `@throng/core`'s `resolveIcon`, bound to the
+ * active theme and icon sets by the caller. Injected rather than imported so this module stays free
  * of React (it manipulates DOM the pipeline produced, not a React tree) and a test can assert on the
  * token requested without a real theme.
  */
-export type IconResolver = (token: string) => IconAsset;
+export type IconResolver = (token: IconKey) => string;
 
 export interface FoldGutterOptions {
   /** The Markdown provider's gutter setting (FR-032b), as it stands for this render. */
@@ -61,16 +61,12 @@ function labelFor(collapsed: boolean, headingText: string): string {
 }
 
 /** The `<span class="icon">` an inserted toggle carries, built exactly as the shared `Icon` component would. */
-function renderIconInto(host: HTMLElement, asset: IconAsset): void {
+function renderIconInto(host: HTMLElement, markup: string): void {
   const span = host.ownerDocument.createElement('span');
   span.className = 'icon';
   span.setAttribute('aria-hidden', 'true');
-  if (asset.kind === 'svg') {
-    // Safe: sanitised in main at pack-load time, exactly as `common/icon.tsx` relies on (017/#54).
-    span.innerHTML = asset.markup;
-  } else if (asset.kind === 'glyph') {
-    span.textContent = asset.glyph;
-  }
+  // Safe: default set compiled in, user sets sanitised in main at load time, as `common/icon.tsx` relies on.
+  span.innerHTML = markup;
   host.append(span);
 }
 

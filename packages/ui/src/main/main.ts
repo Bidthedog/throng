@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
+import * as fsPromises from 'node:fs/promises';
 import { readFile, stat as statAsync } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -20,6 +21,10 @@ import {
 } from 'electron';
 import {
   DEFAULT_APP_SETTINGS,
+  backupName,
+  classifySeededFolder,
+  ICON_SET_UPGRADE_VERSION,
+  ICON_SETS_README,
   instanceLockName,
   logCaught,
   logExpected,
@@ -49,6 +54,7 @@ import {
   SHIPPED_PREVIEW_PROVIDERS,
   parseLaunchFolder,
   providersTurnedOff,
+  validateIconSetName,
 } from '@throng/core';
 import type {
   DifferentCopyNotice,
@@ -95,7 +101,9 @@ import { registerConfigWriteIpc, registerConfigManagementIpc } from './config-wr
 import { FileConfigStore } from './config-store.js';
 import { openLogsFolder } from './open-logs.js';
 import { FontCache } from './font-cache.js';
-import { IconPackService } from './icon-pack-service.js';
+import { IconSetService } from './icon-set-service.js';
+import { IconSetUpgrade } from './icon-set-upgrade.js';
+import { ICON_SETS_CHANNELS, registerIconSetsIpc } from './icon-sets-ipc.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { installNavigationGuards, installRendererRequestFilter } from './renderer-request-filter.js';
@@ -144,7 +152,8 @@ import { RESOURCES_ROSTER_METHOD } from '@throng/ipc-contract';
 import { ResourceMonitorHost } from './resource-monitor-host.js';
 import { registerResourcesIpc, type ResourcesIpcSurface } from './resources-ipc.js';
 import { MONITOR_MIN_SIZE, ResourceMonitorWindow } from './resource-monitor-window.js';
-import { wireFloatingLayering } from './floating-window-layering.js';
+import { wireFloatingLayering, yieldFloatingWindows } from './floating-window-layering.js';
+import { retargetThemesIconSet } from './icon-set-themes.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
@@ -300,6 +309,8 @@ interface ThirdPartyLicence {
   license: string;
   licenseUrl: string;
   projectUrl: string;
+  /** The full licence text, for packages vendored rather than installed from npm (069 FR-022). */
+  licenseText?: string;
 }
 
 /**
@@ -1113,6 +1124,12 @@ if (isPrimaryInstance)
   const fileWatcher = container.get<IFileWatcher>(UI_TYPES.FileWatcher);
   const shipped = container.get<ShippedDefaults>(UI_TYPES.ShippedDefaults);
   const shippedService = container.get<ShippedDefaultsService>(UI_TYPES.ShippedDefaultsService);
+  /*
+   * 069 FR-019, FR-020 — whether this configuration predates icon sets, read BEFORE the upgrade below moves
+   * the marker on. Only such a configuration has old packs for the folder step to back up. A marker that is
+   * missing on a configuration that is not new is from before the marker existed, so it predates them too.
+   */
+  let predatesIconSets = false;
   if (await isFirstRun(configStore)) {
     const seeded = await shippedService.seed();
     if (!seeded.ok)
@@ -1124,7 +1141,9 @@ if (isPrimaryInstance)
     // was hand-edited out of range between sessions is corrected AND written back here.
     await configStore.read({ kind: 'settings' }, shipped.settings, parseSettingsGuarded);
     await configStore.read({ kind: 'keybindings' }, shipped.keybindings, parseKeybindings);
-    if ((await shippedService.readAppliedVersion()) !== shipped.version) {
+    const appliedBefore = await shippedService.readAppliedVersion();
+    predatesIconSets = appliedBefore === null || appliedBefore < ICON_SET_UPGRADE_VERSION;
+    if (appliedBefore !== shipped.version) {
       const upgraded = await shippedService.upgrade();
       if (!upgraded.ok)
         console.error('[throng-ui] shipped-defaults upgrade failed:', upgraded.failedPath, upgraded.error);
@@ -1132,29 +1151,56 @@ if (isPrimaryInstance)
   }
 
   /*
-   * The icon-pack service must exist BEFORE the first config payload is read, because 017 puts the
-   * loaded packs ON that payload — they ride the same channel as the theme that selects them, so no
-   * frame can pair a new theme with an old pack's icons.
-   *
-   * Seeding is awaited so both bundled packs are on disk before anything reads them.
+   * The icon-set service must exist BEFORE the first config payload is read: user sets ride that
+   * payload with the theme that selects them (017, 069). Nothing is seeded any more.
    */
-  const iconPackService = new IconPackService(join(configSettings.configRoot, 'icon-packs'));
-  await iconPackService.ensureReadme();
-  await iconPackService.ensureBundledPacks();
+  /*
+   * 069 FR-019, FR-020 — the folder step of the icon set upgrade, BEFORE the service first lists the
+   * sets: the old packs become backups and must never be listed as sets. It is idempotent and keeps
+   * its own marker (`icon-sets-upgrade.json`); it starts only for a configuration from before icon sets.
+   */
+  {
+    const configRoot = configSettings.configRoot;
+    const outcome = await new IconSetUpgrade({
+      dir: join(configRoot, 'icon-packs'),
+      stateFile: join(configRoot, 'icon-sets-upgrade.json'),
+      predatesIconSets,
+      fs: fsPromises,
+      isUncustomised: (name, files) => classifySeededFolder(name, files) === 'uncustomised',
+      backupName,
+    })
+      .run()
+      .catch((error: unknown) => {
+        logCaught('main: icon set upgrade', error);
+        return { renamed: [], deleted: [], failed: [] };
+      });
+    if (outcome.renamed.length > 0 || outcome.deleted.length > 0 || outcome.failed.length > 0) {
+      console.info(
+        `[throng-ui] icon set upgrade: ${outcome.renamed.length} backed up, ${outcome.deleted.length} deleted, ${outcome.failed.length} to retry`,
+      );
+    }
+  }
+  const iconSetService = new IconSetService({
+    dir: join(configSettings.configRoot, 'icon-packs'),
+    fs: fsPromises,
+    eol: process.platform === 'win32' ? '\r\n' : '\n',
+    readme: ICON_SETS_README,
+    // A deleted set or a reset icon goes to the OS trash, where it can be got back (069 FR-043, FR-044).
+    trash: (path) => container.get<IFileSystem>(UI_TYPES.FileSystem).trash(path),
+  });
+  await iconSetService.init();
 
-  // The renderer pulls the current config (settings + theme + keybindings + icon packs) on
+  // The renderer pulls the current config (settings + theme + keybindings + icon sets) on
   // mount (FR-031); it then receives a fresh payload whenever a config file
   // changes (hot-reload, FR-030/033). The renderer resolves keyboard accelerators
   // from the pushed keybindings.
   ipcMain.handle('throng:config:get', () =>
-    readConfigPayload(configStore, () => iconPackService.listIconPacks()),
+    readConfigPayload(configStore, () => iconSetService.list()),
   );
   // Cache the parsed settings in UI main so services (e.g. the editor) can read
   // injected config (Principle X) without a renderer round-trip; kept fresh by the
   // config watcher below.
-  const initialPayload = await readConfigPayload(configStore, () =>
-    iconPackService.listIconPacks(),
-  );
+  const initialPayload = await readConfigPayload(configStore, () => iconSetService.list());
   let currentSettings = initialPayload.settings;
   // Set once the menu's handlers exist (below); the config broadcast calls it to move Settings…'s chord (070 FR-027).
   let installAppMenu: (keybindings: Keybindings) => void = () => {};
@@ -1288,7 +1334,7 @@ if (isPrimaryInstance)
     watcher: fileWatcher,
     config: configSettings,
     broadcast,
-    loadIconPacks: () => iconPackService.listIconPacks(),
+    loadIconSets: () => iconSetService.list(),
     // 032 FR-008: resolved from the container, not written here. A single bad read — the watcher
     // waking mid-write — used to broadcast the shipped defaults and then nothing looked again,
     // stranding every open window on them until something touched the file.
@@ -1300,11 +1346,9 @@ if (isPrimaryInstance)
   // `throng:config`, which live-applies the change (immediate-apply, FR-016/042).
   registerConfigWriteIpc(configStore);
 
-  // Themes tab (007): theme-file management + installed-font cache + icon-pack
-  // discovery. Font enumeration runs in the BACKGROUND (never awaited on the
+  // Themes tab (007): theme-file management + installed-font cache. Font enumeration runs in the BACKGROUND (never awaited on the
   // startup path — SC-010) and writes %APPDATA%\throng\fonts.json; the picker
-  // reads that cache (or a curated fallback). Icon packs are discovered under the
-  // per-user config icon-packs\ directory.
+  // reads that cache (or a curated fallback).
   const fontCache = new FontCache(
     container.get<IFontEnumeration>(UI_TYPES.FontEnumeration),
     app.getPath('userData'),
@@ -1314,7 +1358,6 @@ if (isPrimaryInstance)
     store: configStore as FileConfigStore,
     shippedDefaults: shippedService,
     listFonts: () => fontCache.read(),
-    listIconPacks: () => iconPackService.listIconPacks(),
   });
 
   // Custom title bar (007): window min/max/close relays (each targets its sender
@@ -1376,11 +1419,54 @@ if (isPrimaryInstance)
     flash: notificationEvents.repeat,
   });
 
+  /*
+   * 069 FR-038, research R7 — the icon set backup notice, delivered as the installed-version notice is:
+   * main holds the count until the window reports it is listening, and sends it ONCE. The count is
+   * taken at startup, so a dismissed notice is raised again by the next start while any backup remains.
+   * With none left, the persisted panel entry of the group goes too, so the panel keeps no stale notice.
+   */
+  {
+    const backupCount = await iconSetService.countBackups();
+    if (backupCount === 0) {
+      // Off the startup path: nothing waits on it, and on most starts it finds nothing.
+      void (async () => {
+        const { entries } = await notificationStore.list();
+        for (const entry of entries) {
+          if (entry.key === 'group:icon-set-backups') await notificationStore.dismiss(entry.id);
+        }
+      })().catch((error: unknown) => logCaught('main: drop the stale icon set backup notice', error));
+    }
+    let pendingBackups: { count: number } | undefined = backupCount > 0 ? { count: backupCount } : undefined;
+    ipcMain.on(ICON_SETS_CHANNELS.backupsReady, (event) => {
+      const contents = event.sender;
+      if (pendingBackups && !contents.isDestroyed()) {
+        contents.send(ICON_SETS_CHANNELS.backupsPresent, pendingBackups);
+        pendingBackups = undefined;
+      }
+    });
+  }
+
   // The platform seam behind every window's deny-renderer-windows guard (044 FR-091 / R10) and
   // behind file-explorer reveal/open (FR-035) — built early because Preferences, About and the drag
   // ghost all need it below, well before FilesService (which also takes it) is built further down.
   // FR-038 / D4: built by the factory, so an elevated app reveals and opens as the interactive user.
   const shellIntegration = createAppShellIntegration(shell);
+
+  // 069: the icon-set handlers. A change re-reads the config and broadcasts it, because the sets ride
+  // that payload and the cached sets changed without any file the config watcher reads changing.
+  registerIconSetsIpc(ipcMain, {
+    service: iconSetService,
+    shell: shellIntegration,
+    validateName: (name, existing) => {
+      const verdict = validateIconSetName(name, existing);
+      return verdict.ok ? verdict : { ok: false, reason: verdict.message };
+    },
+    onChanged: async () => {
+      broadcast(await readConfigPayload(configStore, () => iconSetService.list()));
+    },
+    retargetThemes: (from, to) => retargetThemesIconSet(configStore as FileConfigStore, from, to),
+    beforeOpenFolder: yieldFloatingWindows,
+  });
 
   const preferencesDeps: PreferencesWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),

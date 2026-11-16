@@ -87,6 +87,8 @@ export interface ExplorerSettings {
   sortOrder: ExplorerSortOrder;
   /** Whether Open in OS Default Program shows on the tree's and the panel title's menus (067 FR-021). */
   showOpenInOsDefaultProgram: boolean;
+  /** Milliseconds the pointer rests on a tree row before its icon-and-path popover opens (069 FR-059). */
+  popoverDelayMs: number;
 }
 
 /** A user-defined terminal flavour (005 Phase B, settings.terminals.flavours). */
@@ -862,6 +864,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     autoRevealActiveFile: true,
     sortOrder: 'natural',
     showOpenInOsDefaultProgram: true,
+    popoverDelayMs: 500,
   },
   terminals: {
     flavours: [],
@@ -1229,8 +1232,16 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
     autoRevealActiveFile,
     sortOrder,
     showOpenInOsDefaultProgram,
+    // The descriptor's own bounds, so a hand-edited value outside them cannot reach the tree.
+    popoverDelayMs: Math.min(
+      EXPLORER_POPOVER_DELAY_MAX_MS,
+      Math.max(0, wholeNumber(v.popoverDelayMs, fallback.popoverDelayMs)),
+    ),
   };
 }
+
+/** The upper bound of `explorer.popoverDelayMs`, shared with its descriptor. */
+export const EXPLORER_POPOVER_DELAY_MAX_MS = 1500;
 
 const DRAG_MODIFIER_KEYS: readonly DragModifierKey[] = ['ctrl', 'shift', 'alt'];
 
@@ -1245,6 +1256,7 @@ function cloneExplorer(e: ExplorerSettings): ExplorerSettings {
     autoRevealActiveFile: e.autoRevealActiveFile,
     sortOrder: e.sortOrder,
     showOpenInOsDefaultProgram: e.showOpenInOsDefaultProgram,
+    popoverDelayMs: e.popoverDelayMs,
   };
 }
 
@@ -1907,6 +1919,7 @@ function cloneNotifications(n: NotificationSettings): NotificationSettings {
     os: n.os,
     toastDurationMs: n.toastDurationMs,
     toastWidthPx: n.toastWidthPx,
+    hoverDelayMs: n.hoverDelayMs,
     confirmDismissAll: n.confirmDismissAll,
     panelLimit: n.panelLimit,
   } as NotificationSettings;

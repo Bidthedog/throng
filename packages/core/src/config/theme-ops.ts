@@ -84,42 +84,6 @@ export function migrateThemeColours(colours: Record<string, string>): Record<str
   return out;
 }
 
-/**
- * Icon tokens 046 (iterate round 2, branch-review finding) retires: `projectList` named the title
- * bar's cog-menu "Focus Projects" row — a row FR-074/FR-107 had already retired before the
- * description was ever written, so the token drew nothing from the day this comment's predecessor
- * shipped it. Dropped unconditionally on load, the same as {@link REMOVED_COLOUR_TOKENS}, so an
- * install that received it via the version-12 shipped-defaults seed loses the stale key rather than
- * carrying it forever.
- *
- * 048 (research R6) retires `resetName` with panel renaming — its one call site was the panel
- * header's Reset Name row — and drops it the same way.
- *
- * 054's MT-04 round retires `diagramFullSize` (the diagram's "Fill the panel" control, removed): the
- * version-21 seed wrote it into every theme file, and it is dropped here for the same reason.
- *
- * 057 round 12 (FR-124) retires `goToPanel`: an attention toast's whole card is now the link, so the
- * control it drew is gone.
- *
- * 057 round 13 (FR-135, FR-139) retires `attention` and `attentionFailed`: the mark is a numbered circle
- * drawn in CSS, not a glyph.
- */
-const REMOVED_ICON_TOKENS = [
-  'projectList',
-  'resetName',
-  'diagramFullSize',
-  'goToPanel',
-  'attention',
-  'attentionFailed',
-] as const;
-
-/** Migrate one theme's `icons` to the 046 iterate round 2 model: drop {@link REMOVED_ICON_TOKENS}. */
-export function migrateThemeIcons(icons: Record<string, string>): Record<string, string> {
-  const out = { ...icons };
-  for (const token of REMOVED_ICON_TOKENS) delete out[token];
-  return out;
-}
-
 /** The default base weights a role's `bold` boolean used to resolve to (theme.ts `fonts.weights`). */
 const DEFAULT_BOLD_WEIGHT = 600;
 const DEFAULT_NORMAL_WEIGHT = 400;
@@ -163,19 +127,22 @@ export function migrateThemeTypography(
 
 /**
  * Migrate a whole theme document read from disk to the current model (FR-031/032, and 046's icon
- * retirement). Pure, idempotent, lossless for every surviving token. Applied on the theme LOAD path
- * so any user theme authored before 021 gains the typed button tokens and sheds the removed
- * surfaces, and any theme carrying a retired icon token (`projectList`) sheds that too, before it is
- * used.
+ * retirement, and 069's: `icons` and `iconOverrides` go). Pure, idempotent, lossless for every
+ * surviving token. Applied on the theme LOAD path so any user theme authored before 021 gains the typed
+ * button tokens and sheds the removed surfaces, and any theme carrying a glyph map or per-icon overrides
+ * sheds those too, before it is used.
  */
 export function migrateTheme(raw: Theme): Theme {
   const colours = (raw.colours ?? {}) as Record<string, string>;
-  const icons = (raw.icons ?? {}) as Record<string, string>;
   const typography = migrateThemeTypography(
     raw.typography as Record<string, Record<string, unknown>> | undefined,
     raw.fonts,
   );
-  const next: Theme = { ...raw, colours: migrateThemeColours(colours), icons: migrateThemeIcons(icons) };
+  const next: Theme = { ...raw, colours: migrateThemeColours(colours) };
+  // 069 (FR-018): a theme holds no glyph map and no per-icon overrides. A file that still carries them is
+  // read with both dropped, whatever they held; the shipped-defaults upgrade removes them from disk.
+  delete (next as { icons?: unknown }).icons;
+  delete (next as { iconOverrides?: unknown }).iconOverrides;
   if (typography === undefined) delete (next as { typography?: unknown }).typography;
   else next.typography = typography as Theme['typography'];
   return next;
@@ -207,4 +174,15 @@ export function checkRename(existing: readonly string[], from: string, to: strin
 /** Select = activate (FR-035): return settings with the active theme set to `name`. */
 export function activateTheme(settings: AppSettings, name: string): AppSettings {
   return { ...settings, appearance: { ...settings.appearance, theme: name } };
+}
+
+/**
+ * Make a new theme from `source` under `name` (the Themes tab's Clone). Every token carries over; the
+ * source's choice of icon set does not, so the copy starts on the default set (069 FR-014: absent
+ * `iconPack` means the default set). Pure; the source is not modified.
+ */
+export function cloneTheme(source: Theme, name: string): Theme {
+  const next: Theme = { ...structuredClone(source), name };
+  delete next.iconPack;
+  return next;
 }

@@ -74,7 +74,7 @@ const DEFAULT_HOTRELOAD_DEBOUNCE_MS = 150;
 /**
  * User-scoped config locations (003 / research D1). The config root defaults to
  * `%USERPROFILE%\.throng` — `%USERPROFILE%\.throng-dev` for an unpackaged run, so
- * developing throng never edits the installed app's settings, themes or icon packs —
+ * developing throng never edits the installed app's settings, themes or icon sets —
  * and is overridable via `THRONG_CONFIG_ROOT` (e.g. a temp dir in tests). Environment
  * access stays in the composition root.
  */

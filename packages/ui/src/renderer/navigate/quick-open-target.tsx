@@ -65,13 +65,13 @@
  * preselects is exactly where the two drift apart unnoticed.
  */
 import { useState, type ReactElement } from 'react';
-import { collectPanels, panelDisplayTitle, type EditorOpenTarget } from '@throng/core';
+import { collectPanels, panelDisplayTitle, type EditorOpenTarget, type IconKey } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useEditorState } from '../editor/editor-state.js';
 
 /** What each option means, in the one place the icon, the sentence and the title come from. */
-const OPTIONS: Record<EditorOpenTarget, { icon: string; name: string; other: string }> = {
+const OPTIONS: Record<EditorOpenTarget, { icon: IconKey; name: string; other: string }> = {
   lastActive: {
     icon: 'editorPanel',
     name: 'the currently active editor',

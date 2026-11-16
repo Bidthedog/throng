@@ -28,6 +28,7 @@ import {
   type Panel,
   type PanelTitleSources,
   type WorkspaceLayout,
+  type IconKey,
 } from '@throng/core';
 import { getEditorState, useEditorStateVersion } from '../editor/editor-state.js';
 import { useTerminalCommandVersion } from '../terminal/command-store.js';
@@ -83,7 +84,7 @@ export interface PanelListEntry {
   /** The name the panel wears, bounded by `maxNameLength` when one is set. */
   name: string;
   /** Theme icon token for the panel's type, or `null` when it has no type or no icon (#304). */
-  icon: string | null;
+  icon: IconKey | null;
   /** The type's own name, for the icon's tooltip — an icon alone names nothing. */
   typeLabel: string | null;
 }
@@ -104,7 +105,7 @@ export interface PanelListEntry {
  * It has no type — the "Select Panel Type" form is what it is showing — and its NAME is already the
  * bare placeholder, so the row is just `Panel 4` with no icon, and that absence is the information.
  */
-function panelType(panel: Panel): { icon: string | null; typeLabel: string | null } {
+function panelType(panel: Panel): { icon: IconKey | null; typeLabel: string | null } {
   if (panel.kind === undefined) return { icon: null, typeLabel: null };
   const desc = defaultPanelTypeRegistry.get(panel.kind);
   if (desc === undefined) return { icon: null, typeLabel: null };

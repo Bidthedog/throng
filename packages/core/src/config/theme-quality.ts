@@ -14,6 +14,7 @@
  */
 import { THRONG_THEME, type Theme } from './theme.js';
 import { channelToLinear, contrastRatio, hexToRgb, readableTextOn, relativeLuminance, type Rgb } from './colour-math.js';
+import { FILE_ICON_CATEGORY_TOKENS, FILE_ICON_MIN_CONTRAST } from './file-icon-colours.js';
 
 // The WCAG maths lives in colour-math.ts (a leaf, so theme.ts can use it too); re-exported unchanged.
 export { contrastRatio, hexToRgb, readableTextOn, relativeLuminance, type Rgb };
@@ -236,8 +237,14 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  *
  * Re-measured by 057 round 13 (FR-139), which retired `attentionFailedMark`: 6.061137717854353 →
  * 6.137860980105675. One shared token fewer, so the mean moves back up by construction; no hue changed.
+ *
+ * Re-measured by 069 FR-061, which added the seven file icon category colours to every theme:
+ * 6.137860980105675 → 5.88067402240191. Each category keeps one hue in every theme and only its
+ * lightness follows the theme, so seven near-alike tokens join the mean and pull it down by construction;
+ * no existing colour changed. The threshold is untouched at 4.3, and the closest pair clears it with 1.58
+ * of headroom.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.137860980105675;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.88067402240191;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A
@@ -568,10 +575,33 @@ export const CONTRAST_PAIRINGS: readonly ContrastPairing[] = [
  * know about it. Derived per theme, it cannot: whatever a theme SHIPS is what gets measured.
  */
 export function contrastPairingsFor(theme: Theme): readonly ContrastPairing[] {
-  const extra = syntaxTokensOf(theme)
-    .filter((token) => !SYNTAX_TOKENS.includes(token))
-    .map(syntaxOnBodyPairing);
+  const extra = [
+    ...syntaxTokensOf(theme)
+      .filter((token) => !SYNTAX_TOKENS.includes(token))
+      .map(syntaxOnBodyPairing),
+    ...fileIconPairingsFor(theme),
+  ];
   return extra.length === 0 ? CONTRAST_PAIRINGS : [...CONTRAST_PAIRINGS, ...extra];
+}
+
+/** The backgrounds a file icon is drawn on: the tree's pane, a hovered row, a selected row, the app. */
+const FILE_ICON_BACKGROUNDS = ['sidebarBg', 'hoverSurface', 'surfaceActive', 'appBg'] as const;
+
+/**
+ * 069 FR-061 — each file icon category colour a theme SETS, against each of those backgrounds the theme
+ * defines, at the text floor (a label icon is an image of text). An unset category takes the Icon Colour
+ * and is not a pairing of its own, so a theme without them is measured exactly as before.
+ */
+function fileIconPairingsFor(theme: Theme): ContrastPairing[] {
+  const out: ContrastPairing[] = [];
+  for (const fg of Object.values(FILE_ICON_CATEGORY_TOKENS)) {
+    if (!theme.colours[fg]) continue;
+    for (const bg of FILE_ICON_BACKGROUNDS) {
+      if (!theme.colours[bg]) continue;
+      out.push({ fg, bg, min: FILE_ICON_MIN_CONTRAST, label: `${fg} file icons on ${bg}` });
+    }
+  }
+  return out;
 }
 
 export interface ContrastResult {

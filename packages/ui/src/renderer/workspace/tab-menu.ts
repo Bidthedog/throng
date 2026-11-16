@@ -52,7 +52,7 @@ export function tabContextMenu(args: TabMenuArgs): MenuAction[] {
   const items: MenuAction[] = [
     {
       label: 'Rename',
-      icon: 'rename',
+      icon: 'rename' as const,
       section: 'content',
       ...(keybindings ? { shortcut: firstBinding(keybindings, 'tabs.rename') } : {}),
       onClick: () => actions.rename(tabId),
@@ -65,18 +65,18 @@ export function tabContextMenu(args: TabMenuArgs): MenuAction[] {
   if (detach) {
     items.push({
       label: 'Sync to',
-      icon: 'send',
+      icon: 'send' as const,
       section: 'navigate',
       submenu: [
         {
           label: 'New Sub-workspace',
-          icon: 'detach',
+          icon: 'detach' as const,
           section: 'navigate',
           onClick: () => detach.detachToNew(tabId),
         },
         ...detach.subWorkspaces.map((s) => ({
           label: s.name,
-          icon: 'tab',
+          icon: 'tab' as const,
           section: 'navigate' as const,
           onClick: () => detach.syncToExisting(tabId, s.id),
         })),
@@ -86,14 +86,14 @@ export function tabContextMenu(args: TabMenuArgs): MenuAction[] {
 
   items.push({
     label: 'Destroy Tab',
-    icon: 'destroy',
+    icon: 'destroy' as const,
     section: 'destroy',
     onClick: () => actions.destroyTab(tabId),
     disabled: destroyTabDisabled,
   });
   items.push({
     label: 'Destroy other tabs',
-    icon: 'destroy',
+    icon: 'destroy' as const,
     section: 'destroy',
     onClick: () => actions.destroyOthers(tabId),
     disabled: destroyOthersDisabled,

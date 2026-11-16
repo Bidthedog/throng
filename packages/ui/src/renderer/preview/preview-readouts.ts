@@ -19,6 +19,7 @@ import { formatGrouped, logExpected } from '@throng/core';
 import { readoutText, type Readout } from '../editor/status-strip.js';
 import type { DocumentMetrics } from '../editor/document-metrics-store.js';
 import type { LabelForm, ReadoutId } from '../editor/status-strip-fit.js';
+import { defaultPreviewSearchExclusion, type TextModelNode } from './preview-search-model.js';
 
 /** What the preview's selection contributes: a count always, its source lines only where they map. */
 export interface PreviewSelectionReadout {
@@ -105,6 +106,19 @@ function breaksIn(text: string): number {
   return breaks;
 }
 
+/**
+ * The text a range covers, less what the preview's text model leaves out (`defaultPreviewSearchExclusion`): the fold
+ * toggle at the head of a heading, hidden front matter, a diagram. The toggle's icon is inline SVG (069), whose markup
+ * carries line breaks between its elements; counted, they put a selection from a heading two lines too far down.
+ */
+function contentText(range: Range): string {
+  const fragment = range.cloneContents();
+  for (const el of Array.from(fragment.querySelectorAll('*'))) {
+    if (fragment.contains(el) && defaultPreviewSearchExclusion(el as unknown as TextModelNode)) el.remove();
+  }
+  return fragment.textContent ?? '';
+}
+
 /** A fence or front-matter delimiter: the block's first source line, whose content starts on the next one. */
 const OPENER = /^\s*(```|~~~|---\s*$)/;
 
@@ -134,7 +148,7 @@ export function sourceLineAt(host: HTMLElement, node: Node, offset: number, sour
     return null;
   }
   const opener = block.tagName === 'PRE' && OPENER.test(sourceLines[base] ?? '') ? 1 : 0;
-  const line = base + opener + breaksIn(before.toString()) + 1;
+  const line = base + opener + breaksIn(contentText(before)) + 1;
   return line <= sourceLines.length ? line : null;
 }
 

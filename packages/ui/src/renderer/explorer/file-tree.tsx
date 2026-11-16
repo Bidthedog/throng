@@ -751,9 +751,10 @@ export function FileTree({
   // filesystem reported, and Windows calls those the same file.
   const activeFilePath = useMemo(() => (activeFileRel == null ? null : pathCompareKey(activeFileRel)), [activeFileRel]);
 
+  const popoverDelayMs = explorerSettings.popoverDelayMs;
   const rowCtx = useMemo(
-    () => ({ onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths, activeFilePath, inboundDropFolder }),
-    [onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths, activeFilePath, inboundDropFolder],
+    () => ({ onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths, activeFilePath, inboundDropFolder, popoverDelayMs }),
+    [onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths, activeFilePath, inboundDropFolder, popoverDelayMs],
   );
 
   return (

@@ -54,6 +54,7 @@ import {
 import { committedWrite, type CommittedEdits, type CommittedWrite } from './find-in-files-store.js';
 import { Icon } from '../common/icon.js';
 import { fileIconToken } from '../explorer/tree-icons.js';
+import { fileIconCategory } from '@throng/core';
 
 /**
  * One line, headings and rows alike, at zoom level 0 — the BASE the live row height is derived from.
@@ -730,7 +731,12 @@ function renderGroup(
       >
         {collapsed ? <Icon token="chevronRight" /> : <Icon token="chevronDown" />}
       </button>
-      <span className="fif-group__icon" aria-hidden="true">
+      <span
+        className="fif-group__icon"
+        aria-hidden="true"
+        // 069 FR-061 — coloured by its category, as the tree draws it.
+        data-icon-category={group.kind === 'file' ? (fileIconCategory(fileIconToken(name)) ?? undefined) : undefined}
+      >
         {/*
           FR-011 — the SAME icon the explorer draws. A file takes `fileIconToken(name)`, a computed
           token exactly as `tree-node.tsx` passes one (its values are covered by the tree-icons

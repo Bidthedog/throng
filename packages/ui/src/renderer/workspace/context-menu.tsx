@@ -8,7 +8,7 @@ import {
   type ReactElement,
   type Ref,
 } from 'react';
-import { eventToToken, normalizeToken, type MenuSection } from '@throng/core';
+import { eventToToken, normalizeToken, type IconKey, type MenuSection } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { clampToViewport } from '../common/clamp-to-viewport.js';
 import { withDividers } from './menu-dividers.js';
@@ -43,7 +43,14 @@ export interface MenuAction {
   /** Hover text for the row — chiefly WHY it is disabled, so a greyed row explains itself (055 FR-063). */
   title?: string;
   /** Theme icon token shown before the label (e.g. 'rename', 'send', 'destroy'). */
-  icon?: string;
+  icon?: IconKey;
+  /**
+   * A TOGGLE row's state (069 FR-010): `true` draws the `menuChecked` icon after the label, where the
+   * `✓` that used to be written into the label stood, and announces the row as a checked menu item.
+   * `false` is an unchecked toggle (announced as such, nothing drawn); omitted is an ordinary action.
+   * The label stays the bare action name, so a test id and a chord never depend on the state.
+   */
+  checked?: boolean;
   /**
    * The command's first keyboard shortcut, shown in brackets after the label in smaller text
    * (US1, #125) — e.g. `Ctrl+C`. Resolved live from the keybindings at the build site via
@@ -385,7 +392,8 @@ function MenuLevel({
             }}
             className={`context-menu__item${item.disabled ? ' context-menu__item--disabled' : ''}${hasSub ? ' context-menu__item--parent' : ''}`}
             data-testid={item.testId ?? `menu-item-${item.label}`}
-            role="menuitem"
+            role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+            aria-checked={item.checked}
             title={item.title}
             aria-disabled={item.disabled ?? false}
             aria-haspopup={hasSub || undefined}
@@ -425,6 +433,11 @@ function MenuLevel({
               {item.icon ? <Icon token={item.icon} /> : ''}
             </span>
             <span className="context-menu__label">{item.label}</span>
+            {item.checked ? (
+              <span className="context-menu__check" data-testid={`menu-checked-${item.label}`} aria-hidden>
+                <Icon token="menuChecked" />
+              </span>
+            ) : null}
             {item.shortcut ? (
               // US1 (#125): the command's first binding, in smaller text after the label. Only
               // rendered when present, so an unbound item is byte-identical to before (FR-004).

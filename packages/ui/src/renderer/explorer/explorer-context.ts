@@ -42,6 +42,8 @@ export interface ExplorerRowCtx {
   activeFilePath: string | null;
   /** The folder an OS file drag over the tree would drop into (067 FR-004), highlighted like a tree drop; `null` when none. */
   inboundDropFolder: string | null;
+  /** `explorer.popoverDelayMs`: how long the pointer rests on a row before its popover opens (069 FR-059). */
+  popoverDelayMs: number;
 }
 
 export const ExplorerRowContext = createContext<ExplorerRowCtx | null>(null);

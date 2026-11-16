@@ -19,7 +19,6 @@ import {
   type ConfigChange,
   type ConfigDocId,
   type IConfigStore,
-  type LoadedIconPack,
 } from '@throng/core';
 import { withDocumentLock } from './config-write-lock.js';
 import type { ResetOne, RestoreResult } from './shipped-defaults-service.js';
@@ -198,7 +197,7 @@ export function registerConfigWriteIpc(store: IConfigStore): void {
   );
 }
 
-/** Theme-file management + font/icon-pack discovery for the Themes tab (007/014). */
+/** Theme-file management + font discovery for the Themes tab (007/014). */
 export interface ConfigManagementDeps {
   store: {
     listThemes(): Promise<string[]>;
@@ -221,7 +220,6 @@ export interface ConfigManagementDeps {
     resetKeybindings(): Promise<RestoreResult>;
   };
   listFonts(): Promise<string[]>;
-  listIconPacks(): Promise<LoadedIconPack[]>;
 }
 
 export function registerConfigManagementIpc(deps: ConfigManagementDeps): void {
@@ -265,5 +263,4 @@ export function registerConfigManagementIpc(deps: ConfigManagementDeps): void {
   ipcMain.handle('throng:config:resetSettings', () => deps.shippedDefaults.resetSettings());
   ipcMain.handle('throng:config:resetKeybindings', () => deps.shippedDefaults.resetKeybindings());
   ipcMain.handle('throng:config:listFonts', () => deps.listFonts());
-  ipcMain.handle('throng:config:listIconPacks', () => deps.listIconPacks());
 }

@@ -556,7 +556,7 @@ export {
   formatChord,
   MAX_CHORD_KEYS,
 } from './config/keybindings.js';
-export type { Theme, ThemeFonts, IconValue, TextCase, TypographyRole, ThemeFontRole, ThemeBootstrap } from './config/theme.js';
+export type { Theme, ThemeFonts, TextCase, TypographyRole, ThemeFontRole, ThemeBootstrap } from './config/theme.js';
 export {
   THRONG_THEME,
   OPTIONAL_THEME_COLOUR_TOKENS,
@@ -567,11 +567,26 @@ export {
   themeBootstrap,
   themeColorScheme,
 } from './config/theme.js';
-// Themes editor + icon packs + fonts (007).
+// Themes editor + fonts (007).
 export { THEME_METADATA, THEME_AREA_GROUPS, THEME_PROPERTY_VOCABULARY, areaForToken, assertThemeAreaGroups, assertNamingConvention, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens, mechanicalCopy } from './config/theme-metadata.js';
 // Hand-written token copy + theme-quality guards (009).
 export { THEME_TOKEN_COPY, BANNED_ABBREVIATIONS, containsAbbreviation } from './config/theme-copy.js';
 export type { TokenCopy } from './config/theme-copy.js';
+export { ICON_KEYS, ICON_KEY_DESCRIPTIONS, isIconKey } from './icons/icon-keys.js';
+export type { IconKey } from './icons/icon-keys.js';
+export { DEFAULT_ICON_SET, ICON_SETS_README } from './icons/default-icon-set.generated.js';
+export { DEFAULT_ICON_SET_NAME, resolveIcon } from './icons/resolve-icon.js';
+export type { UserIconSetDto } from './icons/resolve-icon.js';
+export { isIconSetBackupName, validateIconSetName } from './icons/icon-set-name.js';
+export type { IconSetNameReason, IconSetNameResult } from './icons/icon-set-name.js';
+export {
+  backupName,
+  classifySeededFolder,
+  ICON_SET_UPGRADE_VERSION,
+  iconSetBackupNoticeText,
+  planThemeIconSetUpgrade,
+} from './icons/icon-set-upgrade.js';
+export type { RetiredThemeKey, SeededFileInfo, SeededFolderVerdict, ThemeIconSetUpgrade } from './icons/icon-set-upgrade.js';
 export {
   hexToRgb,
   relativeLuminance,
@@ -617,11 +632,9 @@ export type {
   ClosestMatchSurfacePair,
 } from './config/theme-quality.js';
 export { parseFontStack, serializeFontStack } from './config/font-stack.js';
-export type { IconPackManifest, IconAsset, LoadedIconPack } from './config/icon-pack.js';
-export { parseIconPack, resolveIconValue, resolveIconAsset } from './config/icon-pack.js';
 export { sanitiseSvg } from './config/svg-sanitise.js';
 export type { ThemeRenameResult } from './config/theme-ops.js';
-export { isValidThemeName, checkRename, activateTheme, migrateTheme, migrateThemeColours } from './config/theme-ops.js';
+export { isValidThemeName, checkRename, activateTheme, cloneTheme, migrateTheme, migrateThemeColours } from './config/theme-ops.js';
 export { matchFamilies } from './config/font-typeahead.js';
 export type { SearchableField, SearchableDescriptor } from './config/settings-search.js';
 export { searchTokens, fieldHaystack, matchesQuery, filterFields } from './config/settings-search.js';
@@ -647,10 +660,7 @@ export {
   // 043 R28 — the guarded VALUE rewrite, and the frozen record of what version 6 shipped that it
   // compares an installed file against. Copies, never references: see their doc comments.
   V6_SEARCH_MATCH_COLOURS,
-  V6_FIND_IN_FILES_ICON,
   V19_MOVED_COLOURS,
-  V25_MOVED_ICONS,
-  V30_MOVED_ICONS,
   V6_SEARCH_IN_FILES_SETTINGS,
   SEARCH_MATCH_TOKENS,
   planThemeValueUpgrade,
@@ -1534,3 +1544,15 @@ export type {
 
 export { descendantsOf, type ProcessTreeRow } from './process/process-tree.js';
 export * from './resources/index.js';
+
+// 069 FR-061 — file icon categories and their colours.
+export {
+  FILE_ICON_CATEGORIES,
+  FILE_ICON_CATEGORY_TOKENS,
+  FILE_ICON_KEY_CATEGORY,
+  FILE_ICON_HUES,
+  FILE_ICON_MIN_CONTRAST,
+  fileIconCategory,
+  deriveFileIconColours,
+  type FileIconCategory,
+} from './config/file-icon-colours.js';

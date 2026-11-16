@@ -63,6 +63,14 @@ export const TOAST_WIDTH_MAX_PX = 800;
 export const TOAST_WIDTH_DEFAULT_PX = 520;
 
 /**
+ * 069 FR-052: how long the pointer must stay on a notice before hovering reveals more — a Notifications panel entry
+ * expanding in place (068 FR-085), a cut-off toast's whole-text popover (068 FR-079). Keyboard focus never waits.
+ */
+export const NOTICE_HOVER_DELAY_MIN_MS = 0;
+export const NOTICE_HOVER_DELAY_MAX_MS = 1500;
+export const NOTICE_HOVER_DELAY_DEFAULT_MS = 250;
+
+/**
  * Where a notice is shown (068 FR-092). The two are independent: `panel` without `toast` keeps the
  * notice in the Notifications panel with no toast, and neither shows it nowhere in throng — the log
  * record is still filed (FR-005/FR-006).
@@ -100,6 +108,8 @@ export interface NotificationSettings {
   toastDurationMs: number;
   /** FR-076: how wide every toast is, in pixels; never wider than half the window. */
   toastWidthPx: number;
+  /** 069 FR-052: how long the pointer rests on a notice before an entry expands or a toast's popover opens. */
+  hoverDelayMs: number;
   /** FR-026c: whether Dismiss all asks first. */
   confirmDismissAll: boolean;
   /** FR-031d: the most entries the Notifications panel holds. */
@@ -129,6 +139,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   attention: { toast: true, panel: true, os: true },
   toastDurationMs: TOAST_DURATION_DEFAULT_MS,
   toastWidthPx: TOAST_WIDTH_DEFAULT_PX,
+  hoverDelayMs: NOTICE_HOVER_DELAY_DEFAULT_MS,
   confirmDismissAll: true,
   panelLimit: PANEL_LIMIT_DEFAULT,
 };
@@ -171,6 +182,12 @@ export function parseNotificationSettings(raw: unknown): NotificationSettings {
     TOAST_WIDTH_MIN_PX,
     TOAST_WIDTH_MAX_PX,
     DEFAULT_NOTIFICATION_SETTINGS.toastWidthPx,
+  );
+  resolved.hoverDelayMs = boundedInt(
+    section.hoverDelayMs,
+    NOTICE_HOVER_DELAY_MIN_MS,
+    NOTICE_HOVER_DELAY_MAX_MS,
+    DEFAULT_NOTIFICATION_SETTINGS.hoverDelayMs,
   );
   resolved.confirmDismissAll =
     typeof section.confirmDismissAll === 'boolean' ? section.confirmDismissAll : DEFAULT_NOTIFICATION_SETTINGS.confirmDismissAll;

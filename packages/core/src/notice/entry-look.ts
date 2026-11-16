@@ -1,3 +1,4 @@
+import type { IconKey } from '../icons/icon-keys.js';
 import type { EntrySeverity } from './notification-entries.js';
 
 /**
@@ -30,8 +31,8 @@ export const ENTRY_TYPE_COLOUR_TOKEN: Readonly<Record<EntrySeverity, string>> = 
   success: 'success',
 };
 
-/** The icon token each type draws before its title. */
-export const ENTRY_TYPE_ICON_TOKEN: Readonly<Record<EntrySeverity, string>> = {
+/** The icon key each type draws before its title. */
+export const ENTRY_TYPE_ICON_TOKEN: Readonly<Record<EntrySeverity, IconKey>> = {
   error: 'noticeError',
   warning: 'warning',
   attention: 'noticeAttention',

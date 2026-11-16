@@ -10,11 +10,13 @@
  * collapses (FR-004); right-click opens the operations menu.
  */
 import { pathCompareKey } from '@throng/core';
-import { useRef, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react';
 import type { NodeRendererProps } from 'react-arborist';
 import { decideClick } from '@throng/core';
 import { Icon } from '../common/icon.js';
-import { fileIconToken } from './tree-icons.js';
+import { fileIconToken, folderIconToken } from './tree-icons.js';
+import { ExplorerPathPopover } from './path-popover.js';
+import { fileIconCategory } from '@throng/core';
 import { useExplorerRow } from './explorer-context.js';
 import type { TreeNodeData } from './use-explorer-data.js';
 
@@ -39,11 +41,49 @@ export function TreeRow({
   const escapedRef = useRef(false);
   // Highlight the folder that would receive a drop while dragging (FR-091).
   const willDrop = node.willReceiveDrop || (row?.inboundDropFolder != null && row.inboundDropFolder === data.relPath);
-  const iconToken = isFolder
-    ? node.isOpen || isRoot
-      ? 'folderOpen'
-      : 'folder'
-    : fileIconToken(data.name);
+  // The root is always open and is the project itself, never a Git or dependency folder (069 FR-056).
+  const iconToken = isRoot ? 'folderOpen' : isFolder ? folderIconToken(data.name, node.isOpen) : fileIconToken(data.name);
+
+  /*
+   * 069 FR-059 — the hover popover: the row's icon, large, beside its path, once the pointer has rested
+   * for `explorer.popoverDelayMs`. Any press, wheel or menu on the row puts it away until the pointer
+   * leaves, so it never sits over a click, a drag, a scroll or a menu; so does the window losing focus.
+   *
+   * It arms from the pointer ENTERING or MOVING, and never while `body[data-window-blurred]` is set (021
+   * FR-035, use-hover-suppression.ts): a menu closing over a row, or the window coming back from another
+   * one, leaves the pointer stranded over a row nobody is pointing at, and a popover must not bloom there.
+   * The next real move re-arms it, exactly as the hover backgrounds come back.
+   */
+  const rowEl = useRef<HTMLDivElement | null>(null);
+  const popoverId = useId();
+  const restTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [rested, setRested] = useState(false);
+  const [popoverSuppressed, setPopoverSuppressed] = useState(false);
+  const popoverDelayMs = row?.popoverDelayMs ?? 500;
+  const stopResting = (): void => {
+    if (restTimer.current !== null) clearTimeout(restTimer.current);
+    restTimer.current = null;
+    setRested(false);
+  };
+  const startResting = (): void => {
+    if (rested || restTimer.current !== null) return;
+    if (document.body.hasAttribute('data-window-blurred')) return;
+    restTimer.current = setTimeout(() => {
+      restTimer.current = null;
+      if (!document.body.hasAttribute('data-window-blurred')) setRested(true);
+    }, popoverDelayMs);
+  };
+  useEffect(() => {
+    if (!rested) return;
+    const onBlur = (): void => stopResting();
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, [rested]);
+  useEffect(() => () => {
+    if (restTimer.current !== null) clearTimeout(restTimer.current);
+  }, []);
+  const showPopover = rested && !popoverSuppressed && !node.isEditing;
+  const suppressPopover = (): void => setPopoverSuppressed(true);
 
   // Selection — including Ctrl/Shift multi-select (FR-015) — is handled by
   // react-arborist's DefaultRow (node.handleClick). Here we decide what a click
@@ -91,7 +131,10 @@ export function TreeRow({
 
   return (
     <div
-      ref={dragHandle}
+      ref={(el) => {
+        rowEl.current = el;
+        dragHandle?.(el);
+      }}
       style={style}
       // 024 US6 (#157 follow-up): mark the keyboard-focused (highlighted) row so a Shift+F10 /
       // ContextMenu keypress can open THIS row's menu. react-arborist keeps DOM focus on the tree
@@ -112,9 +155,18 @@ export function TreeRow({
       onDoubleClick={onDoubleClick}
       onContextMenu={(e) => {
         e.preventDefault();
+        suppressPopover();
         row?.onContextMenu(node, e);
       }}
-      title={isRoot ? data.name : data.relPath}
+      onPointerEnter={startResting}
+      onPointerMove={startResting}
+      onPointerLeave={() => {
+        stopResting();
+        setPopoverSuppressed(false);
+      }}
+      onPointerDown={suppressPopover}
+      onWheel={suppressPopover}
+      aria-describedby={showPopover ? popoverId : undefined}
     >
       {isFolder && !isRoot ? (
         // #121 — the chevron is now the ONLY expand/collapse control, so it is a
@@ -148,7 +200,7 @@ export function TreeRow({
       ) : (
         <span className="tree-twisty" aria-hidden />
       )}
-      <span className="tree-icon" aria-hidden>
+      <span className="tree-icon" aria-hidden data-icon-category={fileIconCategory(iconToken) ?? undefined}>
         <Icon token={iconToken} />
       </span>
       {node.isEditing ? (
@@ -221,9 +273,18 @@ export function TreeRow({
       */}
       {data.isSymlink && !node.isEditing && (
         <span className="tree-symlink" role="img" aria-label="Symbolic link" title="Symbolic link">
-          <Icon token="symlink" />
+          {/* 069 FR-056 — a linked folder's badge is a folder, so the two kinds of link read apart. */}
+          <Icon token={isFolder ? 'folderSymlink' : 'symlink'} />
         </span>
       )}
+      {showPopover ? (
+        <ExplorerPathPopover
+          id={popoverId}
+          token={iconToken}
+          path={isRoot ? data.name : data.relPath}
+          anchor={rowEl.current}
+        />
+      ) : null}
     </div>
   );
 }

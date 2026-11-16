@@ -63,18 +63,40 @@ export function electronLayeringSeam(): LayeringSeam {
   };
 }
 
+/** The yield of every wired floating window, so another app's window can be shown above them all. */
+const yields = new Set<() => void>();
+
+/**
+ * Let a window throng is about to open in ANOTHER application — a folder in the file manager (069) —
+ * come up above the floating windows. Each drops its flag and keeps it down until throng has lost
+ * focus once: holding it while throng still has focus put Preferences over the very folder the user
+ * had just asked it to open. When the user comes back to throng, the rule above applies again.
+ */
+export function yieldFloatingWindows(): void {
+  for (const y of yields) y();
+}
+
 /** Wire the layering for `win`, and hand back the teardown (which drops the flag). */
 export function wireFloatingLayering(win: FloatingWindow, seam: LayeringSeam = electronLayeringSeam()): () => void {
+  let yielded = false;
   const sync = (): void =>
     seam.defer(() => {
       if (win.isDestroyed()) return;
       const throngHasFocus = seam.throngHasFocus();
-      if (win.isAlwaysOnTop() !== throngHasFocus) win.setAlwaysOnTop(throngHasFocus);
+      if (!throngHasFocus) yielded = false;
+      const want = throngHasFocus && !yielded;
+      if (win.isAlwaysOnTop() !== want) win.setAlwaysOnTop(want);
     });
+  const yieldNow = (): void => {
+    yielded = true;
+    if (!win.isDestroyed() && win.isAlwaysOnTop()) win.setAlwaysOnTop(false);
+  };
+  yields.add(yieldNow);
   const off = seam.onFocusChange(sync);
   sync();
   return () => {
     off();
+    yields.delete(yieldNow);
     if (!win.isDestroyed()) win.setAlwaysOnTop(false);
   };
 }

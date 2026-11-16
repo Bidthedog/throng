@@ -7,9 +7,10 @@ import {
   type NotificationActionDescriptor, type NotificationEntry } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
-import { MinimiseChevronButton } from '../panes/chevron.js';
+import { MinimisePanelButton } from '../panes/collapse-icon.js';
 import { isRealPointerMove, useCollapsedHover } from '../panes/use-collapsed-hover.js';
 import { useCopyToClipboard } from '../common/use-copy.js';
+import { useHoverIntent } from '../common/use-hover-intent.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -47,16 +48,20 @@ export function NotificationsPanel({ minimised, onToggleMinimise, targetExists, 
   const confirm = useConfirm();
   const contextMenu = useContextMenu();
   const copy = useCopyToClipboard();
-  const { confirmDismissAll } = useAppSettings().notifications;
+  const { confirmDismissAll, hoverDelayMs } = useAppSettings().notifications;
   const hover = useCollapsedHover(minimised);
   const projects = useProjectsOptional()?.projects;
   /**
    * 068 FR-085 — the entry the pointer is pointing at, and the one focus is in: each shows its whole text in place.
    * The pointer one is set only by a pointer that MOVES over the entry, never by one that merely enters: an entry that
    * slid under a still pointer because the one above it grew or shrank was not pointed at, so moving between entries
-   * cannot make them oscillate. No timers.
+   * cannot make them oscillate.
+   *
+   * 069 FR-052 — and only once the pointer has stayed on it for `notifications.hoverDelayMs`, so sweeping the pointer down
+   * the panel expands nothing. Leaving collapses it at once and drops a pending expansion. Focus expands at once.
    */
   const [pointedId, setPointedId] = useState<string | null>(null);
+  const hoverIntent = useHoverIntent(hoverDelayMs);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   /**
    * 068 FR-087 — the entry whose context menu is open, with the id that opening was given. It holds the entry expanded
@@ -199,7 +204,7 @@ export function NotificationsPanel({ minimised, onToggleMinimise, targetExists, 
               />
             </>
           )}
-          <MinimiseChevronButton
+          <MinimisePanelButton
             minimised={minimised}
             testId={minimised ? 'notifications-restore' : 'notifications-minimise'}
             title={minimised ? 'Restore Notifications' : 'Minimise Notifications'}
@@ -231,9 +236,12 @@ export function NotificationsPanel({ minimised, onToggleMinimise, targetExists, 
                 style={projectColour ? ({ '--entry-project': projectColour } as CSSProperties) : undefined}
                 data-expanded={expanded ? 'true' : undefined}
                 onPointerMove={(e) => {
-                  if (pointedId !== entry.id && isRealPointerMove(e)) setPointedId(entry.id);
+                  if (pointedId !== entry.id && isRealPointerMove(e)) hoverIntent.arm(entry.id, () => setPointedId(entry.id));
                 }}
-                onPointerLeave={() => setPointedId((cur) => (cur === entry.id ? null : cur))}
+                onPointerLeave={() => {
+                  hoverIntent.cancel(entry.id);
+                  setPointedId((cur) => (cur === entry.id ? null : cur));
+                }}
                 onFocus={() => setFocusedId(entry.id)}
                 onBlur={(e) => {
                   if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;

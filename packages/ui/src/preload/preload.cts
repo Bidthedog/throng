@@ -106,6 +106,29 @@ contextBridge.exposeInMainWorld('throng', {
     /** 057 FR-110 — a notice accepted in this window; main decides whether it reaches the OS. */
     toOs: (input: unknown) => ipcRenderer.send('throng:notices:toOs', input),
   },
+  /**
+   * 069 — user icon sets (contracts/icon-sets-ipc.md). The renderer names a set; main resolves every
+   * path. The channel strings are `main/icon-sets-ipc.ts`'s, spelled out because a sandboxed preload
+   * cannot import it. A successful change is followed by a config broadcast carrying the sets.
+   */
+  iconSets: {
+    create: (name: string, from: string) => ipcRenderer.invoke('throng:iconSets:create', { name, from }),
+    override: (set: string, key: string, replace: boolean) =>
+      ipcRenderer.invoke('throng:iconSets:override', { set, key, replace }),
+    // 069 FR-041: Reload reads every set again; the set is not needed.
+    reload: () => ipcRenderer.invoke('throng:iconSets:reload', {}),
+    rename: (from: string, to: string) => ipcRenderer.invoke('throng:iconSets:rename', { from, to }),
+    remove: (set: string) => ipcRenderer.invoke('throng:iconSets:remove', { set }),
+    resetIcon: (set: string, key: string) => ipcRenderer.invoke('throng:iconSets:resetIcon', { set, key }),
+    openFolder: (set?: string) => ipcRenderer.invoke('throng:iconSets:openFolder', set === undefined ? {} : { set }),
+    // FR-038 — the number of upgrade backups, held by main until this window reports it is listening.
+    onBackupsPresent: (cb: (payload: { count: number }) => void) => {
+      const h = (_e: unknown, payload: { count: number }): void => cb(payload);
+      ipcRenderer.on('throng:iconSets:backupsPresent', h);
+      return () => ipcRenderer.removeListener('throng:iconSets:backupsPresent', h);
+    },
+    backupsReady: () => ipcRenderer.send('throng:iconSets:backupsReady'),
+  },
   /** 029 FR-013 — panel id -> what a user calls it, so main can NAME a throng lock holder. */
   panels: {
     publishIdentities: (list: unknown) => ipcRenderer.send('throng:panels:identities', list),
@@ -465,6 +488,8 @@ contextBridge.exposeInMainWorld('throng', {
         license: string;
         licenseUrl: string;
         projectUrl: string;
+        /** The full licence text, for packages vendored rather than installed from npm (069 FR-022). */
+        licenseText?: string;
       }>
     > => ipcRenderer.invoke('throng:about:getThirdParty'),
     openExternal: (url: string) => ipcRenderer.send('throng:openExternal', url),
@@ -536,8 +561,6 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.invoke('throng:config:resetKeybindings'),
     // Installed-font typeahead source (cached; may be empty → curated fallback).
     listFonts: (): Promise<string[]> => ipcRenderer.invoke('throng:config:listFonts'),
-    // Discovered icon packs ({ name, assetBase }); resolved by the main process.
-    listIconPacks: (): Promise<unknown[]> => ipcRenderer.invoke('throng:config:listIconPacks'),
   },
   // Typed panels — Terminal (005). Phase B: list the Flavour dropdown's catalogue
   // (machine-detected built-ins ∪ user-defined), owned by UI main (no daemon).

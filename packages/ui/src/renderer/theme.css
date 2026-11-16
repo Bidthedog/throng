@@ -74,7 +74,8 @@
 .panel-type-form__confirm,
 .panel-type-form__clear,
 .terminal-dormant__reload,
-.capture-modal__btn {
+.capture-modal__btn,
+.about-close {
   font-family: var(--throng-font-button-family, var(--throng-font-family));
   font-size: var(--throng-font-button-size, var(--throng-font-size));
   font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
@@ -128,7 +129,7 @@
 
 /* 018 — the drop-down popup of a native <select> is a MENU, and it did not obey the theme.
  *
- * Five <select> elements in the app (theme picker, icon pack, panel type, terminal flavour, and
+ * Five <select> elements in the app (theme picker, icon set, panel type, terminal flavour, and
  * every enum setting) opened a popup that the BROWSER ENGINE rendered, not us: an operating-system
  * list whose hovered row was highlighted in the SYSTEM accent — blue on a default Windows install,
  * in the middle of a fully-themed dark application. No stylesheet could reach it. It is the same
@@ -146,6 +147,79 @@
 select,
 select::picker(select) {
   appearance: base-select;
+}
+
+/*
+ * 069 FR-054 (#638, #639) — THE icon button, section heading and field of every window: the main window's
+ * dialogs, Preferences, About and the Resource Monitor. Defined once, here, near the top of the last stylesheet
+ * loaded, so a surface that needs its own size or state declares it later in this file and still wins, and a
+ * surface that needs nothing of its own looks like every other.
+ *
+ * An icon button: the icon centred both ways in a 24px box, on `iconButtonSurface` (optional: unset, nothing
+ * shows behind the icon). Pointed at, it takes `hoverSurface` AND a border: every bundled theme sets
+ * `hoverSurface` to `surface`, so on a dialog card or a window painted `surface` the wash alone shows nothing,
+ * and the border is what tells the pointer it has reached a button. Unusable, it is dimmed as a row action's idle
+ * state is (015 FR-015a, 069 FR-049).
+ */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--throng-colour-iconButtonSurface, transparent);
+  color: var(--text-dim, var(--text));
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .icon-button:hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* throng's 2px focus convention, as the Resource Monitor's controls draw it (055 FR-089). */
+.icon-button:focus-visible {
+  outline: 2px solid var(--throng-colour-activePanelBorder);
+  outline-offset: -2px;
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* A section's heading, in every window: Preferences' group headings are the model. */
+.section-heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: var(--throng-font-weight-bold, 600);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* A text field, in every window. */
+.field {
+  box-sizing: border-box;
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--throng-colour-inputSurface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.field:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }
 
 select::picker(select) {
@@ -410,7 +484,7 @@ textarea,
   color: var(--throng-colour-accentText);
   border-color: var(--throng-colour-accentText);
 }
-.pane.collapsed-hover[data-hover-armed='true']:hover .pane-collapse :is(.icon, .pane-chevron--left) {
+.pane.collapsed-hover[data-hover-armed='true']:hover .pane-collapse :is(.icon, .rotated-icon) {
   color: var(--throng-colour-accentText);
 }
 
@@ -1768,6 +1842,13 @@ textarea,
 /* US1 (#125) — the command's first keyboard binding, after the label. Smaller than the 13px label
    (FR-005) and pushed to the right; the label's flex:1 keeps it right-aligned. currentColor so it
    follows the item colour on hover/focus like the icon does. */
+/* 069 FR-010 — a checked toggle row's mark, drawn by the `menuChecked` key after the label. */
+.context-menu__check {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  color: currentColor;
+}
+
 .context-menu__shortcut {
   flex: 0 0 auto;
   margin-left: 16px;
@@ -2361,6 +2442,73 @@ textarea,
   min-width: 280px;
   max-width: 440px;
   pointer-events: none;
+}
+
+/* 069 FR-061 — a file icon takes its CATEGORY's colour where the theme sets one, and the Icon Colour
+   where it does not (file-icon-colours.ts). Keyed on the icon's host, so any icon set — the default or a
+   user's — is coloured the same way, through `currentColor`. */
+[data-icon-category='code'] .icon {
+  color: var(--throng-colour-fileIconCode, var(--throng-colour-iconColour, inherit));
+}
+
+[data-icon-category='markup'] .icon {
+  color: var(--throng-colour-fileIconMarkup, var(--throng-colour-iconColour, inherit));
+}
+
+[data-icon-category='data'] .icon {
+  color: var(--throng-colour-fileIconData, var(--throng-colour-iconColour, inherit));
+}
+
+[data-icon-category='document'] .icon {
+  color: var(--throng-colour-fileIconDocument, var(--throng-colour-iconColour, inherit));
+}
+
+[data-icon-category='media'] .icon {
+  color: var(--throng-colour-fileIconMedia, var(--throng-colour-iconColour, inherit));
+}
+
+[data-icon-category='archive'] .icon {
+  color: var(--throng-colour-fileIconArchive, var(--throng-colour-iconColour, inherit));
+}
+
+[data-icon-category='script'] .icon {
+  color: var(--throng-colour-fileIconScript, var(--throng-colour-iconColour, inherit));
+}
+
+/* 069 FR-059 — the File Explorer row's hover popover: the tab popover's surface, with the row's icon at
+   twice the theme's icon size to the left of the path, centred on it. */
+.explorer-path-popover {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 560px;
+  padding: 8px 10px;
+  background: var(--throng-colour-surfaceActive);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.explorer-path-popover__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.explorer-path-popover__icon .icon {
+  font-size: calc(var(--throng-size-icon, 16px) * 2);
+  width: calc(var(--throng-size-icon, 16px) * 2);
+  height: calc(var(--throng-size-icon, 16px) * 2);
+}
+
+.explorer-path-popover__path {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .tabstrip-popover__name {
@@ -3183,10 +3331,10 @@ textarea,
   width: 1em;
   height: 1em;
   /*
-   * Do NOT hardcode `stroke`/`fill` here. A pack SVG already carries its own
-   * `stroke="currentColor"` or `fill="currentColor"` (the bundled throng-svg is stroke-based), and
+   * Do NOT hardcode `stroke`/`fill` here. An icon set SVG already carries its own
+   * `stroke="currentColor"` or `fill="currentColor"` (the default set is stroke-based), and
    * `.icon { color: inherit }` above makes `currentColor` resolve to the theme. Forcing `fill:none`
-   * here would render a legitimately fill-based third-party pack completely invisible.
+   * here would render a legitimately fill-based user icon completely invisible.
    */
 }
 
@@ -3380,12 +3528,6 @@ textarea,
   background-size: 400% 100%;
   animation: throng-shimmer 1.4s ease infinite;
 }
-.paste-progress__cancel {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding-left: 8px;
-  border-left: 1px solid var(--throng-colour-border);
-}
 @media (prefers-reduced-motion: reduce) {
   .paste-progress__bar--indeterminate {
     animation: none;
@@ -3514,18 +3656,46 @@ textarea,
 .notice__copy,
 .notice__dismiss {
   flex: 0 0 auto;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
   border: none;
+  border-radius: 4px;
   background: none;
   color: var(--text-dim);
   cursor: pointer;
   pointer-events: auto;
 }
 
+/* 069 FR-051 — pointed at, a control lifts onto the hover surface every other icon button uses, not
+   only a change of colour, so it reads as a button the moment the pointer reaches it. */
 .notice__control:hover,
 .notice__copy:hover,
 .notice__dismiss:hover {
   color: var(--throng-colour-text);
+}
+:where(body:not([data-window-blurred])) :is(.notice__control, .notice__copy, .notice__dismiss):hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+}
+/* …except on a toast. A toast card IS `surface`, and `hoverSurface` defaults to `surface` (TOKEN_PARENT), so that wash
+   was the card's own colour and nothing showed. On a card the control washes in its own pointed-at colour instead,
+   which stands out from any card — the error card's red included — and follows the theme. */
+:where(body:not([data-window-blurred])) .notice :is(.notice__control, .notice__copy, .notice__dismiss):hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+:is(.notice__control, .notice__copy, .notice__dismiss):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* 069 FR-050, FR-051 — a toast's ONE control group at its top-right: the notice's own controls, then
+   Copy, then Dismiss (constitution, toast controls), spaced so each is its own target. */
+.notice__controls {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .notice__title {
@@ -3683,12 +3853,9 @@ textarea,
  * The picker header's action controls (033, FR-069) — Quick Open's target button and its exclusion
  * toggle.
  *
- * DEFINED HERE RATHER THAN IN `preferences.css`, and that is the whole point of the class existing.
- * `.icon-button` — which the shipped target control asked for — lives in `preferences.css`, and
- * `preferences.css` is imported only by `preferences-app.tsx`. The main window loads `theme.css`
- * alone, so the control rendered with no styling beyond the user-agent default: a raw grey button
- * sitting above the query field. Every other main-window `IconButton` call site passes its own
- * class, which is why nothing else showed the same symptom.
+ * A class of its own because, when it was written, `.icon-button` was thought to load only in the Preferences
+ * window and the control rendered as a raw grey button. Since 069 FR-054 `.icon-button` is defined once, near the
+ * top of this file, for every window; this rule keeps the picker header's own look on top of it.
  *
  * The vocabulary is `.tabstrip-actions__btn`'s, deliberately — one look for "a small themeable icon
  * control in a chrome row", rather than a third of them.
@@ -3925,7 +4092,8 @@ canvas.status-popover__plot {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  background: var(--throng-colour-surface);
+  /* 069 FR-054 (#639): every secondary window sits on the app background, as Preferences does. */
+  background: var(--bg);
   color: var(--throng-colour-text);
   font-family: var(--throng-font-family);
   font-size: var(--throng-font-size);
@@ -4066,29 +4234,9 @@ canvas.status-popover__plot {
   min-width: 0;
 }
 
+/* The shared `.icon-button` (069 FR-054); only its place in the row is the breadcrumb's own. */
 .breakdown__back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   flex: none;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .breakdown__back:hover:not(:disabled) {
-  background: var(--throng-colour-hoverSurface);
-}
-
-.breakdown__back:disabled {
-  color: var(--throng-colour-textMuted);
-  cursor: default;
-  opacity: 0.5;
 }
 
 /* What the filter matched and what Hide idle left out. */
@@ -4109,7 +4257,7 @@ canvas.status-popover__plot {
   gap: 8px;
   padding: 2px 6px;
   border-bottom: 1px solid var(--throng-colour-border);
-  background: var(--throng-colour-surface);
+  background: var(--bg);
   color: var(--throng-colour-textMuted);
   font-size: 11px;
 }
@@ -4204,11 +4352,9 @@ canvas.status-popover__plot {
   cursor: default;
 }
 
+/* Its look is the shared `.section-heading` (069 FR-054); only its spacing is its own. */
 .breakdown__heading {
   margin: 4px 0;
-  font-size: 12px;
-  font-weight: var(--throng-font-weight-bold);
-  color: var(--throng-colour-textMuted);
 }
 
 /*
@@ -4486,7 +4632,10 @@ canvas.status-popover__plot {
 }
 
 .breakdown-total__name {
-  overflow: hidden;
+  /* `clip` with a margin rather than `hidden`: the name still ends in an ellipsis, and the raised "?" beside it
+     (069 FR-062) is not cut off at the top. */
+  overflow: clip;
+  overflow-clip-margin: 6px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4603,26 +4752,8 @@ canvas.status-popover__plot {
   outline-offset: -2px;
 }
 
-.monitor-filter__clear,
-.monitor-controls__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .monitor-filter__clear:hover,
-:where(body:not([data-window-blurred])) .monitor-controls__button:hover {
-  background: var(--throng-colour-hoverSurface);
-}
-
+/* The filter's clear and the toolbar's buttons are the shared `.icon-button` (069 FR-054); a pressed toggle's
+   mark below is the toolbar's own. */
 /* A pressed toggle: the chosen metric, Hide idle. A mark, not a focus ring — that one is 2px, below. */
 .monitor-controls__button[aria-pressed='true'] {
   background: var(--throng-colour-surfaceActive);
@@ -4686,20 +4817,34 @@ canvas.status-popover__plot {
   align-items: center;
   justify-content: center;
   flex: none;
-  /* Superscript (sixth feedback): small and raised against the text or icon it explains — in running text by
-     `vertical-align`, as a flex item (the toolbar's pairs) by `align-self` — and with no margin of its own. */
-  width: 12px;
-  height: 12px;
-  margin: 0;
+  /* Superscript (sixth feedback): small and raised against the text or icon it explains — aligned to its top
+     edge (in running text by `vertical-align`, as a flex item by `align-self`) and lifted above it.
+     069 FR-062: clear of what it explains by a hair and of the next element by more, so it reads as the
+     superscript of the one before it and touches neither; the margins take real space, so the elements
+     around it move rather than sit under it. */
+  width: 14px;
+  /* It is also an `.icon-button`, whose 24px minimum would stretch it to twice its width (069 FR-054). */
+  min-width: 0;
+  height: 14px;
+  margin: 0 6px 0 2px;
   padding: 0;
   border: 0;
   border-radius: 3px;
   background: transparent;
   color: var(--throng-colour-textMuted);
   font-size: 9px;
-  vertical-align: super;
+  vertical-align: text-top;
   align-self: flex-start;
+  translate: 0 -4px;
   cursor: pointer;
+}
+
+/* 069 FR-062 — the art is the box's size. An icon sizes itself from the theme's icon size (16px), which in
+   this 14px box spilled past every edge and onto the text it explains. */
+.info-helper .icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
 }
 
 /* A control and the "?" that explains it: one item of the toolbar, with nothing between them. */
@@ -4734,11 +4879,9 @@ canvas.status-popover__plot {
   margin: 12px 0 4px;
 }
 
+/* Its look is the shared `.section-heading` (069 FR-054); only its spacing is its own. */
 .line-graphs__heading {
   margin: 0 0 4px;
-  color: var(--throng-colour-textMuted);
-  font-size: 12px;
-  font-weight: var(--throng-font-weight-bold);
 }
 
 .line-graphs__grid {
@@ -5018,23 +5161,7 @@ canvas.status-popover__plot {
   margin: 2px 0 0;
 }
 
-.monitor-notice__dismiss {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .monitor-notice__dismiss:hover {
-  background: var(--throng-colour-hoverSurface);
-}
+/* The notice's dismiss is the shared `.icon-button` (069 FR-054). */
 
 /* The list in a kill confirmation. */
 .kill-details {
@@ -5062,27 +5189,6 @@ canvas.status-popover__plot {
   margin: 0;
 }
 
-.detail-pane__action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .detail-pane__action:hover:not(:disabled) {
-  background: var(--throng-colour-hoverSurface);
-}
-
-.detail-pane__action:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
+/* A detail pane's actions are the shared `.icon-button` (069 FR-054), disabled as every other one is. */
 
 /* ── 055 end ── */

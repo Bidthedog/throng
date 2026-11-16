@@ -9,6 +9,8 @@
 import { useId, useState, type ReactElement } from 'react';
 import { useNotify } from '../common/notification.js';
 import { useFlavours } from '../panel-type/use-flavours.js';
+import { IconButton } from '../common/icon-button.js';
+import { ROW_ACTION_TOKENS } from './row-action-tokens.js';
 
 export function FormHistoryControl(): ReactElement | null {
   const api = window.throng?.formHistory;
@@ -34,6 +36,7 @@ export function FormHistoryControl(): ReactElement | null {
       </div>
       <div className="settings-row__control settings-row__control--inline">
         <select
+          className="ctl ctl--select"
           data-testid="form-history-flavour"
           aria-label="Terminal type to clear"
           value={flavourId}
@@ -46,10 +49,12 @@ export function FormHistoryControl(): ReactElement | null {
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          data-testid="form-history-clear-flavour"
-          aria-label="Clear the values remembered for the selected terminal type"
+        {/* 069 FR-054 (#639) — action controls are themed icons with hover titles (constitution), not the
+            browser's own text buttons. */}
+        <IconButton
+          token={ROW_ACTION_TOKENS.clear}
+          testId="form-history-clear-flavour"
+          title="Clear the values remembered for the selected terminal type"
           disabled={flavourId === ''}
           onClick={() => {
             api.clearFlavour(flavourId);
@@ -61,13 +66,11 @@ export function FormHistoryControl(): ReactElement | null {
               testId: 'form-history-cleared',
             });
           }}
-        >
-          Clear this type
-        </button>
-        <button
-          type="button"
-          data-testid="form-history-clear-all"
-          aria-label="Clear the remembered values of all terminal types"
+        />
+        <IconButton
+          token="dismissAll"
+          testId="form-history-clear-all"
+          title="Clear the remembered values of all terminal types"
           onClick={() => {
             api.clearAll();
             notify({
@@ -78,9 +81,7 @@ export function FormHistoryControl(): ReactElement | null {
               testId: 'form-history-cleared',
             });
           }}
-        >
-          Clear all
-        </button>
+        />
       </div>
     </div>
   );

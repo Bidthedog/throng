@@ -21,7 +21,6 @@ export type ControlKind =
   | 'font-size'
   | 'enum'
   | 'chord' // keybinding chord (edited via the capture modal)
-  | 'icon' // theme icon token (pack-aware)
   | 'folder' // editable path + browse-to-pick folder (011, shared folder-picker)
   | 'map' // keyed table: key column + typed value columns (016, F5)
   /*

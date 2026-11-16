@@ -1112,17 +1112,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               );
             }}
           />
-          <button
-            type="button"
+          <IconButton
+            token="windowClose"
+            className=""
             // 054 FR-074 — a maximised tab's panel is not destroyed: drawn disabled, saying why.
             title={tabModal ? `Restore the panel to ${panelVerb.toLowerCase()} it` : `${panelVerb} panel`}
-            aria-label={`${panelVerb} panel`}
+            ariaLabel={`${panelVerb} panel`}
             disabled={tabModal}
-            data-testid={`panel-close-${panel.id}`}
+            testId={`panel-close-${panel.id}`}
             onClick={() => void destroyPanel()}
-          >
-            ✕
-          </button>
+          />
         </span>
       </div>
       {showsZoomIndicator ? (

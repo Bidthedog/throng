@@ -99,8 +99,9 @@
   height: 26px;
   padding: 0 10px;
   border: 1px solid transparent;
-  border-radius: 5px;
-  background: transparent;
+  /* 069 FR-054 — the shared icon button's radius. */
+  border-radius: 4px;
+  background: var(--throng-colour-iconButtonSurface, transparent);
   color: var(--text-dim, var(--text));
   font-family: var(--throng-font-button-family, var(--throng-font-family));
   font-size: var(--throng-font-button-size, var(--throng-font-size));
@@ -260,7 +261,7 @@
   cursor: pointer;
 }
 
-:where(body:not([data-window-blurred])) .settings-search__clear:hover {
+:where(body:not([data-window-blurred])) .settings-search__clear:hover:not(:disabled) {
   color: var(--text);
   background: var(--throng-colour-hoverSurface);
 }
@@ -275,9 +276,11 @@
   margin-bottom: 22px;
 }
 
+/* The model for the shared `.section-heading` (069 FR-054): the same type, so the weight comes from the theme too. */
 .settings-group__title {
   margin: 0 0 8px;
   font-size: 11px;
+  font-weight: var(--throng-font-weight-bold, 600);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim, var(--text));
@@ -539,7 +542,8 @@
   background: var(--throng-colour-inputSurface);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  /* 069 FR-054 — the shared field's radius, as in every window. */
+  border-radius: 4px;
   padding: 5px 8px;
   font-size: 13px;
   font-family: inherit;
@@ -751,14 +755,14 @@
 /* 021 (FR-027) — the capture modal and the name dialog share these buttons. The plain button is the
    safe dismiss → Cancel; `--primary` (Bind / Create / Rename) is the safe primary → Confirm. Each
    consumes only its type's six tokens. */
+/* The same text button as every dialog's (`.modal__buttons button`, 069 FR-054); its type comes from the button role. */
 .capture-modal__btn {
-  padding: 6px 12px;
+  padding: 6px 14px;
   border: 1px solid var(--throng-colour-cancelButtonBorder);
   border-radius: 5px;
   background: var(--throng-colour-cancelButtonBg);
   color: var(--throng-colour-cancelButtonText);
   cursor: pointer;
-  font-size: 13px;
 }
 
 .capture-modal__btn:hover:not(:disabled) {
@@ -819,35 +823,11 @@
 }
 
 /*
- * Generic themeable action icon button (014 / constitution v3.12.0). The glyph
- * comes from the active theme's icon token; every colour here derives from theme
- * tokens — no hardcoded colours, no inline SVG.
+ * The icon button itself — `.icon-button` — is defined once in theme.css for every window (069 FR-054).
+ * 069 FR-049 — an action the selection cannot use stays on screen, greyed out, and its title says why.
  */
-.icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 5px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-dim, var(--text));
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .icon-button:hover:not(:disabled) {
-  background: var(--throng-colour-hoverSurface);
-  border-color: var(--border);
-  color: var(--text);
-}
-
-.icon-button:disabled {
-  opacity: 0.45;
+.settings-search__clear:disabled {
+  opacity: 0.35;
   cursor: default;
 }
 
@@ -1053,10 +1033,62 @@
   color: var(--text-dim, var(--text));
 }
 
-.icon-cell__override {
-  width: 100%;
-  min-width: 0;
-  font-size: 11px;
+/*
+ * 069 FR-047 — the Icon set row: the user set's controls, the controls every selection has, then the
+ * picker at the far right. One line that never wraps, right-aligned, so a control appearing on the
+ * left moves nothing to its right; the description beside it is what gives way.
+ */
+.icon-set-row {
+  flex-wrap: nowrap;
+  gap: 8px;
+  max-width: none;
+}
+
+.icon-set-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.icon-set-row > .ctl--select {
+  flex: 0 0 auto;
+}
+
+/* 069 FR-044 — Override and Reset under each icon. */
+.icon-cell__actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* 069 FR-027 — Overridden or Default, and why an override file was not used. */
+.icon-cell__status {
+  font-size: 10px;
+  color: var(--text-dim, var(--text));
+}
+
+.icon-cell[data-overridden='true'] .icon-cell__status {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.icon-cell__failure {
+  font-size: 10px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: var(--throng-colour-danger);
+}
+
+.icon-set-unrecognised {
+  margin-top: 8px;
+}
+
+/* 069 FR-027 — the file the key is overridden by: `<key>.svg`. */
+.icon-cell__file {
+  font-size: 10px;
+  color: var(--text-dim, var(--text));
+  opacity: 0.75;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 /* JSON editor tab (US5). Fills the panel; the CodeMirror view stretches. */

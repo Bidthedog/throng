@@ -5,6 +5,7 @@ import {
   type LinkMenuItem,
   type ResolvedTarget,
   type ResourceClass,
+  type IconKey,
 } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 import type { LinkOpenInTarget } from './link-open-in.js';
@@ -68,7 +69,7 @@ export interface LinkMenuBuildArgs {
   readonly performers?: LinkMenuPerformers;
 }
 
-const ICONS: Partial<Record<LinkRow['id'], string>> = {
+const ICONS: Partial<Record<LinkRow['id'], IconKey>> = {
   // Open Link and Open in OS Default Program carry no icon: no open/link token exists (023's rule,
   // #127) — an icon only where a real token exists, never a lookalike.
   openInNew: 'editorPanel',

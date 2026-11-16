@@ -3,6 +3,7 @@ import { ConfigProvider, useActiveTheme } from '../config/config-store.js';
 import { useNoDropNavigation } from '../composition-root.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { TitleBar } from '../title-bar/title-bar.js';
+import { IconButton } from '../common/icon-button.js';
 import './about.css';
 
 /**
@@ -33,6 +34,8 @@ interface ThirdPartyLicence {
   license: string;
   licenseUrl: string;
   projectUrl: string;
+  /** The package's own licence text, when it ships one worth reading (069 FR-022: the vendored Lucide icons). */
+  licenseText?: string;
 }
 
 // US4 (#139) — the STATIC identity paints immediately; the third-party list loads separately.
@@ -60,6 +63,14 @@ function AboutShell(): ReactElement {
   // the result via the `active` guard (FR-016), so no orphaned work updates a torn-down view.
   const [thirdParty, setThirdParty] = useState<ThirdPartyLicence[]>([]);
   const [thirdPartyLoading, setThirdPartyLoading] = useState(true);
+  // Which packages' licence text is open (069 FR-022); all start closed.
+  const [openTexts, setOpenTexts] = useState<ReadonlySet<string>>(new Set());
+  const toggleText = (name: string): void =>
+    setOpenTexts((current) => {
+      const next = new Set(current);
+      if (!next.delete(name)) next.add(name);
+      return next;
+    });
 
   useEffect(() => {
     let active = true;
@@ -133,7 +144,7 @@ function AboutShell(): ReactElement {
             </p>
           ) : null}
 
-          <label className="about-section-label" htmlFor="about-licence-text">
+          <label className="section-heading about-section-label" htmlFor="about-licence-text">
             Licence
           </label>
           <textarea
@@ -149,7 +160,7 @@ function AboutShell(): ReactElement {
           {/* Third-party packages (FR-003a). Not a <textarea> — a plain text box cannot carry the
               live licence links the requirement asks for — but a read-only, scrollable box styled
               to match the licence box, each row a package with a live link to its licence. */}
-          <span className="about-section-label">
+          <span className="section-heading about-section-label">
             Third-party packages{thirdPartyLoading ? '' : ` (${thirdParty.length})`}
           </span>
           <div
@@ -178,18 +189,35 @@ function AboutShell(): ReactElement {
                   <span className="about-thirdparty__name">{p.name}</span>
                 )}
                 <span className="about-thirdparty__version">{p.version}</span>
-                {p.licenseUrl ? (
-                  <a
-                    className="about-thirdparty__licence"
-                    href={p.licenseUrl}
-                    onClick={openExternal(p.licenseUrl)}
-                    title={`Open the ${p.license} licence`}
-                  >
-                    {p.license}
-                  </a>
-                ) : (
-                  <span className="about-thirdparty__licence">{p.license}</span>
-                )}
+                <span className="about-thirdparty__licence-cell">
+                  {p.licenseUrl ? (
+                    <a
+                      className="about-thirdparty__licence"
+                      href={p.licenseUrl}
+                      onClick={openExternal(p.licenseUrl)}
+                      title={`Open the ${p.license} licence`}
+                    >
+                      {p.license}
+                    </a>
+                  ) : (
+                    <span className="about-thirdparty__licence">{p.license}</span>
+                  )}
+                  {p.licenseText ? (
+                    <IconButton
+                      token={openTexts.has(p.name) ? 'collapse' : 'expand'}
+                      className="icon-button about-thirdparty__text-toggle"
+                      testId={`about-licence-text-toggle-${p.name}`}
+                      title={openTexts.has(p.name) ? `Hide the ${p.name} licence text` : `Show the ${p.name} licence text`}
+                      ariaExpanded={openTexts.has(p.name)}
+                      onClick={() => toggleText(p.name)}
+                    />
+                  ) : null}
+                </span>
+                {p.licenseText && openTexts.has(p.name) ? (
+                  <pre className="about-thirdparty__text" data-testid={`about-licence-text-${p.name}`}>
+                    {p.licenseText}
+                  </pre>
+                ) : null}
               </div>
               ))
             )}

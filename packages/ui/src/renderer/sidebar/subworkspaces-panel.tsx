@@ -14,7 +14,8 @@ import { useErrorNotice } from '../common/notification.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useAppSettings } from '../config/config-store.js';
 import { Icon } from '../common/icon.js';
-import { MinimiseChevronButton } from '../panes/chevron.js';
+import { IconButton } from '../common/icon-button.js';
+import { MinimisePanelButton } from '../panes/collapse-icon.js';
 import { useCollapsedHover } from '../panes/use-collapsed-hover.js';
 import { useContextMenuOptional } from '../context-menu-provider.js';
 
@@ -33,7 +34,7 @@ function SubWorkspaceGrip({ id }: { id: string }): ReactElement {
       {...listeners}
       {...attributes}
     >
-      ⠿
+      <Icon token="dragHandle" />
     </span>
   );
 }
@@ -231,7 +232,7 @@ export function SubworkspacesPanel({
             </button>
           )}
           {onToggleMinimise ? (
-            <MinimiseChevronButton
+            <MinimisePanelButton
               minimised={minimised}
               testId={minimised ? 'subworkspaces-restore' : 'subworkspaces-minimise'}
               title={minimised ? 'Restore Sub-workspaces' : 'Minimise Sub-workspaces'}
@@ -328,25 +329,20 @@ export function SubworkspacesPanel({
                     </span>
                   )}
                   <span className="subworkspace-item__controls">
-                    <button
-                      type="button"
-                      data-testid={`subworkspace-open-${sw.id}`}
+                    <IconButton
+                      token="detach"
+                      className=""
+                      testId={`subworkspace-open-${sw.id}`}
                       title="Open"
-                      aria-label="Open"
                       onClick={() => open(sw.id)}
-                    >
-                      ⧉
-                    </button>
-                    <button
-                      type="button"
+                    />
+                    <IconButton
+                      token="destroy"
                       className="subworkspace-item__delete"
-                      data-testid={`subworkspace-delete-${sw.id}`}
+                      testId={`subworkspace-delete-${sw.id}`}
                       title="Destroy sub-workspace"
-                      aria-label="Destroy sub-workspace"
                       onClick={() => void destroy(sw.id, sw.name)}
-                    >
-                      ✕
-                    </button>
+                    />
                   </span>
                 </li>
               );

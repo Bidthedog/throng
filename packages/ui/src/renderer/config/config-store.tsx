@@ -16,7 +16,7 @@ import {
   THRONG_THEME,
   type AppSettings,
   type Keybindings,
-  type LoadedIconPack,
+  type UserIconSetDto,
   type Theme,
 } from '@throng/core';
 import { onConfigPatched, onConfigWritten } from './write-config.js';
@@ -35,13 +35,13 @@ interface ConfigState {
   theme: Theme;
   keybindings: Keybindings;
   /**
-   * Loaded icon packs, keyed by name (017 / #54).
+   * The user's icon sets as main loaded them (069 FR-013 to FR-016).
    *
-   * They ride the SAME payload as the theme on purpose: a theme selects a pack, so if the two
-   * arrived on different channels there would be a frame pairing the new theme with the old pack's
-   * icons. One payload, one render.
+   * They ride the SAME payload as the theme on purpose: a theme selects a set, so if the two
+   * arrived on different channels there would be a frame pairing the new theme with the old set's
+   * icons. One payload, one render. The default set is compiled into core and is never in this list.
    */
-  iconPacks: Record<string, LoadedIconPack>;
+  iconSets: readonly UserIconSetDto[];
   /** True once the first config payload has arrived (used to snapshot on-entry state). */
   loaded: boolean;
 }
@@ -50,20 +50,16 @@ const DEFAULT_STATE: ConfigState = {
   settings: DEFAULT_APP_SETTINGS,
   theme: THRONG_THEME,
   keybindings: DEFAULT_KEYBINDINGS,
-  iconPacks: {},
+  iconSets: [],
   loaded: false,
 };
 
 const ConfigContext = createContext<ConfigState>(DEFAULT_STATE);
 
-/** The payload ships packs as a list; the renderer wants them by name. */
-function toPackMap(raw: unknown): Record<string, LoadedIconPack> {
-  if (!Array.isArray(raw)) return {};
-  const map: Record<string, LoadedIconPack> = {};
-  for (const pack of raw as LoadedIconPack[]) {
-    if (pack && typeof pack.name === 'string') map[pack.name] = pack;
-  }
-  return map;
+/** The payload ships the user's icon sets as a list; anything else is no sets. */
+function toIconSets(raw: unknown): readonly UserIconSetDto[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as UserIconSetDto[]).filter((set) => set && typeof set.name === 'string');
 }
 
 /**
@@ -80,7 +76,7 @@ function toTheme(raw: unknown): Theme {
 
 function toState(
   payload:
-    | { settings?: unknown; theme?: unknown; keybindings?: unknown; iconPacks?: unknown }
+    | { settings?: unknown; theme?: unknown; keybindings?: unknown; iconSets?: unknown }
     | null
     | undefined,
 ): ConfigState {
@@ -89,7 +85,7 @@ function toState(
     settings: payload.settings ? guardedSettingsValidator(payload.settings) : DEFAULT_APP_SETTINGS,
     theme: toTheme(payload.theme),
     keybindings: payload.keybindings ? parseKeybindings(payload.keybindings) : DEFAULT_KEYBINDINGS,
-    iconPacks: toPackMap(payload.iconPacks),
+    iconSets: toIconSets(payload.iconSets),
     loaded: true,
   };
 }
@@ -190,14 +186,14 @@ export function useKeybindings(): Keybindings {
 }
 
 /**
- * The loaded icon packs, keyed by name.
+ * The user's icon sets, as main loaded them.
  *
- * Every asset is already in memory — the renderer never reads from disk to draw an icon (FR-006a).
- * The file explorer resolves an icon per row, so a disk read on the render path would cost hundreds
- * of reads to paint one frame of a large tree.
+ * Every override is already in memory — the renderer never reads from disk to draw an icon (017
+ * FR-006a). The file explorer resolves an icon per row, so a disk read on the render path would
+ * cost hundreds of reads to paint one frame of a large tree.
  */
-export function useIconPacks(): Record<string, LoadedIconPack> {
-  return useContext(ConfigContext).iconPacks;
+export function useIconSets(): readonly UserIconSetDto[] {
+  return useContext(ConfigContext).iconSets;
 }
 
 /** True once the first config payload has arrived (for on-entry snapshotting). */

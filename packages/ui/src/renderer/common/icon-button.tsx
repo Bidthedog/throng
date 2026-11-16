@@ -1,8 +1,7 @@
 /**
  * Reusable themeable action icon button (constitution v3.12.0, Themeable icon
  * controls). Every interactive control that performs an action renders through
- * this: the icon is drawn by the shared <Icon> component — which honours the selected icon PACK,
- * not merely the theme's glyph (017 / #54) — and the colours come from theme tokens via CSS. The
+ * this: the icon is drawn by the shared <Icon> component — which honours the selected icon SET (017 / #54, 069) — and the colours come from theme tokens via CSS. The
  * button always carries a hover title / aria-label naming the action; the icon inside it is
  * decorative, so a screen reader announces the action once and never the glyph.
  *
@@ -14,11 +13,12 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import type { IconKey } from '@throng/core';
 import { Icon } from './icon.js';
 
 export interface IconButtonProps {
-  /** Active-theme icon token whose glyph is rendered (e.g. `retry`, `add`, `rename`). */
-  token: string;
+  /** Icon key whose art is rendered (e.g. `retry`, `add`, `rename`). */
+  token: IconKey;
   /** Hover title + aria-label naming the action (required — the icon carries no text). */
   title: string;
   onClick: (event: ReactMouseEvent) => void;

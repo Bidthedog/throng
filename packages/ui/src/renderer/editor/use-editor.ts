@@ -30,7 +30,7 @@ import {
   BLANK_PANEL_NAME,
   languageName,
   PLAIN_TEXT_ID,
-  resolveIconAsset,
+  resolveIcon,
   selectedCharacters,
   toggleSection,
   type ActionId,
@@ -46,7 +46,7 @@ import {
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
-import { useActiveTheme, useAppSettings, useIconPacks } from '../config/config-store.js';
+import { useActiveTheme, useAppSettings, useIconSets } from '../config/config-store.js';
 import { columnSelectModifier, crosshairKey } from '../config/host-modifiers.js';
 import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
 import {
@@ -498,7 +498,7 @@ export function useEditor(params: UseEditorParams): void {
   const languageId = usePanelLanguage(panel.id)?.languageId;
   const isMarkdown = languageId === 'markdown';
   const theme = useActiveTheme();
-  const iconPacks = useIconPacks();
+  const iconSets = useIconSets();
   const foldSeed = initialFold(settings.markdownSectionsOpen);
   const foldStateValue = useDocumentFoldState(wrapDocKey, foldSeed);
   // Read through a ref so the gutter's click handler (built in an effect that does NOT depend on
@@ -559,7 +559,7 @@ export function useEditor(params: UseEditorParams): void {
 
   // The fold mechanism reaches the live view through `foldCompartment` — CodeMirror's folding extension plus the
   // heading gutter — populated only while Markdown (R4), the same way `languageCompartment` is.
-  // Rebuilt on a language change, a gutter-visibility change, or a theme/icon-pack change (the
+  // Rebuilt on a language change, a gutter-visibility change, or a theme/icon-set change (the
   // gutter's markers are drawn from theme icon tokens); NOT on `foldStateValue` — the effect below
   // applies fold RANGES to whatever is already installed, which is cheaper than reinstalling the
   // gutter on every toggle and is what makes a toggle repaint just the markers it touched.
@@ -583,7 +583,7 @@ export function useEditor(params: UseEditorParams): void {
     view.dispatch({
       effects: foldCompartment.reconfigure(
         markdownFoldExtension({
-          iconFor: (token) => resolveIconAsset(theme, iconPacks, token),
+          iconFor: (token) => resolveIcon(theme, iconSets, token),
           // 049 T062 — read the STORE, not the render's copy of it: a command (Collapse All) writes the store and
           // folds the ranges in one go, and the ref below only catches up on the next render — after the
           // gutter had already redrawn its markers from the old state.
@@ -605,7 +605,7 @@ export function useEditor(params: UseEditorParams): void {
   installFoldRef.current = installFold;
   useEffect(() => {
     installFoldRef.current();
-  }, [isMarkdown, settings.showGutter, theme, iconPacks, panel.id]);
+  }, [isMarkdown, settings.showGutter, theme, iconSets, panel.id]);
 
   // Make the view's CodeMirror fold ranges equal the derivation from the CURRENT FoldState (R4) —
   // runs on every change, whichever view or window it came from (Principle XI: one document, one

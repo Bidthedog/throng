@@ -1,0 +1,469 @@
+{
+  "lucideVersion": "1.66.0",
+  "sameAction": [
+    [
+      "destroy",
+      "dismiss",
+      "windowClose"
+    ],
+    [
+      "chevron",
+      "foldPreviewCollapsed"
+    ]
+  ],
+  "keys": {
+    "destroy": {
+      "lucide": "x"
+    },
+    "deleteFile": {
+      "lucide": "trash-2"
+    },
+    "dismiss": {
+      "lucide": "x"
+    },
+    "cancel": {
+      "lucide": "circle-stop"
+    },
+    "collapse": {
+      "lucide": "fold-vertical"
+    },
+    "expand": {
+      "lucide": "unfold-vertical"
+    },
+    "rename": {
+      "lucide": "pencil"
+    },
+    "send": {
+      "lucide": "send-horizontal"
+    },
+    "tab": {
+      "lucide": "app-window"
+    },
+    "add": {
+      "lucide": "plus"
+    },
+    "save": {
+      "lucide": "save"
+    },
+    "saveAs": {
+      "throng": "Lucide has no Save As; drawn as its floppy disk with a pencil, so it stays distinct from Save (067 FR-118)"
+    },
+    "dismissAll": {
+      "lucide": "list-x"
+    },
+    "sortOrder": {
+      "lucide": "arrow-down-wide-narrow"
+    },
+    "minimisePanel": {
+      "lucide": "arrow-down-to-line"
+    },
+    "restorePanel": {
+      "lucide": "arrow-up-from-line"
+    },
+    "noticeError": {
+      "lucide": "circle-x"
+    },
+    "noticeAttention": {
+      "lucide": "circle-alert"
+    },
+    "noticeInfo": {
+      "lucide": "info"
+    },
+    "noticeSuccess": {
+      "lucide": "circle-check"
+    },
+    "detach": {
+      "lucide": "square-arrow-out-up-right"
+    },
+    "retry": {
+      "lucide": "rotate-cw"
+    },
+    "restoreAll": {
+      "lucide": "list-restart"
+    },
+    "revert": {
+      "lucide": "rotate-ccw"
+    },
+    "editJson": {
+      "lucide": "braces"
+    },
+    "editVisual": {
+      "lucide": "sliders-horizontal"
+    },
+    "moveUp": {
+      "lucide": "arrow-up"
+    },
+    "moveDown": {
+      "lucide": "arrow-down"
+    },
+    "zoomIn": {
+      "lucide": "zoom-in"
+    },
+    "zoomOut": {
+      "lucide": "zoom-out"
+    },
+    "zoomReset": {
+      "throng": "Lucide has no zoom reset; drawn as zoom-in’s lens (r 8) and handle, the lens broken at the upper left into an anticlockwise arrow with Lucide rotate-ccw’s corner head"
+    },
+    "folder": {
+      "lucide": "folder"
+    },
+    "folderOpen": {
+      "lucide": "folder-open"
+    },
+    "chevron": {
+      "lucide": "chevron-right"
+    },
+    "file": {
+      "lucide": "file"
+    },
+    "fileCode": {
+      "lucide": "file-code"
+    },
+    "fileJson": {
+      "lucide": "file-json"
+    },
+    "fileMarkdown": {
+      "throng": "Lucide has no Markdown file; drawn as Lucide's file with the Markdown mark, an M and a down arrow, in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileImage": {
+      "lucide": "file-image"
+    },
+    "fileText": {
+      "lucide": "file-text"
+    },
+    "symlink": {
+      "lucide": "file-symlink"
+    },
+    "fileArchive": {
+      "lucide": "file-archive"
+    },
+    "fileShell": {
+      "lucide": "file-terminal"
+    },
+    "fileConfig": {
+      "lucide": "file-cog"
+    },
+    "fileSpreadsheet": {
+      "lucide": "file-spreadsheet"
+    },
+    "fileDatabase": {
+      "lucide": "file-database"
+    },
+    "fileDiff": {
+      "lucide": "file-diff"
+    },
+    "fileKey": {
+      "lucide": "file-key"
+    },
+    "fileAudio": {
+      "lucide": "file-music"
+    },
+    "fileVideo": {
+      "lucide": "file-video"
+    },
+    "fileFont": {
+      "lucide": "file-type-2"
+    },
+    "fileModel": {
+      "lucide": "file-axis-3d"
+    },
+    "filePackage": {
+      "lucide": "file-box"
+    },
+    "folderSymlink": {
+      "lucide": "folder-symlink"
+    },
+    "folderGit": {
+      "lucide": "folder-git"
+    },
+    "folderConfig": {
+      "lucide": "folder-dot"
+    },
+    "folderDependencies": {
+      "lucide": "folder-archive"
+    },
+    "fileC": {
+      "throng": "Lucide has no C file; drawn as Lucide's file with \"C\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileCpp": {
+      "throng": "Lucide has no C++ file; drawn as Lucide's file with \"C++\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileCsharp": {
+      "throng": "Lucide has no C# file; drawn as Lucide's file with \"C#\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileJava": {
+      "throng": "Lucide has no Java file; drawn as Lucide's file with \"JV\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileJavaScript": {
+      "throng": "Lucide has no JavaScript file; drawn as Lucide's file with \"JS\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileTypeScript": {
+      "throng": "Lucide has no TypeScript file; drawn as Lucide's file with \"TS\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "filePython": {
+      "throng": "Lucide has no Python file; drawn as Lucide's file with \"PY\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileGo": {
+      "throng": "Lucide has no Go file; drawn as Lucide's file with \"GO\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileRust": {
+      "throng": "Lucide has no Rust file; drawn as Lucide's file with \"RS\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileRuby": {
+      "throng": "Lucide has no Ruby file; drawn as Lucide's file with \"RB\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileR": {
+      "throng": "Lucide has no R file; drawn as Lucide's file with \"R\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileLua": {
+      "throng": "Lucide has no Lua file; drawn as Lucide's file with \"LUA\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileDart": {
+      "throng": "Lucide has no Dart file; drawn as Lucide's file with \"DA\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileSwift": {
+      "throng": "Lucide has no Swift file; drawn as Lucide's file with \"SW\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileScala": {
+      "throng": "Lucide has no Scala file; drawn as Lucide's file with \"SC\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileKotlin": {
+      "throng": "Lucide has no Kotlin file; drawn as Lucide's file with \"KT\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "filePhp": {
+      "throng": "Lucide has no PHP file; drawn as Lucide's file with \"PHP\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileSql": {
+      "throng": "Lucide has no SQL file; drawn as Lucide's file with \"SQL\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileHtml": {
+      "throng": "Lucide has no HTML file; drawn as Lucide's file with \"HTM\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileCss": {
+      "throng": "Lucide has no CSS file; drawn as Lucide's file with \"CSS\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "fileSass": {
+      "throng": "Lucide has no Sass file; drawn as Lucide's file with \"SAS\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "filePowerShell": {
+      "throng": "Lucide has no PowerShell file; drawn as Lucide's file with \"PS\" in strokes inside it (scripts/draw-file-label-icons.mjs)"
+    },
+    "editorPanel": {
+      "lucide": "file-pen"
+    },
+    "expandAll": {
+      "lucide": "chevrons-up-down"
+    },
+    "collapseAll": {
+      "lucide": "chevrons-down-up"
+    },
+    "newFolder": {
+      "lucide": "folder-plus"
+    },
+    "quickOpen": {
+      "lucide": "file-input"
+    },
+    "terminal": {
+      "lucide": "square-terminal"
+    },
+    "search": {
+      "lucide": "search"
+    },
+    "findNext": {
+      "lucide": "circle-arrow-down"
+    },
+    "findPrevious": {
+      "lucide": "circle-arrow-up"
+    },
+    "findInFiles": {
+      "lucide": "file-search"
+    },
+    "searchScope": {
+      "lucide": "folder-search"
+    },
+    "matchCase": {
+      "lucide": "case-sensitive"
+    },
+    "wholeWord": {
+      "lucide": "whole-word"
+    },
+    "replace": {
+      "lucide": "replace"
+    },
+    "replaceAll": {
+      "lucide": "replace-all"
+    },
+    "settings": {
+      "lucide": "settings"
+    },
+    "windowMinimise": {
+      "lucide": "minus"
+    },
+    "windowMaximise": {
+      "lucide": "square"
+    },
+    "windowRestore": {
+      "lucide": "copy-minus"
+    },
+    "windowClose": {
+      "lucide": "x"
+    },
+    "cut": {
+      "lucide": "scissors"
+    },
+    "copy": {
+      "lucide": "copy"
+    },
+    "paste": {
+      "lucide": "clipboard-paste"
+    },
+    "selectAll": {
+      "lucide": "text-select"
+    },
+    "undo": {
+      "lucide": "undo-2"
+    },
+    "redo": {
+      "lucide": "redo-2"
+    },
+    "language": {
+      "lucide": "languages"
+    },
+    "keybindings": {
+      "lucide": "keyboard"
+    },
+    "themes": {
+      "lucide": "palette"
+    },
+    "about": {
+      "lucide": "badge-info"
+    },
+    "hide": {
+      "lucide": "eye-off"
+    },
+    "showHidden": {
+      "lucide": "eye"
+    },
+    "resourceMonitor": {
+      "lucide": "activity"
+    },
+    "resourceCpu": {
+      "lucide": "cpu"
+    },
+    "resourceMemory": {
+      "lucide": "memory-stick"
+    },
+    "resourceGpu": {
+      "lucide": "gpu"
+    },
+    "resourceIo": {
+      "lucide": "arrow-up-down"
+    },
+    "resourceHideIdle": {
+      "lucide": "moon-star"
+    },
+    "resourceKill": {
+      "lucide": "skull"
+    },
+    "resourceKillBelow": {
+      "throng": "Lucide has no group kill; drawn as two Lucide skulls, the front one scaled to 0.8 at the lower right and the one behind it offset up and left, showing only the dome clear of the front skull"
+    },
+    "chevronLeft": {
+      "lucide": "square-chevron-left"
+    },
+    "chevronRight": {
+      "lucide": "square-chevron-right"
+    },
+    "chevronDown": {
+      "lucide": "square-chevron-down"
+    },
+    "preview": {
+      "lucide": "scan-eye"
+    },
+    "refresh": {
+      "lucide": "refresh-cw"
+    },
+    "navigateBack": {
+      "lucide": "arrow-left"
+    },
+    "navigateForward": {
+      "lucide": "arrow-right"
+    },
+    "syncScroll": {
+      "lucide": "link"
+    },
+    "unload": {
+      "lucide": "eject"
+    },
+    "category": {
+      "lucide": "tag"
+    },
+    "foldSectionExpanded": {
+      "lucide": "square-minus"
+    },
+    "foldSectionCollapsed": {
+      "lucide": "square-plus"
+    },
+    "foldPreviewExpanded": {
+      "lucide": "chevron-down"
+    },
+    "foldPreviewCollapsed": {
+      "lucide": "chevron-right"
+    },
+    "panelMaximise": {
+      "lucide": "maximize-2"
+    },
+    "panelRestore": {
+      "lucide": "minimize-2"
+    },
+    "diagramFit": {
+      "lucide": "scan"
+    },
+    "diagramZoomReset": {
+      "throng": "Lucide has no 1:1 actual-size mark; drawn as a \"1:1\" in strokes on its grid"
+    },
+    "diagramFullPane": {
+      "lucide": "expand"
+    },
+    "warning": {
+      "lucide": "triangle-alert"
+    },
+    "whitespace": {
+      "lucide": "pilcrow"
+    },
+    "busy": {
+      "lucide": "loader-circle"
+    },
+    "groupFolderTree": {
+      "lucide": "folder-tree"
+    },
+    "projectSettings": {
+      "lucide": "folder-cog"
+    },
+    "searchExclusions": {
+      "lucide": "filter-x"
+    },
+    "help": {
+      "lucide": "circle-help"
+    },
+    "activate": {
+      "lucide": "locate-fixed"
+    },
+    "resourceHideEnded": {
+      "lucide": "circle-slash"
+    },
+    "resourceNetwork": {
+      "lucide": "network"
+    },
+    "dragHandle": {
+      "lucide": "grip-vertical"
+    },
+    "menuChecked": {
+      "lucide": "check"
+    },
+    "overrideIcon": {
+      "lucide": "paintbrush"
+    }
+  }
+}

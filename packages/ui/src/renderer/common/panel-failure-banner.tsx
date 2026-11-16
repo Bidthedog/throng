@@ -366,8 +366,8 @@ export function PanelFailureBanner({
         />
       ) : null}
       {/*
-        COPY, in the MIDDLE (FR-051). Never a literal glyph: `copy` is a theme token, and the theme
-        ships `⎘` for it — a component that hard-coded 📋 would ignore the user's icon pack and
+        COPY, in the MIDDLE (FR-051). Never a literal glyph: `copy` is an icon key — a component that
+        hard-coded 📋 would ignore the user's icon set and
         render something the rest of the application does not use.
       */}
       {isRetry || copyable ? (

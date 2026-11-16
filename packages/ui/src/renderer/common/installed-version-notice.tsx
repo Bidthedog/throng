@@ -23,7 +23,7 @@ export function InstalledVersionNotice(): null {
       const restart: ReactElement = (
         <IconButton
           token="retry"
-          className="notice__action"
+          className="notice__control"
           testId="installed-version-restart"
           title="Restart throng"
           onClick={() => instance.restartInstalled()}
@@ -33,7 +33,8 @@ export function InstalledVersionNotice(): null {
         severity: 'info',
         subject: { kind: 'none' },
         message: installedVersionNoticeText(payload),
-        body: restart,
+        // The card's own control, beside Copy and Dismiss (constitution, toast controls).
+        controls: restart,
         testId: TEST_ID,
         instanceKey: payload.installedVersion,
         display: ALWAYS_SHOWN,

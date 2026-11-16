@@ -19,7 +19,7 @@ import {
   type IConfigStore,
   type IFileWatcher,
   type Keybindings,
-  type LoadedIconPack,
+  type UserIconSetDto,
   type Theme,
 } from '@throng/core';
 
@@ -28,14 +28,12 @@ export interface ConfigPayload {
   theme: Theme;
   keybindings: Keybindings;
   /**
-   * 017 / #54 — icon packs ride the SAME channel as the theme, deliberately.
-   *
-   * A theme selects a pack (`theme.iconPack`). If packs arrived on a different channel, the two
-   * would race, and there would be a frame in which the new theme is paired with the old pack's
-   * icons. One payload, one render, no mismatch — which is also what makes a pack change LIVE
-   * (FR-005) rather than merely eventual.
+   * 069 — user icon sets ride the SAME channel as the theme, deliberately (017 / #54): a theme
+   * selects a set (`theme.iconPack`), and one payload means no frame pairs a new theme with an old
+   * set's icons. They are served from memory and never re-read from disk here (FR-029). The default
+   * set is compiled into core and does not cross IPC.
    */
-  iconPacks: LoadedIconPack[];
+  iconSets: UserIconSetDto[];
   /**
    * The store's commit generation as it was when this read STARTED (#341, #333).
    *
@@ -102,12 +100,12 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Read the active settings + the theme they select + keybindings + icon packs, merged over defaults. */
+/** Read the active settings + the theme they select + keybindings + icon sets, merged over defaults. */
 export async function readConfigPayload(
   store: IConfigStore,
-  loadIconPacks: () => Promise<LoadedIconPack[]> = async () => [],
+  loadIconSets: () => readonly UserIconSetDto[] = () => [],
 ): Promise<ConfigPayload> {
-  return (await readConfigOnce(store, loadIconPacks)).payload;
+  return (await readConfigOnce(store, loadIconSets)).payload;
 }
 
 /**
@@ -120,7 +118,7 @@ export async function readConfigPayload(
  */
 export async function readConfigOnce(
   store: IConfigStore,
-  loadIconPacks: () => Promise<LoadedIconPack[]> = async () => [],
+  loadIconSets: () => readonly UserIconSetDto[] = () => [],
 ): Promise<ConfigReadResult> {
   // BEFORE the first read, so a write that commits from here on makes this payload provably stale.
   const generation = storeGeneration(store);
@@ -177,8 +175,8 @@ export async function readConfigOnce(
     { create: false }, // a settings-named theme that doesn't exist falls back to defaults, no stray file (#6)
   );
   const keybindings = await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
-  const iconPacks = await loadIconPacks();
-  return { payload: { settings, theme, keybindings, iconPacks, generation }, settingsUnreadable };
+  const iconSets = [...loadIconSets()];
+  return { payload: { settings, theme, keybindings, iconSets, generation }, settingsUnreadable };
 }
 
 /**
@@ -226,13 +224,13 @@ export function isSupersededPayload(store: IConfigStore, payload: ConfigPayload)
 export async function readConfigWithRetry(
   store: IConfigStore,
   policy: ConfigWatchPolicy = DEFAULT_CONFIG_WATCH_POLICY,
-  loadIconPacks?: () => Promise<LoadedIconPack[]>,
+  loadIconSets?: () => readonly UserIconSetDto[],
 ): Promise<ConfigReadResult> {
   const attempts = Math.max(1, policy.attempts);
-  let last = await readConfigOnce(store, loadIconPacks);
+  let last = await readConfigOnce(store, loadIconSets);
   for (let attempt = 1; attempt < attempts && last.settingsUnreadable; attempt += 1) {
     await delay(policy.intervalMs);
-    last = await readConfigOnce(store, loadIconPacks);
+    last = await readConfigOnce(store, loadIconSets);
   }
   if (last.settingsUnreadable) {
     // Said once per exhausted read, not once per attempt: the diagnostics log is where a user's
@@ -250,12 +248,12 @@ export function startConfigWatcher(deps: {
   watcher: IFileWatcher;
   config: IConfigSettings;
   broadcast: (payload: ConfigPayload) => void;
-  loadIconPacks?: () => Promise<LoadedIconPack[]>;
+  loadIconSets?: () => readonly UserIconSetDto[];
   /** Injected at the main composition root; defaults here so existing callers are unaffected. */
   policy?: ConfigWatchPolicy;
 }): Disposable {
   return deps.watcher.watch(deps.config.configRoot, () => {
-    void readConfigWithRetry(deps.store, deps.policy ?? DEFAULT_CONFIG_WATCH_POLICY, deps.loadIconPacks).then(
+    void readConfigWithRetry(deps.store, deps.policy ?? DEFAULT_CONFIG_WATCH_POLICY, deps.loadIconSets).then(
       (result) => {
         /*
          * Drop a read a write overtook (#341, #333).

@@ -215,7 +215,8 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
 
   if (syncScroll) {
     items.push({
-      label: syncScroll.on ? 'Synchronise Scrolling ✓' : 'Synchronise Scrolling',
+      label: 'Synchronise Scrolling',
+      checked: syncScroll.on,
       testId: 'menu-item-Synchronise Scrolling',
       icon: 'syncScroll',
       section: 'viewState',

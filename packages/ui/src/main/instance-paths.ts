@@ -9,7 +9,7 @@ import { basename, join } from 'node:path';
  * stake, and the last one is the destructive one:
  *
  *   - Electron `userData` — window-state.json, the editor recovery temps, fonts.json
- *   - the config root      — settings, keybindings, themes, icon packs
+ *   - the config root      — settings, keybindings, themes, icon sets
  *   - the SQLite database  — projects, layouts, per-document state
  *   - the daemon's PIPE    — an instance that finds a daemon on its pipe running a different
  *                            build RETIRES it (see `daemon-lifecycle.ensureDaemon`), which
