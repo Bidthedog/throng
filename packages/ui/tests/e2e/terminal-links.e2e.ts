@@ -500,7 +500,7 @@ test('a detected path is marked and a look-alike is marked too, a wrapped link i
        */
       await expect(win.locator('[data-testid^="terminal-status-link-readout-"]')).toHaveCount(0);
       expect(
-        await win.evaluate(() => document.querySelector('.terminal-panel')?.getAttribute('title') ?? ''),
+        await win.evaluate(() => (() => { const host = document.querySelector('.terminal-panel'); return host?.getAttribute('title') || host?.getAttribute('data-throng-title') || ''; })()),
       ).toBe('');
     });
   } finally {
@@ -634,7 +634,7 @@ test('with editor.links.detectInTerminals off, a program-declared OSC 8 hyperlin
             ),
             pointerHost: await term.evaluate((el) => el.classList.contains('terminal-link-pointer')),
             title: await win.evaluate(
-              () => document.querySelector('.terminal-panel')?.getAttribute('title') ?? '',
+              () => (() => { const host = document.querySelector('.terminal-panel'); return host?.getAttribute('title') || host?.getAttribute('data-throng-title') || ''; })(),
             ),
             readouts: await win.locator('[data-testid^="terminal-status-link-readout-"]').count(),
           };

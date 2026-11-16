@@ -2360,14 +2360,6 @@ textarea,
   z-index: 1000;
   min-width: 280px;
   max-width: 440px;
-  padding: 8px 10px;
-  background: var(--throng-colour-surfaceActive);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.4;
   pointer-events: none;
 }
 
@@ -2467,15 +2459,75 @@ textarea,
   position: fixed;
   z-index: 1000;
   max-width: 360px;
-  padding: 8px 10px;
-  background: var(--throng-colour-surfaceActive);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-  color: var(--text);
+  pointer-events: none;
+}
+
+/*
+ * --- One popup style (constitution v6.7.0, "One popup style") ------------
+ *
+ * Every tooltip, hover popover, hint, indicator and confirmation wears THIS class and no look of its own:
+ * colour, border, radius, padding, type, shadow and the fade are here once, and a surface's own rule says
+ * only where it sits and how wide it is. `packages/ui/tests/unit/popup-style.test.ts` fails the build for a
+ * popup rule that declares any of them. The colours are the three popup tokens, whose keys keep their 045
+ * `linkHint*` names so theme files written since then need no migration; each follows
+ * `surfaceActive` / `text` / `border` unless a theme sets it.
+ */
+:root {
+  --throng-popup-bg: var(--throng-colour-linkHintBackground, var(--throng-colour-surfaceActive));
+  --throng-popup-fg: var(--throng-colour-linkHintText, var(--throng-colour-text));
+  --throng-popup-border: var(--throng-colour-linkHintBorder, var(--throng-colour-border));
+  --throng-popup-radius: 6px;
+  --throng-popup-padding: 6px 10px;
+  --throng-popup-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  --throng-popup-fade-in: 120ms;
+  --throng-popup-fade-out: 180ms;
+}
+
+.throng-popup {
+  box-sizing: border-box;
+  padding: var(--throng-popup-padding);
+  border: 1px solid var(--throng-popup-border);
+  border-radius: var(--throng-popup-radius);
+  background: var(--throng-popup-bg);
+  box-shadow: var(--throng-popup-shadow);
+  color: var(--throng-popup-fg);
   font-size: 12px;
   line-height: 1.4;
+  animation: throng-popup-in var(--throng-popup-fade-in) ease-out;
+}
+
+/* The app's stand-in for the OS's own title tooltip (title-tooltips in common). A title may carry line breaks. */
+.title-tooltip {
+  position: fixed;
+  z-index: 2800;
+  max-width: 360px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
   pointer-events: none;
+}
+
+/* A popup leaving by itself (a confirmation, a hint) fades out; one closed by the user goes at once. */
+.throng-popup--leaving {
+  opacity: 0;
+  transition: opacity var(--throng-popup-fade-out) ease-in;
+}
+
+@keyframes throng-popup-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .throng-popup,
+  .throng-popup--leaving {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* FR-119 — a full-width rule between projects. */
@@ -2651,28 +2703,25 @@ textarea,
   height: 0;
 }
 
+/* Always mounted, so it fades by opacity rather than by the popup class's mount animation — at the popup's
+   own fade durations. */
 .zoom-indicator {
   position: absolute;
   top: 8px;
   right: 12px;
   z-index: 6;
-  padding: 3px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-raised);
-  color: var(--text);
-  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
   user-select: none;
+  animation: none;
   opacity: 0;
-  transition: opacity 900ms ease-in;
+  transition: opacity var(--throng-popup-fade-out) ease-in;
 }
 
 .zoom-indicator--shown {
   opacity: 1;
-  transition: opacity 150ms ease-out;
+  transition: opacity var(--throng-popup-fade-in) ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4613,7 +4662,6 @@ canvas.status-popover__plot {
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px);
   overflow: auto;
-  padding: 8px 12px 10px;
   pointer-events: auto;
 }
 

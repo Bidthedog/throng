@@ -30,7 +30,7 @@ export function ZoomIndicator({ percent, cue, testId }: ZoomIndicatorProps): Rea
     return () => clearTimeout(timer);
   }, [cue]);
   return (
-    <div className={`zoom-indicator${shown ? ' zoom-indicator--shown' : ''}`} data-testid={testId} aria-hidden="true">
+    <div className={`throng-popup zoom-indicator${shown ? ' zoom-indicator--shown' : ''}`} data-testid={testId} aria-hidden="true">
       {cue === 0 ? '' : `${Math.round(percent)}%`}
     </div>
   );

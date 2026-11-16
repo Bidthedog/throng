@@ -28,7 +28,7 @@ export function PlacePopover({
   return createPortal(
     <div
       ref={ref}
-      className="notification-place-popover"
+      className="throng-popup notification-place-popover"
       data-testid={testId}
       role="tooltip"
       style={{

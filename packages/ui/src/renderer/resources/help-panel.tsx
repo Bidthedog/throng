@@ -104,7 +104,7 @@ export function HelpPanel({ anchor, onClose }: HelpPanelProps): ReactElement {
   return (
     <div
       ref={ref}
-      className="monitor-help"
+      className="throng-popup monitor-help"
       data-testid="monitor-help-panel"
       role="dialog"
       aria-label="About the Resource Monitor"

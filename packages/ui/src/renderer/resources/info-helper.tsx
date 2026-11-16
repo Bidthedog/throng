@@ -72,7 +72,7 @@ function HelperPopover({ anchor, id, text, onClose }: { anchor: HTMLButtonElemen
     <div
       ref={ref}
       id={id}
-      className="info-helper-popover"
+      className="throng-popup info-helper-popover"
       data-testid="info-helper-popover"
       role="note"
       style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? 'visible' : 'hidden' }}

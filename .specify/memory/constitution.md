@@ -1,6 +1,32 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.6.0 → 6.7.0
+Bump rationale: MINOR — Principle VI gains "One popup style": every popup (tooltip, hover popover, hint, indicator,
+                confirmation) is drawn in one shared style, and the OS's own `title` tooltip is never shown. From the
+                maintainer's #637 manual testing (2026-11-16: "lots of title hover / popups with different styles;
+                they should all be consistent in style. This should be a constitution rule."). Additive guidance
+                within an existing principle; no guarantee is withdrawn. Existing code failed it — the ordinary MINOR
+                case — and the same change brings it into line.
+Modified principles: VI (new subsection after "Name the OS generically").
+Added sections: none. Removed sections: none.
+Audit (2026-11-16, at bdf6f8b1): thirteen floating surfaces in two style families — eight on `surfaceActive` with
+                radii of 4 or 6 px, paddings from 2px 8px to 8px 12px and four different shadows; two (the pending
+                chord, the preview's copy confirmation) on the status strip's colours with no shadow; the zoom
+                indicator on `sidebarBg`. Only the zoom indicator faded. About 290 controls (206 `title=` sites, 87
+                `IconButton`s) showed the OS's native tooltip. All fixed in the same change: `.throng-popup` in
+                `theme.css`, the title tooltip in `common/title-tooltips.tsx`, and
+                `packages/ui/tests/unit/popup-style.test.ts`. The link hint's three colour tokens (045 FR-165g) become
+                the popup tokens; their keys are unchanged, so no theme file needs migrating.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks registered.
+           ✅ .claude/skills/throng-renderer-ui/SKILL.md — reviewed; it lists floating-surface helpers to reuse and
+              names no popup style, so no change.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.5.0 → 6.6.0
 Bump rationale: MINOR — Principle II makes macOS a supported target and extends the v6.1.0 delivery rule to it: a
                 feature with per-OS code ships Windows, Linux and macOS together, each passing the shared contract.
@@ -2814,6 +2840,26 @@ copy that names one of them reads as wrong, or as a missing feature, on the othe
 - Code comments, logs, specs and developer documentation are not user-visible text and may
   name the OS they describe.
 
+**One popup style (v6.7.0).** A tooltip that looks one way over a tab, another over a button and
+a third over a status figure tells the user these are three kinds of thing when they are one.
+
+- A **popup** is any surface throng shows on hover or focus, or briefly after an action, and
+  takes away by itself: tooltips (every `title` included), hover popovers and cards, hints,
+  indicators, and confirmations. Menus, dialogs, pickers and notices are not popups; each keeps
+  its own shared style.
+- Every popup MUST be drawn in the **one popup style**: one background, text colour, border,
+  radius, padding, type size, shadow and fade, defined once (`.throng-popup` and its
+  `--throng-popup-*` values) from the theme's popup tokens. A popup's own rule says only where it
+  sits, how wide it may grow, how its text wraps and whether it takes the pointer.
+- The OS's own tooltip MUST NOT be shown: a `title` is drawn by throng's tooltip, in the popup
+  style, in every window.
+- `packages/ui/tests/unit/popup-style.test.ts` fails the build for a popup that restyles itself,
+  one whose root does not wear the shared class, or a window that stops mounting the tooltip. A
+  new popup is added to its list in the change that adds it.
+- Conforming since this version: the tab, attention, notification-place, resource status and
+  Resource Monitor help popovers, the whitespace marker name, the link hint, the pending-chord
+  and zoom indicators, the tree drag label, and the title tooltip.
+
 - The selected project's colour MUST be visually dominant so the active context
   is unambiguous at a glance.
 
@@ -3315,7 +3361,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-15
+**Version**: 6.7.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-16
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and

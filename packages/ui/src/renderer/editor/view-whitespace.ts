@@ -297,7 +297,7 @@ const hoverNamePlugin = ViewPlugin.fromClass(
       if (!this.target?.isConnected) return;
       const doc = this.view.dom.ownerDocument;
       const tip = doc.createElement('div');
-      tip.className = 'cm-ws-hover-name';
+      tip.className = 'throng-popup cm-ws-hover-name';
       tip.setAttribute('role', 'tooltip');
       tip.textContent = this.target.dataset.wsName ?? '';
       doc.body.appendChild(tip);

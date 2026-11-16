@@ -255,11 +255,6 @@ button.tree-twisty:focus-visible {
 .tree-drag-label {
   position: fixed;
   z-index: 2000;
-  padding: 2px 8px;
-  background: var(--throng-colour-surfaceActive);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 12px;
   pointer-events: none;
 }
 

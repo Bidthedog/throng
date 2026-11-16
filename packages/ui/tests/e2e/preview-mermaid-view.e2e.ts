@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp } from './harness.js';
+import { byTitle } from './helpers/titles.js';
 
 const FLOW = 'graph TD\n  Start[Begin here] --> Finish[Done]\n';
 /** Twelve long labels in a row: far wider than any panel, so Fit must shrink it below the readable floor. */
@@ -113,7 +114,7 @@ test('B1: Fit on a wide diagram fits both extents inside the viewport, with no h
   const win = shared!.win;
   const id = await previewFromTree(win, 'wide.mmd');
   const frame = await drawnFrame(win, id);
-  await frame.getByTitle('Fit diagram').click();
+  await byTitle(frame, 'Fit diagram').click();
   await expect(frame).toHaveAttribute('data-mode', 'fit');
 
   const m = await frame.evaluate((el) => {
@@ -154,7 +155,7 @@ test('B2: a maximised diagram fills the whole middle section, as a layer above e
   // An inline diagram: a standalone `.mmd` maximises from its panel header only.
   const id = await previewFromEditor(win, 'max.md', 'Max doc');
   const frame = await drawnFrame(win, id);
-  await frame.getByTitle('Maximise').click();
+  await byTitle(frame, 'Maximise').click();
 
   const layer = win.getByTestId('maximise-layer');
   await expect(layer).toBeVisible();
@@ -182,7 +183,7 @@ test('B2: a maximised diagram fills the whole middle section, as a layer above e
   // The whole drawing is shown (not its top half).
   expect(svg!.bottom, 'the drawing’s bottom against the viewport’s').toBeLessThanOrEqual(viewport!.bottom + 1);
 
-  await layer.getByTitle('Minimise').click();
+  await byTitle(layer, 'Minimise').click();
   await expect(layer).toHaveCount(0);
 });
 
@@ -195,7 +196,7 @@ test('B3: a maximised diagram sits above an open find bar, which stays open', { 
   const bar = win.getByTestId(`find-bar-${id}`);
   await expect(bar).toBeVisible();
 
-  await frame.getByTitle('Maximise').click();
+  await byTitle(frame, 'Maximise').click();
   const layer = win.getByTestId('maximise-layer');
   await expect(layer).toBeVisible();
 
@@ -222,7 +223,7 @@ test('B3: a maximised diagram sits above an open find bar, which stays open', { 
   expect(top.inBar, `the find bar is the topmost element at its own centre (topmost: ${top.what})`).toBe(false);
   expect(top.inLayer, `the maximised diagram’s layer is the topmost element there (topmost: ${top.what})`).toBe(true);
 
-  await layer.getByTitle('Minimise').click();
+  await byTitle(layer, 'Minimise').click();
   await win.keyboard.press('Escape');
 });
 
@@ -242,7 +243,7 @@ test('B6: a maximised inline diagram covers its preview’s status bar', { tag: 
   const strip = win.getByTestId(`preview-status-bar-${id}`);
   await expect(strip).toBeVisible();
 
-  await frame.getByTitle('Maximise').click();
+  await byTitle(frame, 'Maximise').click();
   const layer = win.getByTestId('maximise-layer');
   await expect(layer).toBeVisible();
   const box = await strip.boundingBox();
@@ -251,7 +252,7 @@ test('B6: a maximised inline diagram covers its preview’s status bar', { tag: 
   expect(top.inTarget, 'the preview’s status bar is the topmost element at its own centre').toBe(false);
   expect(top.inLayer, 'the maximised diagram’s layer is the topmost element there').toBe(true);
 
-  await layer.getByTitle('Minimise').click();
+  await byTitle(layer, 'Minimise').click();
 });
 
 test('B7: collapsing a heading hides the diagram in its region with the rest of it', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
@@ -313,7 +314,7 @@ async function ringThickness(app: OpenApp['app'], panel: Locator, panelId: strin
  * under whatever border runs down that edge; the node's centre line, in window coordinates.
  */
 async function nodeOntoLeftEdge(win: Page, frame: Locator, edgeOf: Locator): Promise<number> {
-  for (let i = 0; i < 3; i += 1) await frame.getByTitle('Zoom in').first().click();
+  for (let i = 0; i < 3; i += 1) await byTitle(frame, 'Zoom in').first().click();
   const node = frame.locator('svg .node').first();
   const n = await node.boundingBox();
   const edge = await edgeOf.boundingBox();
@@ -347,8 +348,8 @@ test('B8: focus borders paint above a zoomed diagram — a .mmd preview’s pane
   const panel = win.getByTestId(`panel-${id}`);
   await panel.getByTestId(`panel-title-${id}`).click();
   await expect(panel).toHaveClass(/panel-box--active/);
-  const byTitle = await ringThickness(app, panel, id);
-  expect(byTitle.body, `a .mmd preview's ring beside its body matches its title's — ${byTitle.detail}`).toBe(byTitle.title);
+  const rings = await ringThickness(app, panel, id);
+  expect(rings.body, `a .mmd preview's ring beside its body matches its title's — ${rings.detail}`).toBe(rings.title);
   await frame.locator('.preview-diagram-frame__viewport').click();
   const byDiagram = await ringThickness(app, panel, id);
   expect(byDiagram.body, `with its diagram clicked, still one ring — ${byDiagram.detail}`).toBe(byDiagram.title);
@@ -376,7 +377,7 @@ test('B8: focus borders paint above a zoomed diagram — a .mmd preview’s pane
   )
     .slice(0, 3)
     .map(Number) as [number, number, number];
-  await mdFrame.getByTitle('Maximise').click();
+  await byTitle(mdFrame, 'Maximise').click();
   const pane = win.getByTestId('maximise-layer').locator('.preview-diagram-frame--in-pane');
   await expect(pane.locator('svg').first()).toBeVisible();
   const paneY = await nodeOntoLeftEdge(win, pane, pane);
@@ -397,8 +398,8 @@ test('B9: Ctrl+middle-click on a diagram resets it to Fit and never starts a pan
     const frame = await drawnFrame(win, await open());
     const viewport = frame.locator('.preview-diagram-frame__viewport');
     await viewport.click();
-    await frame.getByTitle('Zoom in').click();
-    await frame.getByTitle('Zoom in').click();
+    await byTitle(frame, 'Zoom in').click();
+    await byTitle(frame, 'Zoom in').click();
     await expect(frame).toHaveAttribute('data-mode', 'zoom');
     const v = await viewport.boundingBox();
     await win.keyboard.down('Control');

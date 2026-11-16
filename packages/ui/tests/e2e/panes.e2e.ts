@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openApp, createProject, settle, geom, viewport, type OpenApp } from './harness.js';
+import { openApp, createProject, firstPanelId, settle, geom, viewport, type OpenApp } from './harness.js';
+import { titleOf } from './helpers/titles.js';
 
 // FR #3: the collapse control lives next to the pane title (no permanent rail
 // strip when expanded); when collapsed, only the rail remains and the button
@@ -144,13 +145,13 @@ test('right pane: rail only while collapsed; expand reveals the explorer', { tag
   // 046 FR-001 — the rail names the pane, and its own button explains the gesture; neither still
   // says "Files & Folders" (app.tsx :1003/:1012).
   await expect(win.getByTestId('pane-rail-right')).toHaveText('File Explorer & Notifications'); // 068 FR-068
-  await expect(win.getByTestId('pane-show-right')).toHaveAttribute('title', 'Show File Explorer');
+  await expect.poll(() => titleOf(win.getByTestId('pane-show-right'))).toBe('Show File Explorer');
   const collapsed = await buttonGeom(win, 'pane-show-right', 'right');
 
   await win.getByTestId('pane-show-right').click();
   await expect(win.getByTestId('file-explorer-empty')).toBeVisible();
   await expect(win.getByTestId('pane-rail-right')).toHaveCount(0);
-  await expect(win.getByTestId('pane-hide-right')).toHaveAttribute('title', 'Hide File Explorer');
+  await expect.poll(() => titleOf(win.getByTestId('pane-hide-right'))).toBe('Hide File Explorer');
   const expanded = await buttonGeom(win, 'pane-hide-right', 'right');
   approxSame(collapsed, expanded);
 });
@@ -213,4 +214,87 @@ test('the three pane headers share a bottom border line (#6); resize handles dra
   expect(await beforeBg(win, '[data-testid="explorer-resize"]')).toBe('rgba(0, 0, 0, 0)');
   // The explorer handle keeps its 6px hit area (spacing unchanged).
   expect(Math.round(await widthOf(win, '[data-testid="explorer-resize"]'))).toBe(6);
+});
+
+/*
+ * #635 (054 FR-074a) — the wiring in `app.tsx`: Focus Mode collapses both panes, a toggle during it shows a pane
+ * for that Focus Mode only, and exit restores each pane's ENTRY state. The rule's whole truth table (per tab,
+ * diagram sections, nothing stored) is `component/focus-mode-panes.test.ts`; `App` is not mountable there, so
+ * this one case proves the real window routes its toggles through it.
+ *
+ * Runs AFTER the pane-header test on purpose: it needs that test's active project for a panel to maximise.
+ */
+test('Focus Mode collapses both side panes and restores each to its entry state on exit (#635)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+  const win = shared.win;
+  await settle(win);
+  await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
+  const panel = await firstPanelId(win);
+  // Entry state: Projects expanded, File Explorer collapsed.
+  await expect(win.getByTestId('pane-hide-left')).toBeVisible();
+  await win.getByTestId('pane-hide-right').click();
+  await expect(win.getByTestId('pane-rail-right')).toBeVisible();
+  try {
+    await win.getByTestId(`panel-maximise-${panel}`).click();
+    await expect(win.getByTestId('tab-body')).toHaveAttribute('data-maximised', panel);
+    await expect(win.getByTestId('pane-rail-left')).toBeVisible();
+    await expect(win.getByTestId('pane-rail-right')).toBeVisible();
+
+    // Shown during Focus Mode by its own toggle: for this Focus Mode only.
+    await win.getByTestId('pane-show-right').click();
+    await expect(win.getByTestId('pane-rail-right')).toHaveCount(0);
+
+    await win.getByTestId(`panel-maximise-${panel}`).click();
+    await expect(win.getByTestId('tab-body')).not.toHaveAttribute('data-maximised', /.*/);
+    await expect(win.getByTestId('pane-hide-left')).toBeVisible();
+    await expect(win.getByTestId('pane-rail-right')).toBeVisible();
+  } finally {
+    if ((await win.getByTestId('tab-body').getAttribute('data-maximised')) !== null) await win.keyboard.press('Escape');
+    if ((await win.getByTestId('pane-show-right').count()) > 0) await win.getByTestId('pane-show-right').click();
+  }
+});
+
+/*
+ * Constitution v6.7.0 (#637 manual testing, 2026-11-16) — hovering a control inside a titled header (a panel's icon or
+ * its Back / Forward, inside the header titled with the panel's name or path) showed TWO tooltips: the app's for the
+ * control, and the OS's for the header beneath it. The OS draws the nearest element that has a `title` attribute, so
+ * while the app draws a control's title that control must keep an empty one. Back / Forward are DISABLED most of the
+ * time, and whether the window even delivers pointer events to a disabled button is a question only a real Chromium
+ * answers — which is why this is here and not only in `component/title-tooltips.test.ts`.
+ */
+test('a control inside a titled panel header shows only its own tooltip, enabled or disabled (#637)', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
+  const win = shared.win;
+  await settle(win);
+  const panel = await firstPanelId(win);
+  const header = win.getByTestId(`panel-handle-${panel}`);
+  await expect.poll(() => titleOf(header)).not.toBe('');
+  // Stand-ins for Back (a disabled icon button) and the type icon (a titled span), in the real header.
+  await header.evaluate((el) => {
+    const back = document.createElement('button');
+    back.disabled = true;
+    back.title = 'Back (Alt+Left)';
+    back.textContent = '<';
+    back.dataset.testid = 'probe-disabled';
+    const icon = document.createElement('span');
+    icon.title = 'Panel type: Editor';
+    icon.textContent = '#';
+    icon.dataset.testid = 'probe-icon';
+    el.prepend(back, icon);
+  });
+  try {
+    for (const [id, text] of [
+      ['probe-disabled', 'Back (Alt+Left)'],
+      ['probe-icon', 'Panel type: Editor'],
+    ] as const) {
+      const control = win.getByTestId(id);
+      await control.hover();
+      const tip = win.getByTestId('title-tooltip');
+      await expect(tip).toHaveText(text);
+      // What the OS would draw here: the nearest title attribute, which must be the control's own, emptied.
+      expect(await control.evaluate((el) => el.closest('[title]')?.getAttribute('title') ?? null), id).toBe('');
+      await win.mouse.move(1, 1);
+      await expect(tip).toHaveCount(0);
+    }
+  } finally {
+    await header.evaluate((el) => el.querySelectorAll('[data-testid^="probe-"]').forEach((p) => p.remove()));
+  }
 });
