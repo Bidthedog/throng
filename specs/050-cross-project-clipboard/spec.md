@@ -166,7 +166,9 @@ onto a project in the project list."
   option — and the animated state while sizing are derived; a one-item paste would otherwise sit at 0% until it
   ends.)*
 - Q: How does the progress notice offer Cancel? → A: **A dedicated themed cancel icon**, not the X that means
-  dismiss, aligned to the right and set apart from the text, with the hover title "Cancel paste" (FR-039). The
+  dismiss, aligned to the right and set apart from the text, with the hover title "Cancel paste" (FR-039).
+  *(Placement superseded by 069 FR-050, 2026-11-16: Cancel is the first control of the card's top-right
+  group, to the left of Copy, rather than a slot at the end of its body.)* The
   user chose this over a text button, which the constitution's icon-control rule forbids outside a dialog.
 - Q: What does a file dropped on + open as? → A: **Whatever its default open action names** — a Markdown file
   with Preview as its default opens as a preview, exactly as a drop on an empty panel does (047 FR-077) — in the
