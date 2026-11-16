@@ -132,7 +132,20 @@ What makes this one worth its own entry:
   layout to land. Every extra hop between the click and the read shrinks the failure rate without
   closing anything, which is exactly why the flake presented as rare and load-dependent.
 
-The general form, across all three: **ask what writes the thing you are about to read, and wait on
+Two later instances, both red only on a loaded hosted Mac:
+
+- **A one-shot look is a read too.** `notifications-panel.e2e.ts` asked `count()` of the pane's show
+  control once, straight after `.throng-shell` was visible — and the shell is visible before its panes
+  render, so the count was 0, nothing was clicked, and the pane then rendered collapsed. `if ((await
+  x.count()) > 0) await x.click()` is a read with no wait at all; retry the whole decide-and-act step
+  with `expect(…).toPass()` until the state it is after holds.
+- **A click on a disabled button does nothing, silently.** `terminal-admin-default-gate.test.ts` chose
+  Terminal before the form's flavour list had loaded, so the type seeded no flavour, Confirm stayed
+  disabled, and the click was dropped — reported as `expected undefined to be 'terminal'`, a panel that
+  never appeared. The stub now answers on a later macrotask so the race is lost every run without the
+  wait, and the test asserts Confirm is enabled before clicking it.
+
+The general form, across all of them: **ask what writes the thing you are about to read, and wait on
 something that cannot be true before that write has happened.** "Near it", "usually after it", and
 "set when the work was requested" are all the same bug.
 
@@ -184,10 +197,11 @@ are both saying "this is the state" while holding no evidence for it.
 ## On macOS, a watch just opened cannot see the first change
 
 **A test that opens a watch and then changes what it watches awaits `watchStarted()` in between**
-(`packages/ui/tests/integration/helpers/watch-started.ts`). libuv runs one FSEvents stream per process, rebuilds
+(`@throng/core/testing`, so the shared `IFileWatcher` contract uses it too). libuv runs one FSEvents stream per process, rebuilds
 it each time a watch is added, and starts it on its own thread after `fs.watch` has returned. A change made in that
 gap is never reported, and the gap grows under the gate's load: the editor, preferences and explorer watch tests
-went red on the hosted Macs this way, one by one, each passing on Windows and Linux. It is a fixed wait because nothing observable says the
+went red on the hosted Macs this way, one by one, each passing on Windows and Linux — and later the contract's own
+"stops firing after dispose", which touched a file on the line after `watch()`. It is a fixed wait because nothing observable says the
 stream has started; the helper is a no-op elsewhere.
 
 Two neighbours of the same cause:
