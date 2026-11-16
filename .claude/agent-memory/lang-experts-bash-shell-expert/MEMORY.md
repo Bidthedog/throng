@@ -1,0 +1,1 @@
+- [Shell platform landmines](shell-platform-landmines.md) — bash 3.2 on macOS runners, empty arrays under set -u, BSD ps comm with spaces

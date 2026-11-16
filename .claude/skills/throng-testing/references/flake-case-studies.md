@@ -1,6 +1,6 @@
 # Flake case studies: waiting on the wrong signal, and an app that says something untrue
 
-Read when a waited-for value comes back empty or stale, when a flake vanishes under instrumentation, or when a terminal spec asserts on DEC private modes.
+Read when a waited-for value comes back empty or stale, when a flake vanishes under instrumentation, when a watch test misses a change on macOS, or when a terminal spec asserts on DEC private modes.
 
 Part of the `throng-testing` skill; the contributor overview is [`docs/testing.md`](../../../../docs/testing.md).
 
@@ -180,6 +180,23 @@ before, **1 / 14** after the first fix, **0 / 16** after the second — then a f
 The general form of *these* two: **ask whether the thing telling you is entitled to be believed.**
 A payload with no notion of when it was true, and a window with no notion of what it opened with,
 are both saying "this is the state" while holding no evidence for it.
+
+## On macOS, a watch just opened cannot see the first change
+
+**A test that opens a watch and then changes what it watches awaits `watchStarted()` in between**
+(`packages/ui/tests/integration/helpers/watch-started.ts`). libuv runs one FSEvents stream per process, rebuilds
+it each time a watch is added, and starts it on its own thread after `fs.watch` has returned. A change made in that
+gap is never reported, and the gap grows under the gate's load: the editor, preferences and explorer watch tests
+went red on the hosted Macs this way, one by one, each passing on Windows and Linux. It is a fixed wait because nothing observable says the
+stream has started; the helper is a no-op elsewhere.
+
+Two neighbours of the same cause:
+
+- **Events about the watched folder itself are dropped.** A folder renamed away and back is noticed only through
+  `node-file-watcher.ts`'s stat poll of the root (`ROOT_POLL_MS`), so a test of that waits for the poll, not for
+  an event.
+- **A burst of setup writes keeps arriving after the watch opens.** A test that counts events, or measures what
+  a change costs, lets the setup's own events drain first (`file-index-change-cost`).
 
 ## A terminal test that asserts on DEC private modes must use `windows-powershell`
 

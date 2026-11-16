@@ -408,6 +408,9 @@ The jobs, each gating the next (`needs` in brackets):
 4a. **Build the Linux packages** `build-linux` [e2e-full] and **Verify `deb`/`rpm`/`tarball`** `verify-linux` ×3 —
    on `ubuntu-22.04` and `ubuntu-24.04`, the `.rpm` in a Fedora container. `render-body` and `publish` need both.
    Detail: [references/verification.md](references/verification.md#linux).
+4b. **Build the macOS copies** `build-macos` [e2e-full] and **Verify `dmg`/`macarchive`** `verify-macos` ×4 — each
+   copy on both runners in `.github/macos-runners.json` (current and previous macOS). `render-body` and `publish`
+   need both. Detail: [references/verification.md](references/verification.md#macos).
 4. **Verify `<combination>`** `verify-installer` ×6 [build-installer, combinations] — one fresh runner
    per combination, `fail-fast: false`, 40-minute timeout. Each installs (or extracts, or unpacks),
    launches, version-checks, journey-tests (project → terminal → reopen → reattach), checksums and
