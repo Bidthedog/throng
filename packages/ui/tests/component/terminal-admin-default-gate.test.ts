@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -75,20 +75,33 @@ const FLAVOURS = [
  * `guardedSettingsValidator` in the store, so this partial document is merged over the shipped
  * defaults exactly as a real `settings.json` would be.
  */
+const served: { flavours: Promise<unknown> | null; settings: Promise<unknown> | null } = {
+  flavours: null,
+  settings: null,
+};
+
+/**
+ * Answer on a later macrotask, as a real preload does: the form mounts on an empty flavour list and
+ * on the shipped settings, and only a test that waits for both to land chooses its type from them.
+ */
+function later<T>(value: T): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(value), 20));
+}
+
 function stubBridge(list: typeof FLAVOURS = FLAVOURS): void {
   Reflect.set(window, 'throng', {
     terminal: {
-      listFlavours: () => Promise.resolve(list),
+      listFlavours: () => (served.flavours = later(list)),
       capabilities: () => Promise.resolve({ elevated: false }),
     },
     config: {
       get: () =>
-        Promise.resolve({
+        (served.settings = later({
           settings: {
             ...DEFAULT_APP_SETTINGS,
             terminals: { ...DEFAULT_APP_SETTINGS.terminals, defaultRunAsAdmin: true },
           },
-        }),
+        })),
       onChange: () => () => {},
     },
     panel: {},
@@ -168,13 +181,22 @@ function mount(): { user: ReturnType<typeof userEvent.setup> } {
 /**
  * Open the form and choose Terminal, which is the gesture that SEEDS the values.
  *
- * The wait for the settings to arrive is not decoration: `ConfigProvider` starts on the shipped
- * defaults and adopts `config.get`'s payload a tick later, so selecting the type before that lands
- * would seed from `defaultRunAsAdmin: false` and the test would pass for the wrong reason.
+ * Choosing the type seeds from whatever has landed by then, so both waits are load-bearing.
+ * `ConfigProvider` starts on the shipped defaults: selecting before `config.get` lands seeds
+ * `defaultRunAsAdmin: false` and the first test passes for the wrong reason. The form starts on an
+ * empty flavour list: selecting before `listFlavours` lands seeds no flavour, Confirm stays disabled,
+ * and the second test's click does nothing — which is how it failed on a loaded macOS runner.
  */
 async function openTerminalForm(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await waitFor(() => expect(captured.ws?.layout).toBeTruthy());
   const select = await screen.findByTestId(`panel-type-select-${PANEL}`);
+  await waitFor(() => {
+    expect(served.flavours).not.toBeNull();
+    expect(served.settings).not.toBeNull();
+  });
+  await act(async () => {
+    await Promise.all([served.flavours, served.settings]);
+  });
   await user.selectOptions(select, 'terminal');
   await screen.findByTestId('terminal-flavour');
 }
@@ -184,6 +206,8 @@ const panelIn = (ws: Ws): Panel =>
 
 beforeEach(() => {
   captured.ws = null;
+  served.flavours = null;
+  served.settings = null;
   stubBridge();
 });
 
@@ -208,7 +232,10 @@ describe('the "Run as administrator" preference is a seed, not a grant (039 FR-0
     const { user } = mount();
     await openTerminalForm(user);
 
-    await user.click(screen.getByTestId(`panel-type-confirm-${PANEL}`));
+    // A click on a disabled Confirm is silently ignored; say so here rather than as a missing panel.
+    const confirm = screen.getByTestId(`panel-type-confirm-${PANEL}`);
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
 
     await waitFor(() => expect(panelIn(captured.ws as Ws).kind).toBe('terminal'));
     // The value that reaches the daemon. A persisted `true` here is worse than a cosmetic lie: it
