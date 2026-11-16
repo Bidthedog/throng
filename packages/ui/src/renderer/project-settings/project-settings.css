@@ -1,12 +1,19 @@
 /* 018 / US8 — the project settings dialog. Themed ENTIRELY from theme tokens (FR-044): every colour
    here is a var, and the guard in no-inline-artwork.test.ts walks this file to make sure it stays
    that way. It reuses the shared `.modal` / `.modal-overlay` chrome, so it inherits the dialog
-   surface, radius and shadow rather than inventing a second dialog look. */
+   surface, radius and shadow rather than inventing a second dialog look.
 
-/* FR-036 — the dialog is capped to the viewport and is a column: the title and Close keep their size,
-   the sections share the rest, and each LIST scrolls inside its own box. Nothing a long list does can
-   push Close out of reach. */
+   069 FR-054 (#638) — its buttons, headings and field are the shared `.icon-button`, `.section-heading`
+   and `.field` (theme.css), as in every other window. What is here is the dialog's own layout: one
+   right-hand column holds every button, so the Preferences shortcut, the add button and each row's
+   remove sit under one another, and each section is set apart in its own box. */
+
+/* The width every button in the dialog takes, and so the width of the right-hand column. */
 .project-settings {
+  --ps-button: 24px;
+  /* The list keeps its scrollbar's gutter whether or not it scrolls (`scrollbar-gutter: stable`), so a
+     row's remove button sits this far in from the box's edge; every other row is inset the same. */
+  --ps-gutter: var(--throng-size-scrollbar, 12px);
   min-width: 30rem;
   max-width: 44rem;
   max-height: calc(100vh - 4rem);
@@ -15,21 +22,35 @@
   box-sizing: border-box;
 }
 
+.project-settings .icon-button {
+  width: var(--ps-button);
+  min-width: var(--ps-button);
+  padding: 0;
+}
+
+/* FR-036 — the sections share what is left of the viewport, each LIST scrolls inside its own box, and
+   nothing a long list does can push the title's ✕ out of reach. */
 .project-settings__sections {
   display: flex;
   flex-direction: column;
+  gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  margin-top: 12px;
 }
 
-/* Sized by its CONTENT and allowed only to shrink. A zero basis (`flex: 1 1 0`) let Chromium size the
-   uncapped column from zero, and the sections' `overflow: hidden` then hid both sections whole. */
+/* Each section in a box of its own. Sized by its CONTENT and allowed only to shrink: a zero basis let
+   Chromium size the uncapped column from zero, and the sections' `overflow: hidden` hid both whole. */
 .project-settings__group {
   display: flex;
   flex-direction: column;
+  gap: 8px;
   flex: 0 1 auto;
   min-height: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 /* 060 FR-044 — the title and its dismiss ✕ on one row. */
@@ -37,67 +58,49 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .project-settings__header .modal__title {
   margin: 0;
 }
 
-/* A section heading and its shortcut to the global list in Preferences, on one row. */
+/* A section heading and its shortcut to the global list in Preferences: the shortcut in the button column. */
 .project-settings__section-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr var(--ps-button);
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin: 1rem 0 0.35rem;
+  column-gap: 8px;
+  padding-right: var(--ps-gutter);
 }
 
-.project-settings__section-head .project-settings__section {
-  margin: 0;
-}
-
-/* The same inline padding as a list row (`.hidden-path`), so a row's remove ✕ sits under the ＋. */
+/* The add row: the field, then its button in the column. */
 .project-settings__add {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr var(--ps-button);
   align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.35rem;
-  padding: 0 0.4rem;
+  column-gap: 8px;
+  padding-right: var(--ps-gutter);
 }
 
 .project-settings__add-input {
-  flex: 1 1 auto;
   min-width: 0;
-  padding: 2px 6px;
-  font: inherit;
-  color: var(--text);
-  background: var(--throng-colour-surfaceActive);
-  border: 1px solid var(--border);
-  border-radius: 3px;
 }
 
 .project-settings__notice {
-  margin: 0 0 0.35rem;
+  margin: 0;
   padding: 3px 6px;
-  font-size: 0.8rem;
+  font-size: 12px;
   color: var(--text);
   background: var(--throng-colour-surfaceActive);
   border-left: 3px solid var(--throng-colour-warning);
   border-radius: 2px;
 }
 
-.project-settings__section {
-  margin: 1rem 0 0.35rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
 .project-settings__empty {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: 12px;
 }
 
 .project-settings__list {
@@ -110,15 +113,16 @@
   flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .hidden-path,
 .search-exclude {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr var(--ps-button);
   align-items: center;
-  column-gap: 0.5rem;
-  padding: 0.3rem 0.4rem;
+  column-gap: 8px;
+  padding: 2px 0 2px 6px;
   border-radius: 4px;
 }
 
@@ -128,8 +132,8 @@
 }
 
 .hidden-path__path {
-  font-family: var(--throng-font-editor-family, "Consolas, 'Courier New', monospace");
-  font-size: 0.85rem;
+  font-family: var(--throng-font-editor-family, monospace);
+  font-size: 12px;
   color: var(--text);
   overflow-wrap: anywhere;
 }
@@ -137,7 +141,7 @@
 /* The note wraps under the path and spans only the first column, so the remove control stays put. */
 .hidden-path__note {
   grid-column: 1;
-  font-size: 0.75rem;
+  font-size: 11px;
   color: var(--text-dim);
 }
 
@@ -148,13 +152,26 @@
   font-style: italic;
 }
 
+/* 069 FR-053 (#638) — the global list that applies as well: its description, then the list itself on a
+   line of its own in smaller text. */
 .project-settings__globals {
-  margin: 0.9rem 0 0;
-  font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.project-settings__globals-desc {
+  margin: 0;
+  font-size: 12px;
   color: var(--text-dim);
 }
 
 .project-settings__globs {
-  font-family: var(--throng-font-editor-family, "Consolas, 'Courier New', monospace");
+  margin: 0;
+  font-family: var(--throng-font-editor-family, monospace);
+  font-size: 11px;
   color: var(--text);
+  overflow-wrap: anywhere;
 }

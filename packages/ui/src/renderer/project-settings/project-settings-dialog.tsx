@@ -77,7 +77,7 @@ function AddRow({
     <div className="project-settings__add">
       <input
         type="text"
-        className="project-settings__add-input"
+        className="field project-settings__add-input"
         data-testid={inputTestId}
         value={text}
         placeholder={placeholder}
@@ -94,7 +94,7 @@ function AddRow({
       />
       <IconButton
         token="add"
-        className="project-settings__add-button"
+        className="icon-button project-settings__add-button"
         testId={buttonTestId}
         title={addTitle}
         onClick={submit}
@@ -160,12 +160,12 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
   };
 
   /*
-   * 060 FR-044 — each section's way to its GLOBAL list. Preferences opens at its Settings tab only:
-   * nothing yet opens it at one setting, and building that is more than this shortcut is worth.
+   * 060 FR-044 — each section's way to its GLOBAL list. 069 FR-053 (#638): Preferences opens at that very
+   * setting, its section unfolded and the setting scrolled into view.
    */
-  const editGlobalList = (): void => {
+  const editGlobalList = (key: 'explorer.excludeGlobs' | 'search.inFiles.excludeGlobs'): void => {
     onClose();
-    window.throng?.openPreferences?.('settings');
+    window.throng?.openPreferences?.('settings', key);
   };
 
   const excludeFromSearch = (text: string): boolean => {
@@ -205,7 +205,7 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
           </h3>
           <IconButton
             token="dismiss"
-            className="project-settings__close"
+            className="icon-button project-settings__close"
             testId="project-settings-close"
             title="Close project settings"
             onClick={onClose}
@@ -217,13 +217,13 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
         <div className="project-settings__sections">
           <section className="project-settings__group" data-testid="project-settings-explorer">
             <div className="project-settings__section-head">
-              <h4 className="project-settings__section">Hidden in File Explorer</h4>
+              <h4 className="section-heading project-settings__section">Hidden in File Explorer</h4>
               <IconButton
                 token="settings"
-                className="project-settings__prefs"
+                className="icon-button project-settings__prefs"
                 testId="project-settings-explorer-prefs"
                 title="Edit the File Explorer’s excluded globs in Preferences"
-                onClick={editGlobalList}
+                onClick={() => editGlobalList('explorer.excludeGlobs')}
               />
             </div>
             <AddRow
@@ -263,7 +263,7 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
                           hover. */}
                       <IconButton
                         token="destroy"
-                        className="hidden-path__remove"
+                        className="icon-button hidden-path__remove"
                         testId={`hidden-path-remove-${path}`}
                         title={`Stop hiding ${path}`}
                         onClick={() => unhide(path)}
@@ -276,21 +276,22 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
             {/* FR-047 — the hidden list is NOT the whole story. Two independent filters are at work,
                 and a user who believes this list is exhaustive will not understand why a file they
                 never hid is still missing. */}
-            <p className="project-settings__globals" data-testid="project-settings-globals">
-              The global exclusions in Preferences apply as well, to every project:{' '}
-              <span className="project-settings__globs">{globs.join(', ') || 'none'}</span>
-            </p>
+            {/* 069 FR-053 (#638): the description, then the list on its own line in smaller text. */}
+            <div className="project-settings__globals" data-testid="project-settings-globals">
+              <p className="project-settings__globals-desc">The global exclusions in Preferences apply as well, to every project:</p>
+              <p className="project-settings__globs">{globs.join(', ') || 'none'}</p>
+            </div>
           </section>
 
           <section className="project-settings__group" data-testid="project-settings-search">
             <div className="project-settings__section-head">
-              <h4 className="project-settings__section">Hidden to Find &amp; Replace</h4>
+              <h4 className="section-heading project-settings__section">Hidden to Find &amp; Replace</h4>
               <IconButton
                 token="settings"
-                className="project-settings__prefs"
+                className="icon-button project-settings__prefs"
                 testId="project-settings-search-prefs"
                 title="Edit the search exclusion list in Preferences"
-                onClick={editGlobalList}
+                onClick={() => editGlobalList('search.inFiles.excludeGlobs')}
               />
             </div>
             <AddRow
@@ -318,7 +319,7 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
                     <span className="hidden-path__path">{glob}</span>
                     <IconButton
                       token="destroy"
-                      className="hidden-path__remove"
+                      className="icon-button hidden-path__remove"
                       testId={`search-exclude-remove-${glob}`}
                       title={`Stop hiding ${glob} from Find in Files`}
                       onClick={() => unexcludeFromSearch(glob)}
@@ -327,10 +328,10 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
                 ))}
               </ul>
             )}
-            <p className="project-settings__globals" data-testid="project-settings-search-globals">
-              The search exclusion list in Preferences applies as well, to every project:{' '}
-              <span className="project-settings__globs">{searchGlobs.join(', ') || 'none'}</span>
-            </p>
+            <div className="project-settings__globals" data-testid="project-settings-search-globals">
+              <p className="project-settings__globals-desc">The search exclusion list in Preferences applies as well, to every project:</p>
+              <p className="project-settings__globs">{searchGlobs.join(', ') || 'none'}</p>
+            </div>
           </section>
         </div>
       </div>
