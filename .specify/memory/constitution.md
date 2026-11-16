@@ -1,6 +1,27 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.7.0 → 6.8.0
+Bump rationale: MINOR — the "Action controls" quality gate gains "Toast controls": every button a notice offers
+                sits in the card's one control group at its top-right, to the left of Copy and Dismiss, never in
+                the notice's content. From the maintainer's spec 069 review (2026-11-16). Additive guidance within
+                an existing gate; no guarantee is withdrawn.
+Modified sections: Development Workflow & Quality Gates › Action controls (new "Toast controls" sub-rule).
+Added sections: none. Removed sections: none.
+Audit (2026-11-16): four notices put their button in `body` — the icon set backups notice (Open folder), the
+                installed-version notice (Restart), the paste progress card (Cancel, 050 FR-039) and the throng
+                command notice (Install, 070). All four move to `controls` in spec 069 (FR-050), and `packages/ui/tests/unit/toast-controls-guard.test.ts`
+                fails the build for a button passed in a notice's body. The attention toast's go-to-panel (057
+                FR-122) and the Notifications panel's entries already comply.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks registered.
+           ✅ .claude/skills/throng-failure-notices/SKILL.md — reviewed; it describes notice content and
+              de-duplication, not control placement, so no change.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.6.0 → 6.7.0
 Bump rationale: MINOR — Principle VI gains "One popup style": every popup (tooltip, hover popover, hint, indicator,
                 confirmation) is drawn in one shared style, and the OS's own `title` tooltip is never shown. From the
@@ -3327,6 +3348,12 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
     Their label *is* the statement of the consequence being consented to; replacing it with an icon
     would remove the very information the dialog exists to convey. Their colours MUST still derive
     from theme tokens.
+  - **Toast controls.** Every button a notice offers — a toast, or its entry in the Notifications
+    panel — MUST sit in the card's single control group at its **top-right**, to the **left** of Copy
+    and Dismiss, read right to left as Dismiss, Copy, then the notice's own controls. A button MUST NOT
+    be placed in the notice's content (its message or body), where it would land wherever the text
+    happens to end and in a different place on every card. A link in the content is not a button and
+    follows the link rule (Principle VI).
   A change that adds or alters an action control MUST NOT be considered complete, and a PR MUST NOT be
   merged, while that control uses a text label outside the stated exception, or takes its icon or
   colours from anywhere but the theme.
@@ -3361,7 +3388,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.7.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-16
+**Version**: 6.8.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-16
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
