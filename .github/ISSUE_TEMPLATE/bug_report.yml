@@ -1,0 +1,117 @@
+name: Bug report
+description: Report incorrect behaviour. A maintainer must agree this issue before a fix PR is raised.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A maintainer must **agree** this issue, in a comment, before a fix PR is opened. A maintainer's own issue is agreed by ticking the **Maintainer agreement** box. Non-trivial fixes follow the full Spec Kit lifecycle; tiny obviously-correct fixes may skip it but still need an agreed issue.
+
+        **Title:** keep it short and scannable — `[Bug] ` plus a summary a reader can take in at a glance. All the detail belongs in the body below, not the title.
+
+  - type: checkboxes
+    id: labels
+    attributes:
+      label: Labels
+      description: The `bug` type label is applied for you. Add the area(s) yourself — an unlabelled issue drops out of the backlog's filters. See [CONTRIBUTING.md#labelling](https://github.com/Bidthedog/throng/blob/master/CONTRIBUTING.md#labelling).
+      options:
+        - label: At least one `area:*` label added (`area:terminal`, `area:editor`, `area:explorer`, `area:preferences`, `area:themes`, `area:ui-shell`, `area:projects`, `area:vcs`, `area:agents`, `area:extensibility`, `area:infra`, `area:platform`).
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened (observed outcome)
+      description: Plain language — what did you see?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected (intended outcome)
+      description: Plain language — what should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      description: "Windows: Settings › System › About. Linux: the distribution and its release. macOS: Apple menu › About This Mac."
+      placeholder: e.g. Windows 11 24H2, Ubuntu 24.04, macOS 15.1
+    validations:
+      required: true
+
+  - type: input
+    id: throng-version
+    attributes:
+      label: throng version
+      description: "About throng is in the cog menu on Windows and Linux, and under throng › About throng on macOS. Running from source? Give the branch and commit instead."
+      placeholder: e.g. 1.0.0-alpha16
+    validations:
+      required: true
+
+  - type: input
+    id: desktop-session
+    attributes:
+      label: Desktop environment and session (Linux)
+      description: "The desktop and whether the session is Wayland or X11 — `echo $XDG_CURRENT_DESKTOP $XDG_SESSION_TYPE` prints both. Write n/a on Windows and macOS."
+      placeholder: e.g. GNOME wayland
+    validations:
+      required: true
+
+  - type: dropdown
+    id: elevated
+    attributes:
+      label: Run as administrator (elevated)?
+      options:
+        - "No"
+        - "Yes"
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware (optional)
+      description: Anything that might matter — CPU or Apple chip, GPU, display count and scaling, keyboard layout, laptop or dock.
+    validations:
+      required: false
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Logs, screenshots, failing test output, exit codes, etc. throng's logs are in the `logs` folder described under [Logging](https://github.com/Bidthedog/throng/blob/master/docs/preferences.md#logging).
+
+  - type: checkboxes
+    id: maintainer-agreement
+    attributes:
+      label: Maintainer agreement
+      description: Leave blank unless you are a maintainer. A maintainer agrees someone else's issue in a comment below; on their own issue, ticking this box is the agreement.
+      options:
+        - label: Agreed by maintainer. Contributor may proceed with a fix (full lifecycle unless trivially small).
