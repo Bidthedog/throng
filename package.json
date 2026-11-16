@@ -26,6 +26,7 @@
     "generate:defaults": "node scripts/generate-shipped-defaults.mjs",
     "generate:version": "node scripts/generate-version.mjs",
     "generate:licenses": "node scripts/generate-licenses.mjs",
+    "generate:icons": "node scripts/generate-default-icon-set.mjs",
     "stamp:build": "node scripts/stamp-build.mjs",
     "stage:runtime": "node scripts/stage-runtime.mjs",
     "prepackage": "node scripts/clean-dist.mjs",

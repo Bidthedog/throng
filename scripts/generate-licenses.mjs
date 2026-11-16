@@ -9,11 +9,51 @@
 // actually resolve: GitHub repos → https://github.com/<owner>/<repo>, licences → the SPDX page for
 // the declared SPDX id (which always resolves), else the project page. Dependency-free,
 // deterministic (sorted), wired into `npm run build`.
-import { readFileSync, writeFileSync } from 'node:fs';
+//
+// 069 (FR-022): the Lucide art compiled into @throng/core is not an npm dependency of the app, so it
+// would never appear in the lockfile walk. `VENDORED` declares such upstreams by hand, with the licence
+// text itself (read from the copy kept beside the art), and is merged in before sorting. An entry's
+// optional `licenseText` is shown by the About window in an expandable block.
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const here = fileURLToPath(import.meta.url);
+const root = join(dirname(here), '..');
+
+const LUCIDE_DIR = join('packages', 'core', 'src', 'icons', 'default-set');
+
+/** The Lucide version the default set was compiled from: recorded by the compile step, never restated here. */
+function lucideVersion(base) {
+  return JSON.parse(readFileSync(join(base, LUCIDE_DIR, 'SOURCES.json'), 'utf8')).lucideVersion;
+}
+
+/** Upstream works vendored into the source tree, which the lockfile walk cannot see. */
+export const VENDORED = [
+  {
+    name: 'Lucide',
+    version: lucideVersion(root),
+    versionOf: lucideVersion,
+    license: 'ISC',
+    licenseUrl: 'https://spdx.org/licenses/ISC.html',
+    projectUrl: 'https://lucide.dev',
+    licenseTextPath: join(LUCIDE_DIR, 'LICENSE'),
+  },
+];
+
+/** The vendored entries with their licence text read from disk. */
+export function vendoredEntries(base = root) {
+  return VENDORED.map(({ licenseTextPath, versionOf, ...entry }) => ({
+    ...entry,
+    version: versionOf(base),
+    licenseText: readFileSync(join(base, licenseTextPath), 'utf8').replace(/\r\n?/g, '\n').trimEnd(),
+  }));
+}
+
+/** Merge the npm entries with the vendored ones, sorted by name. */
+export function mergeEntries(npmEntries, vendored) {
+  return [...npmEntries, ...vendored].sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /** The declared licence as an SPDX id string (handles the legacy object / `licenses` forms). */
 function licenceId(pkg) {
@@ -67,41 +107,46 @@ function licenceUrl(id, project) {
     : project;
 }
 
-const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
+// Run only when invoked as a script, so a test can import the helpers above.
+// Both sides are real paths: through a symlinked checkout argv[1] is the link while import.meta.url is
+// the target, and comparing them as given made the script silently do nothing.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
 
-// Collect every production package in the install tree. Lockfile v3 keys are install paths
-// ("node_modules/foo", "node_modules/a/node_modules/b"); `dev` marks dev-only, `link` marks a
-// workspace symlink. Dedupe by name@version so a package pinned once appears once.
-const byId = new Map();
-for (const [path, meta] of Object.entries(lock.packages ?? {})) {
-  const at = path.lastIndexOf('node_modules/');
-  if (at === -1 || meta.dev || meta.link) continue;
-  const name = path.slice(at + 'node_modules/'.length);
-  if (name.startsWith('@throng/')) continue; // our own workspace packages, not third-party
-  const id = `${name}@${meta.version}`;
-  if (byId.has(id)) continue;
+  // Collect every production package in the install tree. Lockfile v3 keys are install paths
+  // ("node_modules/foo", "node_modules/a/node_modules/b"); `dev` marks dev-only, `link` marks a
+  // workspace symlink. Dedupe by name@version so a package pinned once appears once.
+  const byId = new Map();
+  for (const [path, meta] of Object.entries(lock.packages ?? {})) {
+    const at = path.lastIndexOf('node_modules/');
+    if (at === -1 || meta.dev || meta.link) continue;
+    const name = path.slice(at + 'node_modules/'.length);
+    if (name.startsWith('@throng/')) continue; // our own workspace packages, not third-party
+    const id = `${name}@${meta.version}`;
+    if (byId.has(id)) continue;
 
-  let pkg;
-  try {
-    pkg = JSON.parse(readFileSync(join(root, path, 'package.json'), 'utf8'));
-  } catch {
-    pkg = { version: meta.version, license: meta.license };
+    let pkg;
+    try {
+      pkg = JSON.parse(readFileSync(join(root, path, 'package.json'), 'utf8'));
+    } catch {
+      pkg = { version: meta.version, license: meta.license };
+    }
+    const licence = licenceId(pkg);
+    const project = projectUrl(pkg);
+    byId.set(id, {
+      name,
+      version: pkg.version ?? meta.version ?? '',
+      license: licence,
+      licenseUrl: licenceUrl(licence, project),
+      projectUrl: project,
+    });
   }
-  const licence = licenceId(pkg);
-  const project = projectUrl(pkg);
-  byId.set(id, {
-    name,
-    version: pkg.version ?? meta.version ?? '',
-    license: licence,
-    licenseUrl: licenceUrl(licence, project),
-    projectUrl: project,
-  });
+
+  const entries = mergeEntries([...byId.values()], vendoredEntries());
+
+  // Written into the UI's built output so it ships as a plain file (electron-builder bundles
+  // packages/*/dist/**), read by main via resolveFromHere('../third-party-licenses.json').
+  const out = join(root, 'packages', 'ui', 'dist', 'third-party-licenses.json');
+  writeFileSync(out, JSON.stringify(entries, null, 2) + '\n');
+  console.log(`[generate-licenses] ${entries.length} third-party packages → ${out}`);
 }
-
-const entries = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-
-// Written into the UI's built output so it ships as a plain file (electron-builder bundles
-// packages/*/dist/**), read by main via resolveFromHere('../third-party-licenses.json').
-const out = join(root, 'packages', 'ui', 'dist', 'third-party-licenses.json');
-writeFileSync(out, JSON.stringify(entries, null, 2) + '\n');
-console.log(`[generate-licenses] ${entries.length} third-party packages → ${out}`);
