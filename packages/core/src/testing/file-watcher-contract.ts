@@ -6,6 +6,7 @@
 import { logExpected } from '../diagnostics/caught.js';
 import { describe, it, expect } from 'vitest';
 import type { IFileWatcher } from '../abstractions/file-watcher.js';
+import { watchStarted } from './watch-started.js';
 
 export interface FileWatcherHarness {
   watcher: IFileWatcher;
@@ -39,6 +40,7 @@ export function runFileWatcherContract(
       try {
         const changed: string[] = [];
         const sub = h.watcher.watch(h.dir, (p) => changed.push(p));
+        await watchStarted();
         await h.touch('settings.json');
         await waitFor(() => changed.length > 0);
         expect(changed.length).toBeGreaterThan(0);
@@ -55,6 +57,7 @@ export function runFileWatcherContract(
         const sub = h.watcher.watch(h.dir, () => {
           count += 1;
         });
+        await watchStarted();
         await h.touch('a.json');
         await waitFor(() => count > 0);
         sub.dispose();
@@ -89,6 +92,7 @@ export function runFileWatcherContract(
         });
         try {
           await new Promise((r) => setTimeout(r, 150)); // let the watch arm
+          await watchStarted();
           let n = 0;
           // 5ms, deliberately: the contract cannot know the implementation's debounce, and a churn
           // interval close to it would let an UNBOUNDED debounce fire anyway on a lucky gap — the
@@ -127,6 +131,7 @@ export function runFileWatcherContract(
         });
         try {
           await new Promise((r) => setTimeout(r, 150));
+          await watchStarted();
           for (let i = 0; i < 30; i += 1) await h.touch(`burst-${i}.json`);
           // Wait for the first report (bounded at 2 s), then a short settle so a split flush would still be counted.
           const deadline = Date.now() + 2000;
@@ -161,6 +166,7 @@ export function runFileWatcherContract(
       });
       try {
         await new Promise((r) => setTimeout(r, 150));
+        await watchStarted();
         const files = ['one.json', 'two.json', 'three.json'];
         for (const f of files) await h.touch(f);
         // An unbatched implementation may never name all three, so the wait is allowed to lapse;
