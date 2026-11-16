@@ -44,6 +44,9 @@ files:
   - '!**/*.ts'
   - '!**/*.tsbuildinfo'
   - '!**/tests/**'
+  # The default icon set ships compiled into core's JavaScript; the vendored SVGs it is generated from
+  # must never ship as loose, editable files (spec 069 FR-021).
+  - '!**/src/icons/default-set/**'
   - '!node_modules/.cache/**'
   - '!node_modules/electron/**'
   - '!node_modules/electron-builder/**'
