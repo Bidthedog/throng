@@ -9,6 +9,9 @@ import {
   TOAST_DURATION_MAX_MS,
   TOAST_DURATION_MIN_MS,
   TOAST_WIDTH_DEFAULT_PX,
+  NOTICE_HOVER_DELAY_MIN_MS,
+  NOTICE_HOVER_DELAY_MAX_MS,
+  NOTICE_HOVER_DELAY_DEFAULT_MS,
   TOAST_WIDTH_MAX_PX,
   TOAST_WIDTH_MIN_PX,
   parseNotificationSettings,
@@ -25,7 +28,7 @@ import {
 
 const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
 const TYPES = [...SEVERITIES, 'attention'] as const;
-const SECTION_KEYS = [...TYPES, 'os', 'toastDurationMs', 'toastWidthPx', 'confirmDismissAll', 'panelLimit'].sort();
+const SECTION_KEYS = [...TYPES, 'os', 'toastDurationMs', 'toastWidthPx', 'hoverDelayMs', 'confirmDismissAll', 'panelLimit'].sort();
 
 describe('the modes and their names (FR-021a)', () => {
   it('has three modes, in order', () => {
@@ -52,6 +55,7 @@ describe('the shipped defaults (FR-021b to FR-021d, FR-026c, FR-031d)', () => {
       attention: { toast: true, panel: true, os: true },
       toastDurationMs: 3000,
       toastWidthPx: 520,
+      hoverDelayMs: 250,
       confirmDismissAll: true,
       panelLimit: 100,
     });
@@ -84,6 +88,15 @@ describe('the shipped defaults (FR-021b to FR-021d, FR-026c, FR-031d)', () => {
     expect(parseNotificationSettings({ toastWidthPx: 300 }).toastWidthPx).toBe(300);
     expect(parseNotificationSettings({ toastWidthPx: 800 }).toastWidthPx).toBe(800);
     expect(parseNotificationSettings({ toastWidthPx: 333.4 }).toastWidthPx).toBe(333);
+  });
+
+  it('bounds the notification hover delay at 0–1500 ms and ships it at 250 (069 FR-052)', () => {
+    expect([NOTICE_HOVER_DELAY_MIN_MS, NOTICE_HOVER_DELAY_MAX_MS, NOTICE_HOVER_DELAY_DEFAULT_MS]).toEqual([0, 1500, 250]);
+    expect(parseNotificationSettings({ hoverDelayMs: 0 }).hoverDelayMs).toBe(0);
+    expect(parseNotificationSettings({ hoverDelayMs: 1500 }).hoverDelayMs).toBe(1500);
+    expect(parseNotificationSettings({ hoverDelayMs: 1501 }).hoverDelayMs).toBe(250);
+    expect(parseNotificationSettings({ hoverDelayMs: -1 }).hoverDelayMs).toBe(250);
+    expect(parseNotificationSettings({ hoverDelayMs: 'soon' }).hoverDelayMs).toBe(250);
   });
 
   it('names the four severities once, so callers iterate rather than re-list them', () => {

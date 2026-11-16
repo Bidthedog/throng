@@ -85,7 +85,7 @@ test('first run (empty config): seeds settings, keybindings, every built-in them
   expect(JSON.parse(readFileSync(markerPath(root), 'utf8'))).toEqual({ version: SHIPPED.version });
   // Exactly the built-in theme set — nothing missing, nothing extra.
   expect(themeFilesOnDisk(root)).toEqual(THEME_NAMES);
-  // Sampled theme files deep-equal the shipped values (throng keeps its icon pack).
+  // Sampled theme files deep-equal the shipped values.
   expect(JSON.parse(readFileSync(themePath(root, 'throng'), 'utf8'))).toEqual(SHIPPED.themes.throng);
   expect(JSON.parse(readFileSync(themePath(root, A_BUILTIN), 'utf8'))).toEqual(SHIPPED.themes[A_BUILTIN]);
 

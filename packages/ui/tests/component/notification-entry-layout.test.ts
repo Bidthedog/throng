@@ -15,6 +15,7 @@ import { ConfigProvider, useConfigLoaded } from '../../src/renderer/config/confi
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
+import { NOTICE_HOVER_DELAY_DEFAULT_MS as HOVER_INTENT_MS } from '@throng/core';
 import { NotificationsPanel } from '../../src/renderer/notifications/notifications-panel.js';
 import type { NotificationsSnapshot } from '../../src/renderer/global.js';
 import { flushUntil } from './helpers/flush-until.js';
@@ -174,39 +175,84 @@ describe('at rest: one line each, shed from the right on line 1, never the actio
 });
 
 describe('pointing at an entry expands it in place (FR-085)', () => {
-  it('expands on a pointer that moves over it, and collapses when the pointer leaves', async () => {
-    snapshot = snap([placed('a'), placed('b')]);
+  // 069 FR-052: the pointer must stay on an entry for `notifications.hoverDelayMs`, shipped at HOVER_INTENT_MS. Timers are faked once the panel has mounted.
+  const pointAt = async (): Promise<void> => {
     await mount();
+    vi.useFakeTimers();
+  };
+  const rest = (ms: number = HOVER_INTENT_MS): void => {
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  };
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('expands on a pointer that moves over it and stays, and collapses at once when the pointer leaves', async () => {
+    snapshot = snap([placed('a'), placed('b')]);
+    await pointAt();
     const [a, b] = cards();
     expect(a!.getAttribute('data-expanded')).toBeNull();
     fireEvent.pointerMove(a!, moved);
+    rest();
     expect(a!.getAttribute('data-expanded')).toBe('true');
     expect(b!.getAttribute('data-expanded')).toBeNull();
     fireEvent.pointerLeave(a!);
     expect(a!.getAttribute('data-expanded')).toBeNull();
   });
 
+  it('expands nothing while the pointer sweeps across the entries (069 FR-052)', async () => {
+    snapshot = snap([placed('a'), placed('b'), placed('c')]);
+    await pointAt();
+    const [a, b, c] = cards();
+    for (const card of [a, b, c]) {
+      fireEvent.pointerMove(card!, moved);
+      rest(HOVER_INTENT_MS - 50);
+      expect(cards().map((e) => e.getAttribute('data-expanded'))).toEqual([null, null, null]);
+      fireEvent.pointerLeave(card!);
+    }
+    rest();
+    expect(cards().map((e) => e.getAttribute('data-expanded'))).toEqual([null, null, null]);
+  });
+
+  it('keeps counting from the first move while the pointer moves within the entry', async () => {
+    snapshot = snap([placed('a')]);
+    await pointAt();
+    const a = cards()[0]!;
+    fireEvent.pointerMove(a, moved);
+    rest(HOVER_INTENT_MS - 50);
+    fireEvent.pointerMove(a, moved);
+    rest(50);
+    expect(a.getAttribute('data-expanded')).toBe('true');
+  });
+
   it('does not expand on entering without movement: a layout that moved under a still pointer is not pointing', async () => {
     snapshot = snap([placed('a'), placed('b')]);
-    await mount();
+    await pointAt();
     const [a, b] = cards();
     fireEvent.pointerMove(a!, moved);
+    rest();
     // `a` grew and `b` slid under the still pointer: the browser reports an enter and a move with no movement.
     fireEvent.pointerLeave(a!);
     fireEvent.pointerEnter(b!);
     fireEvent.pointerMove(b!, still);
+    rest();
     expect(b!.getAttribute('data-expanded')).toBeNull();
     fireEvent.pointerMove(b!, moved);
+    rest();
     expect(b!.getAttribute('data-expanded')).toBe('true');
   });
 
   it('never has two entries expanded by the pointer, so moving between entries does not oscillate', async () => {
     snapshot = snap([placed('a'), placed('b')]);
-    await mount();
+    await pointAt();
     const [a, b] = cards();
     fireEvent.pointerMove(a!, moved);
+    rest();
     fireEvent.pointerLeave(a!);
     fireEvent.pointerMove(b!, moved);
+    rest();
     expect(cards().map((c) => c.getAttribute('data-expanded'))).toEqual([null, 'true']);
   });
 

@@ -18,12 +18,15 @@ import {
 describe('shipped-defaults fidelity contract', () => {
   const record = buildShippedDefaults();
 
-  it('themes deep-equal the definitions, with throng carrying its icon pack', () => {
+  it('themes deep-equal the definitions, and no theme names an icon set (069 FR-014)', () => {
     const expected = {
       ...ALL_DEFAULT_THEMES,
-      throng: { ...THRONG_THEME, iconPack: 'throng' },
+      throng: THRONG_THEME,
     };
     expect(record.themes).toEqual(expected);
+    for (const [name, theme] of Object.entries(record.themes)) {
+      expect('iconPack' in theme, name).toBe(false);
+    }
   });
 
   it('settings and keybindings deep-equal the definitions', () => {

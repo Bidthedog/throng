@@ -541,7 +541,7 @@ describe('S3 / S7 — a preview of each kind mounts in the real panel, with the 
     await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`panel-handle-${id}`) });
     const refresh = await screen.findByTestId('menu-item-Refresh');
     const menu = refresh.closest('[role="menu"]') as HTMLElement;
-    return [...menu.querySelectorAll('[role="menuitem"]')]
+    return [...menu.querySelectorAll('[role="menuitem"], [role="menuitemcheckbox"]')]
       .filter((el) => el.closest('[role="menu"]') === menu)
       .map((el) => (el.getAttribute('data-testid') ?? '').replace(/^menu-item-/, ''));
   }

@@ -11,7 +11,7 @@
  */
 import { fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resolveIconAsset, THRONG_THEME } from '@throng/core';
+import { resolveIcon, THRONG_THEME } from '@throng/core';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
 import {
   PANEL_ID,
@@ -61,12 +61,14 @@ describe('the cancel control carries the busy state (FR-001)', () => {
     // The shared BusyGlyph box (it is what rotates), holding the themeable `busy` icon. The glyph is
     // read from the theme, not hard-coded: it is a token a theme may change. An unknown token renders
     // NOTHING, so a drawn glyph is also the proof the token exists. One `.icon` per button.
-    const asset = resolveIconAsset(THRONG_THEME, {}, 'busy');
-    expect(asset.kind).toBe('glyph');
+    const host = document.createElement('div');
+    host.innerHTML = resolveIcon(THRONG_THEME, [], 'busy');
+    const expected = host.innerHTML;
+    expect(expected).toContain('<svg');
     const busy = cancel().querySelector('.busy-glyph');
     expect(busy).not.toBeNull();
     expect(cancel().querySelectorAll('.icon')).toHaveLength(1);
-    expect(busy?.querySelector('.icon')?.textContent).toBe(asset.kind === 'glyph' ? asset.glyph : '');
+    expect(busy?.querySelector('.icon')?.innerHTML).toBe(expected);
   });
 
   it('marks the results list busy too, so assistive technology hears the list is still filling', () => {

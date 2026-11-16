@@ -39,7 +39,7 @@
  * a section or a control is ABSENT after a search — and in a tree that rendered nothing, every one
  * of them passes. Four tests at this layer on this branch could not fail for exactly that reason.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -277,234 +277,6 @@ describe('emptying and re-populating the font stack (FR-018, SC-020)', () => {
 
     expect(screen.getByTestId('control-fonts.family-pill-0')).toHaveTextContent('Consolas');
     await waitFor(() => expect(screen.getByTestId('theme-clear-fonts.family')).toBeEnabled());
-  });
-});
-
-/* ────────────────────────────────────────────────────────────────────────── *
- * Icon PACKS — selection, re-skinning, fallback, and a per-token override
- * (007 US4, migrated from icon-packs.e2e.ts:49 and :66)
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * ══ WHAT THE MIGRATED TESTS DID ══
- *
- * Each seeded a glyph-only pack into a fresh config root on disk, launched Electron with
- * `THRONG_CONFIG_ROOT` pointed at it, clicked the cog menu, waited for a SECOND WINDOW to open,
- * waited for that window to load, selected the pack from a dropdown — and then read the text of
- * three `<span>`s in the icon grid.
- *
- * The second window is how the E2E REACHED the Themes tab, not what it asserted. That distinction is
- * the whole of this migration: this file already renders `ThemesTab` directly, and the icon grid
- * with it.
- *
- * ══ THE ONE THING THAT HAD TO BE ESTABLISHED FIRST ══
- *
- * `IconSection` reads its packs from `useIconPacks()`, which is `ConfigContext.iconPacks` — the same
- * hot-reloaded payload that carries the theme selecting them, so "the grid cannot show a pack that
- * disagrees with the live theme" is structural rather than arranged. `ConfigProvider` fills it from
- * `window.throng.config.get()`, so a pack is seeded here by answering that call, which is one layer
- * BELOW the component and not a stub of it.
- *
- * The pack is the migrated fixture's, glyph for glyph: `folder → FF`, `add → AA`, and no `terminal`
- * — because the absent token is what proves the fallback.
- *
- * ══ WHAT STAYS END-TO-END ══
- *
- * `:167` — editing the pack in the preferences window re-skins the MAIN window live. That is two
- * real windows and an IPC broadcast between them, and it is the one claim here that a single render
- * cannot make. `:253` — a malformed `pack.json` ON DISK still lets the app start. That is the loader
- * reading a real file, and it is `@reserve:runtime`.
- */
-
-const PACK_NAME = 'mypack';
-
-/**
- * The migrated fixture's pack, as the payload `ConfigProvider` would receive for it.
- *
- * BOTH halves, because a `LoadedIconPack` is a MANIFEST that has gained `assets`, and the resolver
- * reads both: `tokens` says what the token maps to (`icon-pack.ts:109`) and `assets` carries what
- * an image token was turned into at load time (`:156`). A draft with `assets` alone threw on
- * `pack.tokens[token]` at the first cell and took the whole tab down with it — which surfaced as
- * "unable to find icon-cell-folder", a message that reads like a missing token and is not.
- *
- * No `terminal` in either. Its ABSENCE is the fallback assertion below, so adding one would quietly
- * retire that test rather than make it pass.
- */
-const MY_PACK = {
-  name: PACK_NAME,
-  // `IconValue` objects, not bare strings. A pack.json ON DISK writes `"folder": "FF"` and the
-  // main-process loader normalises it; this seeds the LOADED form, which is what crosses the
-  // bridge. Bare strings here threw "Cannot use 'in' operator to search for 'glyph' in AA".
-  tokens: { folder: { glyph: 'FF' }, add: { glyph: 'AA' } },
-  assets: {
-    folder: { kind: 'glyph' as const, glyph: 'FF' },
-    add: { kind: 'glyph' as const, glyph: 'AA' },
-  },
-};
-
-/**
- * The tab over a live config store that already holds a pack and has it selected.
- *
- * Built on `mountLive`'s reasoning rather than beside it: `ThemesTab` is CONTROLLED by the config
- * store, so a selection made through the dropdown only reaches the grid once the written document is
- * adopted back. Seeding the selection in the payload is the state after that round trip, which is
- * what both migrated tests were in by the time they read a cell.
- */
-function mountWithPack(
-  options: {
-    iconPack?: string;
-    overrides?: Record<string, { glyph: string }>;
-    /** Glyphs the ACTIVE THEME defines itself — rung 3, distinct from throng's defaults at rung 4. */
-    themeGlyphs?: Record<string, string>;
-    /** Packs the loader reported as unavailable (`error` set) — listed, not dropped. */
-    brokenPacks?: Array<{ name: string; error: string }>;
-  } = {},
-) {
-  const written: string[] = [];
-  Reflect.set(window, 'throng', {
-    config: {
-      get: () =>
-        Promise.resolve({
-          settings: DEFAULT_APP_SETTINGS,
-          theme: {
-            ...THRONG_THEME,
-            iconPack: options.iconPack,
-            /*
-             * `iconOverrides`, NOT `icons`.
-             *
-             * They are different rungs of the same chain (`icon-pack.ts:106-113`): override, then
-             * pack, then `theme.icons`, then throng's default. A draft that put the override into
-             * `theme.icons` made both override tests pass — through the THIRD rung, with the pack
-             * silently beating it — which is a green bar for the opposite of the requirement.
-             */
-            iconOverrides: options.overrides ?? {},
-            icons: { ...THRONG_THEME.icons, ...(options.themeGlyphs ?? {}) },
-          },
-          // An ARRAY, not a map. `toPackMap` (config-store.tsx:59) returns {} for anything that
-          // is not one, so a map here reaches the grid as no packs at all — which is exactly how
-          // the first draft of this failed, with overrides working and the dropdown empty.
-          iconPacks: [
-            MY_PACK,
-            ...(options.brokenPacks ?? []).map((p) => ({ name: p.name, tokens: {}, assets: {}, error: p.error })),
-          ],
-        }),
-      onChange: () => () => {},
-      write: (_id: unknown, json: string) => {
-        written.push(json);
-        return Promise.resolve({ ok: true });
-      },
-    },
-  });
-  render(
-    createElement(
-      NotificationProvider,
-      null,
-      createElement(ConfigProvider, null, createElement(ConfirmProvider, null, createElement(ThemesTab))),
-    ),
-  );
-  return { user: userEvent.setup({ delay: null }), written };
-}
-
-/**
- * The GLYPH a cell draws, without its label.
- *
- * A cell renders `<Icon>` and then a `.icon-cell__name` span carrying the token, so the cell's own
- * `textContent` is "FFfolder". The migrated test used `toContainText`, which is satisfied by the
- * token name alone for any token whose name contains the expected string — and reading the icon
- * element is both stricter and what the assertion actually means.
- */
-const cellText = (token: string): string =>
-  screen.getByTestId(`icon-cell-${token}`).querySelector('.icon-cell__icon')?.textContent?.trim() ??
-  '';
-
-describe('a user pack re-skins its tokens and falls back for the rest (migrated from icon-packs.e2e.ts:49)', () => {
-  it('offers the pack in the dropdown, alongside the default', async () => {
-    mountWithPack();
-
-    const select = await screen.findByTestId('icon-pack-select');
-    const options = () => [...select.querySelectorAll('option')].map((o) => o.textContent?.trim());
-    /*
-     * POLLED, not read once. The dropdown renders as soon as the theme arrives, and under React 19 the
-     * pack list can be committed a tick later — so a single read finds the default option alone. The
-     * hosted gate failed exactly that way while every local run passed.
-     */
-    await waitFor(() => expect(options()).toContain(PACK_NAME));
-    // The migrated test asserted the pack's option `toHaveCount(1)` and stopped. The DEFAULT option
-    // matters just as much: without it there is no way back to throng's own glyphs.
-    expect(options()).toContain('(default glyphs)');
-  });
-
-  it('renders the pack’s glyph for a token the pack defines', async () => {
-    mountWithPack({ iconPack: PACK_NAME });
-
-    await waitFor(() => expect(cellText('folder')).toBe('FF'));
-    expect(cellText('add')).toBe('AA');
-  });
-
-  it('keeps the THEME’s own glyph for a token the pack does NOT define', async () => {
-    /*
-     * The fallback, and the reason the fixture has exactly two tokens. A pack is a partial map: it
-     * re-skins what it names and must leave everything else alone, or adopting a five-icon pack
-     * would blank the other two hundred.
-     *
-     * ══ THE THEME GETS A GLYPH OF ITS OWN, AND THAT IS THE WHOLE TEST ══
-     *
-     * Written first against the shipped theme, and its red step exposed it: deleting rung 3 of the
-     * precedence chain (`theme.icons[token]`) left every test green, because the active theme WAS
-     * `THRONG_THEME` and rungs 3 and 4 return the same character. The test proved "a token absent
-     * from the pack still renders something" — true, and not the requirement.
-     *
-     * With a theme glyph the two rungs separate: `⌘` can only have come from the active theme.
-     */
-    mountWithPack({ iconPack: PACK_NAME, themeGlyphs: { terminal: '⌘' } });
-
-    await waitFor(() => expect(cellText('folder')).toBe('FF'));
-    expect(cellText('terminal')).toBe('⌘');
-    // Not throng's default either, which is what makes it rung 3 rather than rung 4.
-    expect(cellText('terminal')).not.toBe(THRONG_THEME.icons.terminal);
-  });
-
-  it('lists a BROKEN pack as disabled with its reason as the title, beside the good one (FR-004a / SC-011)', async () => {
-    /*
-     * Migrated from icon-packs.e2e.ts "a BROKEN pack degrades". The loader half (an unparseable manifest
-     * is reported unavailable WITH a reason, and does not stop the others) is
-     * `unit/icon-pack-service.test.ts` "reports a pack with an unparseable manifest as unavailable" and
-     * "one broken pack does not stop the others loading". This is the half between: the picker keeps the
-     * option, disables it and explains it. Mutation: dropping `disabled` or `title` in icon-section.tsx.
-     */
-    const reason = 'pack.json could not be parsed';
-    mountWithPack({ brokenPacks: [{ name: 'brokenpack', error: reason }] });
-
-    const option = await screen.findByTestId('icon-pack-option-brokenpack');
-    expect(option, 'the broken pack is not selectable').toBeDisabled();
-    expect(option, 'the reason travels with the option').toHaveAttribute('title', reason);
-    const good = [...screen.getByTestId('icon-pack-select').querySelectorAll('option')].find(
-      (o) => o.textContent?.trim() === PACK_NAME,
-    );
-    expect(good, 'a good pack still loads beside it').not.toBeDisabled();
-  });
-
-  // DELETED: "shows throng's glyphs again when the pack is deselected" — its second half (no pack selected, `folder`
-  // is not the pack's 'FF') is asserted by "an override applies with NO pack selected too" below.
-});
-
-describe('a per-token override wins over the pack (migrated from icon-packs.e2e.ts:66)', () => {
-  it('changes only the overridden token, leaving the pack’s others alone', async () => {
-    mountWithPack({ iconPack: PACK_NAME, overrides: { add: { glyph: 'ZZ' } } });
-
-    await waitFor(() => expect(cellText('add')).toBe('ZZ'));
-    // …and `folder` is still the PACK's, not throng's and not the override's. The precedence is a
-    // three-way one — override, then pack, then theme — and a test that read only the overridden
-    // cell could not tell an override that replaced the whole pack from one that layered on it.
-    expect(cellText('folder')).toBe('FF');
-  });
-
-  it('an override applies with NO pack selected too', async () => {
-    // The other half of the precedence: an override is not a pack edit. Nothing asserted this.
-    mountWithPack({ overrides: { add: { glyph: 'ZZ' } } });
-
-    await waitFor(() => expect(cellText('add')).toBe('ZZ'));
-    expect(cellText('folder')).not.toBe('FF');
   });
 });
 
@@ -754,5 +526,36 @@ describe('deleting a theme (FR-005a, migrated in part from preferences-themes.e2
     await user.click(screen.getByTestId('theme-confirm-yes'));
 
     await waitFor(() => expect(themeOptions()).toContain('Debian'));
+  });
+});
+
+describe('every toolbar action is on screen, greyed out when it cannot be used (069 FR-049)', () => {
+  const toolbar = (): string[] =>
+    [...screen.getByTestId('themes-tab').querySelectorAll('.themes-toolbar__actions button')].map((b) => b.getAttribute('data-testid') ?? '');
+
+  it('draws the same toolbar for a built-in and a custom theme, disabling what each cannot do', async () => {
+    mountThemeStore({ active: 'Debian' });
+    await waitFor(() => expect((screen.getByTestId('theme-select') as HTMLSelectElement).value).toBe('Debian'));
+    const builtIn = toolbar();
+    expect(screen.getByTestId('theme-revert')).toBeDisabled(); // nothing edited yet
+    expect(screen.getByTestId('theme-revert')).toHaveAttribute('title', '“Debian” has not changed since this window opened');
+    expect(screen.getByTestId('theme-restore')).not.toBeDisabled();
+    expect(screen.getByTestId('theme-rename')).toBeDisabled();
+    expect(screen.getByTestId('theme-rename')).toHaveAttribute('title', '“Debian” is built in and cannot be renamed');
+    cleanup();
+
+    mountThemeStore({ active: 'MyCustom' });
+    await waitFor(() => expect((screen.getByTestId('theme-select') as HTMLSelectElement).value).toBe('MyCustom'));
+    expect(toolbar()).toEqual(builtIn);
+    expect(screen.getByTestId('theme-restore')).toBeDisabled();
+    expect(screen.getByTestId('theme-rename')).not.toBeDisabled();
+  });
+
+  it('shows the search clear greyed out while the search is empty', async () => {
+    const { user } = mountThemeStore();
+    const clear = screen.getByTestId('themes-search-clear');
+    expect(clear).toBeDisabled();
+    await user.type(screen.getByTestId('themes-search'), 'bg');
+    expect(screen.getByTestId('themes-search-clear')).not.toBeDisabled();
   });
 });

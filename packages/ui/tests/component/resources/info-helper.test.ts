@@ -19,6 +19,7 @@ import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
 import { __resetSession, ingestFrame, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { ToolbarControls } from '../../../src/renderer/resources/toolbar.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { drawnIcon, iconMarkup } from '../helpers/icon-markup.js';
 
 beforeEach(() => {
   __resetSession();
@@ -100,7 +101,7 @@ describe('each helper is a themeable icon control (FR-119)', () => {
     expect(el.querySelector('[title]')).toBeNull();
     expect(el).toHaveAttribute('aria-label', HELPER_COPY[topic].title);
     expect(screen.getByRole('button', { name: HELPER_COPY[topic].title })).toBe(el);
-    expect(el).toHaveTextContent((THRONG_THEME.icons as Record<string, string>).help!);
+    expect(drawnIcon(el)).toBe(iconMarkup('help'));
     expect(el).toHaveAttribute('aria-expanded', 'false');
     expect(el).not.toHaveAttribute('aria-pressed');
   });

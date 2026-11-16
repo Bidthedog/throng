@@ -51,6 +51,9 @@ function splitSelectors(list: string): string[] {
 }
 
 const all = rules(section);
+/** 069 FR-054 — the one `.icon-button` every window shares, written outside the 055 section. */
+const SHARED_ICON_BUTTON_BODY = rules(full).filter((r) => r.selectors.includes('.icon-button')).map((r) => r.body).join('\n');
+const SHARED_ICON_BUTTON_HOVER = rules(full).some((r) => r.selectors.some((x) => x === `${GATE} .icon-button:hover:not(:disabled)`));
 const bodyOf = (selector: string): string => all.filter((r) => r.selectors.includes(selector)).map((r) => r.body).join('\n');
 
 describe('hover (FR-089)', () => {
@@ -59,9 +62,22 @@ describe('hover (FR-089)', () => {
     expect(ungated).toEqual([]);
   });
 
-  it('is drawn for rows, breadcrumb segments, the toolbar’s buttons and the filter’s clear button', () => {
-    for (const el of ['.breakdown-row', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear']) {
+  it('is drawn for rows and breadcrumb segments', () => {
+    for (const el of ['.breakdown-row', '.breadcrumb__segment']) {
       expect(all.some((r) => r.selectors.some((s) => s.startsWith(GATE) && s.endsWith(`${el}:hover`))), `${el} has no hover rule`).toBe(true);
+    }
+  });
+
+  // 069 FR-054 (#639): the toolbar's buttons and the filter's clear are the shared `.icon-button`, whose gated
+  // hover and pointer cursor are written once, outside this section, for every window.
+  it('is drawn for the toolbar’s buttons and the filter’s clear through the shared icon button', () => {
+    expect(SHARED_ICON_BUTTON_HOVER).toBe(true);
+    for (const [file, cls] of [
+      ['toolbar.tsx', 'monitor-controls__button'],
+      ['toolbar.tsx', 'monitor-filter__clear'],
+    ] as const) {
+      const source = readFileSync(resolve(process.cwd(), `packages/ui/src/renderer/resources/${file}`), 'utf8');
+      expect(source, `${cls} is not an icon-button`).toContain(`className="icon-button ${cls}"`);
     }
   });
 
@@ -71,9 +87,34 @@ describe('hover (FR-089)', () => {
   });
 });
 
+describe('the "?" helper (069 FR-062)', () => {
+  it('draws its icon at its own size, so the art never spills onto what it explains', () => {
+    const box = bodyOf('.info-helper');
+    const size = /width:\s*(\d+)px/.exec(box)?.[1];
+    expect(size, 'the helper has a fixed width').toBeTruthy();
+    expect(box).toMatch(new RegExp(`height:\\s*${size}px`));
+    const icon = bodyOf('.info-helper .icon');
+    expect(icon).toMatch(new RegExp(`width:\\s*${size}px`));
+    expect(icon).toMatch(new RegExp(`height:\\s*${size}px`));
+  });
+
+  it('keeps clear of what it explains and further clear of what follows, and is raised above it', () => {
+    const box = bodyOf('.info-helper');
+    const [, top, right, bottom, left] = /margin:\s*(\d+)p?x?\s+(\d+)px\s+(\d+)p?x?\s+(\d+)px/.exec(box) ?? [];
+    expect(Number(left)).toBeGreaterThan(0);
+    expect(Number(right)).toBeGreaterThan(Number(left));
+    expect(Number(top) + Number(bottom)).toBe(0);
+    expect(box).toMatch(/translate:\s*0\s+-\d+px/);
+  });
+});
+
 describe('the pointer cursor (FR-089)', () => {
-  it.each(['.breakdown-row', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear', '.monitor-controls__select'])('%s shows it', (selector) => {
+  it.each(['.breakdown-row', '.breadcrumb__segment', '.monitor-controls__select'])('%s shows it', (selector) => {
     expect(bodyOf(selector)).toMatch(/cursor:\s*pointer/);
+  });
+
+  it('the toolbar’s buttons and the filter’s clear show it through the shared icon button (069 FR-054)', () => {
+    expect(SHARED_ICON_BUTTON_BODY).toMatch(/cursor:\s*pointer/);
   });
 });
 

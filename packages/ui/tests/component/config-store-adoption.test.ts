@@ -56,7 +56,6 @@ function bridge(): { writes: string[] } {
       writePatch: () => Promise.resolve({ ok: true }),
       listThemes: () => Promise.resolve(['throng']),
       listFonts: () => Promise.resolve([]),
-      listIconPacks: () => Promise.resolve([]),
     },
   });
   return { writes };
@@ -179,7 +178,6 @@ describe('a written settings document is adopted before the watcher says anythin
         writePatch: () => Promise.resolve({ ok: true }),
         listThemes: () => Promise.resolve(['throng']),
         listFonts: () => Promise.resolve([]),
-        listIconPacks: () => Promise.resolve([]),
       },
     });
     render(createElement(ConfigProvider, null, createElement(Probe)));

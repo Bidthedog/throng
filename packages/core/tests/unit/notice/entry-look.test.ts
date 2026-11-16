@@ -10,7 +10,7 @@ import {
   resolveColour,
 } from '@throng/core';
 import { contrastRatio, hexToRgb } from '../../../src/config/colour-math.js';
-import { THEME_TOKEN_COPY } from '../../../src/config/theme-copy.js';
+import { isIconKey } from '../../../src/icons/icon-keys.js';
 
 /**
  * 068 T103–T105 (FR-071, FR-074) — what a Notifications panel entry looks like by TYPE: a pastel tint of the type's colour
@@ -59,23 +59,7 @@ describe('every type has its own themeable icon (FR-074)', () => {
     expect(new Set(tokens).size).toBe(ENTRY_SEVERITIES.length);
   });
 
-  it.each(THEMES)('%s carries every one as a monochrome glyph', (name, theme) => {
-    for (const token of tokens) {
-      const glyph = theme.icons[token];
-      expect(glyph, `${name}.${token}`).toBeTruthy();
-      expect(String(glyph)).not.toMatch(/\p{Extended_Pictographic}|\p{Emoji_Presentation}|️/u);
-    }
-  });
-
-  it('keeps the glyphs distinct from each other', () => {
-    const glyphs = tokens.map((t) => THRONG_THEME.icons[t]);
-    expect(new Set(glyphs).size).toBe(tokens.length);
-  });
-
-  it('has a label and a description for each new token in the Themes editor', () => {
-    for (const token of tokens.filter((t) => t.startsWith('notice'))) {
-      expect(THEME_TOKEN_COPY[`icons.${token}`]?.label, token).toBeTruthy();
-      expect(THEME_TOKEN_COPY[`icons.${token}`]?.description, token).toBeTruthy();
-    }
+  it('draws every one from a key the default icon set defines (069)', () => {
+    for (const token of tokens) expect(isIconKey(token), token).toBe(true);
   });
 });

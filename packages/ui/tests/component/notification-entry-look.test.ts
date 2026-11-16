@@ -18,7 +18,6 @@ import {
   ENTRY_TYPE_COLOUR_TOKEN,
   ENTRY_TYPE_ICON_TOKEN,
   ENTRY_TYPE_LABEL,
-  THRONG_THEME,
   type NotificationEntry,
 } from '@throng/core';
 import { ConfigProvider, useConfigLoaded } from '../../src/renderer/config/config-store.js';
@@ -28,6 +27,7 @@ import { NotificationProvider } from '../../src/renderer/common/notification.js'
 import { NotificationsPanel } from '../../src/renderer/notifications/notifications-panel.js';
 import type { NotificationsSnapshot } from '../../src/renderer/global.js';
 import { flushUntil } from './helpers/flush-until.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 const projectsHolder: { projects: { id: string; colour: string; name: string }[] } = { projects: [] };
 vi.mock('../../src/renderer/state/projects-store.js', () => ({ useProjectsOptional: () => ({ projects: projectsHolder.projects }) }));
@@ -141,7 +141,7 @@ describe('the type icon, top left, before the title (FR-074)', () => {
     // Line 1's first part (FR-083, over FR-074's placement before the title).
     expect(card.querySelector('.notification-entry__line1')!.querySelector('.notification-entry__lead')!.firstElementChild).toBe(icon);
     expect(icon.getAttribute('title')).toBe(ENTRY_TYPE_LABEL[severity]);
-    expect(icon.textContent).toBe(THRONG_THEME.icons[ENTRY_TYPE_ICON_TOKEN[severity]]);
+    expect(drawnIcon(icon)).toBe(iconMarkup(ENTRY_TYPE_ICON_TOKEN[severity]));
     const title = card.querySelector('.notification-entry__title')!;
     expect(icon.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -149,7 +149,7 @@ describe('the type icon, top left, before the title (FR-074)', () => {
   it('gives the five types five different icons', async () => {
     snapshot = snap(ENTRY_SEVERITIES.map((s, i) => entry(`e${i}`, { severity: s })));
     await mount();
-    const glyphs = screen.getAllByTestId('notification-entry').map((c) => c.querySelector('.notification-entry__icon')!.textContent);
+    const glyphs = screen.getAllByTestId('notification-entry').map((c) => drawnIcon(c.querySelector('.notification-entry__icon')));
     expect(new Set(glyphs).size).toBe(5);
   });
 });

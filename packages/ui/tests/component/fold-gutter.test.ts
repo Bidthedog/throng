@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { within } from '@testing-library/react';
-import { initialFold, setSection, type HeadingRecord, type IconAsset } from '@throng/core';
+import { initialFold, setSection, type HeadingRecord, type IconKey } from '@throng/core';
 import { applyFoldGutter, GUTTER_CLASS, TOGGLE_CLASS } from '../../src/renderer/preview/providers/markdown/fold-gutter.js';
 
 /**
@@ -10,7 +10,7 @@ import { applyFoldGutter, GUTTER_CLASS, TOGGLE_CLASS } from '../../src/renderer/
  * pipeline never nests a paragraph inside its heading).
  *
  * `iconFor` is injected (fold-gutter.ts is plain DOM, not React) — a spy stands in for
- * `@throng/core`'s `resolveIconAsset` bound to a theme, which this file has no need to construct.
+ * `@throng/core`'s `resolveIcon` bound to a theme, which this file has no need to construct.
  */
 
 function heading(level: number, slug: string, text = slug): HTMLHeadingElement {
@@ -31,8 +31,8 @@ function record(level: number, slug: string, line: number): HeadingRecord {
   return { level: level as HeadingRecord['level'], text: slug, slug, line };
 }
 
-const GLYPH: IconAsset = { kind: 'glyph', glyph: '#' };
-const iconFor = vi.fn((_token: string): IconAsset => GLYPH);
+const MARKUP = '<svg data-test="fold-art" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>';
+const iconFor = vi.fn((_token: IconKey): string => MARKUP);
 
 function mount(children: HTMLElement[]): HTMLElement {
   const root = document.createElement('div');

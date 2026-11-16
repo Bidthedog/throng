@@ -57,6 +57,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { ICON_SETS_README } from '@throng/core';
 
 const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
 const UI_SRC = 'packages/ui/src';
@@ -286,24 +287,46 @@ const ALLOWED: readonly Allowed[] = [
   { file: `${UI_SRC}/renderer/editor/reveal-range.ts`, kind: 'identifier', token: 'markdownHeadingLine', reason: `${EDITOR_LANGUAGE} — the heading grammar the FR-090d editor reveal resolves against` },
   { file: `${CORE_SRC}/index.ts`, kind: 'identifier', token: 'markdownHeadingLine', reason: 'the barrel re-export of the heading grammar, forwarded through the registration index' },
 
-  /* The file-type icon, in the theme, its editor copy, the tree and the icon-pack generator. */
-  { file: `${CORE_SRC}/config/theme.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — the theme token` },
-  { file: `${CORE_SRC}/config/shipped-defaults.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — 060's frozen record of the glyph version 25 shipped (V25_MOVED_ICONS)` },
-  { file: `${CORE_SRC}/config/theme-copy.ts`, kind: 'literal', token: 'icons.fileMarkdown', reason: `${FILE_ICON} — the token's editor copy` },
-  { file: `${CORE_SRC}/config/theme-copy.ts`, kind: 'literal', token: 'Markdown file icon', reason: `${FILE_ICON} — the token's editor copy` },
-  { file: `${CORE_SRC}/config/theme-copy.ts`, kind: 'literal', token: 'The glyph shown beside a Markdown document in the tree.', reason: `${FILE_ICON} — the token's editor copy` },
+  /* The file-type icon, in the theme, its editor copy, the tree and the tree. */
+  { file: `${CORE_SRC}/icons/icon-keys.ts`, kind: 'literal', token: 'fileMarkdown', reason: `${FILE_ICON} — the icon key` },
+  { file: `${CORE_SRC}/icons/icon-keys.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — the icon key` },
+  { file: `${CORE_SRC}/icons/icon-keys.ts`, kind: 'literal', token: 'The icon shown beside a Markdown document in the tree.', reason: `${FILE_ICON} — the key's description` },
+  { file: `${CORE_SRC}/icons/default-icon-set.generated.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — the generated default set's key` },
+  {
+    file: `${CORE_SRC}/icons/icon-keys.ts`,
+    kind: 'literal',
+    token:
+      'The icon on the editor status bar button and menu rows that open a rendered, read-only view of a file such as a Markdown document, and at the head of that preview panel’s title.',
+    reason: 'user-facing copy for the `preview` icon key naming Markdown as an EXAMPLE of a previewable file; it selects nothing',
+  },
+  { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'literal', token: 'md', reason: `${FILE_ICON} — the extension it maps` },
+  { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'literal', token: 'markdown', reason: `${FILE_ICON} — the extension it maps` },
+  { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'literal', token: 'fileMarkdown', reason: `${FILE_ICON} — the icon it maps to` },
+  { file: `${CORE_SRC}/config/file-icon-colours.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — its colour category (069 FR-061)` },
   {
     file: `${CORE_SRC}/config/theme-copy.ts`,
     kind: 'literal',
-    token:
-      'The glyph on the editor status bar button and menu rows that open a rendered, read-only view of a file such as a Markdown document, and at the head of that preview panel’s title.',
-    reason: 'user-facing copy for the `preview` icon token naming Markdown as an EXAMPLE of a previewable file; it selects nothing',
+    token: 'The colour of the File Explorer and Find in Files icons for plain text, Markdown and diffs. Leave it empty and they take the Icon Colour.',
+    reason: 'user-facing copy for the Document File Icons colour, naming Markdown as one of the kinds it colours; it selects nothing',
   },
-  { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'identifier', token: 'md', reason: `${FILE_ICON} — the extension key` },
-  { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'identifier', token: 'markdown', reason: `${FILE_ICON} — the extension key` },
-  { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'literal', token: 'fileMarkdown', reason: `${FILE_ICON} — the icon it maps to` },
-  { file: `${UI_SRC}/main/icon-pack-service.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — the shipped SVG for the token` },
-  { file: `${UI_SRC}/main/icon-pack-service.ts`, kind: 'literal', token: 'README.md', reason: 'the icon-pack folder’s own README file name: unrelated to previews' },
+  {
+    file: `${CORE_SRC}/icons/default-icon-set.generated.ts`,
+    kind: 'literal',
+    token: ICON_SETS_README,
+    reason: `${FILE_ICON} — the icon sets README lists every key's file name, fileMarkdown.svg among them (069 FR-023)`,
+  },
+  {
+    file: `${CORE_SRC}/icons/seeded-icon-history.generated.ts`,
+    kind: 'literal',
+    token: 'fileMarkdown.svg',
+    reason: `${FILE_ICON} — a file name older releases seeded, frozen for the 069 upgrade (FR-036)`,
+  },
+  {
+    file: `${UI_SRC}/main/icon-set-upgrade.ts`,
+    kind: 'literal',
+    token: 'README.md',
+    reason: 'the old icon-pack README file the 069 upgrade deletes by name (FR-019); a file name, not a provider',
+  },
 
   /*
    * 045 FR-178 / FR-178a — the shipped known-FILE-EXTENSION list, which is what ends a path span that
@@ -369,7 +392,7 @@ const ALLOWED: readonly Allowed[] = [
   ...allow(`${CORE_SRC}/config/keybindings.ts`, 'identifier', ['MARKDOWN_SURFACES'], `${SECTION_FOLDING} — the surfaces the \`markdown.*\` fold chords are live on`),
   ...allow(`${CORE_SRC}/config/keybindings.ts`, 'literal', FOLD_COMMANDS, `${SECTION_FOLDING} — the fold command ids and their default chords`),
   ...allow(`${CORE_SRC}/config/keybindings-metadata.ts`, 'literal', [...FOLD_COMMANDS, 'Markdown'], `${SECTION_FOLDING} — the fold commands' descriptors and their group name`),
-  ...allow(`${CORE_SRC}/config/theme-copy.ts`, 'literal', [
+  ...allow(`${CORE_SRC}/icons/icon-keys.ts`, 'literal', [
     'The disclosure triangle beside a collapsed heading in a Markdown preview’s fold gutter. Clicking it expands the section.',
     'The disclosure triangle beside an expanded heading in a Markdown preview’s fold gutter. Clicking it collapses the section.',
     "The marker on a collapsed heading's line in a Markdown editor's fold gutter. Clicking it expands the section.",

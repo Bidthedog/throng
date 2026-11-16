@@ -28,7 +28,7 @@ const customTheme: Theme = {
   name: 'MyTheme',
   colours: { accent: '#abcabc' },
   fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } },
-  icons: {},
+
 };
 
 describe('ShippedDefaultsService.restoreAllThemes', () => {

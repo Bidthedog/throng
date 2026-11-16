@@ -92,8 +92,10 @@ describe('the line-ending list (059 FR-057)', () => {
     fireEvent.click(indicator());
     await screen.findByTestId('menu-item-line-ending-lf');
     expect(menuRows()).toEqual(LIST);
-    expect(screen.getByTestId('menu-item-line-ending-lf')).toHaveTextContent('LF ✓');
+    expect(screen.getByTestId('menu-item-line-ending-lf')).toHaveTextContent(/^LF$/);
+    expect(screen.getByTestId('menu-item-line-ending-lf')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('menu-item-line-ending-cr')).toHaveTextContent(/^CR$/);
+    expect(screen.getByTestId('menu-item-line-ending-cr')).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByTestId('menu-item-line-ending-crlf')).toHaveTextContent(/^CRLF$/);
     expect(screen.getByTestId('menu-item-line-ending-mixed')).toHaveTextContent(/^Mixed$/);
     // The insert commands are the CONTENT menu's (MT-04 step 5), not the indicator's.
@@ -142,12 +144,13 @@ describe('the line-ending list (059 FR-057)', () => {
     await waitFor(() => expect(indicator()).toHaveTextContent('Mixed (LF)'));
     fireEvent.click(indicator());
     const mixed = await screen.findByTestId('menu-item-line-ending-mixed');
-    expect(mixed).toHaveTextContent('Mixed ✓');
+    expect(mixed).toHaveTextContent(/^Mixed$/);
+    expect(mixed).toHaveAttribute('aria-checked', 'true');
     expect(mixed).toHaveAttribute('aria-disabled', 'true');
     for (const id of ['lf', 'cr', 'crlf']) {
       const row = screen.getByTestId(`menu-item-line-ending-${id}`);
       expect(row).toHaveAttribute('aria-disabled', 'false');
-      expect(row.textContent).not.toContain('✓');
+      expect(row).toHaveAttribute('aria-checked', 'false');
     }
     // The dominant ending is not "current" on a mixed document: choosing it converts.
     fireEvent.click(screen.getByTestId('menu-item-line-ending-lf'));

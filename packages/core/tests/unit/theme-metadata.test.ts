@@ -5,7 +5,6 @@ import {
   areaForToken,
   assertThemeAreaGroups,
   descriptorForThemeToken,
-  mechanicalCopy,
   themeEditableTokens,
 } from '../../src/config/theme-metadata.js';
 import { assertEveryKeyDescribed, auditRegistry, type FieldDescriptor } from '../../src/config/metadata.js';
@@ -59,19 +58,6 @@ describe('THEME_METADATA completeness (FR-038/047)', () => {
     expect(THEME_METADATA.find((d) => d.key === 'typography.button.family')?.control).toBe('font-family');
   });
 
-  it('gives icons.syncScroll a written label and description, not the mechanical fallback (044 FR-122c)', () => {
-    const desc = THEME_METADATA.find((d) => d.key === 'icons.syncScroll');
-    expect(desc, 'icons.syncScroll').toBeDefined();
-    const fallback = mechanicalCopy('icons.syncScroll');
-    expect(desc!.label).not.toBe(fallback.label);
-    expect(desc!.description).not.toBe(fallback.description);
-    expect(desc!.label.length).toBeGreaterThan(0);
-    expect(desc!.description.length).toBeGreaterThan(0);
-    // Analyze T1 — on the preview's OWN bar the toggle sits beside Open in Editor / Go to Editor, not beside
-    // a preview button, so the copy must not place it there.
-    expect(desc!.description).not.toContain('beside the preview button');
-  });
-
   it('has unique keys and non-empty label/description/group', () => {
     const seen = new Set<string>();
     for (const d of THEME_METADATA) {
@@ -84,12 +70,10 @@ describe('THEME_METADATA completeness (FR-038/047)', () => {
 });
 
 describe('control-type inference (FR-038)', () => {
-  it('colour tokens → colour, icon tokens → icon', () => {
+  it('colour tokens → colour', () => {
     expect(descriptorForThemeToken('colours.accent').control).toBe('colour');
     // 021 — the group is now the app AREA, not the token type. `appBg` is app-wide → General.
     expect(descriptorForThemeToken('colours.appBg').group).toBe('General');
-    expect(descriptorForThemeToken('icons.folder').control).toBe('icon');
-    expect(descriptorForThemeToken('icons.terminal').group).toBe('Icons');
   });
 
   it('font family/size/weight/case map to the right controls', () => {
@@ -197,7 +181,7 @@ describe('area grouping (021, FR-001..FR-009)', () => {
     expect(g('typography.editor.family')).toBe('Editor');
     // The base button typography lives in its own General · Buttons subsection (021 follow-up).
     expect(g('typography.button.weight')).toBe('General · Buttons');
-    expect(g('icons.terminal')).toBe('Icons');
+    expect(g('colours.iconColour')).toBe('Icons');
   });
 
   it('the ten syntax colours share the Editor · Syntax sub-group (FR-003a)', () => {
@@ -217,10 +201,11 @@ describe('area grouping (021, FR-001..FR-009)', () => {
   it('(G1) a group-name search surfaces every nested button row (FR-016)', () => {
     const buttons = filterFields('Buttons', THEME_METADATA, () => '');
     const buttonRows = buttons.filter((d) => /Button/.test(d.key));
-    expect(buttonRows).toHaveLength(18);
+    // 18 text-button tokens, plus the icon button's resting background (069 FR-054).
+    expect(buttonRows).toHaveLength(19);
     // "General" surfaces all of General including the nested button sub-groups.
     const general = filterFields('General', THEME_METADATA, () => '');
-    expect(general.filter((d) => /Button/.test(d.key))).toHaveLength(18);
+    expect(general.filter((d) => /Button/.test(d.key))).toHaveLength(19);
   });
 
   it('the completeness guard passes for the real registry, with no unassigned token (FR-009)', () => {

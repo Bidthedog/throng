@@ -43,6 +43,7 @@ import { __resetDirtyCloseStore } from '../../src/renderer/editor/dirty-close-st
 import { ProjectsPanel } from '../../src/renderer/sidebar/projects-panel.js';
 import { KeybindingsHandler } from '../../src/renderer/app.js';
 import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 class ImmediateResizeObserver implements ResizeObserver {
   constructor(private readonly cb: ResizeObserverCallback) {}
@@ -219,7 +220,8 @@ describe('the non-default header menu (contracts/menus.md §2)', () => {
     fireEvent.contextMenu(screen.getByTestId('category-header-cat-a'));
 
     await screen.findByTestId('context-menu');
-    expect(screen.getByTestId('menu-item-Minimise Category')).toHaveTextContent('✓');
+    expect(screen.getByTestId('menu-item-Minimise Category')).toHaveAttribute('aria-checked', 'true');
+    expect(drawnIcon(screen.getByTestId('menu-checked-Minimise Category'))).toBe(iconMarkup('menuChecked'));
   });
 });
 

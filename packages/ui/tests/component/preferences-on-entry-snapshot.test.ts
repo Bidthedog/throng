@@ -109,7 +109,6 @@ function mountWithDeferredLoad(editorOverrides: Record<string, unknown> = {}) {
       },
       listThemes: () => Promise.resolve(['throng']),
       listFonts: () => Promise.resolve([]),
-      listIconPacks: () => Promise.resolve([]),
     },
   });
 

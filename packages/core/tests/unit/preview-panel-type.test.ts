@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PREVIEW_KIND, previewPanelType } from '../../src/preview/panel-type.js';
 import { defaultPanelTypeRegistry } from '../../src/panel-type/default-registry.js';
-import { THRONG_THEME } from '../../src/config/theme.js';
+import { isIconKey } from '../../src/icons/icon-keys.js';
 
 /**
  * 044 T016 — the preview panel type is REGISTERED but not OFFERED, on 043 FR-017's precedent.
@@ -22,9 +22,9 @@ describe('previewPanelType', () => {
     expect(previewPanelType.label.trim().length).toBeGreaterThan(0);
   });
 
-  it('wears the preview icon token, which the shipped theme defines', () => {
+  it('wears the preview icon key, which the default icon set defines', () => {
     expect(previewPanelType.icon).toBe('preview');
-    expect(THRONG_THEME.icons.preview).toBeTruthy();
+    expect(isIconKey(previewPanelType.icon!)).toBe(true);
   });
 
   it('is registered in the default registry, resolvable by get(), but absent from listOfferable()', () => {

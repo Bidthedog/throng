@@ -110,7 +110,8 @@ describe('the encoding menu (059 FR-055, FR-056)', () => {
       const row = screen.getByTestId(optionId(c));
       const current = c.encoding === 'utf16be' && c.hasBom;
       // Exact: a code page's label carries its script in brackets, so a plain substring match would pass a tick.
-      expect(row.textContent).toBe(current ? `${c.label} ✓` : c.label);
+      expect(row.querySelector('.context-menu__label')?.textContent).toBe(c.label);
+      expect(row).toHaveAttribute('aria-checked', String(current));
     }
     // Change Encoding is not a save: there is no Save with Encoding any more.
     expect(screen.queryByTestId('menu-item-Save with Encoding…')).toBeNull();
@@ -211,12 +212,14 @@ describe('the encoding lists are grouped: Unicode, then Windows Code Pages (059 
     await mount({ encoding: 'windows1253' });
     fireEvent.click(indicator());
     const sub = await screen.findByTestId('menu-item-encoding-codepages');
-    expect(sub.querySelector('.context-menu__label')?.textContent).toBe('Windows Code Pages ✓');
+    expect(sub.querySelector('.context-menu__label')?.textContent).toBe('Windows Code Pages');
+    expect(sub).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(sub);
     await waitFor(() => expect(sub.querySelector('ul')).not.toBeNull());
     const rows = [...(sub.querySelector('ul')?.children ?? [])].map((r) => r.getAttribute('data-testid')).filter(Boolean);
     expect(rows).toEqual(ENCODING_CHOICES.filter((c) => c.group === 'codepage').map(optionId));
-    expect(screen.getByTestId('menu-item-encoding-windows1253').textContent).toBe('Windows-1253 (Greek) ✓');
+    expect(screen.getByTestId('menu-item-encoding-windows1253')).toHaveTextContent(/^Windows-1253 \(Greek\)$/);
+    expect(screen.getByTestId('menu-item-encoding-windows1253')).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(screen.getByTestId('menu-item-encoding-windows1251'));
     await waitFor(() => expect(screen.queryByTestId('context-menu')).toBeNull());
   });

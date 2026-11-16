@@ -38,7 +38,7 @@ import {
 
 /**
  * The panel reads two preferences (FR-033a, FR-033b), so the config store is the one collaborator
- * this file substitutes. Everything else in the module — `useActiveTheme`, `useIconPacks`, which
+ * this file substitutes. Everything else in the module — `useActiveTheme`, `useIconSets`, which
  * every `<Icon>` needs — is the real thing, resolving to the bundled defaults.
  */
 const config = vi.hoisted(() => ({ settings: null as unknown as AppSettings }));

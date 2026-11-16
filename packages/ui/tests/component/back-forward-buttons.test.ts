@@ -13,7 +13,6 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  THRONG_THEME,
   collectPanels,
   createPreviewProviderRegistry,
   type NavigationHistory,
@@ -25,6 +24,7 @@ import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
 import { getEditorActions } from '../../src/renderer/editor/editor-actions.js';
 import { mountEditor, type EditorHarness } from './helpers/mount-editor.js';
 import { mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 const FILE = 'D:/proj/notes.prvtxt';
 const OTHER = 'D:/proj/other.prvtxt';
@@ -134,8 +134,8 @@ describe('the controls themselves (FR-104, Principle VI)', () => {
     expect(forward(id).getAttribute('aria-label')).toBe('Forward');
     expect(back(id).title).toBe('Back (Alt+ArrowLeft)');
     expect(forward(id).title).toBe('Forward (Alt+ArrowRight)');
-    expect(back(id).textContent).toBe(THRONG_THEME.icons.navigateBack);
-    expect(forward(id).textContent).toBe(THRONG_THEME.icons.navigateForward);
+    expect(drawnIcon(back(id))).toBe(iconMarkup('navigateBack'));
+    expect(drawnIcon(forward(id))).toBe(iconMarkup('navigateForward'));
   });
 
   it('a rebound chord is what the title shows', async () => {

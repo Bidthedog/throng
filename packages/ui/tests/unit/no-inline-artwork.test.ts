@@ -51,7 +51,7 @@ function stripComments(src: string): string {
  * The throng brand mark is the application's IDENTITY, not an action control and not a themeable
  * icon. It is deliberately inlined so it can take its colour from the active theme (it is drawn as a
  * frame around a body the colour of the app background — shipped as a fixed asset it would erase its
- * own frame on the Light theme). Putting it in the theme's icon pack would let a theme replace
+ * own frame on the Light theme). Putting it in an icon set would let a theme replace
  * throng's logo, which is not a theming concern.
  */
 const BRAND_MARK = 'title-bar/throng-mark.tsx';
@@ -69,22 +69,6 @@ describe('SC-002 — no inline vector artwork', () => {
       offenders.sort(),
       `these draw inline vector artwork instead of resolving a theme icon token:\n${offenders.join('\n')}`,
     ).toEqual([]);
-  });
-
-  it('exactly one shipped SVG icon set — no black/white variants (FR-028)', () => {
-    // The obvious remedy for illegible icons on light themes is to ship a black set and a white
-    // set. It is the wrong one: the artwork already inherits its colour, so the two sets would be
-    // the same art twice, and would STILL be wrong for every theme that suits neither pure black nor
-    // pure white. One set with an overridable colour is the answer (FR-027).
-    const packs = fileURLToPath(new URL('../../src/main/icon-pack-service.ts', import.meta.url));
-    const src = stripComments(readFileSync(packs, 'utf8'));
-    // The seeded packs are the object literals in the first-run seeder, each `{ name: '…', files }`.
-    const seeded = [...src.matchAll(/name:\s*'([\w-]+)'\s*,\s*\n?\s*files:/g)].map((m) => m[1]!);
-    const svgPacks = seeded.filter((n) => n.includes('svg'));
-    expect(
-      svgPacks,
-      `expected exactly one SVG pack; seeded packs are: ${seeded.join(', ')}`,
-    ).toHaveLength(1);
   });
 });
 

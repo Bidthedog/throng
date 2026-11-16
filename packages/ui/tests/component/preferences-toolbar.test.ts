@@ -96,12 +96,14 @@ describe('every toolbar control is a themed icon with a truthful title (015, FR-
     expect(screen.queryByTestId('prefs-reset-all')).toBeNull();
   });
 
-  it('renders no inline <svg> anywhere in the toolbar', () => {
+  it('draws no inline <svg> of its own: every svg in the toolbar sits inside the shared <Icon>', () => {
     // Constitution v3.12.0 — these were recorded as known violations at that amendment. Icons come
-    // from theme tokens now.
+    // from the active set now, and since 069 that art IS svg markup, so the rule is where it is drawn.
     mount();
     for (const id of CONTROLS) {
-      expect(screen.getByTestId(id).querySelector('svg'), `${id} draws an inline <svg>`).toBeNull();
+      for (const svg of screen.getByTestId(id).querySelectorAll('svg')) {
+        expect(svg.closest('.icon'), `${id} draws an inline <svg> outside <Icon>`).not.toBeNull();
+      }
     }
   });
 
@@ -109,7 +111,8 @@ describe('every toolbar control is a themed icon with a truthful title (015, FR-
     mount();
     for (const id of CONTROLS) {
       const button = screen.getByTestId(id);
-      expect(button.textContent?.trim().length, `${id} rendered no glyph`).toBeGreaterThan(0);
+      expect(button.querySelectorAll('.icon svg').length, `${id} rendered no icon`).toBeGreaterThan(0);
+      expect(button.textContent?.trim(), `${id} carries text beside its icon`).toBe('');
       // The glyph is decorative: the accessible name is the button's, and a screen reader that also
       // announced the character would read the raw glyph aloud.
       expect(button.querySelector('.icon')).toHaveAttribute('aria-hidden', 'true');

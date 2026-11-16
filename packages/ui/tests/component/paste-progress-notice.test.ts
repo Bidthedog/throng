@@ -9,12 +9,12 @@
  * rather than in the explorer pane, it is untouched by a project switch.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { THRONG_THEME } from '@throng/core';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationProvider, useNotify } from '../../src/renderer/common/notification.js';
 import { PasteProgressNotice } from '../../src/renderer/explorer/paste-progress-notice.js';
 import { fakeTransfer } from './helpers/explorer-harness.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 let transfer: ReturnType<typeof fakeTransfer>;
 
@@ -428,27 +428,28 @@ describe('the progress bar (050 T116, FR-039)', () => {
 });
 
 describe('the Cancel icon (050 T116, FR-039)', () => {
-  it('is its own icon token, not the dismiss glyph, titled "Cancel paste"', () => {
+  it('is its own icon key, not the dismiss icon, titled "Cancel paste"', () => {
     render(tree());
     running({ bytesDone: MB, bytesTotal: 20 * MB });
 
     const cancel = screen.getByTestId('paste-cancel');
     expect(cancel.getAttribute('title')).toBe('Cancel paste');
-    const glyph = THRONG_THEME.icons['cancel'];
-    expect(glyph, 'THRONG_THEME has no `cancel` icon token').toBeTruthy();
-    expect(glyph).not.toBe(THRONG_THEME.icons['dismiss']);
-    expect(glyph).not.toBe(THRONG_THEME.icons['destroy']);
-    expect(cancel.textContent).toBe(glyph);
+    const art = iconMarkup('cancel');
+    expect(art).not.toBe(iconMarkup('dismiss'));
+    expect(art).not.toBe(iconMarkup('destroy'));
+    expect(drawnIcon(cancel)).toBe(art);
   });
 
-  it('sits in its own slot, after the text, apart from it', () => {
+  // 069 FR-050, superseding 050 FR-039's slot in the body: a toast's buttons are one group at its top-right.
+  it('sits in the card\'s control group at the top-right, before Copy, and not in the body', () => {
     render(tree());
     running({ bytesDone: MB, bytesTotal: 20 * MB });
 
-    const body = screen.getByTestId('paste-progress').querySelector('.paste-progress__body')!;
-    const slot = within(body as HTMLElement).getByTestId('paste-cancel').closest('.paste-progress__cancel');
-    expect(slot, 'cancel is not in a .paste-progress__cancel slot').not.toBeNull();
-    expect(body.lastElementChild).toBe(slot);
-    expect(slot!.querySelector('.paste-progress__text')).toBeNull();
+    const card = screen.getByTestId('paste-progress');
+    const group = within(card).getByTestId('notice-controls');
+    const ids = [...group.querySelectorAll('button')].map((b) => b.getAttribute('data-testid'));
+    expect(ids[0]).toBe('paste-cancel');
+    expect(ids[1]).toBe('paste-progress-copy');
+    expect(card.querySelector('.paste-progress__body [data-testid="paste-cancel"]')).toBeNull();
   });
 });

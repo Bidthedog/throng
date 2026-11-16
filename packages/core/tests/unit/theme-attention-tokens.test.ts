@@ -16,8 +16,6 @@ import { contrastRatio, readableTextOn } from '../../src/config/theme-quality.js
  *
  * Layer: unit — pure data over the bundled themes.
  */
-const RETIRED_ICONS = ['attention', 'attentionFailed', 'goToPanel'] as const;
-
 describe('057 attention theme tokens', () => {
   const themes = Object.entries(ALL_DEFAULT_THEMES);
 
@@ -40,14 +38,6 @@ describe('057 attention theme tokens', () => {
     expect((migrateTheme(stray).colours as Record<string, string>).attentionFailedMark).toBeUndefined();
   });
 
-  it.each(RETIRED_ICONS)('retires the %s glyph (FR-124, FR-139): no glyph, no editor copy, a stray key dropped on load', (token) => {
-    expect((THRONG_THEME.icons as Record<string, string>)[token]).toBeUndefined();
-    for (const [, theme] of themes) expect((theme.icons as Record<string, string>)[token]).toBeUndefined();
-    expect(THEME_TOKEN_COPY[`icons.${token}`]).toBeUndefined();
-    const stray = { ...THRONG_THEME, icons: { ...THRONG_THEME.icons, [token]: '⚑' } };
-    expect((migrateTheme(stray).icons as Record<string, string>)[token]).toBeUndefined();
-  });
-
   it.each(themes)('%s emits a number colour for the circle that is the black or white its fill needs (FR-136)', (_name, theme) => {
     const vars = toCssVariables(theme);
     const fill = vars['--throng-colour-attentionMark']!;
@@ -64,6 +54,6 @@ describe('057 attention theme tokens', () => {
   });
 
   it('bumps the shipped-defaults version so existing installs receive the tokens', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(33);
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(34);
   });
 });

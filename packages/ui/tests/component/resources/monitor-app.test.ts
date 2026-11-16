@@ -13,11 +13,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
 import { MonitorApp } from '../../../src/renderer/resources/monitor-app.js';
 import { __resetSession, getHistory, getSessionSnapshot, getView, setView } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { drawnIcon, iconMarkup } from '../helpers/icon-markup.js';
 
 // The stand-in body carries the real liveness line, as the real body's first row does (FR-121).
 vi.mock('../../../src/renderer/resources/monitor-body.js', async () => {
@@ -66,8 +66,7 @@ describe('the window (FR-081, FR-084)', () => {
     await mountWindow();
 
     expect(screen.getByTestId('title-bar-identity')).toHaveTextContent('Resource Monitor');
-    const icons = THRONG_THEME.icons as Record<string, string>;
-    expect(screen.getByTestId('window-min')).toHaveTextContent(icons.windowMinimise!);
+    expect(drawnIcon(screen.getByTestId('window-min'))).toBe(iconMarkup('windowMinimise'));
     expect(screen.getByTestId('window-max')).toBeInTheDocument();
     expect(screen.getByTestId('window-close')).toBeInTheDocument();
     expect(document.title).toContain('Resource Monitor');

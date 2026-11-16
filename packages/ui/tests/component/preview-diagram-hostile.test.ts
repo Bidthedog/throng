@@ -93,7 +93,7 @@ const props: PreviewBodyProps = {
 async function mount(): Promise<HTMLElement> {
   render(createElement(MarkdownBody, { ...props, content: { kind: 'text', text } }));
   const body = screen.getByTestId('preview-markdown-p1');
-  await waitFor(() => expect(body.querySelectorAll('.preview-diagram-frame svg')).toHaveLength(2), COLD);
+  await waitFor(() => expect(body.querySelectorAll('.preview-diagram-frame__layer > svg')).toHaveLength(2), COLD);
   return body;
 }
 

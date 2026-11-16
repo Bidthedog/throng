@@ -146,6 +146,17 @@ describe('a malformed payload changes nothing', () => {
     expect((service.calls[0]![1] as NotificationEntryInput).actions).toEqual([{ kind: 'goToPanel', panelId: 'p2', label: 'Go' }]);
   });
 
+  it('keeps the serialisable openIconSetsFolder action, and drops one with no label (069 R7)', async () => {
+    const { ipc, service } = wired();
+    await ipc.handles.get(NOTIFICATIONS_CHANNELS.add)!(event(1), {
+      ...VALID,
+      actions: [{ kind: 'openIconSetsFolder', label: 'Open folder' }, { kind: 'openIconSetsFolder' }],
+    });
+    expect((service.calls[0]![1] as NotificationEntryInput).actions).toEqual([
+      { kind: 'openIconSetsFolder', label: 'Open folder' },
+    ]);
+  });
+
   it('forwards an origin and the place it was raised with, and drops blanks and malformed ones (FR-061, FR-063)', async () => {
     const { ipc, service } = wired();
     const add = ipc.handles.get(NOTIFICATIONS_CHANNELS.add)!;

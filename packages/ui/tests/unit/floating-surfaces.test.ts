@@ -105,6 +105,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — the two-stroke chord indication (046 FR-092), pinned to the bottom-right of its own editor and clamped to it by max-width; anchored to nothing, so nothing to flip away from',
   '.tab-strip':
     'chrome — the tab strip itself. Its z-index belongs to the ::before/::after OVERFLOW FADES (031/#225), which are decoration painted over the scrolling track and are `pointer-events: none`. Nothing opens out of it, so there is no edge to flip away from; the fades are clamped to the strip by construction',
+  '.explorer-path-popover':
+    'explorer/path-popover.tsx — the File Explorer row hover popover (069 FR-059): the row\'s icon, large, beside its path. ANCHORED to its row through the same useAnchoredPosition as the tab popover, so it opens below the row, flips above it when there is no room below, and clamps whatever remains so no part leaves the viewport; held `visibility: hidden` until placed',
   '.tabstrip-popover':
     "workspace/tab-popover.tsx — the tab hover popover (031 US6 / FR-051). ANCHORED to its chip, so it has edges to run off and really does flip: it opens down-left by default and clampToViewport right-aligns it to the chip when opening at the chip's left edge would overflow the window (the LAST tab in the strip, which is where a hover is most likely to be asked for), flips it above the chip when there is no room below, and clamps whatever remains so no part leaves the viewport. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints at the wrong position first",
   '.notification-place-popover':

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   V6_SEARCH_MATCH_COLOURS,
-  V6_FIND_IN_FILES_ICON,
   V6_SEARCH_IN_FILES_SETTINGS,
   SEARCH_MATCH_TOKENS,
   buildShippedDefaults,
@@ -32,7 +31,7 @@ import type { Theme } from '../../src/config/theme.js';
  * once those changes have landed.
  */
 
-/** A shipped record whose four guarded values differ from what version 6 shipped. */
+/** A shipped record whose three guarded colour values differ from what version 6 shipped. */
 function shippedV7(): ShippedDefaults {
   const d = structuredClone(buildShippedDefaults()) as {
     version: number;
@@ -46,7 +45,6 @@ function shippedV7(): ShippedDefaults {
     theme.colours.searchMatch = `${name}-match`;
     theme.colours.searchMatchCurrent = `${name}-current`;
     theme.colours.searchMatchCurrentBorder = `${name}-border`;
-    theme.icons.findInFiles = '🔎';
   }
   return d as unknown as ShippedDefaults;
 }
@@ -139,17 +137,15 @@ describe('the guarded theme value upgrade (FR-065, FR-067, R28) — the first no
       name,
       colours: { accent: '#123', ...V6_SEARCH_MATCH_COLOURS[name] },
       fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } },
-      icons: { destroy: '×', findInFiles: V6_FIND_IN_FILES_ICON },
     }) as unknown as Theme;
 
   it('the v6 record and the v7 shipped values differ, or every case below is vacuous', () => {
     for (const token of SEARCH_MATCH_TOKENS) {
       expect(D7.themes.Light.colours[token]).not.toBe(V6_SEARCH_MATCH_COLOURS.Light[token]);
     }
-    expect(D7.themes.Light.icons.findInFiles).not.toBe(V6_FIND_IN_FILES_ICON);
   });
 
-  it('rewrites a built-in whose four guarded values are still the v6 ones', () => {
+  it('rewrites a built-in whose three guarded colour values are still the v6 ones', () => {
     const plan = planThemeValueUpgrade({ shipped: D7, present: { Light: v6Theme('Light') } });
     expect(plan).toEqual([
       {
@@ -158,7 +154,6 @@ describe('the guarded theme value upgrade (FR-065, FR-067, R28) — the first no
           { path: 'colours.searchMatch', value: 'Light-match' },
           { path: 'colours.searchMatchCurrent', value: 'Light-current' },
           { path: 'colours.searchMatchCurrentBorder', value: 'Light-border' },
-          { path: 'icons.findInFiles', value: '🔎' },
         ],
       },
     ]);
@@ -171,7 +166,6 @@ describe('the guarded theme value upgrade (FR-065, FR-067, R28) — the first no
     expect(plan[0].leaves.map((l) => l.path)).toEqual([
       'colours.searchMatch',
       'colours.searchMatchCurrentBorder',
-      'icons.findInFiles',
     ]);
   });
 
@@ -180,7 +174,6 @@ describe('the guarded theme value upgrade (FR-065, FR-067, R28) — the first no
     theme.colours.searchMatch = '#aaa';
     theme.colours.searchMatchCurrent = '#bbb';
     theme.colours.searchMatchCurrentBorder = '#ccc';
-    theme.icons.findInFiles = '★';
     expect(planThemeValueUpgrade({ shipped: D7, present: { Light: theme } })).toEqual([]);
   });
 
@@ -194,7 +187,7 @@ describe('the guarded theme value upgrade (FR-065, FR-067, R28) — the first no
   });
 
   it('leaves a theme missing the tokens entirely alone — that is the additive upgrade’s job', () => {
-    const bare = { name: 'Light', colours: { accent: '#123' }, icons: {} } as unknown as Theme;
+    const bare = { name: 'Light', colours: { accent: '#123' } } as unknown as Theme;
     expect(planThemeValueUpgrade({ shipped: D7, present: { Light: bare } })).toEqual([]);
   });
 
@@ -216,7 +209,6 @@ describe('the guarded theme value upgrade (FR-065, FR-067, R28) — the first no
     applied.colours.searchMatch = 'Light-match';
     applied.colours.searchMatchCurrent = 'Light-current';
     applied.colours.searchMatchCurrentBorder = 'Light-border';
-    applied.icons.findInFiles = '🔎';
     expect(planThemeValueUpgrade({ shipped: D7, present: { Light: applied } })).toEqual([]);
   });
 

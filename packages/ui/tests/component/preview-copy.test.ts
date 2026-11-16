@@ -663,7 +663,7 @@ describe('a diagram in the selection (054 FR-049a)', () => {
     restore = registerBlockRenderer(fakeEntry);
     m = await mountMarkdownPreview(DIAGRAM_DOC);
     await screen.findByText('Before the diagram.', {}, COLD);
-    await waitFor(() => expect(markdown().querySelector('.preview-diagram-host svg')).toBeTruthy());
+    await waitFor(() => expect(markdown().querySelector('.preview-diagram-frame__layer > svg')).toBeTruthy());
   }
 
   afterEach(() => {

@@ -20,14 +20,14 @@
  *   - The rebind round trip itself (`:287`): a real `keybindings.json` write, main's hot reload, and
  *     the new chord actually firing. What moves here is the narrower claim that the TITLE is computed
  *     from whatever bindings the component is holding — which is what makes the reload observable.
- *   - That an icon PACK's artwork is drawn. `Icon` has its own component test; the toolbar's claim is
+ *   - That an icon SET's artwork is drawn. `Icon` has its own component test; the toolbar's claim is
  *     only that it draws through `Icon` at all.
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_KEYBINDINGS, type Keybindings } from '@throng/core';
+import { DEFAULT_ICON_SET, DEFAULT_KEYBINDINGS, type Keybindings } from '@throng/core';
 import { ExplorerToolbar } from '../../src/renderer/explorer/toolbar.js';
 import { registerQuickOpen } from '../../src/renderer/navigate/navigation-store.js';
 import {
@@ -117,10 +117,8 @@ describe('the shape of the toolbar (V1, V5)', () => {
   it('draws every control as an icon, with no text label of its own (V2)', () => {
     /*
      * "No label" is asserted as "no text OUTSIDE the icon", not as "no text at all", and the
-     * distinction is the migrated spec's own: at the shipped defaults no icon pack is selected, so
-     * `Icon` takes its GLYPH branch and renders the theme's character as text. An empty-textContent
-     * assertion would therefore fail on all five controls and would be testing that a pack was
-     * installed — which is not what V2 says.
+     * distinction is the migrated spec's own: V2 forbids a label, and what the icon itself draws is
+     * the icon set's business (an SVG today, but a user's set is theirs), not this test's.
      */
     mount();
 
@@ -341,6 +339,15 @@ describe('a tree action with no handler is an action with nothing to act on', ()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Collapse all' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'New folder' })).toBeEnabled();
+  });
+
+  it('draws Delete as the rubbish bin, the same icon as the menu’s Delete (069 FR-055)', () => {
+    mount();
+    const drawn = screen.getByRole('button', { name: 'Delete' }).querySelector('.icon')!.innerHTML;
+    // Through the DOM, so both sides are serialised the same way.
+    const asDrawn = (markup: string): string => Object.assign(document.createElement('span'), { innerHTML: markup }).innerHTML;
+    expect(drawn).toBe(asDrawn(DEFAULT_ICON_SET.deleteFile));
+    expect(drawn).not.toBe(asDrawn(DEFAULT_ICON_SET.destroy));
   });
 
   it('calls the handler it was given', async () => {

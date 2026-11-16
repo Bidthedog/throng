@@ -11,8 +11,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { createElement, useState, type ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
 import { FoldHeading, FoldAllButtons } from '../../src/renderer/preferences/fold-heading.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 type Props = Partial<Parameters<typeof FoldHeading>[0]>;
 
@@ -65,7 +65,7 @@ describe('the heading element (F1, F2)', () => {
 
   it('draws its chevron from the chevron token', () => {
     const { container } = render(createElement(Host));
-    expect(container.querySelector('.fold-heading__chevron')).toHaveTextContent(THRONG_THEME.icons.chevron as string);
+    expect(drawnIcon(container.querySelector('.fold-heading__chevron'))).toBe(iconMarkup('chevron'));
   });
 
   it('rotates the chevron only while open', async () => {
@@ -142,7 +142,7 @@ describe('the warning marker (F2, F7, FR-007)', () => {
     const marker = await screen.findByTestId('sec-invalid');
     expect(marker).toHaveAttribute('title', 'Contains an invalid entry');
     expect(marker).toHaveAttribute('aria-label', 'Contains an invalid entry');
-    expect(marker).toHaveTextContent(THRONG_THEME.icons.warning as string);
+    expect(drawnIcon(marker)).toBe(iconMarkup('warning'));
     // Announced with the heading: it is inside the toggle button, so it is part of the button's name.
     expect(toggle()).toContainElement(marker);
     expect(screen.getByRole('button', { name: /Contains an invalid entry/ })).toBe(toggle());

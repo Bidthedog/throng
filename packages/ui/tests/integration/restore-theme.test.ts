@@ -28,7 +28,7 @@ describe('ShippedDefaultsService.restoreTheme (FR-005)', () => {
   it('overwrites an edited built-in back to its shipped value', async () => {
     const { store, svc, root } = freshService();
     await store.restoreDefaultThemes(); // seed all
-    await store.write({ kind: 'theme', name: 'Matrix' }, { name: 'Matrix', colours: { accent: '#ffffff' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
+    await store.write({ kind: 'theme', name: 'Matrix' }, { name: 'Matrix', colours: { accent: '#ffffff' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } } });
 
     const res = await svc.restoreTheme('Matrix');
 
@@ -51,8 +51,8 @@ describe('ShippedDefaultsService.restoreTheme (FR-005)', () => {
   it('touches no other theme (built-in or custom)', async () => {
     const { store, svc, root } = freshService();
     await store.restoreDefaultThemes();
-    await store.write({ kind: 'theme', name: 'Debian' }, { name: 'Debian', colours: { accent: '#123456' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
-    await store.write({ kind: 'theme', name: 'MyCustom' }, { name: 'MyCustom', colours: { accent: '#abcabc' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
+    await store.write({ kind: 'theme', name: 'Debian' }, { name: 'Debian', colours: { accent: '#123456' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } } });
+    await store.write({ kind: 'theme', name: 'MyCustom' }, { name: 'MyCustom', colours: { accent: '#abcabc' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } } });
 
     await svc.restoreTheme('Matrix');
 
@@ -75,7 +75,7 @@ describe('ShippedDefaultsService.restoreTheme (FR-005)', () => {
     await store.restoreDefaultThemes();
     const themesDir = join(root, 'themes');
     // Edit another built-in so we can prove a failed restore of Matrix does not disturb it.
-    await store.write({ kind: 'theme', name: 'Debian' }, { name: 'Debian', colours: { accent: '#123456' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
+    await store.write({ kind: 'theme', name: 'Debian' }, { name: 'Debian', colours: { accent: '#123456' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } } });
 
     // Make Matrix.json unwritable by replacing it with a NON-EMPTY directory.
     rmSync(join(themesDir, 'Matrix.json'));

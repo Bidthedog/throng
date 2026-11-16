@@ -244,7 +244,8 @@ test('the strip is a themed control that DIMS with its panel — it does not sta
       // It is an ACTION control, so it names its action on hover.
       await expect(win.getByTestId(`editor-language-${pid}`)).toHaveAttribute('title', 'Set language');
 
-      // Its colours resolve from THEME TOKENS — never a hardcoded value, and never an inline SVG.
+      // Its colours resolve from THEME TOKENS — never a hardcoded value, and never inline artwork of its own. Its
+      // controls' icons are SVG, drawn from the active icon set inside a themed `.icon` (069): those are allowed.
       const styling = await win.evaluate((id) => {
         const el = document.querySelector(`[data-testid="editor-status-strip-${id}"]`)!;
         const strip = getComputedStyle(el);
@@ -254,11 +255,11 @@ test('the strip is a themed control that DIMS with its panel — it does not sta
         return {
           stripBg: strip.backgroundColor,
           tokenBg,
-          inlineSvgs: el.querySelectorAll('svg').length,
+          inlineSvgs: [...el.querySelectorAll('svg')].filter((svg) => !svg.closest('.icon')).length,
         };
       }, pid);
       expect(styling.tokenBg).toMatch(/^#[0-9a-f]{6}$/i);
-      expect(styling.inlineSvgs, 'the strip must not carry an inline SVG').toBe(0);
+      expect(styling.inlineSvgs, 'the strip must not carry inline artwork outside a themed icon').toBe(0);
       expect(styling.stripBg).not.toBe('rgba(0, 0, 0, 0)');
 
       // The file was opened from the File Explorer, which therefore holds the active pane, and 046

@@ -15,6 +15,7 @@ import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
 import { FilterField, ToolbarControls } from '../../../src/renderer/resources/toolbar.js';
 import { __resetSession, getView, ingestFrame, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { frame, sampleHierarchy, withNetwork } from '../helpers/resource-fixtures.js';
+import { drawnIcon, iconMarkup } from '../helpers/icon-markup.js';
 
 const writePatch = vi.fn(() => Promise.resolve({ ok: true }));
 
@@ -112,12 +113,11 @@ describe('the metric (FR-061)', () => {
 
   it('draws each with the theme’s icon for the metric', async () => {
     await mount();
-    const icons = THRONG_THEME.icons as Record<string, string>;
-    expect(screen.getByTestId('monitor-metric-cpu')).toHaveTextContent(icons.resourceCpu!);
-    expect(screen.getByTestId('monitor-metric-memory')).toHaveTextContent(icons.resourceMemory!);
-    expect(screen.getByTestId('monitor-metric-gpu')).toHaveTextContent(icons.resourceGpu!);
-    expect(screen.getByTestId('monitor-metric-io')).toHaveTextContent(icons.resourceIo!);
-    expect(screen.getByTestId('monitor-metric-network')).toHaveTextContent(icons.resourceNetwork!);
+    expect(drawnIcon(screen.getByTestId('monitor-metric-cpu'))).toBe(iconMarkup('resourceCpu'));
+    expect(drawnIcon(screen.getByTestId('monitor-metric-memory'))).toBe(iconMarkup('resourceMemory'));
+    expect(drawnIcon(screen.getByTestId('monitor-metric-gpu'))).toBe(iconMarkup('resourceGpu'));
+    expect(drawnIcon(screen.getByTestId('monitor-metric-io'))).toBe(iconMarkup('resourceIo'));
+    expect(drawnIcon(screen.getByTestId('monitor-metric-network'))).toBe(iconMarkup('resourceNetwork'));
   });
 
   it('disables Network with its header’s reason while it is not measured (FR-099, FR-113)', async () => {
@@ -143,7 +143,7 @@ describe('hide idle (FR-061a)', () => {
     expect(button).toHaveAttribute('title', 'Hide idle processes');
     expect(screen.getByRole('button', { name: 'Hide idle processes' })).toBe(button);
     expect(button).toHaveAttribute('aria-pressed', 'false');
-    expect(button).toHaveTextContent((THRONG_THEME.icons as Record<string, string>).resourceHideIdle!);
+    expect(drawnIcon(button)).toBe(iconMarkup('resourceHideIdle'));
 
     fireEvent.click(button);
     expect(getView().hideIdle).toBe(true);
@@ -161,7 +161,7 @@ describe('hide ended processes (FR-105)', () => {
     expect(button).toHaveAttribute('title', 'Hide ended processes');
     expect(screen.getByRole('button', { name: 'Hide ended processes' })).toBe(button);
     expect(button).toHaveAttribute('aria-pressed', 'true');
-    expect(button).toHaveTextContent((THRONG_THEME.icons as Record<string, string>).resourceHideEnded!);
+    expect(drawnIcon(button)).toBe(iconMarkup('resourceHideEnded'));
     expect(screen.queryByTestId('monitor-hide-ended-label')).toBeNull();
     expect(screen.queryByTestId('monitor-hide-idle-label')).toBeNull();
     expect(screen.getByTestId('monitor-controls')).not.toHaveTextContent(/Hide (idle|ended)/);

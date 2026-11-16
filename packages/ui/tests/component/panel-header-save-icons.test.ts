@@ -17,6 +17,7 @@ import { getEditorActions } from '../../src/renderer/editor/editor-actions.js';
 import { __resetDirtyCloseStore } from '../../src/renderer/editor/dirty-close-store.js';
 import { mountEditor } from './helpers/mount-editor.js';
 import { mountMarkdownPreview } from './helpers/mount-preview-panel.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 const PANEL = 'p-ed';
 
@@ -93,8 +94,8 @@ describe('an editor panel (FR-069, FR-070)', () => {
     expect(order.indexOf(`panel-save-${PANEL}`)).toBeLessThan(order.indexOf(`panel-save-as-${PANEL}`));
     expect(order.indexOf(`panel-save-as-${PANEL}`)).toBeLessThan(order.indexOf(`panel-save-separator-${PANEL}`));
     expect(order.indexOf(`panel-save-separator-${PANEL}`)).toBeLessThan(order.indexOf(`panel-maximise-${PANEL}`));
-    expect(save().querySelector('.icon')?.textContent).toBe('🖪');
-    expect(saveAs()!.querySelector('.icon')?.textContent).toBe('🖫');
+    expect(drawnIcon(save())).toBe(iconMarkup('save'));
+    expect(drawnIcon(saveAs())).toBe(iconMarkup('saveAs'));
     expect(sep()!.getAttribute('role')).toBe('separator');
   });
 

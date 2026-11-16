@@ -205,6 +205,41 @@ describe('the Clone prefill (FR-006)', () => {
   });
 });
 
+describe('a caller-supplied validate replaces the theme rules (069 FR-025)', () => {
+  const noX = (name: string) => (name.includes('x') ? { ok: false as const, message: 'No x allowed.' } : { ok: true as const });
+
+  it('shows the caller’s message, disables confirm, and ignores the theme reserved list', async () => {
+    // `throng` is reserved for THEMES; with its own `validate` the dialog must not apply that rule.
+    const { user, onConfirm } = open({ validate: noX, reserved: RESERVED, existing: [], renamingFrom: undefined });
+    await typeName(user, 'throng');
+    expect(error()).toBeNull();
+    expect(confirm()).toBeEnabled();
+
+    await typeName(user, 'a-x-b');
+    expect(error()).toHaveTextContent('No x allowed.');
+    expect(confirm()).toBeDisabled();
+    await user.type(input(), '{Enter}');
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('validates the name that will be submitted: leading and trailing spaces do not hide a collision', async () => {
+    const taken = (name: string) => (name === 'mine' ? { ok: false as const, message: 'Already taken.' } : { ok: true as const });
+    const { user, onConfirm } = open({ validate: taken, renamingFrom: undefined });
+    await typeName(user, ' mine ');
+    expect(error()).toHaveTextContent('Already taken.');
+    expect(confirm()).toBeDisabled();
+    await user.type(input(), '{Enter}');
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('can carry its own test-id prefix, so two dialogs never share identifiers', () => {
+    open({ validate: noX, idPrefix: 'icon-set-name' });
+    expect(screen.getByTestId('icon-set-name-input')).toBeInTheDocument();
+    expect(screen.getByTestId('icon-set-name-confirm')).toBeInTheDocument();
+    expect(screen.queryByTestId('theme-name-input')).toBeNull();
+  });
+});
+
 describe('cancelling', () => {
   it('Escape cancels and confirms nothing', async () => {
     const { user, onConfirm, onCancel } = open();

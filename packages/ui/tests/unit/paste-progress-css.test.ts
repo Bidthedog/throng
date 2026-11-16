@@ -32,7 +32,9 @@ describe('the progress card’s stylesheet (050 T116, FR-039)', () => {
     expect(reduced).toMatch(/\.paste-progress__bar--indeterminate[^{]*\{[^}]*animation:\s*none/);
   });
 
-  it('pushes the Cancel slot to the far end of the card (margin-left: auto)', () => {
-    expect(rulesFor(themeCss(), '.paste-progress__cancel')).toMatch(/margin-left:\s*auto/);
+  // 069 FR-050 (superseding 050 FR-039's in-body slot): Cancel sits in the card's control group, styled there.
+  it('styles the card control group, which now holds Cancel, and keeps no in-body Cancel slot', () => {
+    expect(rulesFor(themeCss(), '.notice__controls')).toMatch(/gap:\s*6px/);
+    expect(rulesFor(themeCss(), '.paste-progress__cancel')).toBe('');
   });
 });

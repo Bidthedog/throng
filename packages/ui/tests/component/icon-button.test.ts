@@ -26,7 +26,7 @@ import { IconButton } from '../../src/renderer/common/icon-button.js';
  * control is either anonymous or announced twice.
  */
 
-/** `Icon` reads the active theme and the icon packs; absent providers it renders its fallback. */
+/** `Icon` reads the active theme and the icon sets; absent providers it renders its fallback. */
 const button = (props: Partial<Parameters<typeof IconButton>[0]> = {}) =>
   createElement(IconButton, {
     token: 'retry',

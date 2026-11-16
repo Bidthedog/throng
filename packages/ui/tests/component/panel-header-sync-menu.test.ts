@@ -4,7 +4,7 @@
  *
  * ══ WHAT IS PINNED ══
  *
- * The builder's conditions — the label with its ✓ while on, the test id pinned to the bare label, the
+ * The builder's conditions — the checked flag while on, the test id pinned to the bare label, the
  * `syncScroll` icon, the live `preview.toggleSyncScroll` chord or none, ABSENT exactly where Open Preview is
  * absent, PRESENT AND ENABLED while Open Preview is disabled for either reason, and one call of the toggle —
  * and then the wiring nothing but a mounted panel can show: `panel-placeholder.tsx` decides presence from the
@@ -109,9 +109,9 @@ describe.each([
   ['the editor header', editorHeader],
   ['the preview header', previewHeader],
 ] as const)('%s — Synchronise Scrolling (FR-122b)', (_name, build) => {
-  it('reads “Synchronise Scrolling ✓” while on and the bare label while off, under one test id', () => {
-    expect(sync(build({ syncScroll: true }))?.label).toBe('Synchronise Scrolling ✓');
-    expect(sync(build({ syncScroll: false }))?.label).toBe('Synchronise Scrolling');
+  it('is checked while on and unchecked while off, under the one bare label and test id', () => {
+    expect(sync(build({ syncScroll: true }))).toMatchObject({ label: 'Synchronise Scrolling', checked: true });
+    expect(sync(build({ syncScroll: false }))).toMatchObject({ label: 'Synchronise Scrolling', checked: false });
   });
 
   it('sits in View & state with the syncScroll icon, directly after Zoom as drawn', () => {
@@ -222,7 +222,7 @@ describe('a mounted editor (panel-placeholder.tsx, use-editor.ts)', () => {
     const writePatch = spyPatches();
     fireEvent.contextMenu(screen.getByTestId(`panel-handle-${PANEL}`), { clientX: 10, clientY: 10 });
     const item = await screen.findByTestId(SYNC);
-    expect(item).toHaveTextContent('Synchronise Scrolling ✓');
+    expect(item).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(item);
     await waitFor(() => expect(writePatch).toHaveBeenCalledTimes(1));
     expect(writePatch.mock.calls[0]?.[1]).toEqual(PATCH);
@@ -234,7 +234,7 @@ describe('a mounted editor (panel-placeholder.tsx, use-editor.ts)', () => {
     const writePatch = spyPatches();
     fireEvent.contextMenu(h.content(), { clientX: 10, clientY: 10 });
     const item = await screen.findByTestId(SYNC);
-    expect(item).toHaveTextContent('Synchronise Scrolling ✓');
+    expect(item).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(item);
     await waitFor(() => expect(writePatch).toHaveBeenCalledTimes(1));
     expect(writePatch.mock.calls[0]?.[1]).toEqual(PATCH);
@@ -280,7 +280,7 @@ describe('a mounted preview (panel-placeholder.tsx)', () => {
       const writePatch = spyPatches();
       fireEvent.contextMenu(screen.getByTestId(`panel-handle-${m.id}`), { clientX: 10, clientY: 10 });
       const item = await screen.findByTestId(SYNC);
-      expect(item).toHaveTextContent('Synchronise Scrolling ✓');
+      expect(item).toHaveAttribute('aria-checked', 'true');
       fireEvent.click(item);
       await waitFor(() => expect(writePatch).toHaveBeenCalledTimes(1));
       expect(writePatch.mock.calls[0]?.[1]).toEqual(PATCH);

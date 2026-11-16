@@ -240,9 +240,9 @@ describe('SETTINGS_METADATA notification leaves (030 US1, #224; 068 US3)', () =>
     expect((d!.max! - d!.min!) % d!.step!).toBe(0);
   });
 
-  it('groups all twenty under Notifications, so they arrive as one section', () => {
+  it('groups all twenty-one under Notifications, so they arrive as one section (069 FR-052 adds the hover delay)', () => {
     const notifications = SETTINGS_METADATA.filter((d) => d.key.startsWith('notifications.'));
-    expect(notifications).toHaveLength(20);
+    expect(notifications).toHaveLength(21);
     for (const d of notifications) expect(d.group, d.key).toBe('Notifications');
   });
 

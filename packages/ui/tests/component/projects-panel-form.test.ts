@@ -85,6 +85,7 @@ import { NotificationProvider } from '../../src/renderer/common/notification.js'
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { ProjectsPanel } from '../../src/renderer/sidebar/projects-panel.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 /*
  * `crypto.randomUUID`, which `workspace-store.tsx:66` uses for every new tab and panel id.
@@ -532,6 +533,25 @@ describe('the create form, once a folder has been picked (FR-026/027)', () => {
  * project-counts.e2e.ts
  * ────────────────────────────────────────────────────────────────────────── */
 
+describe('the row controls are icon-set icons, not text glyphs (069 FR-010)', () => {
+  it('draws the grip, Edit and Remove through the dragHandle, rename and destroy keys, each with a hover title', async () => {
+    await mount([dto('p1', 'Proj', PALETTE_A, 'C:/code/proj')]);
+
+    expect(drawnIcon(screen.getByTestId('project-grip-p1'))).toBe(iconMarkup('dragHandle'));
+
+    const edit = screen.getByTestId('project-edit-p1');
+    expect(drawnIcon(edit)).toBe(iconMarkup('rename'));
+    expect(edit).toHaveAttribute('title', 'Edit');
+    expect(edit).toHaveAttribute('aria-label', 'Edit');
+
+    const remove = screen.getByTestId('project-delete-p1');
+    expect(drawnIcon(remove)).toBe(iconMarkup('destroy'));
+    expect(remove).toHaveAttribute('title', 'Remove project');
+    expect(edit.textContent?.trim()).toBe('');
+    expect(remove.textContent?.trim()).toBe('');
+  });
+});
+
 describe('the tab/panel counts beside each project (projects-panel.tsx:455)', () => {
   it('counts the OPEN project from its live layout, as tabs and panels are added', async () => {
     // MIGRATED FROM `project-counts.e2e.ts:12`.
@@ -822,12 +842,12 @@ describe('each project row carries its own path (FR-032)', () => {
  * `packages/ui/tests/component/title-bar.test.ts`, "the chrome draws icons, not characters".
  *
  * It was a literal ＋ character, which is the failure this claim is about: a glyph that cannot take
- * a theme token, cannot be swapped by an icon pack, and renders in whatever font the surrounding
+ * an icon key, cannot be swapped by an icon set, and renders in whatever font the surrounding
  * text happens to use. SC-002's ban on inline `<svg>` (`unit/no-inline-artwork.test.ts:60`) does not
  * catch it, because a character is not artwork — which is precisely why the positive assertion is
  * needed beside the negative one.
  */
-describe('the new-project control is drawn from the icon pack (FR-014b, SC-002)', () => {
+describe('the new-project control is drawn from the icon set (FR-014b, SC-002)', () => {
   it('renders exactly one icon, and no bare plus character', async () => {
     await mount([], { picked: undefined });
 

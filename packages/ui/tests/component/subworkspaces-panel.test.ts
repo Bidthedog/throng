@@ -27,6 +27,7 @@ import { NotificationProvider } from '../../src/renderer/common/notification.js'
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { SubworkspacesPanel } from '../../src/renderer/sidebar/subworkspaces-panel.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 const sw = (id: string, name: string, colour = '#3fb950'): SubWorkspaceMetaDto => ({
   id,
@@ -113,6 +114,28 @@ describe('the list', () => {
     await waitFor(() => expect(names()).toEqual(['Detached A', 'Detached B']));
     expect(screen.getByTestId('subworkspace-counts-swA')).toHaveTextContent('(1T·1P)');
     expect(screen.queryByTestId('subworkspaces-empty')).toBeNull();
+  });
+});
+
+describe('its controls are icon-set icons, not text glyphs (069 FR-010)', () => {
+  it('draws the grip, Open and Destroy through the dragHandle, detach and destroy keys, each with a hover title', async () => {
+    await mount(makeServer([sw('swA', 'Detached A')]));
+    await waitFor(() => expect(names()).toEqual(['Detached A']));
+
+    const grip = screen.getByTestId('subworkspace-grip-swA');
+    expect(drawnIcon(grip)).toBe(iconMarkup('dragHandle'));
+
+    const open = screen.getByTestId('subworkspace-open-swA');
+    expect(drawnIcon(open)).toBe(iconMarkup('detach'));
+    expect(open).toHaveAttribute('title', 'Open');
+    expect(open).toHaveAttribute('aria-label', 'Open');
+
+    const destroy = screen.getByTestId('subworkspace-delete-swA');
+    expect(drawnIcon(destroy)).toBe(iconMarkup('destroy'));
+    expect(destroy).toHaveAttribute('title', 'Destroy sub-workspace');
+    // The control's only content is the icon: no glyph text beside it.
+    expect(open.textContent?.trim()).toBe('');
+    expect(destroy.textContent?.trim()).toBe('');
   });
 });
 
@@ -269,20 +292,18 @@ describe('minimise and restore (068 FR-036)', () => {
     expect(onToggleMinimise).toHaveBeenCalledTimes(1);
   });
 
-  it('draws the side panes\' chevron, pointing down to minimise and up to restore (FR-058)', async () => {
+  it('draws the collapse icon, minimisePanel facing down, to minimise (068 FR-058, 069 FR-040)', async () => {
     await mountMinimisable({ minimised: false, onToggleMinimise: vi.fn() });
     const minimise = screen.getByTestId('subworkspaces-minimise');
-    expect(minimise.querySelector('.pane-chevron.pane-chevron--down')).not.toBeNull();
-    expect(minimise.querySelector('.pane-chevron--up')).toBeNull();
-    expect(minimise.className).toContain('panel__action--chevron');
+    expect(drawnIcon(minimise)).toBe(iconMarkup('minimisePanel'));
+    expect(minimise.className).toContain('panel__action--collapse');
     expect(minimise.getAttribute('aria-label')).toBe('Minimise Sub-workspaces');
   });
 
-  it('draws the chevron pointing up while minimised, and the menu item keeps its own themed icon (FR-058)', async () => {
+  it('draws restorePanel while minimised, and the menu item has the same key (069 FR-040)', async () => {
     await mountMinimisable({ minimised: true, onToggleMinimise: vi.fn() });
     const restore = screen.getByTestId('subworkspaces-restore');
-    expect(restore.querySelector('.pane-chevron.pane-chevron--up')).not.toBeNull();
-    expect(restore.querySelector('.pane-chevron--down')).toBeNull();
+    expect(drawnIcon(restore)).toBe(iconMarkup('restorePanel'));
     fireEvent.contextMenu(screen.getByTestId('subworkspaces-panel'));
     expect(await screen.findByTestId('menu-item-Restore')).toBeInTheDocument();
   });

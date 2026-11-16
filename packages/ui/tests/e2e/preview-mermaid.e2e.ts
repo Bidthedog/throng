@@ -107,7 +107,7 @@ test('a mermaid fence in a Markdown preview draws an SVG in the dark theme’s c
   const win = shared!.win;
   const id = await previewFromEditor(win, 'diagram.md', 'Diagram doc');
   const frame = win.getByTestId(`diagram-frame-${id}-diagram-0`);
-  const svg = frame.locator('svg').first();
+  const svg = frame.locator('.preview-diagram-frame__layer svg').first();
   await expect(svg).toBeVisible({ timeout: 15_000 });
   await expect(svg).toContainText('Begin here');
   await expect(svg).toContainText('Done');
@@ -125,7 +125,7 @@ test('a standalone .mmd file previews as one diagram through the Mermaid provide
   const win = shared!.win;
   const id = await previewFromTree(win, 'flow.mmd');
   await expect(win.getByTestId(`preview-mermaid-${id}`)).toBeVisible();
-  const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('svg').first();
+  const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('.preview-diagram-frame__layer svg').first();
   await expect(svg).toBeVisible({ timeout: 15_000 });
   await expect(svg).toContainText('Begin here');
   await expect(win.getByTestId(`panel-title-${id}`)).toHaveText('flow.mmd - Preview'); // 054 FR-005a, as Markdown
@@ -136,7 +136,7 @@ test('MT-05: a large real-world flowchart in a folder with a space and capitals 
   await win.getByTestId('file-explorer-tree').getByTestId('tree-twisty-UPPER TEST').click(); // the name only selects (#121)
   const id = await previewFromTree(win, 'test.mmd');
   await expect(win.getByTestId(`preview-mermaid-${id}`)).toBeVisible();
-  const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('svg').first();
+  const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('.preview-diagram-frame__layer svg').first();
   await expect(svg).toBeVisible({ timeout: 15_000 });
   await expect(svg).toContainText('Catalog Service');
   await expect(win.getByTestId(`diagram-notice-${id}-diagram-0`)).toHaveCount(0);
@@ -150,7 +150,7 @@ test('MT-01: a followed #heading below drawing diagrams ends at the top of the b
   const heading = body.locator('h2', { hasText: 'System Context' });
   await expect(heading).toBeVisible({ timeout: 10_000 });
   // Every diagram has drawn: three fences and two embeds.
-  for (let n = 0; n < 5; n += 1) await expect(win.getByTestId(`diagram-frame-${id}-diagram-${n}`).locator('svg').first()).toBeVisible({ timeout: 15_000 });
+  for (let n = 0; n < 5; n += 1) await expect(win.getByTestId(`diagram-frame-${id}-diagram-${n}`).locator('.preview-diagram-frame__layer svg').first()).toBeVisible({ timeout: 15_000 });
   const offset = (): Promise<number> => win.evaluate(
     ([bodyId]) => {
       const host = document.querySelector(`[data-testid="${bodyId}"]`)!;

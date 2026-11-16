@@ -37,10 +37,10 @@ import { writeConfigAtomic } from './config-write.js';
  *
  * ══ WHAT IS DELIBERATELY NOT RESTORED ══
  *
- * `icon-packs/` is excluded. `ensureBundledPacks()` runs ONCE, on the startup path, so a test that
- * damages a pack cannot be repaired by rewriting files — it needs its own launch, and the two
- * `icon-packs.e2e.ts` tests that care about that keep one. Excluding the directory also keeps the
- * snapshot small: it is the only part of a config root that holds binary-ish payloads.
+ * `icon-packs/` is excluded. Its `README.txt` and the icon-set upgrade run ONCE, on the startup path,
+ * and user icon sets load only at startup or on Reload the icon sets from disk, so rewriting files there cannot put
+ * a test back — `icon-sets.e2e.ts` keeps its own launch for that. Excluding the directory also keeps
+ * the snapshot small.
  *
  * Synchronous, like {@link writeConfigAtomic}, because the callers are `afterEach` hooks and
  * `beforeAll` bodies that read it inline between Playwright awaits.

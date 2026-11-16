@@ -172,7 +172,32 @@ test('theme icons hot-reload in context menus (#9)', { tag: ['@extended', '@pref
     async (_app, win) => {
       await createProject(win, 'Icons', 'C:/c/icons');
       // Send to Tab is on every panel's menu, an empty one included (048 removed panel Rename).
-      writeTheme(cfg, { icons: { send: '✗' } });
+      // 069: an icon is svg from the theme\'s selected icon SET. Make a user set whose `send` art is a
+      // distinctive path, then select it by hot-reloading the theme (a set is read once, not watched).
+      const setName = 'HotSwap';
+      const marker = 'M2 3L5 10z';
+      const created = await win.evaluate(
+        async (n) => {
+          const w = window as unknown as { throng: { iconSets: Record<string, (...a: unknown[]) => Promise<{ ok: boolean }>> } };
+          const a = await w.throng.iconSets.create(n, 'throng');
+          const b = await w.throng.iconSets.override(n, 'send', false);
+          return a.ok && b.ok;
+        },
+        setName,
+      );
+      expect(created, 'the user icon set could not be created through the bridge').toBe(true);
+      writeFileSync(
+        join(cfg, 'icon-packs', setName, 'send.svg'),
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${marker}" fill="none" stroke="currentColor"/></svg>`,
+        'utf8',
+      );
+      const reloaded = await win.evaluate(
+        async (n) =>
+          (await (window as unknown as { throng: { iconSets: { reload: (s: string) => Promise<{ ok: boolean }> } } }).throng.iconSets.reload(n)).ok,
+        setName,
+      );
+      expect(reloaded, 'the user icon set could not be reloaded').toBe(true);
+      writeTheme(cfg, { iconPack: setName });
       const panelId = await win
         .locator('.panel-box')
         .first()
@@ -190,13 +215,17 @@ test('theme icons hot-reload in context menus (#9)', { tag: ['@extended', '@pref
         .poll(
           async () => {
             await handle.click({ button: 'right' });
-            const text = await icon.textContent().catch(() => null);
+            const markup = await icon.locator('svg').innerHTML({ timeout: 1000 }).catch(() => null);
             await win.keyboard.press('Escape');
-            return text;
+            return markup?.includes(marker) ?? false;
           },
-          { timeout: 8000, message: 'the renamed icon glyph never hot-reloaded into the menu' },
+          { timeout: 8000, message: 'the selected icon set never hot-reloaded into the menu' },
         )
-        .toBe('✗');
+        .toBe(true);
+      // The icon is svg only — no glyph text beside it (069 FR-009).
+      await handle.click({ button: 'right' });
+      expect(((await icon.textContent()) ?? '').trim()).toBe('');
+      await win.keyboard.press('Escape');
     },
   );
 });

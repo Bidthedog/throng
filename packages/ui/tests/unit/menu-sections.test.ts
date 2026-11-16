@@ -62,9 +62,12 @@ function separatorIndices(actions: MenuAction[]): number[] {
 }
 
 /** The menu as DRAWN — one entry per row, a label or `'—'` for a derived divider. */
+/** A row as the checked-state marks read before 069: the bare label, then a tick while `checked`. */
+const shown = (item: { label?: string; checked?: boolean }): string => `${item.label ?? ''}${item.checked ? ' ✓' : ''}`;
+
 function shapeOf(actions: MenuAction[]): string[] {
   return withDividers(actions).map((item) =>
-    isSeparator(item) ? '—' : (item.label ?? '(no label)'),
+    isSeparator(item) ? '—' : item.label === undefined ? '(no label)' : shown(item),
   );
 }
 
@@ -1315,7 +1318,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       'Clear panel type',
       'Flag',
     ]);
-    const sync = row(items, 'Synchronise Scrolling ✓');
+    const sync = row(items, 'Synchronise Scrolling');
     expect(sync?.section).toBe('viewState');
     expect(sync?.icon).toBe('syncScroll');
     expect(sync?.testId).toBe('menu-item-Synchronise Scrolling');
@@ -1541,7 +1544,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       actions: { ...panelActions, toggleSyncScroll: () => fired.push('toggleSyncScroll') },
     });
     const sync = items.find((i) => i.testId === 'menu-item-Synchronise Scrolling');
-    expect(sync).toMatchObject({ label: 'Synchronise Scrolling ✓', icon: 'syncScroll', section: 'viewState' });
+    expect(sync).toMatchObject({ label: 'Synchronise Scrolling', checked: true, icon: 'syncScroll', section: 'viewState' });
     expect(sync?.disabled ?? false).toBe(false);
     sync?.onClick?.();
     expect(fired).toEqual(['toggleSyncScroll']);
@@ -1740,7 +1743,7 @@ describe('045 T274 — the Link menu draws no divider in any state (FR-169, Prin
  */
 describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)', () => {
   const labelsOf = (items: MenuAction[]): string[] =>
-    withDividers(items).map((i) => (isSeparator(i) ? '—' : (i.label ?? '')));
+    withDividers(items).map((i) => (isSeparator(i) ? '—' : shown(i)));
 
   it('with text selected: Content (the three copies and Select All), then Navigate (Find…, Open in Editor), then View & state', () => {
     expect(labelsOf(previewBodyMenu({ route: 'standalone' }))).toEqual([
@@ -1788,7 +1791,8 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     expect(on).toHaveLength(3);
     const syncItem = (items: MenuAction[]): MenuAction | undefined => items.find((i) => i.icon === 'syncScroll');
     expect(syncItem(on)).toMatchObject({
-      label: 'Synchronise Scrolling ✓',
+      label: 'Synchronise Scrolling',
+      checked: true,
       testId: 'menu-item-Synchronise Scrolling',
       icon: 'syncScroll',
       section: 'viewState',
@@ -1854,7 +1858,7 @@ describe('the editor content menu closes with Synchronise Scrolling where it off
 describe('Go To Line is on the editor content menu, in Navigate, showing its current chord (FR-027)', () => {
   it('sits between the editing items and the view items, with a divider either side', () => {
     const items = withDividers(editorMenu('TypeScript'));
-    const labels = items.map((i) => (isSeparator(i) ? '—' : i.label));
+    const labels = items.map((i) => (isSeparator(i) ? '—' : shown(i)));
     expect(labels).toEqual([
       'Cut',
       'Copy',
@@ -2322,7 +2326,7 @@ describe('046 T120 — the category header menu draws [content, destroy, navigat
     expect(collapsed.find((i) => i.label === 'Minimise Category')?.icon).toBe('collapse');
 
     const expanded = await build({ isDefault: false, minimised: true });
-    // The label itself carries the checkmark while minimised ("Minimise Category ✓", the Word Wrap
+    // The row is `checked` while minimised (the Word Wrap
     // idiom below), so this looks it up by the STABLE test id rather than the exact label text.
     expect(expanded.find((i) => i.testId === 'menu-item-Minimise Category')?.icon).toBe('expand');
   });
@@ -2334,7 +2338,8 @@ describe('046 T120 — the category header menu draws [content, destroy, navigat
 
     const expanded = await build({ isDefault: false, minimised: true });
     const row2 = expanded.find((i) => i.label?.startsWith('Minimise Category'));
-    expect(row2?.label).toBe('Minimise Category ✓');
+    expect(row2?.label).toBe('Minimise Category');
+    expect(row2?.checked).toBe(true);
     expect(row2?.testId).toBe('menu-item-Minimise Category');
   });
 

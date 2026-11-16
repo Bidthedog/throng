@@ -129,11 +129,15 @@ describe('the monitor window\'s other stylesheet claims', () => {
     expect(shared).toContain('.status-popover');
   });
 
-  it('raises the info helper "?" and makes it small, with no margin of its own pushing it away (was info-helper)', () => {
+  // 069 FR-062 supersedes the sixth feedback's "no margin of its own": the helper now keeps a small gap from what it
+  // explains and a larger one from what follows, because with none it sat on both.
+  it('raises the info helper "?", makes it small, and keeps it clear of its neighbours (was info-helper; 069 FR-062)', () => {
     const escaped = '.info-helper'.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const body = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-    expect(body).toMatch(/vertical-align:\s*(super|top)/);
-    expect(body).toMatch(/margin:\s*0/);
+    expect(body).toMatch(/vertical-align:\s*(super|top|text-top)/);
+    const [, right, left] = /margin:\s*0\s+(\d+)px\s+0\s+(\d+)px/.exec(body) ?? [];
+    expect(Number(left)).toBeGreaterThan(0);
+    expect(Number(right)).toBeGreaterThan(Number(left));
     expect(Number(/width:\s*(\d+)px/.exec(body)?.[1])).toBeLessThanOrEqual(14);
     expect(Number(/height:\s*(\d+)px/.exec(body)?.[1])).toBeLessThanOrEqual(14);
   });

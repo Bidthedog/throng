@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SHIPPED_DEFAULTS_VERSION,
   buildShippedDefaults,
   fillMissingThemeProps,
   planThemeUpgrade,
@@ -15,7 +14,6 @@ function makeTheme(name: string, overrides: Partial<Theme> = {}): Theme {
     name,
     colours: { accent: '#abc', text: '#fff' },
     fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } },
-    icons: { destroy: '×' },
     ...overrides,
   };
 }
@@ -68,7 +66,7 @@ describe('planThemeUpgrade (010, FR-015a)', () => {
   });
 
   it('fills a custom theme from the throng base', () => {
-    const custom: Theme = { name: 'Mine', colours: { accent: '#mine' }, fonts: throngBase.fonts, icons: {} };
+    const custom: Theme = { name: 'Mine', colours: { accent: '#mine' }, fonts: throngBase.fonts };
     const present: Record<string, Theme> = { ...allPresent(), Mine: custom };
     const plan = planThemeUpgrade({ shipped: D, present, throngBase });
     const filledMine = plan.fillThemes.find((f) => f.name === 'Mine');
@@ -81,49 +79,6 @@ describe('planThemeUpgrade (010, FR-015a)', () => {
     const plan = planThemeUpgrade({ shipped: D, present: allPresent(), throngBase });
     expect(plan.addThemes).toHaveLength(0);
     expect(plan.fillThemes).toHaveLength(0);
-  });
-});
-
-/*
- * 044, 2026-09-16 iteration (FR-122c; contracts/settings-bindings-tokens.md "Shipped defaults — 8 → 9").
- * One new icon token, `syncScroll`, and theme files reach a new token only through the additive upgrade
- * the version gates — so the version moves, or every install already holding an 8 marker (every
- * hand-testing build of this branch) draws the new toggle as an empty box. 043's 6 → 7 is the precedent.
- */
-describe('shipped-defaults version 9 — the syncScroll icon (044 FR-122c)', () => {
-  // 045 FR-138 moved the version on to 10, and round four's FR-165g moved it again to 11
-  // (`theme-link-tokens.test.ts` pins both); what this block guards is that the syncScroll fill is
-  // still inside the sequence.
-  it('is at least version 9', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBeGreaterThanOrEqual(9);
-  });
-
-  /** A theme as a version-8 install holds it: everything shipped, except the token 9 adds. */
-  function asVersion8(theme: Theme): Theme {
-    const icons = { ...theme.icons };
-    delete icons.syncScroll;
-    return { ...structuredClone(theme), icons };
-  }
-
-  it('fills icons.syncScroll into a version-8 built-in theme and a version-8 custom theme', () => {
-    const custom: Theme = { ...asVersion8(throngBase), name: 'Mine' };
-    const present: Record<string, Theme> = { ...allPresent(), Matrix: asVersion8(D.themes.Matrix), Mine: custom };
-    const plan = planThemeUpgrade({ shipped: D, present, throngBase });
-    const matrix = plan.fillThemes.find((f) => f.name === 'Matrix');
-    const mine = plan.fillThemes.find((f) => f.name === 'Mine');
-    expect(matrix?.theme.icons.syncScroll).toBe(D.themes.Matrix.icons.syncScroll);
-    expect(matrix?.theme.icons.syncScroll).toBeTruthy();
-    expect(mine?.theme.icons.syncScroll).toBe(throngBase.icons.syncScroll);
-  });
-
-  it('keeps a user value for icons.syncScroll a version-8 theme already holds', () => {
-    const own = { ...asVersion8(D.themes.Matrix) };
-    own.icons = { ...own.icons, syncScroll: 'S' };
-    const present: Record<string, Theme> = { ...allPresent(), Matrix: own };
-    const plan = planThemeUpgrade({ shipped: D, present, throngBase });
-    // Nothing to fill, so Matrix is not rewritten at all — and its glyph stays the user's.
-    expect(plan.fillThemes.find((f) => f.name === 'Matrix')).toBeUndefined();
-    expect(fillMissingThemeProps(own, D.themes.Matrix).icons.syncScroll).toBe('S');
   });
 });
 

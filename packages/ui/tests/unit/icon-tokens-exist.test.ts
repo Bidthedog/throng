@@ -1,11 +1,9 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
+import { describe, expect, it } from 'vitest';
+import { ICON_KEYS } from '@throng/core';
 import { stripComments } from './helpers/strip-comments.js';
-import { IconPackService } from '../../src/main/icon-pack-service.js';
 
 /**
  * Every `<Icon token="…" />` in the renderer names a token the shipped theme actually defines.
@@ -68,14 +66,14 @@ const code = (file: string): string => stripComments(readFileSync(file, 'utf8'))
 
 describe('Icon tokens', () => {
   const files = walk(RENDERER);
-  const known = new Set(Object.keys(THRONG_THEME.icons));
+  const known = new Set<string>(ICON_KEYS);
 
-  it('the shipped theme defines some icons (guards against a vacuous pass)', () => {
-    // Without this, an empty or renamed `icons` map would make every assertion below trivially true.
+  it('the icon key vocabulary is non-empty (guards against a vacuous pass)', () => {
+    // Without this, an empty or renamed `ICON_KEYS` would make every assertion below trivially true.
     expect(known.size).toBeGreaterThan(10);
   });
 
-  it('every statically-named token resolves in the shipped theme', () => {
+  it('every statically-named token is an icon key (069 FR-010, FR-011)', () => {
     const unknown: string[] = [];
     for (const file of files) {
       const src = code(file);
@@ -85,7 +83,7 @@ describe('Icon tokens', () => {
     }
     expect(
       unknown,
-      'these Icon tokens are not defined by the shipped theme, so they render as NOTHING — an ' +
+      'these Icon tokens are not icon keys in `ICON_KEYS`, so they render as NOTHING — an ' +
         'invisible control, with no error anywhere:\n  ' +
         unknown.join('\n  '),
     ).toEqual([]);
@@ -102,47 +100,48 @@ describe('Icon tokens', () => {
 });
 
 /**
- * 046 T007 (FR-061, R11) — `unload` and `category` each need a BESPOKE shape in the bundled
- * `throng-svg` image pack, not the generic rounded-square badge every undrawn token falls back to
- * (`GENERIC_SHAPE` in `packages/ui/src/main/icon-pack-service.ts`). `SVG_SHAPES` itself is
- * module-private, so this drives it the same way the shipped pack does: seed the two bundled packs
- * into a throwaway `icon-packs/` directory via the public `ensureBundledPacks()` and read back the
- * `.svg` file each of the two tokens produced.
+ * 069 FR-010, FR-011 — the key vocabulary and the call sites agree in BOTH directions.
  *
- * A third token, `projectList`, originally shipped alongside these two — retired (branch-review
- * finding, 046 iterate round 2): it described a cog-menu row FR-074/FR-107 had already retired
- * before the description was written, and no call site ever drew it. `THRONG_THEME.icons` no longer
- * defines it, so `known` above (line 68) already excludes it from every check in this file.
+ * Layer: unit — a question about every file and every key, which no single rendered tree can answer.
  *
- * `dismiss` stands in as a KNOWN-generic reference — it is a real shipped token
- * (`THRONG_THEME.icons.dismiss`) that has never had a bespoke `SVG_SHAPES` entry, so whatever content
- * it produces today IS the generic fallback, discovered rather than hand-copied from the private
- * constant.
+ * A key with no render site is a row in the icon grid nobody can see drawn (`notifications` was one,
+ * until it was retired); a site naming a key the vocabulary lacks draws nothing. A site is either a
+ * static `token="…"`, or a quoted key in a renderer file or in the core files that hand the renderer
+ * an icon key (the panel-type registry, the notice entry look). The second direction also covers a
+ * key written as `icon: '…'` in a menu builder, which the static-attribute guard above cannot see.
  */
-describe('the two 046 side-pane tokens have a bespoke SVG_SHAPES entry, not the generic fallback', () => {
-  let packsDir: string;
+describe('every icon key has a render site, and every render site names a key (069 FR-010, FR-011)', () => {
+  const CORE_SITES = [
+    'notice/entry-look.ts',
+    'panel-type/default-registry.ts',
+    'find-in-files/panel-type.ts',
+  ].map((rel) => fileURLToPath(new URL(`../../../core/src/${rel}`, import.meta.url)));
+  const known = new Set<string>(ICON_KEYS);
+  const siteSources = [...walk(RENDERER), ...CORE_SITES].map((f) => code(f));
+  const all = siteSources.join('\n');
 
-  beforeEach(() => {
-    packsDir = mkdtempSync(join(tmpdir(), 'throng-icon-shapes-'));
+  it('every key is written, quoted, at some render site', () => {
+    const unused = ICON_KEYS.filter((key) => !new RegExp(`['"\`]${key}['"\`]`).test(all));
+    expect(
+      unused,
+      'these icon keys have no render site, so no control draws them — draw them where they belong ' +
+        'or retire them from `ICON_KEYS`:\n  ' +
+        unused.join('\n  '),
+    ).toEqual([]);
   });
-  afterEach(() => {
-    rmSync(packsDir, { recursive: true, force: true });
-  });
 
-  const svgPath = (token: string): string => join(packsDir, 'throng-svg', `${token}.svg`);
-
-  it('dismiss is still undrawn — the generic reference this test relies on', () => {
-    // Guards the test itself: if `dismiss` ever gains bespoke art, the comparison below would
-    // compare bespoke-against-bespoke and could pass for the wrong reason.
-    expect(THRONG_THEME.icons.dismiss, 'icons.dismiss').toBeTruthy();
-  });
-
-  it('unload and category each render distinct art, not the generic badge', async () => {
-    await new IconPackService(packsDir).ensureBundledPacks();
-    const generic = readFileSync(svgPath('dismiss'), 'utf8');
-    for (const token of ['unload', 'category']) {
-      const rendered = readFileSync(svgPath(token), 'utf8');
-      expect(rendered, `${token}.svg is the generic fallback shape, not a bespoke one`).not.toBe(generic);
+  it('every `icon: \'…\'` a menu or descriptor names is a key', () => {
+    const unknown: string[] = [];
+    for (const src of siteSources) {
+      for (const [, token] of src.matchAll(/\bicon:\s*'([A-Za-z0-9]+)'/g)) {
+        if (!known.has(token!)) unknown.push(token!);
+      }
     }
+    expect(unknown, `these \`icon:\` values are not icon keys: ${unknown.join(', ')}`).toEqual([]);
+  });
+
+  it('finds the sites it claims to check', () => {
+    const total = siteSources.reduce((n, src) => n + [...src.matchAll(/\bicon:\s*'([A-Za-z0-9]+)'/g)].length, 0);
+    expect(total).toBeGreaterThan(30);
   });
 });
