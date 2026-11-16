@@ -64,15 +64,23 @@ describe('the preview status bar looks like the editor’s (FR-015a)', () => {
    * Amended for FR-118 (iteration 2026-09-15), which supersedes FR-015a's "it carries no readouts" for ONE
    * readout: the hovered or focused link's target. With nothing to name, the readouts group is still empty.
    */
-  it('is the editor strip’s element, with its two groups, and with no link to name its readouts group is empty', async () => {
+  /*
+   * #637 (FR-118a) amends this again: the readouts group now carries the document's counts once they settle. With
+   * no selection and no link, the counts are ALL it carries — `preview-status-readouts.test.ts` owns the rest.
+   */
+  it('is the editor strip’s element, with its two groups; with no link and no selection it reads the counts alone', async () => {
     const { id } = await mountText();
     const strip = await screen.findByTestId(`preview-status-bar-${id}`);
 
     expect(strip).toHaveClass('editor-status-strip');
     expect(strip.querySelector('.editor-status-strip__group--controls')).not.toBeNull();
-    // No caret, no counts, no language, no wrap toggle — the preview reports nothing about text.
-    expect(strip.querySelector('.editor-status-strip__group--readouts')?.childElementCount).toBe(0);
-    expect(strip.querySelectorAll('.editor-status-strip__readout')).toHaveLength(0);
+    // No caret position, no selection, no language, no wrap toggle — only the document's counts.
+    await screen.findByTestId(`preview-status-words-${id}`);
+    expect([...strip.querySelectorAll('[data-readout]')].map((el) => el.getAttribute('data-readout'))).toEqual([
+      'lines',
+      'chars',
+      'words',
+    ]);
     expect(strip.querySelector('.editor-status-strip__language')).toBeNull();
     expect(strip.querySelector('.editor-status-strip__wrap')).toBeNull();
     // Its two controls (FR-122c partly supersedes FR-015a's one): the scroll-sync toggle, then the route.

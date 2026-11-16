@@ -51,6 +51,11 @@ export interface PreviewSelectionDeps {
   panelId: string;
   /** The text model of the drawn body, when another controller shares it; otherwise this builds its own. */
   modelCache?: ModelCache;
+  /**
+   * #637 — called when the selection this panel holds changes (made, extended, cleared, dropped over new text), with
+   * the new one or `null`. At most once per frame; never for a frame that left it as it was.
+   */
+  onChange?: (selection: RetainedSelection | null) => void;
   /** Test seams for the one frame; default `requestAnimationFrame` / `cancelAnimationFrame`. */
   requestFrame?: (cb: () => void) => number;
   cancelFrame?: (handle: number) => void;
@@ -83,6 +88,21 @@ export function createPreviewSelection(deps: PreviewSelectionDeps): PreviewSelec
   let disposed = false;
 
   const isFocused = (host: HTMLElement): boolean => host.contains(host.ownerDocument.activeElement);
+  /** The selection last reported through `onChange`, compared by what it names rather than by identity. */
+  let reported: RetainedSelection | null = null;
+  /** The body redrew: the same offsets may now sit on other source lines, so the next frame reports regardless. */
+  let redrawn = false;
+  const report = (): void => {
+    const now = retained;
+    const same =
+      now === reported ||
+      (now !== null && reported !== null && now.from === reported.from && now.to === reported.to && now.text === reported.text);
+    const force = redrawn && now !== null;
+    redrawn = false;
+    if (same && !force) return;
+    reported = now;
+    deps.onChange?.(now);
+  };
 
   const clearPaint = (): void => {
     if (!painted) return;
@@ -134,7 +154,9 @@ export function createPreviewSelection(deps: PreviewSelectionDeps): PreviewSelec
       if (retained && cache && cache.model.text.slice(retained.from, retained.to) !== retained.text) retained = null;
     }
     if (isFocused(host)) {
-      if (restoreDom) restore(host);
+      // A redraw with nothing retained has nothing to put back: the selection is the user's newest, so read it
+      // (#637 — otherwise the first selection made after a draw went unreported until the next selectionchange).
+      if (restoreDom && retained) restore(host);
       else track(host, true);
       restoreDom = false;
       clearPaint();
@@ -142,6 +164,7 @@ export function createPreviewSelection(deps: PreviewSelectionDeps): PreviewSelec
       restoreDom = false;
       paintInactive(host);
     }
+    report();
   };
 
   const schedule = (): void => {
@@ -180,6 +203,7 @@ export function createPreviewSelection(deps: PreviewSelectionDeps): PreviewSelec
     if (!inside(e.target)) return;
     retained = null;
     clearPaint();
+    report();
   };
 
   const doc = deps.host()?.ownerDocument ?? document;
@@ -195,6 +219,7 @@ export function createPreviewSelection(deps: PreviewSelectionDeps): PreviewSelec
       models.invalidate();
       drawn = true;
       revalidate = true;
+      redrawn = true;
       restoreDom = true;
       schedule();
     },

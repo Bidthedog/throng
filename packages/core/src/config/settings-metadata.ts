@@ -810,9 +810,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
    */
   {
     key: 'editor.showStatusBar',
-    label: 'Show editor status bar',
+    label: 'Show panel status bar',
     description:
-      'Show the bar along the bottom of each editor panel: the language control, the word-wrap toggle, the cursor position, and the character and word counts. Hiding it hides all of them, whatever the two settings below say — the wrap command and the language picker stay reachable from the content menu and the Toggle Word Wrap key binding.',
+      'The bar along the bottom of editor and preview panels. Off hides all of it, whatever the two settings below say. Terminals have their own.',
     group: 'Editor',
     subgroup: 'Status Bar',
     control: 'toggle',
@@ -821,7 +821,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.statusBar.showCursorPosition',
     label: 'Show cursor position',
     description:
-      'Show the line and column the cursor is on in the editor status bar. The character and word counts are governed separately.',
+      'The caret’s line and column, or the source lines a preview selection spans.',
     group: 'Editor',
     subgroup: 'Status Bar',
     control: 'toggle',
@@ -830,7 +830,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.statusBar.showCounts',
     label: 'Show character and word counts',
     description:
-      'Show how many characters are selected, and how many characters and words the document holds, in the editor status bar. The cursor position is governed separately.',
+      'The document’s lines, characters and words, and how many characters are selected.',
     group: 'Editor',
     subgroup: 'Status Bar',
     control: 'toggle',
