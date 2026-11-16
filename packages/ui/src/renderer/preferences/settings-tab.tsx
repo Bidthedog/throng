@@ -159,6 +159,10 @@ export function SettingsTab({
    * 068 (contracts/ipc.md "Preferences deep link"): a section to open and scroll to — the Notification
    * panel's limit warning links to "Notifications". `nonce` makes each request distinct, so asking for the
    * same section twice scrolls twice. An unknown name is ignored.
+   *
+   * 069 FR-053 (#638): the name may also be a SETTING KEY — the project settings dialog links to
+   * `explorer.excludeGlobs` — and then the setting's section and any subsections holding it are unfolded and
+   * the setting itself is scrolled into view.
    */
   focusSection?: { name: string; nonce: number };
 } = {}): ReactElement {
@@ -217,20 +221,29 @@ export function SettingsTab({
   const handledSection = useRef<number | null>(null);
   useEffect(() => {
     if (!focusSection || handledSection.current === focusSection.nonce) return;
-    if (!allGroups.some((g) => g.group === focusSection.name)) {
+    const setting = metadata.find((d) => d.key === focusSection.name);
+    const group = setting?.group ?? focusSection.name;
+    if (!allGroups.some((g) => g.group === group)) {
       handledSection.current = focusSection.nonce;
       return;
     }
-    const key = foldKey(focusSection.name);
-    if (folds.isFolded(key)) {
-      folds.toggle(key);
+    // Outermost first: one fold per render, and the effect runs again once each has landed.
+    const keys = [foldKey(group)];
+    if (setting?.subgroup !== undefined) keys.push(foldKey(group, setting.subgroup));
+    if (setting?.subgroup !== undefined && setting.subsection !== undefined) {
+      keys.push(foldKey(group, setting.subgroup, setting.subsection));
+    }
+    const folded = keys.find((k) => folds.isFolded(k));
+    if (folded !== undefined) {
+      folds.toggle(folded);
       return;
     }
     handledSection.current = focusSection.nonce;
-    const target = [...document.querySelectorAll<HTMLElement>('[data-testid^="settings-group-"]')].find(
-      (el) => el.getAttribute('data-testid') === `settings-group-${focusSection.name}`,
+    const testId = setting ? `setting-${setting.key}` : `settings-group-${group}`;
+    const target = [...document.querySelectorAll<HTMLElement>('[data-testid]')].find(
+      (el) => el.getAttribute('data-testid') === testId,
     );
-    target?.scrollIntoView({ block: 'start' });
+    target?.scrollIntoView({ block: setting ? 'center' : 'start' });
   });
 
   // Dynamic options for the theme selector (the themes present on disk).

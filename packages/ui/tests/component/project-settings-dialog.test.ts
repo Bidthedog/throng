@@ -441,9 +441,9 @@ describe('each section opens Preferences for its global list', () => {
   });
 
   it.each([
-    ['project-settings-explorer', 'project-settings-explorer-prefs'],
-    ['project-settings-search', 'project-settings-search-prefs'],
-  ])('%s: an icon control that closes the dialog and opens the Settings tab', async (section, control) => {
+    ['project-settings-explorer', 'project-settings-explorer-prefs', 'explorer.excludeGlobs'],
+    ['project-settings-search', 'project-settings-search-prefs', 'search.inFiles.excludeGlobs'],
+  ])('%s: an icon control that closes the dialog and opens Settings at its setting (069 FR-053, #638)', async (section, control, key) => {
     const openPreferences = vi.fn();
     (window as unknown as { throng: unknown }).throng = { openPreferences };
     const { user, onClose } = await mount([project('p1', 'Demo', ['a.txt'])]);
@@ -454,7 +454,7 @@ describe('each section opens Preferences for its global list', () => {
     expect(button).toHaveAttribute('title', expect.stringMatching(/Preferences/));
 
     await user.click(button);
-    expect(openPreferences).toHaveBeenCalledWith('settings');
+    expect(openPreferences).toHaveBeenCalledWith('settings', key);
     expect(onClose).toHaveBeenCalled();
   });
 });
@@ -503,6 +503,28 @@ describe('two sections under the unchanged title (FR-035)', () => {
     expect(searchSection()).toHaveTextContent('**/gen');
     expect(searchSection()).toHaveTextContent('src/old');
     expect(searchSection()).not.toHaveTextContent('a.txt');
+  });
+
+  it('draws every button as the shared, themed icon button, never the browser\'s own (069 FR-054, #638)', async () => {
+    const { user, onClose } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+    const buttons = [...screen.getByTestId('project-settings-dialog').querySelectorAll('button')];
+    expect(buttons.length).toBeGreaterThan(4);
+    for (const b of buttons) expect(b.classList.contains('icon-button'), b.getAttribute('data-testid') ?? '').toBe(true);
+    expect(screen.getByTestId('hidden-path-add-input')).toHaveClass('field');
+    for (const h of screen.getByTestId('project-settings-dialog').querySelectorAll('h4')) expect(h).toHaveClass('section-heading');
+  });
+
+  it('puts each global list on a line of its own, below its description (069 FR-053, #638)', async () => {
+    const { user, onClose } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+    for (const id of ['project-settings-globals', 'project-settings-search-globals']) {
+      const box = screen.getByTestId(id);
+      const [desc, list] = [...box.children];
+      expect(desc).toHaveClass('project-settings__globals-desc');
+      expect(list).toHaveClass('project-settings__globs');
+      expect(desc!.textContent).not.toContain('node_modules');
+    }
   });
 
   it('names the global list that also applies, in each section', async () => {
@@ -686,17 +708,29 @@ describe('each list scrolls on its own and Close stays in view (FR-036)', () => 
   });
 
   /*
-   * Hand-test 2026-10-29 (060 FR-044): a row's remove ✕ sits in line with its section's add ＋. The
-   * rows are padded inside their hover box, so the add row takes the same inline padding.
+   * Hand-test 2026-10-29 (060 FR-044), widened by 069 FR-053 (#638): every button in a section — the
+   * Preferences shortcut, the add button, each row's remove — sits in ONE right-hand column. Each of those rows
+   * is a grid whose last column is the button's width, and each is inset by the list's stable scrollbar gutter,
+   * so a list that scrolls does not pull its buttons out of line with the ones above it.
    */
-  it('lines up each row’s remove control with the add control above it', () => {
-    const padding = (selector: string): string | undefined =>
-      /padding:\s*([^;]+);/.exec(rule(selector))?.[1]?.trim();
-    // `.hidden-path, .search-exclude` is one rule; the helper finds it by its last selector.
-    const row = padding('.search-exclude') ?? '';
-    const inline = row.split(/\s+/)[1];
-    expect(inline, 'the rows declare an inline padding').toBeTruthy();
-    expect(rule('.project-settings__add')).toMatch(new RegExp(`padding:\\s*0\\s+${inline!.replace('.', '\\.')}\\s*;`));
+  it('puts every button of a section in one right-hand column', () => {
+    for (const selector of ['.project-settings__section-head', '.project-settings__add', '.search-exclude']) {
+      expect(rule(selector), selector).toMatch(/grid-template-columns:\s*1fr var\(--ps-button\)/);
+    }
+    expect(rule('.project-settings__section-head')).toMatch(/padding-right:\s*var\(--ps-gutter\)/);
+    expect(rule('.project-settings__add')).toMatch(/padding-right:\s*var\(--ps-gutter\)/);
+    expect(rule('.search-exclude')).toMatch(/padding:\s*2px 0 2px 6px/);
+    expect(rule('.project-settings__list')).toMatch(/scrollbar-gutter:\s*stable/);
+    expect(rule('.project-settings .icon-button')).toMatch(/width:\s*var\(--ps-button\)/);
+  });
+
+  it('sets each section apart in a box of its own', () => {
+    expect(rule('.project-settings__group')).toMatch(/border:\s*1px solid var\(--border\)/);
+  });
+
+  it('sets each global list in smaller text than its description (069 FR-053, #638)', () => {
+    expect(rule('.project-settings__globals-desc')).toMatch(/font-size:\s*12px/);
+    expect(rule('.project-settings__globs')).toMatch(/font-size:\s*11px/);
   });
 
   it('caps the dialog to the viewport so nothing pushes Close off screen', () => {

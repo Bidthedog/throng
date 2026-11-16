@@ -22,6 +22,7 @@ import { SettingsMetadataContext, SettingsTab } from '../../src/renderer/prefere
 const REGISTRY: readonly FieldDescriptor[] = [
   ...SETTINGS_METADATA.filter((d) => d.group === 'Notifications'),
   ...SETTINGS_METADATA.filter((d) => d.group === 'Terminal').slice(0, 2),
+  ...SETTINGS_METADATA.filter((d) => d.group === 'File Explorer'),
 ];
 
 const scrollIntoView = vi.fn();
@@ -98,5 +99,16 @@ describe('a section handed to the Settings tab (FR-031f link)', () => {
     expect(() => render(tab({ name: 'No Such Section', nonce: 1 }))).not.toThrow();
     expect(scrollIntoView).not.toHaveBeenCalled();
     expect(expanded(NOTIFICATIONS)).toBe(false);
+  });
+});
+
+// 069 FR-053 (#638): the project settings dialog links to one SETTING, not a section.
+describe('a setting key handed to the Settings tab', () => {
+  it('unfolds the setting\'s section and scrolls to the setting itself', () => {
+    render(tab({ name: 'explorer.excludeGlobs', nonce: 1 }));
+    expect(expanded('settings-group-File Explorer')).toBe(true);
+    expect(expanded(NOTIFICATIONS)).toBe(false);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.calls[0]![0]).toBe(screen.getByTestId('setting-explorer.excludeGlobs'));
   });
 });
