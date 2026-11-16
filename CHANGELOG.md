@@ -33,6 +33,12 @@ What changed in each release of throng, written for someone deciding whether to 
 
 - **throng now runs on Electron 45** (Chromium 156) ([#519](https://github.com/Bidthedog/throng/issues/519)).
 - **throng's database library moves to better-sqlite3 13**, which carries its own prebuilt binaries, so building throng from source on Windows no longer risks needing a C++ toolchain for it ([#520](https://github.com/Bidthedog/throng/issues/520)).
+- **One default icon set.** Every icon in throng is now simple line art from [Lucide](https://lucide.dev), built into the app and the same in every theme unless a theme picks an icon set of your own ([#127](https://github.com/Bidthedog/throng/issues/127)).
+- **Your own icon sets.** In Preferences › Themes › Icons, make a new icon set from any set, press **Override this icon** on the icons you want to change, open the set's folder and replace each `<key>.svg` with your own file, then press **Reload this set**. Icons you have not overridden keep the default art, including icons added in later versions ([#127](https://github.com/Bidthedog/throng/issues/127)).
+
+### Removed
+
+- **The old icon packs, glyph maps and per-theme icon overrides.** throng converted none of them. On the first start after the upgrade, each folder in your `icon-packs` folder that holds anything you made or changed is renamed with a `.bak` suffix and hidden from throng, the two packs throng shipped are deleted if you never changed them, and a notice appears at every start until the backups are gone. To keep a custom icon, make a new icon set, press **Override this icon** on that key, and copy your file over the one it creates; then delete the `.bak` folders or move them out of `icon-packs`. `README.txt` in the `icon-packs` folder has the steps ([#127](https://github.com/Bidthedog/throng/issues/127)).
 
 ## 1.0.0-alpha16 — 2026-11-13
 

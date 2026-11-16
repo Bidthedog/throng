@@ -64,7 +64,7 @@ flowchart LR
   M <-->|"named pipe: JSON-RPC 2.0 requests<br/>(one connection per call)"| D
   D -.->|"same pipe: long-lived events socket<br/>terminal.output / exit / grid / cwd / command"| M
   D <-->|"private named pipe<br/>line-JSON agent protocol"| A
-  M ---|"settings.json, keybindings.json,<br/>themes, icon packs"| CFG[("config root<br/>~/.throng")]
+  M ---|"settings.json, keybindings.json,<br/>themes, icon sets"| CFG[("config root<br/>~/.throng")]
 ```
 
 | Process | Runs | Owns |
@@ -211,7 +211,7 @@ and each process wires the two together in one place.
 - Domain: `projects/`, `workspace/`, `panel-type/`, `terminal/`, `editor/`, `explorer/`, `fs/`,
   `fileop-undo/`, `preview/`, `find-in-files/`, `search/`, `links/`, `navigation/`, `picker/`,
   `text/`, `display/`, `failure/`, `notice/` and `diagnostics/`.
-- `config/`: the settings, key bindings, themes and icon packs, with their editor-metadata
+- `config/`: the settings, key bindings, themes and icon sets, with their editor-metadata
   registries. See [Configuration and shipped defaults](#configuration-and-shipped-defaults).
 - `testing/`: one **contract suite** per abstraction (`*-contract.ts`), exported as
   `@throng/core/testing`.
@@ -786,7 +786,7 @@ Binds: [XI. Dockable Workspace: Panes, Tabs & Panels](../.specify/memory/constit
 
 ## Configuration and shipped defaults
 
-Settings, key bindings, themes and icon packs: typed models in core, human-editable JSON files on
+Settings, key bindings, themes and icon sets: typed models in core, human-editable JSON files on
 disk, and visual editors for every key.
 
 **Code.**
@@ -817,7 +817,7 @@ flowchart LR
   CORE["core/config<br/>models + metadata"] -->|"buildShippedDefaults()"| SD["ShippedDefaults record<br/>(immutable, versioned)"]
   SD --> SDS["ShippedDefaultsService<br/>(seed, upgrade, restore)"]
   SDS --> FCS["FileConfigStore<br/>(atomic writes)"]
-  FCS <--> ROOT[("config root<br/>settings.json, keybindings.json,<br/>themes/, icon packs,<br/>defaults-state.json")]
+  FCS <--> ROOT[("config root<br/>settings.json, keybindings.json,<br/>themes/, icon sets,<br/>defaults-state.json")]
   ROOT -->|"config-watcher"| M["UI main"] -->|"broadcast"| WIN["every window"]
 ```
 
