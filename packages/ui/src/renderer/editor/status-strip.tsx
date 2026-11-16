@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useStripMeasure } from './status-strip-measure.js';
 import { FOCUS_MODE_STRIP_CLASS, FocusModeBadge, usePanelInFocusMode } from '../workspace/focus-mode-badge.js';
 import {
   codePageName,
@@ -147,18 +148,6 @@ export function readoutText(
  * declared gap against this constant and turns a silent drift into a named failure.
  */
 export const BAR_GAP = 6;
-
-/** Whether two measurement tables agree, so an unchanged measurement causes no re-render. */
-function sameWidths(
-  a: Partial<Record<SegmentId, SegmentWidth>>,
-  b: Partial<Record<SegmentId, SegmentWidth>>,
-): boolean {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)] as SegmentId[]);
-  for (const key of keys) {
-    if (a[key]?.full !== b[key]?.full || a[key]?.short !== b[key]?.short) return false;
-  }
-  return true;
-}
 
 /** `1 word` / `2 words` — the announced name is English, so it agrees in number. */
 function plural(count: number, singular: string, figure: string, suffix = ''): string {
@@ -508,11 +497,17 @@ export function StatusStrip({
    */
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
-  const [barWidth, setBarWidth] = useState(Number.POSITIVE_INFINITY);
-  const [measured, setMeasured] = useState<{
-    controls: number;
-    widths: Partial<Record<SegmentId, SegmentWidth>>;
-  }>({ controls: 0, widths: {} });
+  // While the picker is up, Tab belongs to the strip: the language list, the filter box and the
+  // strip's own controls, and nothing else. It used to walk straight out of an open picker and into
+  // the rest of the application — the file tree, the panels — leaving a menu on screen that the
+  // keyboard had abandoned. The strip is the trapped region rather than the picker alone because the
+  // strip is what the picker belongs to, and the user named its controls as part of the cycle.
+  const trap = useFocusTrap<HTMLDivElement>(pickerOpen);
+  // One ref serves three jobs: the trap, the outside-click dismissal ("is this inside the strip?") and
+  // the width the fit is given (`useStripMeasure`, shared with the preview's bar, #637).
+  const stripRef = trap.ref;
+  const measured = useStripMeasure(stripRef, controlsRef, rulerRef);
+  const barWidth = measured.barWidth;
 
   /*
    * 059 FR-030/FR-031 — the document's encoding and line format, from the display copy the authority's
@@ -554,36 +549,6 @@ export function StatusStrip({
     forms.has('column'),
   ).filter((r) => forms.has(r.id));
 
-  // Read the ruler after every render, and write back only when something actually moved — an
-  // unconditional `setMeasured` here would re-render forever.
-  //
-  // The lint rule below fires on `setMeasured` in a dependency-less layout effect, and it is right
-  // about the general shape: measure → setState → re-render → measure is an infinite chain. It
-  // cannot see the guard that breaks it. The updater returns `prev` BY IDENTITY when nothing moved,
-  // so React bails out of the re-render and the chain terminates after one pass. Running on every
-  // render is deliberate: the ruler's widths change when the font, the theme or the digit count
-  // changes, and none of those is expressible as a dependency.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useLayoutEffect(() => {
-    const controls = controlsRef.current?.getBoundingClientRect().width ?? 0;
-    const widths: Partial<Record<SegmentId, SegmentWidth>> = {};
-    for (const el of rulerRef.current?.children ?? []) {
-      const key = el.getAttribute('data-measure');
-      const [id, form] = (key ?? '').split(':') as [SegmentId, LabelForm];
-      if (!id || !form) continue;
-      const width = el.getBoundingClientRect().width;
-      // A label with no shorter form is drawn ONCE and stands for both (see the ruler below). Taking
-      // the measured width for the missing form matters: leaving it at 0 would tell `fitReadouts`
-      // that `Ln 412` costs nothing at its short label, and the bar would believe it always fits.
-      widths[id] = labelShortens(id)
-        ? { ...(widths[id] ?? { full: 0, short: 0 }), [form]: width }
-        : { full: width, short: width };
-    }
-    setMeasured((prev) =>
-      prev.controls === controls && sameWidths(prev.widths, widths) ? prev : { controls, widths },
-    );
-  });
-
   // The content menu's "Set Language…" opens THIS picker (FR-010/FR-012) — the strip owns it,
   // because the strip is what it is anchored to. A second picker rendered by the menu would be free
   // to disagree with this one about which language is selected.
@@ -616,16 +581,6 @@ export function StatusStrip({
    * toggle reopen it on `click` — the picker would appear to ignore its own button. Anything inside
    * the strip is the picker's business; everything else dismisses it.
    */
-  // While the picker is up, Tab belongs to the strip: the language list, the filter box and the
-  // strip's own controls, and nothing else. It used to walk straight out of an open picker and into
-  // the rest of the application — the file tree, the panels — leaving a menu on screen that the
-  // keyboard had abandoned. The strip is the trapped region rather than the picker alone because the
-  // strip is what the picker belongs to, and the user named its controls as part of the cycle.
-  const trap = useFocusTrap<HTMLDivElement>(pickerOpen);
-
-  // One ref serves both jobs: the trap needs the strip, and so does the outside-click dismissal —
-  // they are asking the same question ("is this inside the strip?") about the same element.
-  const stripRef = trap.ref;
   useEffect(() => {
     if (!pickerOpen) return;
     const onPointerDown = (event: MouseEvent): void => {
@@ -635,27 +590,6 @@ export function StatusStrip({
     document.addEventListener('mousedown', onPointerDown, true);
     return () => document.removeEventListener('mousedown', onPointerDown, true);
   }, [pickerOpen, stripRef]);
-
-  /*
-   * How wide the bar is (040 FR-021 … FR-026). Declared here rather than beside the fit above only
-   * because `stripRef` is the focus trap's and is created below it — the effect order is what
-   * matters to React, not the reading order.
-   *
-   * `contentRect` excludes padding, which is exactly what `available` wants. jsdom implements no
-   * `ResizeObserver` at all, so the guard is not defensiveness: without it every component test
-   * that renders this strip without a stub would throw on mount.
-   */
-  useLayoutEffect(() => {
-    const el = stripRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width;
-      if (typeof width === 'number') setBarWidth(width);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-    // `stripRef` is stable; re-observing per render would tear the observer down mid-measurement.
-  }, [stripRef]);
 
   /*
    * 059 FR-033 — each indicator opens a menu of its actions, and that menu is the EDITOR MENU's own items

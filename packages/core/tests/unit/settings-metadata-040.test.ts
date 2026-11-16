@@ -33,6 +33,7 @@ import { SETTINGS_METADATA, settingsLeaves } from '../../src/config/settings-met
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
 import type { FieldDescriptor } from '../../src/config/metadata.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../../src/preview/providers/index.js';
+import { THEME_TOKEN_COPY } from '../../src/config/theme-copy.js';
 
 const CURSOR_KEY = 'editor.statusBar.showCursorPosition';
 const COUNTS_KEY = 'editor.statusBar.showCounts';
@@ -100,13 +101,13 @@ describe('the readout toggles are two, not five (FR-032)', () => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('editor.showStatusBar says what the bar holds and what hiding it does (FR-034)', () => {
-  it('names the language control, the wrap toggle, the caret position and the counts', () => {
+  // 044 FR-118f (#637 MT-02) supersedes FR-034's inventory: the bar is a preview's too, and the description is one
+  // short sentence naming the panels it covers — and that terminals have their own — rather than listing each control.
+  it('names the panels whose bar it is, and points terminals at their own setting', () => {
     const text = descriptor(BAR_KEY).description.toLowerCase();
-    expect(text, 'the language control').toContain('language');
-    expect(text, 'the wrap toggle').toContain('wrap');
-    expect(text, 'the caret position').toMatch(/cursor|caret|line and column/);
-    expect(text, 'the character count').toContain('character');
-    expect(text, 'the word count').toContain('word count');
+    expect(text).toContain('editor and preview panels');
+    expect(text).toContain('terminals have their own');
+    expect(text.length, 'kept short').toBeLessThan(160);
   });
 
   it('states that hiding the bar overrides the individual settings', () => {
@@ -129,6 +130,18 @@ describe('no user-facing string calls it a status strip (FR-034a)', () => {
       (d) => /status\s+strip/i.test(d.label) || /status\s+strip/i.test(d.description),
     ).map((d) => d.key);
     expect(offenders, 'these say "status strip" to the user').toEqual([]);
+  });
+
+  // #320 — the theme registry is user-facing copy too (the Themes tab renders it), and was the one place still
+  // saying "Editor Status Strip". Its three tokens take the setting's name: the PANEL status bar (044 FR-118f).
+  it('nor does any theme token, and the bar’s three tokens are named for the panel status bar', () => {
+    const offenders = Object.entries(THEME_TOKEN_COPY)
+      .filter(([, copy]) => /status\s+strip/i.test(copy.label) || /status\s+strip/i.test(copy.description))
+      .map(([key]) => key);
+    expect(offenders, 'these say "status strip" to the user').toEqual([]);
+    expect(THEME_TOKEN_COPY['colours.editorStatusStripBg']?.label).toBe('Panel Status Bar Surface');
+    expect(THEME_TOKEN_COPY['colours.editorStatusStripFg']?.label).toBe('Panel Status Bar Text');
+    expect(THEME_TOKEN_COPY['colours.editorStatusStripHover']?.label).toBe('Panel Status Bar Hover Background');
   });
 });
 
@@ -262,8 +275,9 @@ describe('no key, default or control type changed (FR-039)', () => {
   it('leaves editor.showStatusBar a toggle that ships on', () => {
     expect(DEFAULT_APP_SETTINGS.editor.showStatusBar).toBe(true);
     expect(descriptor(BAR_KEY).control).toBe('toggle');
-    // Its LABEL is user-facing copy this feature does not rewrite — only the description is.
-    expect(descriptor(BAR_KEY).label).toBe('Show editor status bar');
+    // 040 rewrote only its description. Its label is 044 FR-118f's (#637): the bar is a preview's too, so it is
+    // the PANEL status bar — the key is unchanged.
+    expect(descriptor(BAR_KEY).label).toBe('Show panel status bar');
   });
 
   it('leaves terminals.showStatusBar a toggle that ships on', () => {

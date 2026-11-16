@@ -38,10 +38,10 @@ function pointer(type: 'pointerover' | 'pointerout', target: Element, relatedTar
 
 const linkEl = (name: string): HTMLElement => screen.getByText(name).closest<HTMLElement>('[data-throng-link]')!;
 
-/** The readout's text, or `null` when the readouts group shows nothing. */
+/** The link readout's text, or `null` when the bar shows none. Its own class: the counts (#637) sit beside it. */
 function readout(id: string): string | null {
   const bar = screen.getByTestId(`preview-status-bar-${id}`);
-  const el = bar.querySelector('.editor-status-strip__group--readouts .editor-status-strip__readout');
+  const el = bar.querySelector('.editor-status-strip__group--readouts .link-target-readout');
   return el === null ? null : el.textContent;
 }
 
@@ -55,6 +55,9 @@ describe('the status bar names the hovered or focused link (FR-118)', () => {
   it('pointer over a link shows its target; pointer out clears it', async () => {
     const { id } = await mount();
     await screen.findByTestId(`preview-status-bar-${id}`);
+    // #637 (FR-118a): the bar also carries the document's counts, which settle after a debounce. Wait for them, so
+    // the link readout is asserted beside them every time rather than only on a machine fast enough to beat them.
+    await screen.findByTestId(`preview-status-lines-${id}`);
     expect(readout(id)).toBeNull();
 
     const site = linkEl('Site');

@@ -546,13 +546,13 @@ export const CONTRAST_PAIRINGS: readonly ContrastPairing[] = [
   { fg: 'terminalFg', bg: 'terminalBg', min: WCAG_AA_BODY, label: 'terminal text on terminal background' },
   { fg: 'editorFg', bg: 'editorBg', min: WCAG_AA_BODY, label: 'editor text on editor background' },
   { fg: 'editorGutterFg', bg: 'editorGutterBg', min: WCAG_AA_LARGE_UI, label: 'gutter line numbers on gutter background' },
-  // The editor status strip (016, FR-010c). SC-007 promises the language indicator is READABLE on
+  // The panel status bar (016, FR-010c). SC-007 promises the language indicator is READABLE on
   // every bundled theme — a promise that was asserted and never measured until this pairing existed.
   {
     fg: 'editorStatusStripFg',
     bg: 'editorStatusStripBg',
     min: WCAG_AA_BODY,
-    label: 'editor status strip label on its strip background',
+    label: 'panel status bar text on its background',
   },
   ...SYNTAX_ON_MATCH,
   ...SYNTAX_ON_BODY,

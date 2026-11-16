@@ -131,6 +131,7 @@ import {
   canCollapseWithin,
   canExpandWithin,
   collapseWithin,
+  countCharacters,
   expandWithin,
   isFlowingDocument,
 } from '@throng/core';
@@ -162,7 +163,10 @@ import { unregisterPanelSearch } from '../search/search-controller.js';
 import { clearPanel } from './highlight-registry.js';
 import { createPreviewOccurrences, type PreviewOccurrences } from './preview-occurrences.js';
 import { createPreviewSelection, type PreviewSelection } from './preview-selection.js';
-import { createModelCache } from './preview-selection-model.js';
+import { createModelCache, rangeOver } from './preview-selection-model.js';
+import type { RetainedSelection } from './preview-selection-store.js';
+import { sourceLinesOf, type PreviewSelectionReadout } from './preview-readouts.js';
+import { forgetDocumentMetrics, scheduleDocumentMetrics, useDocumentMetrics } from '../editor/document-metrics-store.js';
 import { createCssHighlightPainter, createDomFramePainter, createPreviewSearchController } from './preview-search.js';
 import { recordLastActivePreview } from './last-active-preview.js';
 import { HeadingOutline } from './heading-outline.js';
@@ -720,6 +724,21 @@ export function PreviewPanel({
   const occurrencesRef = useRef<PreviewOccurrences | null>(null);
   /** 049 US5 (#457) — the selection this body keeps while it is not focused (`preview-selection.ts`). */
   const selectionRef = useRef<PreviewSelection | null>(null);
+  /** #637 — what that selection contributes to the status bar, or `null` with none. */
+  const [selectionReadout, setSelectionReadout] = useState<PreviewSelectionReadout | null>(null);
+  /*
+   * #637 (044 FR-118a) — the document's line, character and word counts, from the same debounced scan the editor's
+   * bar reads (`document-metrics-store.ts`), over the text this preview draws. Keyed by the PANEL, not the file: a
+   * standalone preview can draw the file on disk while an editor of it holds unsaved edits, and two writers of one
+   * key would make each bar flicker between the other's figures. Over the same text the figures are the same.
+   */
+  const metricsKey = `preview:${panelId}`;
+  const drawnText = state?.content?.kind === 'text' ? state.content.text : null;
+  useEffect(() => {
+    if (drawnText !== null) scheduleDocumentMetrics(metricsKey, drawnText);
+  }, [metricsKey, drawnText]);
+  useEffect(() => () => forgetDocumentMetrics(metricsKey), [metricsKey]);
+  const documentMetrics = useDocumentMetrics(metricsKey);
   const highlightOccurrencesRef = useRef(settings.editor.highlightOccurrences);
   highlightOccurrencesRef.current = settings.editor.highlightOccurrences;
   useEffect(() => {
@@ -736,7 +755,25 @@ export function PreviewPanel({
     });
     // One text model per draw, walked once for both controllers that map the DOM selection onto it.
     const models = createModelCache(() => bodyHostRef.current);
-    const retainedSelection = createPreviewSelection({ host: () => bodyHostRef.current, panelId, modelCache: models });
+    /*
+     * #637 (044 FR-118b) — the status bar's selection readouts: the count of what is selected, counted as the editor
+     * counts, and the source lines it spans where BOTH ends map back (`preview-readouts.ts`); otherwise the count alone.
+     */
+    const readoutOf = (selection: RetainedSelection | null): PreviewSelectionReadout | null => {
+      if (selection === null) return null;
+      const host = bodyHostRef.current;
+      const cache = models.get();
+      const content = stateRef.current?.content;
+      const range = host !== null && cache ? rangeOver(host, cache.model, selection.from, selection.to) : null;
+      const lines = host !== null && range !== null && content?.kind === 'text' ? sourceLinesOf(host, range, content.text) : null;
+      return { selected: countCharacters(selection.text), lines };
+    };
+    const retainedSelection = createPreviewSelection({
+      host: () => bodyHostRef.current,
+      panelId,
+      modelCache: models,
+      onChange: (selection) => setSelectionReadout(readoutOf(selection)),
+    });
     const occurrences = createPreviewOccurrences({
       host: () => bodyHostRef.current,
       panelId,
@@ -2501,6 +2538,9 @@ export function PreviewPanel({
           showSyncScroll={flowing}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}
+          metrics={documentMetrics}
+          selection={selectionReadout}
+          readoutPrefs={settings.editor.statusBar}
         />
       ) : null}
     </div>

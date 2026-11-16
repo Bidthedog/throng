@@ -1272,6 +1272,38 @@ restart; Back again. Repeat in a preview by following links.
   status bar**, and clear it when the pointer or focus leaves. It MUST appear only while the status bar
   is shown (`editor.showStatusBar`). This supersedes FR-015a's "it carries no readouts" for this
   readout only.
+  - **FR-118a** *(2026-11-16, #637 — supersedes FR-015a's "it carries no readouts" for the counts too)*: A
+    text provider's preview status bar MUST show the drawn document's line, character and word counts, in
+    the editor strip's readout class, labels, short forms and announced names (040 FR-012, FR-015; 067
+    FR-095 – FR-099, FR-125), computed by the same scan the editor strip's counts use, so they equal the
+    editor's figures for the same text. Counts that have not settled are absent, never zero (040 FR-008b).
+    They follow `editor.statusBar.showCounts`.
+  - **FR-118b** *(2026-11-16, #637)*: While text is selected in the preview, the bar MUST add the selected
+    character count (counted as the editor counts it) and, where BOTH ends of the rendered selection map to
+    the source, the source line or line range it spans (`Ln 5.`, `Ln 3-5.`), following
+    `editor.statusBar.showCursorPosition`. A source COLUMN is not shown: rendered Markdown does not keep the
+    source's columns (emphasis, links, escapes and entities draw fewer characters than they are written
+    with), so the line is drawn alone and ends in a full stop (067 FR-134). An unmappable selection shows
+    its count alone. Clearing the selection removes both.
+  - **FR-118c** *(2026-11-16, #637)*: The readouts MUST give way to width by the editor strip's rules (040
+    FR-021 – FR-023): every label shortens before any readout hides, then `words → chars → lines →
+    selected → line`. The link readout keeps its place after them, unfitted and clipped by ellipsis, as the
+    editor's link readout is; the scroll-sync toggle and the editor route are never hidden by width.
+  - **FR-118d** *(2026-11-16, #637 — WITHDRAWN the same day, with FR-118e)*: A copy from a preview raises no
+    confirmation popover; the copy gesture and the body menu's copy rows behave as they did before #637. A brief
+    "Copied" popover, first for previews and then (FR-118e) for every copy in the app, was built and dropped at the
+    maintainer's manual test (MT-03, 2026-11-16: "drop the 'copied' popover, I don't like it").
+  - **FR-118e** *(2026-11-16, #637 — WITHDRAWN with FR-118d, above)*.
+  - **FR-118f** *(2026-11-16, #637 MT-02 — supersedes 024 FR-001b's name for the preference, and 040 FR-034's
+    list of the bar's contents in its description, which the maintainer asked to be shorter)*: Because
+    `editor.showStatusBar` shows or hides the preview's bar as well as the editor's (FR-118a), its label MUST
+    be **Show panel status bar**, and its description MUST say it covers editor and preview panels and that
+    terminals have their own (`terminals.showStatusBar`, still "Show terminal status bar"), keeping 040 FR-034's
+    statement that hiding the bar beats the two settings beneath it. The key, default
+    and behaviour are unchanged. The two settings beneath it describe what they show in one short sentence
+    each. The three theme tokens that colour the bar are labelled in the same words — **Panel Status Bar
+    Surface**, **Panel Status Bar Text** and **Panel Status Bar Hover Background** — completing 040 FR-034a's
+    "status bar, never status strip" in the theme registry (#320); their keys are unchanged.
 - **FR-119**: After a web or `mailto:` link is followed (FR-091), throng MUST NOT take the foreground
   back: the handler's window MUST be left in front of throng's.
   > **Implementation note 2026-09-16 (converge, adopting what shipped)**: the foreground handoff is made

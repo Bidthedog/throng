@@ -160,18 +160,20 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The solid underline a link takes while the pointer is over it. Unset, it follows the link underline.',
   },
+  // The link hint's three tokens (045 FR-165g), widened to every popup by constitution v6.7.0. The keys keep their
+  // names so theme files written since 045 still apply.
   'colours.linkHintBackground': {
-    label: 'Link Hint Background',
+    label: 'Popup Background',
     description:
-      'The small popover a plain click on a link shows, saying what Ctrl+click will do. Unset, it follows the raised surface colour.',
+      'Every tooltip, hover popover and hint — the hint a plain click on a link shows among them. Unset, it follows the raised surface colour.',
   },
   'colours.linkHintText': {
-    label: 'Link Hint Text',
-    description: 'The link hint’s own text. Unset, it follows the body text colour.',
+    label: 'Popup Text',
+    description: 'The text of every tooltip, popover and hint. Unset, it follows the body text colour.',
   },
   'colours.linkHintBorder': {
-    label: 'Link Hint Border',
-    description: 'The link hint’s hairline edge. Unset, it follows the border colour.',
+    label: 'Popup Border',
+    description: 'The hairline edge of every tooltip, popover and hint. Unset, it follows the border colour.',
   },
   'colours.accentText': {
     label: 'Highlighted Option Text',
@@ -343,22 +345,21 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Invalid Code Text',
     description: 'Text the language cannot make sense of, marked so a typo is visible at a glance.',
   },
-  // The editor's own status strip (016) — distinct from the application status bar along the very
-  // bottom of the window, which has its own token.
+  // The panel status bar (016, the editor's; 044 FR-118a, the preview's too) — distinct from the application
+  // status bar along the very bottom of the window, which has its own token. Labelled in Settings' vocabulary
+  // (040 FR-034a, #320): "status bar", and the PANEL status bar since 044 FR-118f. The keys keep their names.
   'colours.editorStatusStripBg': {
-    label: 'Editor Status Strip Surface',
+    label: 'Panel Status Bar Surface',
     description:
-      'The narrow band along the bottom of an editor panel that shows the file language — not the application status bar at the foot of the window.',
+      'The bar along the bottom of editor and preview panels — not the application status bar at the foot of the window.',
   },
   'colours.editorStatusStripFg': {
-    label: 'Editor Status Strip Text',
-    description:
-      'The language name printed in the band along the bottom of an editor panel, which must stay readable on it.',
+    label: 'Panel Status Bar Text',
+    description: 'The text on the panel status bar, which must stay readable on it.',
   },
   'colours.editorStatusStripHover': {
-    label: 'Editor Status Strip Hover Background',
-    description:
-      'The surface that appears behind the language name when the pointer is over it, showing it can be clicked to change the language.',
+    label: 'Panel Status Bar Hover Background',
+    description: 'Behind a panel status bar control while the pointer is over it, showing it can be clicked.',
   },
   'colours.searchMatch': {
     label: 'Search Match Highlight',
