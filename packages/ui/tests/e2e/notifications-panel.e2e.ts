@@ -40,10 +40,19 @@ async function openSettings(app: ElectronApplication, win: Page): Promise<Page> 
   return prefs;
 }
 
-/** Show the right pane, which starts hidden with no project open. */
+/**
+ * Show the right pane, which starts hidden with no project open, and wait until it is open.
+ *
+ * Retried rather than checked once: `.throng-shell` is visible before its panes render, so a single
+ * look for the show control found nothing on a hosted Mac, clicked nothing, and the pane then rendered
+ * collapsed (070). A pane the width coordinator collapses after a resize is caught the same way.
+ */
 async function showRightPane(win: Page): Promise<void> {
-  const show = win.getByTestId('pane-show-right');
-  if ((await show.count()) > 0) await show.click();
+  await expect(async () => {
+    const show = win.getByTestId('pane-show-right');
+    if (await show.isVisible()) await show.click();
+    await expect(win.getByTestId('pane-hide-right')).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
   await expect(win.getByTestId('notifications-panel')).toBeVisible();
 }
 
@@ -119,8 +128,7 @@ test('a kept notice raised in Preferences reaches the main window panel, and it 
   await runApp(
     async (_app, win) => {
       await settle(win);
-      const show = win.getByTestId('pane-show-right');
-      if ((await show.count()) > 0) await show.click();
+      await showRightPane(win);
       await expect(win.getByTestId('notifications-restore')).toBeVisible({ timeout: 20_000 });
       await expect(win.getByTestId('notifications-pending-badge')).toHaveText('1');
       await win.getByTestId('notifications-restore').click();
