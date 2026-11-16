@@ -83,8 +83,9 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
 - `common/clamp-to-viewport.ts`, `focus-trap.ts` and `use-hover-suppression.ts` exist because
   floating surfaces, modality and hover previews each had a real defect. Reuse them rather than
   re-deriving.
-- Theme is applied through `renderer/theme/theme-provider.tsx` + `tokens.css`; `THRONG_THEME` forces
-  one for a test.
+- Theme is applied through `renderer/theme/theme-provider.tsx` + `tokens.css`; a test picks a theme by
+  seeding `appearance.theme` in `settings.json` under its `THRONG_CONFIG_ROOT` (no environment
+  variable forces one; `THRONG_THEME` is the built-in theme object in `@throng/core`).
 
 ## Verifying
 
