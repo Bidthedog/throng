@@ -100,7 +100,7 @@ export function TabPopover({
   return createPortal(
     <div
       ref={ref}
-      className="tabstrip-popover"
+      className="throng-popup tabstrip-popover"
       data-testid="tabstrip-popover"
       data-tab-id={tabId}
       role="tooltip"

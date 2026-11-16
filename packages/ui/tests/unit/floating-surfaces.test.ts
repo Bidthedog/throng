@@ -61,9 +61,9 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'common/colour-picker.tsx — flips + clamps on BOTH axes via clampToViewport (021/FR-036); found BY this guard',
   '.language-picker':
     'editor/language-picker.tsx — CLAMPS its height to the room above its strip; it opens upward from the bottom of its panel, so there is nothing below to flip to (found BY this guard, in 016)',
-  // `.terminal-link-tip` was here until 045's round five deleted it. A link's hover is now a native
-  // HTML `title` on the panel, which the OS draws and positions — there is no element of ours left
-  // for this guard to have an opinion about. The wording that tip carried moved to `.link-hint`.
+  // `.terminal-link-tip` was here until 045's round five deleted it. A link's hover is now a `title` on
+  // the panel, drawn by the app's one title tooltip (`.title-tooltip`, below). The wording that tip
+  // carried moved to `.link-hint`.
   '.capture-overlay': 'a full-viewport scrim over the key-capture dialog — nothing to flip away from',
   '.cm-ws-hover-name':
     'editor/view-whitespace.ts (059 FR-067) — the whitespace marker name: opens above the pointer and FLIPS below it when there is no room above; CLAMPS its left edge between the window edges',
@@ -123,6 +123,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — 054 FR-032\'s reveal mark, selected through the host it marks (`.preview-diagram-host--revealed .preview-diagram-frame::before`): the same inset overlay over its own diagram box as `.preview-diagram-frame` above',
   '.zoom-indicator':
     'chrome — #486 / 054 FR-046n\'s zoom percentage (workspace/zoom-indicator.tsx): pinned to the top-right INSIDE the panel or diagram box that zoomed, which clips it, `pointer-events: none`, no controls; anchored to nothing that moves, so nothing to flip away from',
+  '.title-tooltip':
+    'common/title-tooltips.tsx (constitution v6.7.0) — the app\'s stand-in for the OS `title` tooltip. ANCHORED below the resting pointer, and clampToViewport FLIPS it above the pointer at the window\'s foot and clamps whatever remains; measured in a layout effect and held `visibility: hidden` until placed, `pointer-events: none`',
   '.project-insert': 'a drag INSERTION MARKER inside its list — a line, not a surface',
   '.subworkspace-insert': 'a drag insertion marker inside its list',
   '.tab-insert': 'a drag insertion marker inside the tab strip',

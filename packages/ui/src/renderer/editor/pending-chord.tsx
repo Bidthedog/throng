@@ -77,7 +77,7 @@ export function PendingChord(): ReactElement | null {
   if (!state || !state.host.isConnected) return null;
   return createPortal(
     <div
-      className={`editor-pending-chord editor-pending-chord--${state.kind}`}
+      className={`throng-popup editor-pending-chord editor-pending-chord--${state.kind}`}
       data-testid="editor-pending-chord"
       role="status"
       aria-live="polite"

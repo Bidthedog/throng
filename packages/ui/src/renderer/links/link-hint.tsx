@@ -122,7 +122,7 @@ export function LinkHint(): ReactElement | null {
   return (
     <div
       ref={ref}
-      className="link-hint"
+      className="throng-popup link-hint"
       data-testid="link-hint"
       style={{
         left: pos?.left ?? hint.anchor.left,

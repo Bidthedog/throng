@@ -27,9 +27,11 @@ describe('.zoom-indicator', () => {
     expect(base).toMatch(/opacity:\s*0/);
     const shown = rule('.zoom-indicator--shown');
     expect(shown).toMatch(/opacity:\s*1/);
-    const fadeOut = Number(/transition:\s*opacity (\d+)ms/.exec(base)![1]);
-    const fadeIn = Number(/transition:\s*opacity (\d+)ms/.exec(shown)![1]);
-    expect(fadeOut).toBeGreaterThan(fadeIn);
+    // At the shared popup fades (constitution v6.7.0), the way out slower than the way in.
+    expect(base).toMatch(/transition:\s*opacity var\(--throng-popup-fade-out\)/);
+    expect(shown).toMatch(/transition:\s*opacity var\(--throng-popup-fade-in\)/);
+    const ms = (name: string): number => Number(new RegExp(`--throng-popup-${name}:\\s*(\\d+)ms`).exec(css)![1]);
+    expect(ms('fade-out')).toBeGreaterThan(ms('fade-in'));
   });
 
   // MT-04 retest (2026-10-13) — the active ring is redrawn above the panel's content (B8 measures the paint),

@@ -37,5 +37,5 @@ export function DragActionLabel({ ref }: { ref: Ref<DragActionLabelHandle> }): R
     }),
     [],
   );
-  return createPortal(<div ref={element} className="tree-drag-label" data-testid="tree-drag-label" aria-hidden="true" hidden />, document.body);
+  return createPortal(<div ref={element} className="throng-popup tree-drag-label" data-testid="tree-drag-label" aria-hidden="true" hidden />, document.body);
 }

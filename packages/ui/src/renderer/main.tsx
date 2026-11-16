@@ -9,6 +9,7 @@ import { MonitorApp } from './resources/monitor-app.js';
 import { settleConfigWrites } from './config/write-config.js';
 import { settleLayoutSaves } from './state/layout-saves.js';
 import { installWindowErrorListeners, rootErrorOptions } from './error-hooks.js';
+import { WindowPopups } from './common/window-popups.js';
 import './theme.css';
 import { logCaught } from '@throng/core';
 
@@ -77,5 +78,7 @@ createRoot(container, rootErrorOptions).render(
     ) : (
       <CompositionRoot />
     )}
+    {/* The title tooltip — one in every window kind. */}
+    <WindowPopups />
   </StrictMode>,
 );

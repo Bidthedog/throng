@@ -60,7 +60,9 @@ describe('View Whitespace markers (059 FR-064, FR-065)', () => {
     const body = rule('.cm-ws-hover-name');
     expect(body).toMatch(/position:\s*fixed/);
     expect(body).toMatch(/pointer-events:\s*none/);
-    expect(body).toMatch(/background:\s*var\(--throng-colour-surfaceActive/);
+    // Its raised surface is the shared popup class's (constitution v6.7.0) — `popup-style.test.ts` holds that the
+    // element wears it and this rule adds no look of its own.
+    expect(body).not.toMatch(/background:/);
   });
 
   it('a space and a tab keep the text cursor: they are characters the user selects (FR-066)', () => {

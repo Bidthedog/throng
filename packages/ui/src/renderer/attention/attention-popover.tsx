@@ -105,7 +105,7 @@ export function AttentionPopover({ anchor, projectIds, panelIds, grouped }: Atte
   return createPortal(
     <div
       ref={ref}
-      className="attention-popover"
+      className="throng-popup attention-popover"
       data-testid="attention-popover"
       role="tooltip"
       style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? 'visible' : 'hidden' }}

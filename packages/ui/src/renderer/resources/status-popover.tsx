@@ -127,7 +127,7 @@ export function StatusPopover({ anchor, summary, figures, points, id, onPointerE
     <div
       ref={ref}
       id={id}
-      className="status-popover"
+      className="throng-popup status-popover"
       data-testid="status-popover"
       role="tooltip"
       style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? 'visible' : 'hidden' }}

@@ -392,22 +392,14 @@ li + .encoding-picker__heading {
   cursor: help;
 }
 
-/* The hover-name popover (FR-067): portaled to the body, so it is styled at the root, on the raised surface
-   every menu and popover shares. It never takes the pointer — it sits just above it, and a hover it caught
-   would close it. Its left/top are written by the plugin, so no transform may move it off them. */
+/* The hover-name popover (FR-067): portaled to the body and drawn by the shared popup class in the theme stylesheet. It
+   never takes the pointer — it sits just above it, and a hover it caught would close it. Its left/top are
+   written by the plugin, so no transform may move it off them. */
 .cm-ws-hover-name {
   position: fixed;
   z-index: 1000;
   max-width: 360px;
-  padding: 3px 8px;
-  background: var(--throng-colour-surfaceActive);
-  border: 1px solid var(--throng-colour-border);
-  border-radius: 4px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  color: var(--throng-colour-text);
   font-family: var(--throng-font-family);
-  font-size: 12px;
-  line-height: 1.4;
   white-space: nowrap;
   pointer-events: none;
 }
@@ -560,7 +552,7 @@ li + .encoding-picker__heading {
 }
 
 /* The pending indication for a two-stroke chord (046 FR-092), portalled into the waiting editor's
- * CodeMirror root (which CodeMirror positions). Bottom-right, above the text, in the status strip's colours,
+ * CodeMirror root (which CodeMirror positions). Bottom-right, above the text, drawn by the shared popup class,
  * and never taking the pointer: it is a status, not something the user must dismiss. */
 .editor-pending-chord {
   position: absolute;
@@ -568,12 +560,6 @@ li + .encoding-picker__heading {
   bottom: 8px;
   z-index: 6;
   max-width: calc(100% - 16px);
-  padding: 3px 8px;
-  border: 1px solid var(--throng-colour-border, #2a3344);
-  border-radius: 4px;
-  background: var(--throng-colour-editorStatusStripBg, #151a23);
-  color: var(--throng-colour-editorStatusStripFg, #a7b4c8);
-  font-size: 12px;
   pointer-events: none;
 }
 

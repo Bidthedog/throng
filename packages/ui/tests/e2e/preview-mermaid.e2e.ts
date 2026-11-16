@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp } from './harness.js';
+import { byTitle } from './helpers/titles.js';
 
 const FLOW = 'graph TD\n  Start[Begin here] --> Finish[Done]\n';
 
@@ -111,7 +112,7 @@ test('a mermaid fence in a Markdown preview draws an SVG in the dark theme’s c
   await expect(svg).toContainText('Begin here');
   await expect(svg).toContainText('Done');
   // Its view controls are the frame's.
-  await expect(frame.getByTitle('Fit diagram')).toBeVisible();
+  await expect(byTitle(frame, 'Fit diagram')).toBeVisible();
 
   // Themed: a node is painted with the theme's surface token, never mermaid's own light default.
   const surface = await resolvedToken(win, 'surfaceActive');

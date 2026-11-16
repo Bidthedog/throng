@@ -7,23 +7,14 @@
  * POSITIONED but never FLIPPED — `clampToViewport` (the link hint's own component) only ever
  * slides it because FR-165c says staying on screen wins over not covering the link.
  *
- * Colours are theme tokens with their own descriptors (FR-165g): `linkHintBackground` /
- * `linkHintText` / `linkHintBorder` each carve out a role a theme authored before the hint
- * existed already sets (`surfaceActive` / `text` / `border`) so an old theme's hint reads like the
- * rest of its chrome from the first render.
+ * Its look is the shared popup class's (in the theme stylesheet), whose colours are the three
+ * tokens FR-165g carved out for this hint and the constitution's "One popup style" widened to
+ * every popup.
  */
 .link-hint {
   position: fixed;
   z-index: 1000;
   max-width: 360px;
-  padding: 4px 8px;
-  background: var(--throng-colour-linkHintBackground);
-  color: var(--throng-colour-linkHintText);
-  border: 1px solid var(--throng-colour-linkHintBorder);
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  font-size: 12px;
-  line-height: 1.4;
   pointer-events: none;
   user-select: none;
 }
