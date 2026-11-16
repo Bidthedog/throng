@@ -522,7 +522,7 @@ overview.
 | [elevation.md](references/elevation.md) | a spec depends on admin rights; adding `skipIfElevated()`; elevated and non-elevated runs disagree |
 | [writing-e2e.md](references/writing-e2e.md) | writing or converting a spec: config-root writes, one app per file, the harness helpers |
 | [flakes.md](references/flakes.md) | a test passes on retry; before stress-testing one spec |
-| [flake-case-studies.md](references/flake-case-studies.md) | a waited-for value is empty or stale; a flake vanishes under instrumentation; a terminal spec asserts DEC modes |
+| [flake-case-studies.md](references/flake-case-studies.md) | a waited-for value is empty or stale; a flake vanishes under instrumentation; a watch test misses a change on macOS; a terminal spec asserts DEC modes |
 | [budgets.md](references/budgets.md) | before raising any E2E timeout |
 | [measuring-durations.md](references/measuring-durations.md) | measuring a spec file's cost, or before any run with a positional filter |
 | [quarantine.md](references/quarantine.md) | before tagging `@quarantine`; "what are we not testing?" |

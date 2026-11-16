@@ -15,9 +15,10 @@ core            ← no dependency on any other @throng package. No Electron, no 
 ipc-contract    ← core
 persistence     ← core                      (better-sqlite3 lives here and nowhere else)
 platform-windows← core                      (node-pty, koffi, Win32 live here and nowhere else)
-platform-node   ← core                      (what Node already abstracts: file log, user context)
+platform-node   ← core                      (what Node already abstracts: file log, user context; posix/ = shared by Linux and macOS)
 platform-linux  ← core, platform-node       (node-pty, /proc, Unix sockets live here and nowhere else)
-platform        ← platform-windows, platform-linux, platform-node   (selects one set per process)
+platform-macos  ← core, platform-node       (node-pty, koffi libproc/sysctl/Objective-C runtime, JXA live here and nowhere else)
+platform        ← platform-windows, platform-linux, platform-macos, platform-node   (selects one set per process)
 daemon          ← core, ipc-contract, persistence, platform
 ui              ← core, ipc-contract, platform
 ```
@@ -30,7 +31,8 @@ An arrow the other way is a defect, not a refactor opportunity. `core` importing
 - `abstractions/` — the interfaces Principle II demands: `pty-host`, `shell-detection`, `elevation`,
   `de-elevator`, `file-system`, `file-watcher`, `clipboard`, `display-info`, `font-enumeration`,
   `platform-info`, `process-cwd`, `directory-lock`, `shell-integration`, `user-context`,
-  `config-store`. Each has a Windows and a Linux implementation (`platform-linux/src`), chosen in `platform/src/index.ts`; the Windows one is in `platform-windows/src`.
+  `config-store`. Each has a Windows, a Linux and a macOS implementation (`platform-windows/src`, `platform-linux/src`,
+  `platform-macos/src`; what Linux and macOS share is in `platform-node/src/posix`), chosen in `platform/src/index.ts`.
 - `ports/` — storage-side contracts (`project-store`, `workspace-store`, `subworkspace-store`),
   implemented by `persistence` repositories.
 - `config/` — the settings, keybindings, theme and icon-pack models plus their editor-metadata
@@ -47,13 +49,22 @@ Always in this order, in one change:
    vocabulary leaking into the signature.
 2. A DI token for it. Tokens are per-process: `packages/ui/src/main/tokens.ts`,
    `packages/ui/src/renderer/…`, `packages/daemon/src/tokens.ts`.
-3. Windows implementation in `platform-windows/src/windows-<thing>.ts`, `@injectable()`, and Linux in `platform-linux/src`, both added to `platform/src/index.ts` (constitution: per-OS features deliver both together).
+3. Windows implementation in `platform-windows/src/windows-<thing>.ts`, `@injectable()`, Linux in `platform-linux/src` and macOS in `platform-macos/src`, all added to `platform/src/index.ts` (constitution
+   Principle II: per-OS features deliver all three together, macOS proved by CI only).
 4. Binding in the composition root of every process that needs it —
    `packages/ui/src/main/composition-root.ts`, `packages/ui/src/renderer/composition-root.tsx`,
    `packages/daemon/src/composition-root.ts`.
 5. A fake in `core/src/testing` so consumers can be unit-tested without the OS.
 6. A contract test (`packages/ui/tests/contract/*.contract.test.ts`) if the real implementation
    talks to the OS or Electron — that layer exists to prove the concrete satisfies the interface.
+
+**On macOS, call the OS in process through `koffi`, never through `osascript`.** `objc-runtime.ts` in
+`platform-macos` sends Foundation and AppKit messages directly (`foundation-trash.ts` and
+`pasteboard-file-urls.ts` are the worked examples). Declare one `objc_msgSend` prototype per argument shape,
+because arm64 does not pass variadic arguments the way the call expects, and make the calls inside `pooled()`,
+which pushes and pops an autorelease pool around them. JXA's Objective-C bridge crashed `osascript` intermittently on the hosted Macs, under
+Electron and plain Node alike, even after answering, so the Trash and the pasteboard were moved off it. Only the font
+list still runs through JXA, which nothing waits on.
 
 Never construct a dependency inside a consumer, and never reach for a module-level singleton. The
 composition root is the only place `new` appears for a service.
@@ -67,7 +78,7 @@ metadata error, check that config before suspecting the container.
 
 ## Rules that bind here
 
-- **Principle II** — core stays OS-agnostic; no design may foreclose macOS/Linux.
+- **Principle II** — core stays OS-agnostic; per-OS code ships for Windows, Linux and macOS together.
 - **Principle VIII** — SOLID, DRY, YAGNI. Do not add an abstraction with one implementation and no
   second caller in sight; do not duplicate a concept that already exists in `core`.
 - **Principle IX** — DI and a single composition root per process.

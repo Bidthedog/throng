@@ -31,7 +31,7 @@ covers takes the **next** number, even before that directory exists. This same r
 ## The thirteen principles, in one line each
 
 I Project-first context isolation · II Platform-abstracted core, with per-OS code delivered for
-Windows and Linux together · III Detached, tagged, persistent terminals · IV Native terminal support &
+Windows, Linux and macOS together (macOS proved by CI only) · III Detached, tagged, persistent terminals · IV Native terminal support &
 auto-detection · V Test-first quality discipline (NON-NEGOTIABLE) · VI Simple, modern, discoverable
 UX · VII Change review & approval · VIII SOLID, DRY, YAGNI · IX DI & composition root · X Externalised
 configuration · XI Dockable workspace: panes, tabs & panels · XII Responsive UI (NON-NEGOTIABLE) · XIII

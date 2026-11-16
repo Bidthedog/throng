@@ -26,6 +26,11 @@ times checked before every signal), `linux-shell-detection.ts`, `linux-process-c
 `linux-orphan-processes.ts`. There is no conhost and no elevation; a job has its own process group, so killing the
 shell's group is not enough, which is why the tree is read first.
 
+On macOS: `packages/platform-macos/src` — `macos-pty-host.ts` over the shared `platform-node/src/posix/posix-pty-host.ts`,
+with the process tree, cwd and start times from `macos-proc-table.ts` (`libproc` and `sysctl` through `koffi`, in
+`libsystem.ts`). Shells start as login shells (`-l`), as Terminal.app's do. Every test of it runs on CI's macOS runners
+only, behind `skipUnlessMacos(reason)`.
+
 ## The hygiene rules (Principle III, NON-NEGOTIABLE)
 
 - **No orphaned OS processes.** Every end path — user close, kill, panel destroy, project delete,

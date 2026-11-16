@@ -11,6 +11,19 @@ The Linux artifacts have their own harness, `scripts/verify-linux-package.mjs`, 
 Nothing in it may be `unproven`. `in-use-upgrade` installs the `linux-upgrade-fixture` artifact, this tree packaged as
 0.9.0, and upgrades over it while it runs. The sections below describe the Windows harness.
 
+## macOS
+
+The macOS copies have their own harness, `scripts/verify-macos-package.mjs`, over the same step vocabulary and verdict
+(070 FR-010, `MACOS_PACKAGE_STEPS` in `release-artifacts.ts`). It runs once per copy per runner label in
+`.github/macos-runners.json`, each its own combination (`dmg-current`, `dmg-previous`, …), and copies the app into
+the runner account's `~/Applications` as a user would. `gatekeeper-first-launch` is the one step allowed `unproven`
+(`GATEKEEPER_UNPROVEN_REASON`: a hosted runner cannot click Open Anyway); the release body names it. The translocation
+refusal is proved through `THRONG_TEST_EXEC_PATH`. `macarchive` has no `in-use-upgrade`.
+
+**Moving the runner range** when Apple ships a new macOS: change the two labels in `.github/macos-runners.json` and
+nothing else. Every macOS job in `ci.yml`, `gate.yml` and `release.yml` reads them from there, and
+`macos-runners.test.ts` fails a workflow that names a label of its own.
+
 ## What is proved
 
 **Every** declared artifact is verified before any of them is published, each on a fresh CI runner

@@ -1,1 +1,2 @@
 - [Renderer tests are not typechecked](renderer-test-typecheck-gap.md) — no tsconfig covers packages/ui/tests; verify test-side shapes by hand
+- [macOS lane runs @core](macos-lane-chords.md) — @core specs press app chords as ControlOrMeta; overrides stay Ctrl

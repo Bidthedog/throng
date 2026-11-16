@@ -8,8 +8,8 @@ holds how the set is declared and enforced, and what every artifact contains. Pa
 
 ## Declared, not discovered
 
-Seven roles: `setup`, `msi`, `portable`, `archive` on Windows, `deb`, `rpm`, `tarball` on Linux (063), each carrying
-its `platform`. A build is held to its own platform's files (`reconcile --platform`); the publish gate reads the whole
+Nine roles: `setup`, `msi`, `portable`, `archive` on Windows, `deb`, `rpm`, `tarball` on Linux (063), `dmg`,
+`macarchive` on macOS, Apple silicon only (070), each carrying its `platform`. A build is held to its own platform's files (`reconcile --platform`); the publish gate reads the whole
 set. The two Windows installers each carry two **install
 scopes** (`per-user`, `machine`) — spec 058 superseded 020 FR-040 and, for the machine-wide path
 only, FR-012 — and the declaration derives one **verification combination** per artifact and scope
@@ -26,7 +26,7 @@ from three places in `release.yml`.
 ```bash
 node scripts/artifact-set.mjs list        # role, filename, label
 node scripts/artifact-set.mjs resolve setup   # the one path for that role
-node scripts/artifact-set.mjs reconcile   # what was built == what was declared? (--platform win32|linux for one build)
+node scripts/artifact-set.mjs reconcile   # what was built == what was declared? (--platform win32|linux|darwin for one build)
 node scripts/artifact-set.mjs checksums   # the set, with each SHA-256 filled in
 node scripts/artifact-set.mjs list --combinations   # id, role, scope, verdict file — the matrix's one source
 ```
