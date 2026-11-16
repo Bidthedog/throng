@@ -49,7 +49,6 @@ function wire(root: string): InstanceType<typeof FileConfigStore> {
     store,
     shippedDefaults,
     listFonts: () => Promise.resolve([]),
-    listIconPacks: () => Promise.resolve([]),
   });
   return store;
 }

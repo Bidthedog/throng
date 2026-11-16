@@ -21,30 +21,30 @@
  * string `aria-hidden`, which would pass on a file that mentioned it in a comment. These tests
  * render.
  *
- * WHAT STAYS END-TO-END in `icon-packs.e2e.ts`: that a selected pack re-skins the MAIN window live
- * with no restart, that pack art takes its colour from the theme rather than rendering black (which
- * needs a real style resolution — an SVG inside an `<img>` is an isolated document and that is the
- * bug), that a fresh install seeds the packs, and that a broken pack degrades without stopping the
- * app. None of those is about one component's markup.
+ * WHAT STAYS END-TO-END in `icon-sets.e2e.ts` (spec 069): that a reloaded user icon set re-skins the
+ * MAIN window live with no restart, and that its art takes its colour from the theme rather than
+ * rendering black, which needs real style resolution. Neither is about one component's markup.
  */
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_APP_SETTINGS, DEFAULT_KEYBINDINGS, THRONG_THEME } from '@throng/core';
+import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { Icon } from '../../src/renderer/common/icon.js';
 
 /** Every `.icon` in the rendered tree — the same selector the E2E sweep used. */
 const icons = (): HTMLElement[] => Array.from(document.querySelectorAll('.icon'));
 
 describe('every icon is decorative (FR-006c / SC-010)', () => {
-  it('hides a THEME GLYPH from the accessibility tree', () => {
+  it('hides the default svg from the accessibility tree', () => {
     /*
-     * Before 017 the raw glyph character sat in the DOM as text and a screen reader read it aloud —
-     * the accessible name of the enclosing control, and then the character. `retry` is a token the
-     * shipped theme defines, so this resolves a real glyph rather than a stub.
+     * An icon is svg markup, always (069 FR-009) — there is no glyph branch, so no raw character
+     * for a screen reader to read aloud. The name comes from the enclosing control.
      */
     render(createElement(Icon, { token: 'retry' }));
     expect(icons()).toHaveLength(1);
     expect(icons()[0]).toHaveAttribute('aria-hidden', 'true');
+    expect(icons()[0].querySelector('svg')).not.toBeNull();
   });
 
   it('carries no accessible name of its own', () => {
@@ -55,18 +55,31 @@ describe('every icon is decorative (FR-006c / SC-010)', () => {
     expect(icons()[0]).not.toHaveAttribute('title');
   });
 
-  it('hides an UNKNOWN token too, rather than falling out of the branch', () => {
+  it('hides a user override too, and draws it instead of the default art', async () => {
     /*
-     * `resolveIconAsset` falls back down the chain (pack → theme → default) rather than returning
-     * `missing`, precisely so a half-broken pack cannot produce a half-empty interface. Whatever it
-     * falls back to must still be decorative — the fallback path is exactly where an attribute gets
-     * forgotten.
+     * The override is a second return path from `resolveIcon`; the attribute is exactly what gets
+     * forgotten on a second path. The set rides the config payload, as it does in the running app.
      */
-    render(createElement(Icon, { token: 'no-such-token-anywhere' }));
-    // The length guard is load-bearing: without it, an Icon that returned null for an unknown token —
-    // literally what this title forbids — would iterate zero times and pass. A vacuity audit caught it.
-    expect(icons(), 'the fallback rendered nothing at all').toHaveLength(1);
+    const override = '<svg data-test="override" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>';
+    Reflect.set(window, 'throng', {
+      config: {
+        get: () =>
+          Promise.resolve({
+            settings: DEFAULT_APP_SETTINGS,
+            theme: { ...THRONG_THEME, iconPack: 'mine' },
+            keybindings: DEFAULT_KEYBINDINGS,
+            iconSets: [{ name: 'mine', overrides: { retry: override }, failures: {}, unrecognised: [] }],
+          }),
+        onChange: () => () => undefined,
+      },
+    });
+    render(createElement(ConfigProvider, null, createElement(Icon, { token: 'retry' }), createElement(Icon, { token: 'add' })));
+    await waitFor(() => expect(document.querySelector('[data-test="override"]')).not.toBeNull());
+    expect(icons()).toHaveLength(2);
     for (const el of icons()) expect(el).toHaveAttribute('aria-hidden', 'true');
+    // A key the set does not override still draws the default art — the set holds only what it overrides.
+    expect(icons()[1].querySelector('svg')).not.toBeNull();
+    expect(icons()[1].querySelector('[data-test="override"]')).toBeNull();
   });
 
   it('keeps its class when the caller adds one, so the sweep’s selector still finds it', () => {

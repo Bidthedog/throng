@@ -117,7 +117,10 @@ describe('raise', () => {
     const copy = within(card('p1')).getByTestId('attention-toast-p1-copy');
     const dismiss = within(card('p1')).getByTestId('attention-toast-p1-dismiss');
     expect(copy.nextElementSibling).toBe(dismiss);
-    expect(card('p1').lastElementChild).toBe(dismiss);
+    // 069 FR-050: Copy and Dismiss close the card's top-right control group, which closes the card.
+    const group = within(card('p1')).getByTestId('notice-controls');
+    expect(group.lastElementChild).toBe(dismiss);
+    expect(card('p1').lastElementChild).toBe(group);
   });
 
   it('keeps Dismiss (030 FR-060)', () => {

@@ -13,6 +13,7 @@ import { test, expect, type Locator } from '@playwright/test';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_ICON_SET } from '@throng/core';
 import {
   openApp,
   runApp as runOwnApp,
@@ -54,12 +55,31 @@ const rowFor = (tree: Locator, name: string): Locator =>
 async function folderState(
   tree: Locator,
   name: string,
-): Promise<{ twistyOpen: boolean; icon: string }> {
+): Promise<{ twistyOpen: boolean; icon: 'open' | 'closed' | 'other' }> {
   const row = rowFor(tree, name);
   const twistyOpen = await row
     .locator('.tree-twisty')
     .evaluate((el) => el.classList.contains('tree-twisty--open'));
-  const icon = ((await row.locator('.tree-icon').textContent()) ?? '').trim();
+  // 069: the folder icon is inline svg, never text. Classify its markup against the default set's
+  // `folderOpen` / `folder` art, normalised through the browser's own parser so attribute order and
+  // quoting cannot make equal markup compare unequal.
+  const icon = await row.locator('.tree-icon').evaluate(
+    (el, art) => {
+      const normal = (markup: string): string => {
+        const t = document.createElement('template');
+        t.innerHTML = markup;
+        return t.innerHTML;
+      };
+      if (el.textContent?.trim()) return 'other' as const;
+      const svg = el.querySelector('svg');
+      if (!svg) return 'other' as const;
+      const drawn = normal(svg.outerHTML);
+      if (drawn === normal(art.open)) return 'open' as const;
+      if (drawn === normal(art.closed)) return 'closed' as const;
+      return 'other' as const;
+    },
+    { open: DEFAULT_ICON_SET.folderOpen, closed: DEFAULT_ICON_SET.folder },
+  );
   return { twistyOpen, icon };
 }
 
@@ -127,7 +147,7 @@ test('(1) dragging an EXPANDED folder into another folder keeps it expanded, ico
       // child is visible, chevron + glyph both read OPEN.
       await rowFor(tree, 'movable').locator('.tree-twisty').click();
       await expect(tree.getByText('child.txt', { exact: true })).toBeVisible();
-      expect(await folderState(tree, 'movable')).toEqual({ twistyOpen: true, icon: '▱' });
+      expect(await folderState(tree, 'movable')).toEqual({ twistyOpen: true, icon: 'open' });
 
       // Drag the EXPANDED `movable` onto `box`.
       await tree
@@ -154,7 +174,7 @@ test('(1) dragging an EXPANDED folder into another folder keeps it expanded, ico
           { timeout: 5000 },
         )
         // REQUIRED: the folder stays open — children visible, chevron open, glyph open.
-        .toEqual({ twistyOpen: true, icon: '▱', childVisible: true });
+        .toEqual({ twistyOpen: true, icon: 'open', childVisible: true });
 
       expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });
@@ -217,7 +237,7 @@ test('(1b) dragging a folder BACK to a previously-expanded path: icon open, no c
           { timeout: 5000 },
         )
         // REQUIRED: whatever the icon says, it must agree with the children.
-        .toEqual({ twistyOpen: true, icon: '▱', childVisible: true });
+        .toEqual({ twistyOpen: true, icon: 'open', childVisible: true });
     });
   } finally {
     // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would

@@ -20,11 +20,12 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { THRONG_THEME, createPreviewProviderRegistry } from '@throng/core';
+import { createPreviewProviderRegistry } from '@throng/core';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
 import { PreviewStatusBar } from '../../src/renderer/preview/preview-status-bar.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { mountMarkdownPreview, previewUpdate, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 const TEXT_FILE = 'D:/proj/notes.prvtxt';
 const BINARY_FILE = 'D:/proj/manual.prvbin';
@@ -156,8 +157,7 @@ describe('its one button is the route back to the source (FR-015a, FR-015c, FR-0
     expect(b).toHaveAccessibleName('Open in Editor');
     expect(b).toHaveAttribute('title', 'Open in Editor');
     expect(b).toHaveAttribute('aria-pressed', 'false');
-    expect(b).toHaveTextContent(THRONG_THEME.icons.editorPanel);
-    expect(b.querySelector('svg')).toBeNull();
+    expect(drawnIcon(b)).toBe(iconMarkup('editorPanel'));
   });
 
   it('parented: “Go to Editor”, pressed — and back to Open in Editor when the parent goes', async () => {
@@ -214,8 +214,7 @@ describe('the scroll-sync toggle (FR-122c)', () => {
     const t = await screen.findByTestId(`preview-sync-scroll-${id}`);
     expect(t.nextElementSibling).toBe(button(id));
     expect(t.closest('.editor-status-strip__group--controls')).not.toBeNull();
-    expect(t).toHaveTextContent(THRONG_THEME.icons.syncScroll);
-    expect(t.querySelector('svg')).toBeNull();
+    expect(drawnIcon(t)).toBe(iconMarkup('syncScroll'));
   });
 
   it('stays immediately before the route button when the preview is parented', async () => {

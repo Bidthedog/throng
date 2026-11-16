@@ -59,12 +59,11 @@ describe('tokensOf', () => {
     expect(tokensOf(THRONG_THEME)).not.toContain('name');
   });
 
-  it('enumerates colour, font, typography and icon tokens', () => {
+  it('enumerates colour, font and typography tokens, and no icon tokens (069)', () => {
     const tokens = tokensOf(THRONG_THEME);
     expect(tokens).toContain('colours.accent');
     expect(tokens).toContain('colours.appBg');
-    expect(tokens).toContain('icons.folder');
-    expect(tokens).toContain('icons.terminal');
+    expect(tokens.filter((t) => t.startsWith('icons.'))).toEqual([]);
     expect(tokens).toContain('fonts.family');
     expect(tokens).toContain('fonts.baseSizePx');
     expect(tokens).toContain('typography.paneTitle.case');

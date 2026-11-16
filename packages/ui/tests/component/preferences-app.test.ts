@@ -187,7 +187,6 @@ function mount(
       readRaw: () => Promise.resolve(JSON.stringify(settings, null, 2)),
       listThemes: () => Promise.resolve(themeList),
       listFonts: () => Promise.resolve([]),
-      listIconPacks: () => Promise.resolve([]),
     },
   });
 

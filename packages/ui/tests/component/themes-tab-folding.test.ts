@@ -11,7 +11,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { THEME_METADATA, THRONG_THEME, formatGrouped } from '@throng/core';
+import { THEME_METADATA, ICON_KEYS, formatGrouped } from '@throng/core';
 import { ThemesTab } from '../../src/renderer/preferences/themes-tab.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
@@ -26,7 +26,7 @@ const FIRST = GROUPS[0];
 const LAST = GROUPS[GROUPS.length - 1];
 const idOf = (group: string): string => `settings-group-${group}`;
 const ICONS = 'settings-group-Icons';
-const ICON_TOTAL = Object.keys(THRONG_THEME.icons).length + 2;
+const ICON_TOTAL = ICON_KEYS.length + 2;
 const ALL = [...GROUPS.map(idOf), ICONS];
 
 /** A colour token, and the group it is drawn in. */

@@ -6,10 +6,13 @@
  * finds a panel with no mark is `attention-service.test.ts`'s (unit, no mocked go-to); this proves the renderer asks main
  * and follows its answer.
  */
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, screen, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotificationEntry } from '@throng/core';
+import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { useNotificationActions } from '../../src/renderer/notifications/use-notification-actions.js';
+import { buildEntryMenu, iconFor } from '../../src/renderer/notifications/notifications-menu.js';
 import type { NotificationsSnapshot } from '../../src/renderer/global.js';
 
 const layoutHolder: { layout: unknown } = { layout: null };
@@ -106,5 +109,63 @@ describe('going there (B16)', () => {
       result.current.runAction(link('there'));
     });
     expect(goToPanel).toHaveBeenCalledWith({ panelId: 'there' });
+  });
+});
+
+/*
+ * 069 FR-039 (research R7) — the `openIconSetsFolder` action a backup notice carries: it is not about any panel, so it is
+ * always available, and running it opens the icon sets folder itself (no set named) through the icon-sets bridge.
+ */
+describe('open the icon sets folder (069 R7)', () => {
+  const openFolderAction = { kind: 'openIconSetsFolder' as const, label: 'Open the icon sets folder' };
+  const withBridge = (): ReturnType<typeof vi.fn> => {
+    const openFolder = vi.fn(() => Promise.resolve({ ok: true }));
+    Reflect.set(window, 'throng', { ...(window.throng as object), iconSets: { openFolder } });
+    return openFolder;
+  };
+
+  it('is always available — it names no panel that could be gone', () => {
+    const { result } = renderHook(() => useNotificationActions());
+    expect(result.current.targetExists(openFolderAction)).toBe(true);
+  });
+
+  it('opens the icon sets folder itself: the bridge is asked for no set', async () => {
+    const openFolder = withBridge();
+    const { result } = renderHook(() => useNotificationActions());
+    await act(async () => {
+      result.current.runAction(openFolderAction);
+    });
+    expect(openFolder).toHaveBeenCalledTimes(1);
+    expect(openFolder).toHaveBeenCalledWith();
+  });
+
+  it('shows a notice naming the reason when main answers that the folder could not be opened', async () => {
+    const openFolder = vi.fn(() => Promise.resolve({ ok: false, reason: 'io', message: 'no file manager here' }));
+    const base = window.throng as unknown as { notifications: object };
+    Reflect.set(window, 'throng', {
+      ...base,
+      notifications: { ...base.notifications, add: () => Promise.resolve() }, // the provider keeps what it raises
+      iconSets: { openFolder },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(NotificationProvider, null, children);
+    const { result } = renderHook(() => useNotificationActions(), { wrapper });
+    await act(async () => {
+      result.current.runAction(openFolderAction);
+    });
+    const notice = await screen.findByTestId('icon-set-notice-error');
+    expect(notice.textContent).toContain('no file manager here');
+  });
+
+  it('is drawn with the folderOpen key, in the entry menu and on the entry', () => {
+    expect(iconFor(openFolderAction)).toBe('folderOpen');
+    const menu = buildEntryMenu({
+      entry: entry('e1', 'there'),
+      actions: [openFolderAction],
+      onCopy: vi.fn(),
+      onDismiss: vi.fn(),
+      onRun: vi.fn(),
+    });
+    expect(menu.find((item) => item.label === openFolderAction.label)?.icon).toBe('folderOpen');
   });
 });

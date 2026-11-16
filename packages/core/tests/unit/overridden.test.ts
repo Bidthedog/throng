@@ -140,7 +140,6 @@ describe('theme-token overridden / differs-from-entry (#76)', () => {
     name: 'T',
     colours: { surface: '#111', accent: '#2a2' },
     fonts: { ui: 'Inter', mono: 'Fira' },
-    icons: { folder: 'F' },
   };
 
   describe('isThemeTokenOverridden', () => {

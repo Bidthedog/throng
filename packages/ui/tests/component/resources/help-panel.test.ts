@@ -17,6 +17,7 @@ import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
 import { __resetSession, ingestFrame, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { HelpControl, ToolbarControls } from '../../../src/renderer/resources/toolbar.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { drawnIcon, iconMarkup } from '../helpers/icon-markup.js';
 
 function stubConfig(resourceMonitor: Record<string, number> = {}): void {
   window.throng = {
@@ -52,7 +53,7 @@ describe('the button (FR-093)', () => {
   it('is a titled, themeable “?” icon control in the toolbar', async () => {
     await mount();
     expect(button()).toHaveAttribute('title', 'Help');
-    expect(button()).toHaveTextContent((THRONG_THEME.icons as Record<string, string>).help!);
+    expect(drawnIcon(button())).toBe(iconMarkup('help'));
     expect(button().querySelector('.icon')).not.toBeNull();
     expect(within(screen.getByTestId('monitor-controls')).queryByTestId('monitor-help')).toBeNull();
   });

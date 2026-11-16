@@ -521,9 +521,9 @@ describe('Synchronise Scrolling, closing View & state after Word Wrap (FR-122b)'
     expect(items[at]).toMatchObject({ section: 'viewState', icon: 'syncScroll' });
   });
 
-  it('reads “Synchronise Scrolling ✓” while on and the bare label while off', () => {
-    expect(sync(menuWith({ on: true }))?.label).toBe('Synchronise Scrolling ✓');
-    expect(sync(menuWith({ on: false }))?.label).toBe('Synchronise Scrolling');
+  it('is checked while on and unchecked while off, under the one bare label', () => {
+    expect(sync(menuWith({ on: true }))).toMatchObject({ label: 'Synchronise Scrolling', checked: true });
+    expect(sync(menuWith({ on: false }))).toMatchObject({ label: 'Synchronise Scrolling', checked: false });
   });
 
   it('shows preview.toggleSyncScroll’s chord when bound, and none when it is not', () => {

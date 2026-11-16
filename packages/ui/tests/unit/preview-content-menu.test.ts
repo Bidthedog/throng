@@ -347,7 +347,7 @@ describe('Synchronise Scrolling on the body menu (FR-122b)', () => {
       find: { run: vi.fn() },
       goToHeading: { run: vi.fn() },
     });
-    expect(items.at(-1)).toMatchObject({ testId: SYNC, section: 'viewState', label: 'Synchronise Scrolling ✓' });
+    expect(items.at(-1)).toMatchObject({ testId: SYNC, section: 'viewState', label: 'Synchronise Scrolling', checked: true });
   });
 
   it('is absent when the panel hands the builder none (a binary provider)', () => {

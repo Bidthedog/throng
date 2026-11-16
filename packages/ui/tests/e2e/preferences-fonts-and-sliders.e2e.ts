@@ -208,15 +208,15 @@ test('a role WEIGHT is a slider on the real 100-900 scale (021 follow-up)', { ta
 });
 
 /*
- * MERGED (pass 2): "Revert this theme undoes THIS SITTING’s edits, and only offers itself when there are
+ * MERGED (pass 2): "Revert this theme undoes THIS SITTING’s edits, and is only usable when there are
  * any" is the second half of this test — same window, same BASE font size slider, one app run.
  */
 test('the preferences window inherits the BASE application font (no separate dialog font), and Revert this theme undoes that edit', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemesTab(app, win);
-      // Nothing has changed, so there is nothing to revert — and a no-op affordance is noise.
-      await expect(prefs.getByTestId('theme-revert'), 'Revert is not offered before any edit').toHaveCount(0);
+      // Nothing has changed, so there is nothing to revert: the control is on screen, greyed out (069 FR-049).
+      await expect(prefs.getByTestId('theme-revert'), 'Revert is not usable before any edit').toBeDisabled();
 
       const size = prefs.getByTestId('control-fonts.baseSizePx');
       const original = await size.inputValue();

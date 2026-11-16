@@ -14,6 +14,7 @@ import {
 } from '../../src/config/keybindings.js';
 import { KEYBINDINGS_METADATA } from '../../src/config/keybindings-metadata.js';
 import { THRONG_THEME } from '../../src/config/theme.js';
+import { isIconKey } from '../../src/icons/icon-keys.js';
 import { THEME_TOKEN_COPY, containsAbbreviation } from '../../src/config/theme-copy.js';
 import { DEFAULT_APP_SETTINGS, parseAppSettings } from '../../src/config/app-settings.js';
 import { parseSettingsGuarded } from '../../src/config/settings-read.js';
@@ -111,16 +112,15 @@ describe('013 match-highlight & find-bar theme tokens (FR-018, FR-019)', () => {
     }
   });
 
-  it('defines a themeable glyph for every find-bar action control', () => {
+  it('draws every find-bar action control from an icon key the default icon set defines', () => {
     for (const token of NEW_ICON_TOKENS) {
-      expect(THRONG_THEME.icons[token], `icons.${token} missing`).toBeTruthy();
+      expect(isIconKey(token), `icon key ${token} missing`).toBe(true);
     }
   });
 
   it('gives every new token hand-written editor copy (completeness)', () => {
     const tokens = [
       ...NEW_COLOUR_TOKENS.map((t) => `colours.${t}`),
-      ...NEW_ICON_TOKENS.map((t) => `icons.${t}`),
     ];
     for (const key of tokens) {
       const copy = THEME_TOKEN_COPY[key];

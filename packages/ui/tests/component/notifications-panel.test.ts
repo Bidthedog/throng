@@ -22,6 +22,7 @@ import { NotificationProvider } from '../../src/renderer/common/notification.js'
 import { PanelFailureBanner } from '../../src/renderer/common/panel-failure-banner.js';
 import { NotificationsPanel } from '../../src/renderer/notifications/notifications-panel.js';
 import type { NotificationsSnapshot } from '../../src/renderer/global.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 let settingsPayload: Record<string, unknown> = { version: 1 };
 let snapshot: NotificationsSnapshot;
@@ -345,38 +346,35 @@ describe('the keyboard (FR-033)', () => {
   });
 });
 
-describe('the minimise control is the side panes\' chevron (FR-058)', () => {
-  it('points down to minimise', async () => {
+describe('the minimise control draws the collapse icon, facing down (068 FR-058, 069 FR-040)', () => {
+  it('draws minimisePanel, unturned, to minimise', async () => {
     await mount();
     const button = screen.getByTestId('notifications-minimise');
-    expect(button.querySelector('.pane-chevron.pane-chevron--down')).not.toBeNull();
-    expect(button.querySelector('.pane-chevron--up')).toBeNull();
-    expect(button.className).toContain('panel__action--chevron');
+    expect(drawnIcon(button)).toBe(iconMarkup('minimisePanel'));
+    expect(button.querySelector<HTMLElement>('.rotated-icon')?.style.transform).toBe('');
+    expect(button.className).toContain('panel__action--collapse');
     expect(button.getAttribute('title')).toBe('Minimise Notifications');
   });
 
-  it('points up to restore, and is still the one control that restores', async () => {
+  it('draws restorePanel to restore, and is still the one control that restores', async () => {
     const { onToggleMinimise } = await mount({ minimised: true });
     const button = screen.getByTestId('notifications-restore');
-    expect(button.querySelector('.pane-chevron.pane-chevron--up')).not.toBeNull();
-    expect(button.querySelector('.pane-chevron--down')).toBeNull();
+    expect(drawnIcon(button)).toBe(iconMarkup('restorePanel'));
     fireEvent.click(button);
     expect(onToggleMinimise).toHaveBeenCalledTimes(1);
   });
 
-  it('centres the chevron in its button, and rotates the one themed glyph rather than drawing another', () => {
+  it('centres the icon in its button', () => {
     const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/panes/panes.css'), 'utf8');
     const rule = (selector: string): string => {
       const at = css.indexOf(`${selector} {`);
       expect(at, `${selector} must have a rule`).toBeGreaterThanOrEqual(0);
       return css.slice(at, css.indexOf('}', at));
     };
-    const button = rule('.panel__action--chevron');
+    const button = rule('.panel__action--collapse');
     expect(button).toMatch(/display:\s*inline-flex/);
     expect(button).toMatch(/align-items:\s*center/);
     expect(button).toMatch(/justify-content:\s*center/);
-    expect(rule('.pane-chevron--down')).toMatch(/rotate\(90deg\)/);
-    expect(rule('.pane-chevron--up')).toMatch(/rotate\(-90deg\)/);
   });
 });
 

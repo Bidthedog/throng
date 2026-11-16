@@ -155,7 +155,7 @@ describe('the disclosure control expands and collapses the replace row (FR-008)'
 
     // Collapsed: the control is drawn, and it ANNOUNCES the state rather than only implying it.
     const arrow = disclosure();
-    const collapsedGlyph = arrow?.textContent ?? '';
+    const collapsedGlyph = arrow?.querySelector('.icon')?.innerHTML ?? '';
     expect(arrow, 'an editor find bar draws the replace disclosure control').not.toBeNull();
     expect(arrow).toHaveAttribute('aria-expanded', 'false');
     expect(replaceRow()).toBeNull();
@@ -175,7 +175,7 @@ describe('the disclosure control expands and collapses the replace row (FR-008)'
      * rather than to any hardcoded character.
      */
     expect(collapsedGlyph, 'the collapsed control draws a glyph').not.toBe('');
-    expect(disclosure()?.textContent, 'a different glyph in each state').not.toBe(collapsedGlyph);
+    expect(disclosure()?.querySelector('.icon')?.innerHTML, 'a different icon in each state').not.toBe(collapsedGlyph);
     // …and the hover title names the action it will perform, in each state (constitution v3.12.0).
     expect(disclosure()?.getAttribute('title')).toBeTruthy();
   });

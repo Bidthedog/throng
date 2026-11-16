@@ -16,6 +16,7 @@ import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { NotificationProvider, useNotify, type NoticeInput } from '../../src/renderer/common/notification.js';
 import { NotificationsPanel } from '../../src/renderer/notifications/notifications-panel.js';
+import { NOTICE_HOVER_DELAY_DEFAULT_MS as HOVER_INTENT_MS } from '@throng/core';
 import type { NotificationsSnapshot } from '../../src/renderer/global.js';
 import { flushUntil } from './helpers/flush-until.js';
 
@@ -169,13 +170,26 @@ describe('the whole text of a cut-off toast, in a popover (FR-079)', () => {
     });
   };
 
-  it('shows heading, place and message whole on hover when the text is cut off, and removes it when the pointer leaves', async () => {
+  // 069 FR-052: the pointer must stay on the toast for `notifications.hoverDelayMs`, shipped at HOVER_INTENT_MS. Timers are faked once the provider is up.
+  const rest = (ms: number = HOVER_INTENT_MS): void => {
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  };
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows heading, place and message whole once the pointer stays on a cut-off toast, and removes it when the pointer leaves', async () => {
     sizes(120, 66);
     const probe = await mount();
+    vi.useFakeTimers();
     act(() => void probe.notify!({ ...RAISE, origin: { panelId: 'p1' } }));
     const toast = screen.getByTestId('toast');
     fireEvent.pointerEnter(toast);
-    const popover = await screen.findByTestId('notice-text-popover');
+    expect(screen.queryByTestId('notice-text-popover'), 'the popover opened before the pointer rested').toBeNull();
+    rest();
+    const popover = screen.getByTestId('notice-text-popover');
     expect(popover.textContent).toBe('Heading line\nAlpha › Build › Shell\nThe message line.');
     expect(popover.getAttribute('role')).toBe('tooltip');
     expect(popover.parentElement).toBe(document.body);
@@ -183,30 +197,47 @@ describe('the whole text of a cut-off toast, in a popover (FR-079)', () => {
     expect(screen.queryByTestId('notice-text-popover')).toBeNull();
   });
 
+  it('shows nothing when the pointer only passes over the toast (069 FR-052)', async () => {
+    sizes(120, 66);
+    const probe = await mount();
+    vi.useFakeTimers();
+    act(() => void probe.notify!({ ...RAISE }));
+    const toast = screen.getByTestId('toast');
+    fireEvent.pointerEnter(toast);
+    rest(HOVER_INTENT_MS - 50);
+    fireEvent.pointerLeave(toast);
+    rest();
+    expect(screen.queryByTestId('notice-text-popover')).toBeNull();
+  });
+
   it('shows none for a toast whose text fits', async () => {
     sizes(66, 66);
     const probe = await mount();
+    vi.useFakeTimers();
     act(() => void probe.notify!({ ...RAISE }));
     fireEvent.pointerEnter(screen.getByTestId('toast'));
+    rest();
     expect(screen.queryByTestId('notice-text-popover')).toBeNull();
   });
 
   it('is gone with its toast', async () => {
     sizes(120, 66);
     const probe = await mount();
+    vi.useFakeTimers();
     act(() => void probe.notify!({ ...RAISE }));
     fireEvent.pointerEnter(screen.getByTestId('toast'));
-    await screen.findByTestId('notice-text-popover');
+    rest();
+    screen.getByTestId('notice-text-popover');
     fireEvent.click(screen.getByTestId('toast-dismiss'));
     expect(screen.queryByTestId('notice-text-popover')).toBeNull();
   });
 
-  it('shows on keyboard focus too', async () => {
+  it('shows at once on keyboard focus: a focus move is deliberate', async () => {
     sizes(120, 66);
     const probe = await mount();
     act(() => void probe.notify!({ ...RAISE }));
     fireEvent.focus(screen.getByTestId('toast'));
-    expect(await screen.findByTestId('notice-text-popover')).toBeInTheDocument();
+    expect(screen.getByTestId('notice-text-popover')).toBeInTheDocument();
   });
 });
 

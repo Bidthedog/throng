@@ -1,12 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   V6_SEARCH_MATCH_COLOURS,
-  V6_FIND_IN_FILES_ICON,
   V6_SEARCH_IN_FILES_SETTINGS,
 } from '../../src/config/shipped-defaults.js';
 import { ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
-import { THRONG_THEME } from '../../src/config/theme.js';
 import PRE_REFACTOR from './fixtures/pre-refactor-theme-colours.json';
 
 /**
@@ -39,8 +37,7 @@ import PRE_REFACTOR from './fixtures/pre-refactor-theme-colours.json';
  *     `settleMs` have moved to `asYouType` and 500, so the record must now DISAGREE with the live
  *     defaults on exactly those two and still agree on the other four — both directions asserted,
  *     because "differs somewhere" is the weakened form that would let one of them drift back;
- *   - `icons.findInFiles` (FR-065): converted (043 T182). The glyph has moved, so the record holds
- *     what version 6 wrote and the live theme no longer does.
+ *   - `icons.findInFiles` (FR-065): retired with the glyph map (069). Its record went with it.
  */
 describe('the frozen version-6 record (R28, D4 step 1)', () => {
   it('carries the three search-match colours for all fifteen bundled themes', () => {
@@ -115,17 +112,6 @@ describe('the frozen version-6 record (R28, D4 step 1)', () => {
     expect(V6_SEARCH_MATCH_COLOURS.SUBNET.searchMatch).toBe('#03253e');
     expect(V6_SEARCH_MATCH_COLOURS.Matrix.searchMatch).toBe('#001104');
     expect(V6_SEARCH_MATCH_COLOURS.Light.searchMatch).toBe('#ebf1fd');
-  });
-
-  it('carries the `findInFiles` glyph version 6 shipped — which the live theme no longer does', () => {
-    // ══ CONVERTED BY 043 T182 (FR-065) ══ The faithful-copy assertion it replaces was right while
-    // the live glyph still WAS the version-6 one. It has moved, so the record's job is now to hold
-    // what version 6 wrote to disk, and the assertion becomes its opposite — the same conversion the
-    // search-match colours and the two `search.inFiles` leaves have already had, for the same
-    // reason: re-pointing this constant at the current default would make the upgrade match no
-    // install, rewrite nothing, and pass every test here.
-    expect(V6_FIND_IN_FILES_ICON).toBe('⌕');
-    expect(V6_FIND_IN_FILES_ICON).not.toBe(THRONG_THEME.icons.findInFiles);
   });
 
   it('carries all six `search.inFiles` leaves version 6 shipped — two of which have since moved', () => {

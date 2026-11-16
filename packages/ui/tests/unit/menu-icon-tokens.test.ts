@@ -30,7 +30,7 @@
  * which is a real menu drawn by the real provider.
  */
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_KEYBINDINGS, THRONG_THEME } from '@throng/core';
+import { DEFAULT_KEYBINDINGS, DEFAULT_ICON_SET } from '@throng/core';
 import type { EditorView } from '@codemirror/view';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import { buildContextMenuItems } from '../../src/renderer/explorer/context-menu-items.js';
@@ -139,13 +139,13 @@ function row(items: MenuAction[], label: string): MenuAction {
  * treated the same way here.
  */
 const glyphFor = (token: string): string | undefined =>
-  (THRONG_THEME.icons as Record<string, string>)[token];
+  (DEFAULT_ICON_SET as Record<string, string>)[token];
 
-describe('the shipped theme is a real icon set (guards against a vacuous pass)', () => {
+describe('the default icon set is real (guards against a vacuous pass)', () => {
   it('defines enough tokens for the assertions below to mean something', () => {
     // Empty or renamed the `icons` map, and "every declared token resolves" would still hold — of
     // nothing. `icon-tokens-exist.test.ts` closes the same hole from the other side.
-    expect(Object.keys(THRONG_THEME.icons).length).toBeGreaterThan(10);
+    expect(Object.keys(DEFAULT_ICON_SET).length).toBeGreaterThan(10);
   });
 });
 
@@ -188,6 +188,11 @@ describe('the rows #126 shipped blank now carry a glyph (#127)', () => {
       expect(item.icon, `${label} has no icon token`).toBeDefined();
       expect(glyphFor(item.icon!)?.trim(), `${label}: icon="${item.icon}"`).toBeTruthy();
     }
+  });
+
+  it('the explorer’s Delete draws the rubbish bin, not the ✕ that closes and discards elsewhere (069 FR-055)', () => {
+    expect(row(explorerFile(), 'Delete').icon).toBe('deleteFile');
+    expect(glyphFor('deleteFile')).not.toBe(glyphFor('destroy'));
   });
 
   it('the relocated OS reveal, which lives inside the Open In submenu', () => {
@@ -433,7 +438,7 @@ describe('FR-014 — the content menu and the panel-header menu are distinct', (
    * (FR-122b, extended 2026-09-16 to the header menus, checked while the setting is on — so both of its
    * labels). Those rows are the exceptions, and the only ones: anything else in both menus still fails.
    */
-  const REQUIRED_IN_BOTH = new Set(['Open Preview', 'Synchronise Scrolling', 'Synchronise Scrolling ✓']);
+  const REQUIRED_IN_BOTH = new Set(['Open Preview', 'Synchronise Scrolling']);
   const PREVIEWABLE = {
     state: 'enabled',
     provider: { id: 'markdown', displayName: 'Markdown', kind: 'text' },
@@ -461,7 +466,7 @@ describe('FR-014 — the content menu and the panel-header menu are distinct', (
     const shared = labelsOf(previewableHeader(sync)).filter((l) => content.has(l));
     // Not vacuous: both required rows really are in both menus with this fixture.
     expect(shared).toContain('Open Preview');
-    expect(shared).toContain(sync ? 'Synchronise Scrolling ✓' : 'Synchronise Scrolling');
+    expect(shared).toContain('Synchronise Scrolling');
     const unexpected = shared.filter((l) => !REQUIRED_IN_BOTH.has(l));
     expect(unexpected, `these labels appear in BOTH menus without a requirement: ${unexpected.join(', ')}`).toEqual([]);
   });

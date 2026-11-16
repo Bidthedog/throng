@@ -99,18 +99,14 @@ test('the daemon indicator reports the state, restarts on demand, and outlives t
         await expect(indicator(win)).toHaveAttribute('data-status', 'stopped');
         await expect(indicator(win)).toHaveAttribute('title', /daemon/i);
         /*
-         * Icon-only means a GLYPH, not a word — throng's icon packs are characters, not SVG.
+         * Icon-only means drawn art, not a word (spec 069: every icon is SVG from an icon set).
          *
-         * Asserted as "short and contains no letters" rather than as a specific glyph, because the
-         * icon pack is user-replaceable and pinning the character would make this a test of the
-         * shipped theme's taste. What must not happen is a text label creeping in, or the glyph
-         * vanishing entirely: an icon token the theme does not define renders NOTHING, silently, and
-         * the control becomes an invisible button. That has already happened once in this feature.
+         * Asserted as "an svg and no text" rather than as specific art, because the icon set is
+         * user-replaceable. What must not happen is a text label creeping in, or the icon vanishing
+         * entirely and leaving an invisible button.
          */
-        const glyph = (await indicator(win).innerText()).trim();
-        expect(glyph, 'the indicator rendered nothing — an invisible control').not.toBe('');
-        expect(glyph.length, 'the indicator should be an icon, not a word').toBeLessThanOrEqual(2);
-        expect(glyph, 'the indicator should be an icon, not a word').not.toMatch(/[A-Za-z]/);
+        await expect(indicator(win).locator('svg'), 'the indicator rendered no icon — an invisible control').toHaveCount(1);
+        expect((await indicator(win).innerText()).trim(), 'the indicator should be an icon, not a word').toBe('');
 
         /**
          * FR-009a — the NOTICE carries no restart of its own, and the indicator survives the notice.

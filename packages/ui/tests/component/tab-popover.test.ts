@@ -97,8 +97,7 @@ function mount(tabId: string, name: string | null, panelNames: (string | PanelLi
  * The panel NAMES, in the order the surface is showing them.
  *
  * Reads the name span rather than the whole row since #304: the row also holds the type icon, and
- * with a glyph icon pack that glyph is a character in `textContent` — so a row-level read would
- * assert on `▣ISSUE MANAGEMENT` and turn every one of these into a test of the icon pack.
+ * a row-level read would make every one of these a test of whatever that icon draws.
  */
 function panelRows(): string[] {
   return Array.from(document.querySelectorAll('.tabstrip-popover__panel-name')).map((el) =>

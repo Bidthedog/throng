@@ -43,7 +43,7 @@
     "find-in-files-subworkspace.e2e.ts": "FOCUS",
     "goto-line-keybinding.e2e.ts": "FOCUS",
     "icon-colour.e2e.ts": "FOCUS",
-    "icon-packs.e2e.ts": "FOCUS",
+    "icon-sets.e2e.ts": "FOCUS",
     "keybindings.e2e.ts": "UNATTRIBUTED",
     "maximise-terminal.e2e.ts": "FOCUS",
     "menu-keyboard.e2e.ts": "FOCUS",

@@ -141,6 +141,33 @@ test.describe('the preferences window itself', () => {
    * The migrated version keeps the maximise/close pairing for the same reason this one had it: a
    * title bar that failed to render AT ALL would satisfy "no minimise control" perfectly.
    */
+  /*
+   * The title bar's Maximise fills the display and its Restore puts the window back. Measured by the
+   * window's bounds against its display's work area, not `isMaximized()`: on Linux a parented window
+   * is maximised by hand because the window manager will not (window-maximise.ts), and the user sees
+   * the size, not the flag. Only a real window has bounds; the rule itself is held at unit.
+   */
+  test('Preferences maximises and restores from its title bar', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
+    const lastWindow = (): Promise<{ bounds: { width: number; height: number; x: number; y: number }; area: { width: number; height: number } }> =>
+      shared.app.evaluate(({ BrowserWindow, screen }) => {
+        const wins = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id);
+        const w = wins[wins.length - 1];
+        return { bounds: w.getBounds(), area: screen.getDisplayMatching(w.getBounds()).workArea };
+      });
+    const before = (await lastWindow()).bounds;
+    const fills = async (): Promise<boolean> => {
+      const { bounds, area } = await lastWindow();
+      return bounds.width >= area.width - 16 && bounds.height >= area.height - 16;
+    };
+    expect(await fills()).toBe(false);
+    await prefs.getByTestId('window-max').click();
+    await expect.poll(fills, { timeout: 5000 }).toBe(true);
+    await expect(prefs.getByTestId('window-max')).toHaveAttribute('title', 'Restore');
+    await prefs.getByTestId('window-max').click();
+    await expect.poll(async () => (await lastWindow()).bounds, { timeout: 5000 }).toEqual(before);
+    await expect(prefs.getByTestId('window-max')).toHaveAttribute('title', 'Maximise');
+  });
+
   test('Preferences window is non-minimizable at the OS level', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
     // Distinct from the renderer assertion above: the BrowserWindow itself forbids minimise.
     expect(await lastWindowMinimizable(shared.app)).toBe(false);

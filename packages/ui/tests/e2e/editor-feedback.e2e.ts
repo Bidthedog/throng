@@ -213,7 +213,7 @@ test('word wrap toggles from the status bar, the chord, and the content menu (#1
 
       // Content menu carries a checkable "Word Wrap" item that toggles it off again.
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click({ button: 'right' });
-      await expect(win.getByTestId('menu-item-Word Wrap')).toContainText('✓'); // checked while on
+      await expect(win.getByTestId('menu-item-Word Wrap')).toHaveAttribute('aria-checked', 'true'); // checked while on
       await win.getByTestId('menu-item-Word Wrap').click();
       await expect(wrapBtn).toHaveText('No Wrap');
       await expect.poll(() => contentWraps(win, pid)).toBe(false);

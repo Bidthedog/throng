@@ -33,7 +33,7 @@ describe('restoreDefaultThemes', () => {
     const store = new FileConfigStore(root);
     await store.restoreDefaultThemes();
     // A user theme coexists.
-    await store.write({ kind: 'theme', name: 'MyTheme' }, { name: 'MyTheme', colours: { accent: '#abc' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
+    await store.write({ kind: 'theme', name: 'MyTheme' }, { name: 'MyTheme', colours: { accent: '#abc' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } } });
 
     const matrixBefore = readFileSync(join(root, 'themes', 'Matrix.json'), 'utf8');
     await store.deleteTheme('Matrix');
@@ -50,7 +50,7 @@ describe('restoreDefaultThemes', () => {
     const store = new FileConfigStore(root);
     await store.restoreDefaultThemes();
     // Edit a default in place.
-    await store.write({ kind: 'theme', name: 'Debian' }, { name: 'Debian', colours: { accent: '#ffffff' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
+    await store.write({ kind: 'theme', name: 'Debian' }, { name: 'Debian', colours: { accent: '#ffffff' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } } });
     await store.restoreDefaultThemes(); // present → must not clobber
     expect(JSON.parse(readFileSync(join(root, 'themes', 'Debian.json'), 'utf8')).colours.accent).toBe('#ffffff');
   });

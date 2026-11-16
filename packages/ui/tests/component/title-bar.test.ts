@@ -214,7 +214,7 @@ describe('the drag zone toggles maximise on double-click (FR-004)', () => {
 });
 
 /**
- * Every control is drawn from the theme's icon pack (018 FR-014b, SC-002).
+ * Every control is drawn from the theme's icon set (018 FR-014b, SC-002).
  *
  * MIGRATED FROM `packages/ui/tests/e2e/menus.e2e.ts:93` (035 T055) — `test('the cog gear comes from
  * the theme's icon pack — no inline vector')`.

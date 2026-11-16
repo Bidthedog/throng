@@ -62,7 +62,7 @@ describe('the readouts are readouts, not actions (FR-009)', () => {
      * The menu's item list is pinned, so an addition of ANY kind (a readout item, which has nothing to invoke)
      * fails here. It also keeps the two items that ARE actions on the bar, Word Wrap and Set Language (FR-009).
      */
-    expect(menu().map((item) => item.label)).toEqual([
+    expect(menu().map((item) => `${item.label}${item.checked ? ' ✓' : ''}`)).toEqual([
       'Cut',
       'Copy',
       'Paste',

@@ -35,7 +35,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
 import { FindBar } from '../../src/renderer/search/find-bar.js';
 import {
   registerPanelSearch,
@@ -43,6 +42,7 @@ import {
   type SearchController,
 } from '../../src/renderer/search/search-controller.js';
 import { __resetFindState, openFind } from '../../src/renderer/search/search-store.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 /*
  * Resolved from the runner's root rather than from `import.meta.url`: under jsdom the module URL is
@@ -235,7 +235,7 @@ describe('the disclosure control 043 adds obeys the icon rule (FR-011)', () => {
     __resetFindState();
   });
 
-  it('draws a glyph from the ACTIVE THEME rather than an inline vector', () => {
+  it('draws its icon through the shared Icon (the selected set art), not an inline vector', () => {
     /*
      * The constitutional rule, asserted where it can actually be checked: the rendered text is the
      * shipped theme's own glyph for the token, so re-skinning the icon set re-skins this control.
@@ -243,8 +243,7 @@ describe('the disclosure control 043 adds obeys the icon rule (FR-011)', () => {
      */
     const control = screen.getByTestId('find-toggle-replace');
 
-    expect(control.querySelector('svg'), 'an icon control must never be an inline vector').toBeNull();
-    expect(control).toHaveTextContent(THRONG_THEME.icons.expand);
+    expect(drawnIcon(control)).toBe(iconMarkup('expand'));
   });
 
   it('names its action in a hover title, and names the OTHER action once expanded', async () => {
@@ -257,7 +256,7 @@ describe('the disclosure control 043 adds obeys the icon rule (FR-011)', () => {
     await user.click(control);
 
     const expanded = screen.getByTestId('find-toggle-replace');
-    expect(expanded).toHaveTextContent(THRONG_THEME.icons.collapse);
+    expect(drawnIcon(expanded)).toBe(iconMarkup('collapse'));
     expect(
       expanded.getAttribute('title'),
       'the title names what the click will DO, so it changes with the state',

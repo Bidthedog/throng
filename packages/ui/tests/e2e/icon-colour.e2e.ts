@@ -124,7 +124,7 @@ function iconColourInApp(win: Page): Promise<string | null> {
 /*
  * ── ONE REMOVED (035 T055) ──
  *
- * `:124` "the icon colour has exactly ONE control, beside the icon-pack selector (FR-027)" →
+ * `:124` "the icon colour has exactly ONE control, beside the icon-set selector (FR-027)" →
  * `packages/ui/tests/component/preferences-app.test.ts`, "the icon colour is edited in one place".
  *
  * The whole test was two DOM queries — a count and a containment — and it opened a preferences
@@ -146,7 +146,7 @@ test('UNSET, icons inherit their host’s colour — so no bundled theme changes
     async (app, win) => {
       const prefs = await openThemes(app, win);
 
-      // The control exists, beside the icon-pack selector, and it is EMPTY.
+      // The control exists, beside the icon-set selector, and it is EMPTY.
       const field = prefs.getByTestId('control-colours.iconColour-hex');
       await expect(field).toBeVisible();
       await expect(field).toHaveValue('');

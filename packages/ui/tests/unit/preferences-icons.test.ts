@@ -15,7 +15,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
+import { ICON_KEYS } from '@throng/core';
 import { ROW_ACTION_TOKENS } from '../../src/renderer/preferences/row-action-tokens.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -81,7 +81,7 @@ describe('every icon in the preferences window is themeable', () => {
     // A token that does not exist resolves to an empty glyph, so the button would render blank —
     // present, clickable, and invisible.
     for (const token of Object.values(ROW_ACTION_TOKENS)) {
-      expect(Object.keys(THRONG_THEME.icons)).toContain(token);
+      expect(ICON_KEYS as readonly string[]).toContain(token);
     }
   });
 

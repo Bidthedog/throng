@@ -94,9 +94,12 @@ describe('the Encoding and Line Endings items (059 FR-058)', () => {
     const parent = await openSubmenu(h, 'menu-item-Encoding');
     expect(submenuRows(parent)).toEqual(ENCODING_ROWS);
     const pages = screen.getByTestId('menu-item-encoding-codepages');
-    expect(pages.querySelector('.context-menu__label')?.textContent).toBe('Windows Code Pages ✓');
+    expect(pages.querySelector('.context-menu__label')?.textContent).toBe('Windows Code Pages');
+    expect(pages).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(pages);
-    expect(await screen.findByTestId('menu-item-encoding-windows1252')).toHaveTextContent('Windows-1252 (Western European) ✓');
+    const w1252 = await screen.findByTestId('menu-item-encoding-windows1252');
+    expect(w1252).toHaveTextContent(/^Windows-1252 \(Western European\)$/);
+    expect(w1252).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(screen.getByTestId('menu-item-encoding-utf16le-bom'));
     await waitFor(() =>
       expect(h.calls.changeEncoding).toHaveBeenCalledWith({ panelId: PANEL, encoding: 'utf16le', hasBom: true }),
@@ -107,7 +110,8 @@ describe('the Encoding and Line Endings items (059 FR-058)', () => {
     const h = await mount();
     const parent = await openSubmenu(h, 'menu-item-Line Endings');
     expect(submenuRows(parent)).toEqual(LINE_ENDING_ROWS);
-    expect(screen.getByTestId('menu-item-line-ending-crlf')).toHaveTextContent('CRLF ✓');
+    expect(screen.getByTestId('menu-item-line-ending-crlf')).toHaveTextContent(/^CRLF$/);
+    expect(screen.getByTestId('menu-item-line-ending-crlf')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('menu-item-line-ending-mixed')).toHaveAttribute('aria-disabled', 'true');
     // The key binder's labels, so the menu and the bindings editor name the command alike.
     expect(screen.getByTestId('menu-item-insert-line-break-cr')).toHaveTextContent(/^Insert Line Break \(CR\)$/);

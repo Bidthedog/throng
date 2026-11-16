@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
+  ICON_SET_UPGRADE_VERSION,
   SHIPPED_DEFAULTS_VERSION,
   V4_EXCLUDE_GLOBS,
   V11_ZOOM_RESET_BINDING,
-  V6_FIND_IN_FILES_ICON,
   V6_SEARCH_IN_FILES_SETTINGS,
   V6_SEARCH_MATCH_COLOURS,
   buildShippedDefaults,
@@ -99,7 +99,7 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
     delete (matrixNoAppBg.colours as Record<string, string>).appBg;
     await store.write({ kind: 'theme', name: 'Matrix' }, matrixNoAppBg);
 
-    const custom: Theme = { name: 'Mine', colours: { accent: '#mine0' }, fonts: SHIPPED.themes.throng.fonts, icons: {} };
+    const custom: Theme = { name: 'Mine', colours: { accent: '#mine0' }, fonts: SHIPPED.themes.throng.fonts };
     await store.write({ kind: 'theme', name: 'Mine' }, custom);
 
     const res = await new ShippedDefaultsService(store, SHIPPED).upgrade();
@@ -136,6 +136,48 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
       expect(readFileSync(join(root, 'themes', `${n}.json`), 'utf8'), n).toBe(snapshot[i]);
     });
     expect(await service.readAppliedVersion()).toBe(SHIPPED_DEFAULTS_VERSION);
+  });
+
+  it('removes the glyph map, per-icon overrides and icon set choice from built-in and user themes, once (069 FR-017, FR-018, FR-020)', async () => {
+    const root = freshRoot();
+    const store = new FileConfigStore(root);
+    // A configuration last upgraded before icon sets existed: it is the move to 34 that drops the set choice.
+    await new ShippedDefaultsService(store, { ...SHIPPED, version: ICON_SET_UPGRADE_VERSION - 1 }).seed();
+    const legacy = { icons: { save: 'S' }, iconOverrides: { save: 'X' }, iconPack: 'throng-svg' };
+    for (const name of ['Light', 'Mine']) {
+      const base = name === 'Mine' ? { ...SHIPPED.themes.throng, name: 'Mine' } : readJson(join(root, 'themes', `${name}.json`));
+      writeFileSync(join(root, 'themes', `${name}.json`), `${JSON.stringify({ ...base, ...legacy }, null, 2)}\n`, 'utf8');
+    }
+
+    const service = new ShippedDefaultsService(store, SHIPPED);
+    expect(await service.upgrade()).toMatchObject({ ok: true });
+    for (const name of ['Light', 'Mine']) {
+      const theme = readJson(join(root, 'themes', `${name}.json`)) as Record<string, unknown>;
+      expect(theme, name).not.toHaveProperty('icons');
+      expect(theme, name).not.toHaveProperty('iconOverrides');
+      expect(theme, name).not.toHaveProperty('iconPack');
+      expect(theme.colours, `${name} keeps its colours`).toBeTruthy();
+    }
+
+    const after = readFileSync(join(root, 'themes', 'Mine.json'), 'utf8');
+    expect(await service.upgrade()).toMatchObject({ ok: true });
+    expect(readFileSync(join(root, 'themes', 'Mine.json'), 'utf8')).toBe(after);
+  });
+
+  it('keeps a set the user chose after the icon set upgrade through every later upgrade (069 FR-014, FR-020)', async () => {
+    const root = freshRoot();
+    const store = new FileConfigStore(root);
+    await new ShippedDefaultsService(store, SHIPPED).seed();
+    for (const name of ['Light', 'Mine']) {
+      const base = name === 'Mine' ? { ...SHIPPED.themes.throng, name: 'Mine' } : readJson(join(root, 'themes', `${name}.json`));
+      writeFileSync(join(root, 'themes', `${name}.json`), `${JSON.stringify({ ...base, iconPack: 'mine' }, null, 2)}\n`, 'utf8');
+    }
+
+    const next = new ShippedDefaultsService(store, { ...SHIPPED, version: SHIPPED_DEFAULTS_VERSION + 1 });
+    expect(await next.upgrade()).toMatchObject({ ok: true });
+    for (const name of ['Light', 'Mine']) {
+      expect(readJson(join(root, 'themes', `${name}.json`)), name).toHaveProperty('iconPack', 'mine');
+    }
   });
 
   /*
@@ -256,7 +298,6 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
         theme.colours.searchMatch = `${name}-match`;
         theme.colours.searchMatchCurrent = `${name}-current`;
         theme.colours.searchMatchCurrentBorder = `${name}-border`;
-        theme.icons.findInFiles = '🔎';
       }
       return d as unknown as ShippedDefaults;
     }
@@ -282,7 +323,6 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
       };
       for (const [name, theme] of Object.entries(d.themes)) {
         Object.assign(theme.colours, V6_SEARCH_MATCH_COLOURS[name]);
-        theme.icons.findInFiles = V6_FIND_IN_FILES_ICON;
       }
       d.settings.search.inFiles = { ...V6_SEARCH_IN_FILES_SETTINGS };
       return d as unknown as ShippedDefaults;
@@ -321,12 +361,10 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
        */
       expect(V7.settings.search.inFiles.trigger).not.toBe(V6.settings.search.inFiles.trigger);
       expect(V7.settings.search.inFiles.settleMs).not.toBe(V6.settings.search.inFiles.settleMs);
-      expect(V7.themes.Light.icons.findInFiles).not.toBe(V6.themes.Light.icons.findInFiles);
       expect(V7.themes.Light.colours.searchMatch).not.toBe(SHIPPED.themes.Light.colours.searchMatch);
 
       // …and all four guarded values in V6 are genuinely the version-6 ones rather than today's.
       expect(V6.themes.Light.colours.searchMatch).not.toBe(SHIPPED.themes.Light.colours.searchMatch);
-      expect(V6.themes.Light.icons.findInFiles).not.toBe(SHIPPED.themes.Light.icons.findInFiles);
       expect(V6.settings.search.inFiles.trigger).not.toBe(
         DEFAULT_APP_SETTINGS.search.inFiles.trigger,
       );
@@ -350,7 +388,6 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
       expect(light.colours.searchMatch).toBe('Light-match');
       expect(light.colours.searchMatchCurrent).toBe('Light-current');
       expect(light.colours.searchMatchCurrentBorder).toBe('Light-border');
-      expect(light.icons.findInFiles).toBe('🔎');
       // Every other colour is the user's file as it was found.
       expect(light.colours.accent).toBe(SHIPPED.themes.Light.colours.accent);
     });
@@ -370,7 +407,6 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
         'Matrix-current',
       );
       expect(themeOnDisk(root, 'Mine').colours.searchMatch).toBe(SHIPPED.themes.throng.colours.searchMatch);
-      expect(themeOnDisk(root, 'Mine').icons.findInFiles).toBe(SHIPPED.themes.throng.icons.findInFiles);
     });
 
     it('applies a value rewrite and an additive fill to ONE theme as a single file', async () => {
@@ -610,9 +646,9 @@ describe.skipIf(skipOnMacos('upgrades a Windows or Linux seed from before v14; n
     // and 056 to 23 (the `warning` icon token), and 057 to 24 (the attention mark tokens),
     // and 060 to 25 (`busy`, `groupFolderTree`), then 060's hand-test round to 26 (the plain glyphs),
     // then 060 #532 to 27 (`projectSettings`, `searchExclusions`), and 059 to 28 (the `whitespace` icon token),
-    // and 055 to 29 (its twelve resource monitor icon tokens).
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(33);
-    expect(await service.readAppliedVersion()).toBe(33);
+    // and 055 to 29 (its twelve resource monitor icon tokens), and 069 to 34 (icons leave every theme).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(34);
+    expect(await service.readAppliedVersion()).toBe(34);
   });
 
   it('a second upgrade writes nothing', async () => {

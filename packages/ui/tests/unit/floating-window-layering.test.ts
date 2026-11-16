@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { wireFloatingLayering, type LayeringSeam } from '../../src/main/floating-window-layering.js';
+import { wireFloatingLayering, yieldFloatingWindows, type LayeringSeam } from '../../src/main/floating-window-layering.js';
 
 /**
  * 055 T104, FR-083 — a floating window (Preferences, the Resource Monitor) is above throng's own windows
@@ -81,5 +81,30 @@ describe('floating-window layering (055 FR-083)', () => {
     f.destroy();
     f.flush();
     expect(f.top()).toBe(false);
+  });
+  // 069: Open folder from Preferences — the file manager must come up above it, not behind.
+  it('yields to another application\'s window until throng has lost focus once', () => {
+    const f = fakes(true);
+    const unwire = wireFloatingLayering(f.win, f.seam);
+    f.flush();
+    yieldFloatingWindows();
+    expect(f.top()).toBe(false);
+    f.focusChanged(true); // throng still focused: the file manager has not taken focus yet
+    expect(f.top()).toBe(false);
+    f.focusChanged(false); // the user is in the file manager
+    expect(f.top()).toBe(false);
+    f.focusChanged(true); // back in throng: above its windows again
+    expect(f.top()).toBe(true);
+    unwire();
+  });
+
+  it('stops yielding once unwired', () => {
+    const f = fakes(true);
+    const unwire = wireFloatingLayering(f.win, f.seam);
+    f.flush();
+    unwire();
+    f.win.setAlwaysOnTop(true);
+    yieldFloatingWindows();
+    expect(f.top()).toBe(true);
   });
 });

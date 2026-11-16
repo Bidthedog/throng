@@ -5,7 +5,7 @@
  *
  * Layer: component — what one renderer component renders and how it reacts to a pushed event; jsdom shows all of it.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommandLineNotice } from '../../src/renderer/common/command-line-notice.js';
@@ -80,6 +80,9 @@ describe('the throng command’s notices (070 FR-024a)', () => {
       target: '/Volumes/old/throng.app/Contents/Resources/bin/throng',
     });
     expect(card.textContent).toMatch(/no longer opens throng/);
+    // 069 FR-050 (constitution 6.8.0, toast controls): Install leads the card's top-right control group.
+    const group = within(card).getByTestId('notice-controls');
+    expect(group.firstElementChild).toBe(screen.getByTestId('command-line-install'));
     fireEvent.click(screen.getByTestId('command-line-install'));
     expect(install).toHaveBeenCalledTimes(1);
   });

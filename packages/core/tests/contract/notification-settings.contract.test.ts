@@ -111,6 +111,7 @@ describe('notifications merge contract', () => {
       'attention',
       'confirmDismissAll',
       'error',
+      'hoverDelayMs',
       'info',
       'os',
       'panelLimit',

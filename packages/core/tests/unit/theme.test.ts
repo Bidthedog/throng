@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   THRONG_THEME,
   resolveColour,
-  resolveIconAsset,
   themeBootstrap,
   themeColorScheme,
   toCssVariables,
@@ -14,7 +13,6 @@ const themeWithBg = (appBg: string): Theme => ({
   name: 'T',
   colours: { appBg },
   fonts: THRONG_THEME.fonts,
-  icons: {},
 });
 
 describe('Theme token resolution (FR-030)', () => {
@@ -23,18 +21,11 @@ describe('Theme token resolution (FR-030)', () => {
   });
 
   it('falls back to the throng default for a missing token', () => {
-    const sparse: Theme = { name: 'Sparse', colours: { surface: '#fff' }, fonts: THRONG_THEME.fonts, icons: {} };
+    const sparse: Theme = { name: 'Sparse', colours: { surface: '#fff' }, fonts: THRONG_THEME.fonts };
     // present in sparse
     expect(resolveColour(sparse, 'surface')).toBe('#fff');
     // missing in sparse → throng default
     expect(resolveColour(sparse, 'danger')).toBe(THRONG_THEME.colours.danger);
-    // 017: `resolveIcon` is deleted — it was the pack-BLIND resolver, and the reason the user's
-    // icon-pack choice was ignored everywhere in the app (#54). The same fallback is now asserted
-    // through the single pack-aware resolver, which also honours the selected pack.
-    expect(resolveIconAsset(sparse, {}, 'destroy')).toEqual({
-      kind: 'glyph',
-      glyph: THRONG_THEME.icons.destroy,
-    });
   });
 
   it('emits per-section typography vars; unset role sizes track baseSizePx', () => {
@@ -170,7 +161,6 @@ describe('Theme token resolution (FR-030)', () => {
       name: 'Sparse',
       colours: { accent: '#123456' },
       fonts: { family: 'Mono', baseSizePx: 15, weights: { normal: 300, bold: 700 } },
-      icons: {},
     };
     const vars = toCssVariables(sparse);
     expect(vars['--throng-colour-accent']).toBe('#123456'); // overridden
@@ -193,7 +183,6 @@ describe('themeBootstrap (issue 132 — pre-paint theme snapshot)', () => {
       name: 'Daylight',
       colours: { appBg: '#ffffff', surface: '#f4f4f4', text: '#101010' },
       fonts: THRONG_THEME.fonts,
-      icons: {},
     };
     const boot = themeBootstrap(saved);
     expect(boot.name).toBe('Daylight');

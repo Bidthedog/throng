@@ -36,64 +36,8 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 // attention mark and of its Failed variant.
 //
 // 79 since 057 round 13 (FR-139): `attentionFailedMark` retired — a Failed mark looks like any other.
-const EXPECTED_COLOUR_TOKEN_COUNT = 79;
-/**
- * The icon set's counterpart to the colour count above — 63 before 043, plus `findInFiles` and
- * `searchScope` (FR-029a/FR-029b, FR-030).
- *
- * It did not exist until 043 needed to update it, and the gap is worth naming: `ICON_TOKENS` below
- * is `Object.keys(THRONG_THEME.icons)`, so every icon assertion in this file walks whatever the
- * shipped set happens to hold. A token silently dropped from it would take its own assertion with
- * it and the suite would stay green — the exact drift the colour count has been guarding against
- * since D1, on the half of the theme that had no guard at all.
- */
-// 69 since 044 (R17): `preview`, `refresh`, `navigateBack` and `navigateForward` — four new ACTIONS,
-// each deliberately not a reuse (`retry` means "try again", `chevronLeft` steps the tab strip).
-// 70 since 044's 2026-09-16 iteration (FR-122c): `syncScroll`, the Synchronise Scrolling toggle — a
-// new ACTION, so a token of its own rather than a reuse of `preview` or `refresh`.
-// 73 since 046 (FR-061, R11): `unload`, `category` and `projectList` — the Unload menu, the Projects
-// pane's category header and the pane's own panel-type marker, none of them a reuse of an existing
-// token (see the comment beside them in theme.ts).
-//
-// 72 since 046 iterate round 2 (branch-review finding): `projectList` retired. It described the cog
-// menu's "Focus Projects" row — a row FR-074/FR-107 had already retired before the description was
-// ever written, and nothing in the renderer has drawn the token at any point. `migrateTheme` drops a
-// stray `projectList` key from a theme that received it via the version-12 seed (theme-ops.ts).
-//
-// 76 since 047 (research R10): `foldSectionExpanded`, `foldSectionCollapsed`, `foldPreviewExpanded`
-// and `foldPreviewCollapsed` — the editor's fold-gutter marker and the preview's disclosure triangle,
-// each in its expanded/collapsed pair, none a reuse of `collapseAll`/`expandAll` (see the comment
-// beside them in theme.ts).
-// 75 since 048 (research R6): `resetName` retired with panel renaming (`migrateTheme` drops it).
-// 76 since 050 (FR-039, R24): `cancel`, the paste notice's own Cancel — not the `dismiss` glyph.
-// 81 since 054 (FR-071, FR-046b): `panelMaximise`, `panelRestore`, `diagramFit`, `diagramZoomReset`,
-// `diagramFullPane`.
-// 82 since 056 (FR-007, research R7): `warning`, the marker on a folded Preferences heading that hides
-// an invalid entry — no warning glyph existed, only the `warning` colour.
-// 85 since 057 (R11): `attention`, `attentionFailed` and `goToPanel` — the mark, its Failed variant and
-// the toast's link control.
-// 84 since 057 round 12 (FR-124): `goToPanel` retired — the toast's whole card is the link.
-// 82 since 057 round 13 (FR-139): `attention` and `attentionFailed` retired — the mark is a CSS circle.
-// 84 since 060 (FR-001, FR-018): `busy` and `groupFolderTree`, two Find in Files controls.
-// 87 since 059 round 2 (FR-059): `whitespace`, the View Whitespace toggle.
-// 055 adds twelve: the eight resource monitor tokens (`resourceMonitor`, `resourceCpu`, `resourceMemory`,
-// `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`, `resourceKillBelow`), `help` (FR-093),
-// `activate` (FR-110), `resourceHideEnded` (FR-105) and `resourceNetwork` (FR-113) — 99, on top of 060 and 059.
-// 068 adds five for the Notifications panel and side-panel minimise (`notifications`, `dismissAll`,
-// `sortOrder`, `minimisePanel`, `restorePanel`) — 106; named in `icon-tokens-068.test.ts`. 068 T103-T105 adds four
-// (`noticeError`, `noticeAttention`, `noticeInfo`, `noticeSuccess`) — 110; named in `entry-look.test.ts`.
-const EXPECTED_ICON_TOKEN_COUNT = 110;
-/** The icon tokens 055's Session 2026-10-23 adds; named, because a count alone is satisfied by a rename. */
-const MONITOR_2026_10_23_ICON_TOKENS = ['activate', 'resourceHideEnded', 'resourceNetwork'] as const;
-/** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
-const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
-/** The icon tokens 047 adds (research R10); named, for the same reason. */
-const FOLD_ICON_TOKENS = [
-  'foldSectionExpanded',
-  'foldSectionCollapsed',
-  'foldPreviewExpanded',
-  'foldPreviewCollapsed',
-] as const;
+// 86 since 069 FR-061: the seven file icon category colours.
+const EXPECTED_COLOUR_TOKEN_COUNT = 86;
 /** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
 const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
 /**
@@ -105,6 +49,14 @@ const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
  * of the palette.
  */
 const ADDED_SINCE_FIXTURE = [
+  // 069 FR-061 — the file icon categories, derived per theme (file-icon-colours.test.ts guards their values).
+  'fileIconCode',
+  'fileIconMarkup',
+  'fileIconData',
+  'fileIconDocument',
+  'fileIconMedia',
+  'fileIconArchive',
+  'fileIconScript',
   'warning',
   'linkUnderline',
   'linkUnderlineHover',
@@ -137,7 +89,6 @@ const EXPECTED = [
 ];
 
 const COLOUR_TOKENS = Object.keys(THRONG_THEME.colours);
-const ICON_TOKENS = Object.keys(THRONG_THEME.icons);
 
 describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
   it('ships exactly the 14 named default themes', () => {
@@ -152,13 +103,10 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('every theme styles the full colour + icon token set (FR-046)', () => {
+  it('every theme styles the full colour token set (FR-046)', () => {
     for (const [name, theme] of Object.entries(DEFAULT_THEMES)) {
       for (const token of COLOUR_TOKENS) {
         expect(theme.colours[token], `${name}.colours.${token}`).toBeTruthy();
-      }
-      for (const token of ICON_TOKENS) {
-        expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
       }
       expect(theme.fonts.family.length).toBeGreaterThan(0);
     }
@@ -191,127 +139,6 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     expect(Object.keys(THRONG_THEME.colours)).toHaveLength(EXPECTED_COLOUR_TOKEN_COUNT);
     for (const token of BUTTON_TOKENS) expect(THRONG_THEME.colours[token], token).toBeTruthy();
     for (const token of REMOVED_TOKENS) expect(THRONG_THEME.colours[token], token).toBeUndefined();
-  });
-
-  it('THRONG_THEME.icons has exactly the expected token count (043 — no silent drift)', () => {
-    expect(Object.keys(THRONG_THEME.icons)).toHaveLength(EXPECTED_ICON_TOKEN_COUNT);
-    // Named as well as counted: a count alone is satisfied by a token being renamed, and a renamed
-    // icon token renders as NOTHING at its call site with no error anywhere (`icon-tokens-exist`).
-    expect(THRONG_THEME.icons.findInFiles, 'icons.findInFiles').toBeTruthy();
-    expect(THRONG_THEME.icons.searchScope, 'icons.searchScope').toBeTruthy();
-  });
-
-  it('every bundled theme carries the four 044 preview and navigation icon tokens (R17)', () => {
-    for (const token of PREVIEW_ICON_TOKENS) {
-      expect(THRONG_THEME.icons[token], `THRONG_THEME.icons.${token}`).toBeTruthy();
-    }
-    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      for (const token of PREVIEW_ICON_TOKENS) {
-        expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
-      }
-    }
-  });
-
-  it('every bundled theme carries the Resource Monitor’s Activate and Hide ended icon tokens (055 FR-110, FR-105)', () => {
-    for (const [name, theme] of Object.entries({ throng: THRONG_THEME, ...ALL_DEFAULT_THEMES })) {
-      for (const token of MONITOR_2026_10_23_ICON_TOKENS) {
-        expect((theme.icons as Record<string, string | undefined>)[token], `${name}.icons.${token}`).toBeTruthy();
-      }
-    }
-  });
-
-  it('every bundled theme carries the four 047 Markdown fold icon tokens (research R10)', () => {
-    for (const token of FOLD_ICON_TOKENS) {
-      expect(THRONG_THEME.icons[token], `THRONG_THEME.icons.${token}`).toBeTruthy();
-    }
-    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      for (const token of FOLD_ICON_TOKENS) {
-        expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
-      }
-    }
-  });
-
-  it('every bundled theme carries the warning icon token (056 FR-007)', () => {
-    expect(THRONG_THEME.icons.warning, 'THRONG_THEME.icons.warning').toBeTruthy();
-    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      expect(theme.icons.warning, `${name}.icons.warning`).toBeTruthy();
-    }
-  });
-
-  it('every bundled theme carries the help icon token (055 FR-093)', () => {
-    expect(THRONG_THEME.icons.help, 'THRONG_THEME.icons.help').toBeTruthy();
-    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      expect(theme.icons.help, `${name}.icons.help`).toBeTruthy();
-    }
-  });
-
-  it('every bundled theme carries the syncScroll icon token (044 FR-122c)', () => {
-    expect(THRONG_THEME.icons.syncScroll, 'THRONG_THEME.icons.syncScroll').toBeTruthy();
-    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      expect(theme.icons.syncScroll, `${name}.icons.syncScroll`).toBeTruthy();
-    }
-    // Its own glyph: it sits beside the preview button on an editor's bar, and beside Open in Editor / Go to
-    // Editor on a preview's.
-    const { syncScroll, preview, refresh, retry } = THRONG_THEME.icons;
-    expect([preview, refresh, retry]).not.toContain(syncScroll);
-  });
-
-  it('draws each 044 action with a glyph of its own, not one another action already wears (R17)', () => {
-    const { preview, refresh, navigateBack, navigateForward, retry, chevronLeft, chevronRight, undo, redo } =
-      THRONG_THEME.icons;
-    expect(new Set([preview, refresh, navigateBack, navigateForward]).size, 'four actions, four glyphs').toBe(4);
-    // `retry` is "try again", beside Refresh while the failure banner is up (030 FR-042c).
-    expect(refresh).not.toBe(retry);
-    // The tab strip's step controls and the editor's undo pair are different actions.
-    for (const other of [chevronLeft, chevronRight, undo, redo]) {
-      expect([navigateBack, navigateForward]).not.toContain(other);
-    }
-  });
-
-  /*
-   * 043 T182 (FR-065) — the Find in Files toolbar control reads at the same weight as its neighbours.
-   *
-   * ══ WHAT WAS ACTUALLY WRONG, AND WHY IT IS TESTABLE AT ALL ══
-   *
-   * The maintainer reported the control as DWARFED by Quick Open beside it. Both are drawn in the
-   * same 22×22 box at the same 16 px icon size, so the box was never the problem: `findInFiles`
-   * shipped as `'⌕'`, a thin monochrome OUTLINE character that a text font draws at whatever
-   * stroke weight it happens to use, sitting next to `'🔎'`, a colour emoji that fills its
-   * em box. That difference has a name in Unicode — **Emoji_Presentation** — and it is exactly the
-   * property that decides whether a codepoint is rendered by the emoji font at full weight or by the
-   * text font as a hairline. So "reads at the same visual weight" is not a matter of taste here; it
-   * is one derivable property, and this is the layer that can read it.
-   *
-   * `EXPECTED_ICON_TOKEN_COUNT` does NOT move: this is a value change, not a token (plan D6). It
-   * reaches an installed build only through the shipped-defaults version bump (T121/T123/T124), and
-   * only for a theme still holding the version-6 glyph — a user who chose their own keeps it.
-   *
-   * ══ THE CONSTRAINT THAT PREDATES FR-065 AND IS NOT RELAXED BY IT ══
-   *
-   * There are THREE searches in this application, `theme.ts:427-437` says why they are held apart,
-   * and two of them can appear in one toolbar. Making this one heavier must not make it a third
-   * magnifier: the pair 🔍/🔎 differ only in which way the handle tilts, and a third would be told
-   * apart by nothing at 16 px.
-   */
-  /*
-   * 060 FR-011c SUPERSEDES the FR-065 rule this test used to hold (Find in Files as an emoji, to match
-   * Quick Open's emoji weight). The intent is unchanged — one weight across the toolbar — but it is now
-   * reached by making the neighbours PLAIN as well, at the maintainer's direction. The "neighbour"
-   * half stays: this cannot pass by one of the two becoming an emoji again.
-   */
-  it('draws Find in Files at the same weight as the controls beside it (FR-065, as superseded by 060 FR-011c)', () => {
-    const plain = (glyph: string): boolean => !/[\p{Extended_Pictographic}\p{Emoji_Presentation}]/u.test(glyph);
-    expect(plain(THRONG_THEME.icons.findInFiles), 'findInFiles').toBe(true);
-    expect(plain(THRONG_THEME.icons.quickOpen), 'quickOpen, the neighbour it is measured against').toBe(true);
-  });
-
-  it('keeps the three searches distinguishable from one another (FR-065)', () => {
-    const { search, quickOpen, findInFiles } = THRONG_THEME.icons;
-    expect(new Set([search, quickOpen, findInFiles]).size, 'three actions, three glyphs').toBe(3);
-    // And not a third magnifier. The existing pair is told apart by the tilt of one handle; a third
-    // member of that family would be told apart by nothing at all at 16 px.
-    const MAGNIFIERS = ['\u{1F50D}', '\u{1F50E}', '\u{1F52C}'];
-    expect(MAGNIFIERS, 'findInFiles must not be a third lens').not.toContain(findInFiles);
   });
 
   it('(SC-006′, F2) non-drift: every surviving token keeps its exact pre-refactor value', () => {
@@ -481,42 +308,5 @@ describe('theme-quality guards hold for the shipped set (009, US6)', () => {
   // the derived fourteen would miss (plan D5).
   it('every shipped theme keeps its two search matches distinct from each other and the page', () => {
     expect(() => assertMatchDistinctness(themes)).not.toThrow();
-  });
-  it('ships the dismiss icon token distinct from destroy (009 addition)', () => {
-    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      expect(theme.icons.dismiss, `${name}.icons.dismiss`).toBeTruthy();
-    }
-    expect(THRONG_THEME.icons.dismiss).toBe('✕');
-  });
-
-  /**
-   * 031 / FR-032 (T063). The tab strip's step and show-all controls are icons drawn from the active
-   * theme, so the chevrons they need must exist as tokens in EVERY shipped set — a control whose
-   * token is missing renders an empty box.
-   *
-   * They are their OWN tokens, deliberately not `collapse`/`expand`: those mean tree-node state, and
-   * sharing them would make re-skinning a tree chevron silently re-skin the tab strip. Both pairs
-   * must therefore survive as four distinct keys, whatever glyphs they happen to default to.
-   */
-  it('ships the tab-strip chevron icon tokens, separate from collapse/expand (031, FR-032)', () => {
-    const chevrons = ['chevronLeft', 'chevronRight', 'chevronDown'] as const;
-    for (const token of chevrons) {
-      expect(THRONG_THEME.icons[token], `THRONG_THEME.icons.${token}`).toBeTruthy();
-    }
-    expect(THRONG_THEME.icons.chevronLeft).toBe('‹');
-    expect(THRONG_THEME.icons.chevronRight).toBe('›');
-    expect(THRONG_THEME.icons.chevronDown).toBe('▾');
-
-    // Four distinct keys — the tree-node pair is untouched and still resolvable on its own.
-    for (const token of [...chevrons, 'collapse', 'expand']) {
-      expect(Object.prototype.hasOwnProperty.call(THRONG_THEME.icons, token), token).toBe(true);
-    }
-
-    // Every shipped theme spreads the icon set, so all 14 resolve the new tokens.
-    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      for (const token of chevrons) {
-        expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
-      }
-    }
   });
 });

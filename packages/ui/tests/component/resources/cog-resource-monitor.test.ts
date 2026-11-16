@@ -9,11 +9,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
 import { TitleBar } from '../../../src/renderer/title-bar/title-bar.js';
 import { ContextMenuProvider } from '../../../src/renderer/context-menu-provider.js';
 import { __resetMonitorStore, openResourceMonitor } from '../../../src/renderer/resources/monitor-store.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
+import { drawnIcon, iconMarkup } from '../helpers/icon-markup.js';
 
 let bridge: ResourcesBridge;
 
@@ -54,7 +54,7 @@ describe('the cog menu lists Resource Monitor (FR-056)', () => {
     const row = screen.getByTestId('cog-resource-monitor');
     expect(row).toHaveTextContent('Resource Monitor');
     // The cell holds the glyph the theme gives the `resourceMonitor` token.
-    expect(row).toHaveTextContent(THRONG_THEME.icons.resourceMonitor as string);
+    expect(drawnIcon(row)).toBe(iconMarkup('resourceMonitor'));
   });
 
   it('opens the monitor window when chosen, and closes the menu', async () => {

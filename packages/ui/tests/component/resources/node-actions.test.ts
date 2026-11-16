@@ -24,6 +24,7 @@ import { NodeActionsProvider } from '../../../src/renderer/resources/node-action
 import { __resetSession, focusOn, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { drawnIcon, iconMarkup } from '../helpers/icon-markup.js';
 
 
 let bridge: ResourcesBridge;
@@ -96,9 +97,8 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
 
     rightClick('x:200:1');
     expect(menuLabels()).toEqual(['menu-item-Kill Process', 'menu-item-Kill All Below', 'menu-item-Go to panel']);
-    const icons = THRONG_THEME.icons as Record<string, string>;
-    expect(screen.getByTestId('menu-item-Kill Process')).toHaveTextContent(icons.resourceKill!);
-    expect(screen.getByTestId('menu-item-Kill All Below')).toHaveTextContent(icons.resourceKillBelow!);
+    expect(drawnIcon(screen.getByTestId('menu-item-Kill Process'))).toBe(iconMarkup('resourceKill'));
+    expect(drawnIcon(screen.getByTestId('menu-item-Kill All Below'))).toBe(iconMarkup('resourceKillBelow'));
   });
 
   it('a terminal panel: Destroy Panel and Kill All Below; an editor panel: Destroy Panel only', async () => {
@@ -552,7 +552,7 @@ describe('Activate goes to the project, tab or panel (FR-110, US2 scenarios 30 a
     // Scenario 31: Unload Project, Kill All Below and Activate — and the row's menu offers the same.
     expect(titles).toEqual(expect.arrayContaining(['Unload Project', 'Kill All Below', 'Go to project']));
     const go = screen.getByTestId('detail-action-activate');
-    expect(go).toHaveTextContent((THRONG_THEME.icons as Record<string, string>).activate!);
+    expect(drawnIcon(go)).toBe(iconMarkup('activate'));
     rightClick('p:p1');
     expect(menuLabels()).toEqual(expect.arrayContaining(['menu-item-Go to project', 'menu-item-Unload Project', 'menu-item-Kill All Below']));
   });

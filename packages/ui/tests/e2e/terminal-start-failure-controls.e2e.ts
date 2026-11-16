@@ -228,10 +228,9 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
           const control = bannerControl(win, pid, name);
           await expect(control).toBeVisible();
           await expect(control).toHaveAttribute('title', /.+/);
-          const glyph = (await control.innerText()).trim();
-          expect(glyph, `${name} rendered nothing — an invisible control`).not.toBe('');
-          expect(glyph.length, `${name} should be an icon, not a word`).toBeLessThanOrEqual(2);
-          expect(glyph, `${name} should be an icon, not a word`).not.toMatch(/[A-Za-z]/);
+          // 069: an icon is always inline svg and never text.
+          await expect(control.locator('svg'), `${name} rendered no icon — an invisible control`).toHaveCount(1);
+          expect((await control.innerText()).trim(), `${name} should be an icon, not a word`).toBe('');
         }
 
         /**

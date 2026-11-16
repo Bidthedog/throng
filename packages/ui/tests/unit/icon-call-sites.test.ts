@@ -71,20 +71,35 @@ describe('no renderer module may bypass the shared <Icon> component (FR-002)', (
     expect(rendererSources.length).toBeGreaterThan(20);
   });
 
-  it('no renderer file references resolveIcon', () => {
+  it('only the sanctioned sites call resolveIcon', () => {
     /*
-     * WORD-BOUNDED, and this matters: `resolveIcon` is a SUBSTRING of `resolveIconValue`, which is
-     * the resolver <Icon> is required to use. A naive `.includes('resolveIcon')` would fail on the
-     * very component this feature introduces, making the guard unsatisfiable.
+     * `resolveIcon` (069) is the one resolver, and it returns svg markup. The shared <Icon> calls it
+     * for React; the two CodeMirror / DOM-pipeline hosts that cannot render a component (the editor's
+     * fold gutter and the Markdown preview's) call it to build markup they inject. Any other renderer
+     * file calling it is drawing an icon without <Icon>, so it would bypass the IconButton / title
+     * contract that makes every control themeable.
      */
-    const banned = /\bresolveIcon\b(?!Value)/;
-    const offenders = rendererSources.filter((f) => banned.test(code(f)));
+    const SANCTIONED = new Set([
+      'common/icon.tsx',
+      'editor/use-editor.ts',
+      'preview/providers/markdown/markdown-body.tsx',
+    ]);
+    const banned = /\bresolveIcon\b/;
+    const offenders = rendererSources
+      .map((f) => f.slice(RENDERER.length + 1).replace(/\\/g, '/'))
+      .filter((rel, i) => banned.test(code(rendererSources[i]!)) && !SANCTIONED.has(rel));
 
     expect(
-      offenders.map((f) => f.slice(RENDERER.length + 1).replace(/\\/g, '/')),
-      'These files still resolve icons themselves instead of rendering <Icon>, so the user\'s ' +
-        'icon-pack choice is ignored there (#54).',
+      offenders,
+      'These files resolve icons themselves instead of rendering <Icon>, so the selected icon ' +
+        "set's art is not drawn through the one component (#54, 069).",
     ).toEqual([]);
+  });
+
+  it('every sanctioned site still calls it (the allow-list is not stale)', () => {
+    for (const rel of ['common/icon.tsx', 'editor/use-editor.ts', 'preview/providers/markdown/markdown-body.tsx']) {
+      expect(code(join(RENDERER, rel)), rel).toMatch(/\bresolveIcon\b/);
+    }
   });
 });
 

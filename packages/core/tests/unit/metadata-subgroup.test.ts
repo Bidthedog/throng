@@ -78,6 +78,7 @@ function unionMembers(union: string): string[] {
 /**
  * The control vocabulary as 007 FR-028 declared it, frozen here so that widening it is a change
  * someone has to argue with rather than one they can make by reflex while adding a descriptor field.
+ * Spec 069 narrowed it: `icon` went with the theme's icon tokens, which are no longer descriptors.
  */
 const SHIPPED_CONTROL_KINDS = [
   'number',
@@ -91,7 +92,6 @@ const SHIPPED_CONTROL_KINDS = [
   'font-size',
   'enum',
   'chord',
-  'icon',
   'folder',
   'map',
   'records',

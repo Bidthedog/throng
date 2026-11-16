@@ -257,6 +257,21 @@ describe('parseNotificationsDocument is total', () => {
     expect(parseNotificationsDocument({ version: 1, order: 'sideways', entries: [] }).order).toBe('oldest');
   });
 
+  // 069 T028 (research R7): the icon set backup notice's Open folder action.
+  it('keeps the openIconSetsFolder action through a round trip, and takes its label', () => {
+    const actions = [{ kind: 'openIconSetsFolder' as const, label: 'Open folder' }];
+    const doc = add(emptyNotificationsDocument(), { message: 'a', actions }).doc;
+    const parsed = parseNotificationsDocument(JSON.parse(JSON.stringify(doc)));
+    expect(parsed.entries[0]!.actions).toEqual(actions);
+  });
+
+  it('drops an openIconSetsFolder action that has no label', () => {
+    const doc = add(emptyNotificationsDocument(), { message: 'a' }).doc;
+    const raw = JSON.parse(JSON.stringify(doc));
+    raw.entries[0].actions = [{ kind: 'openIconSetsFolder' }];
+    expect(parseNotificationsDocument(raw).entries[0]!.actions).toEqual([]);
+  });
+
   it('survives a round trip through JSON', () => {
     let doc = add(emptyNotificationsDocument(), { message: 'a', actions: [{ kind: 'goToPanel', panelId: 'p', label: 'Go' }] }).doc;
     doc = dismissLimitWarning(doc);

@@ -22,7 +22,6 @@
  */
 import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
 import {
   __resetFindInFilesState,
   markFindInFilesScopeMissing,
@@ -35,6 +34,7 @@ import {
   resultRow,
   type FileSearchStub,
 } from './helpers/find-in-files.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 let bridge: FileSearchStub;
 
@@ -74,8 +74,7 @@ describe('the scope control says where the search looks (FR-030)', () => {
     mount();
     // The `searchScope` token was added in T029 and this is its call site — an icon token with
     // none renders nowhere and is indistinguishable from a token that was never added.
-    expect(scopeControl()).toHaveTextContent(THRONG_THEME.icons.searchScope);
-    expect(scopeControl().querySelector('svg')).toBeNull();
+    expect(drawnIcon(scopeControl())).toBe(iconMarkup('searchScope'));
     expect(scopeField().disabled).toBe(false);
     // Empty means the whole root (FR-030's default), and the field says so rather than looking blank.
     expect(scopeField().value).toBe('');

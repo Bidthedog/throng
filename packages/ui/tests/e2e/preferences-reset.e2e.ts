@@ -372,7 +372,7 @@ test('US2: resetting a modified setting from its row writes the shipped value ba
 test('US3: Reset All Preferences restores settings + bindings, states both sides of its scope, and spares custom themes', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
-      seedTheme('MyUser', { name: 'MyUser', colours: { accent: '#abcdef' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
+      seedTheme('MyUser', { name: 'MyUser', colours: { accent: '#abcdef' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } } });
       const prefs = await openPrefs(app, win, 'settings');
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
 

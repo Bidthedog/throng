@@ -97,7 +97,7 @@ async function previewFromTree(win: Page, file: string): Promise<string> {
 
 async function drawnFrame(win: Page, id: string): Promise<Locator> {
   const frame = win.getByTestId(`diagram-frame-${id}-diagram-0`);
-  await expect(frame.locator('svg').first()).toBeVisible({ timeout: 15_000 });
+  await expect(frame.locator('.preview-diagram-frame__layer svg').first()).toBeVisible({ timeout: 15_000 });
   return frame;
 }
 
@@ -379,7 +379,7 @@ test('B8: focus borders paint above a zoomed diagram — a .mmd preview’s pane
     .map(Number) as [number, number, number];
   await byTitle(mdFrame, 'Maximise').click();
   const pane = win.getByTestId('maximise-layer').locator('.preview-diagram-frame--in-pane');
-  await expect(pane.locator('svg').first()).toBeVisible();
+  await expect(pane.locator('.preview-diagram-frame__layer svg').first()).toBeVisible();
   const paneY = await nodeOntoLeftEdge(win, pane, pane);
   const paneBox = await pane.boundingBox();
   const ring = panelColour;

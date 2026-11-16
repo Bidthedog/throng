@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { migrateTheme, THRONG_THEME, type Theme } from '../../src/index.js';
+import { cloneTheme, migrateTheme, THRONG_THEME, type Theme } from '../../src/index.js';
 
 const REMOVED = ['menuSurface', 'dialogSurface', 'buttonBg', 'buttonText', 'buttonHoverBg', 'buttonHoverText'];
 const BUTTON_TYPES = ['confirm', 'cancel', 'destroy'] as const;
@@ -29,7 +29,6 @@ function legacyTheme(): Theme {
       dialogSurface: '#0f0f0f',
     },
     fonts: THRONG_THEME.fonts,
-    icons: {},
   };
 }
 
@@ -99,82 +98,78 @@ describe('migrateTheme (021, FR-031/032)', () => {
 });
 
 /**
- * Branch-review finding (spec 046 iterate round 2) — `icons.projectList` is retired: it described
- * the title bar's cog-menu "Focus Projects" row, a row FR-074/FR-107 had already retired before the
- * description was ever written, and no call site in the renderer has ever drawn the token. Version
- * 12's shipped-defaults seed already wrote it into every existing install's `theme.json` before this
- * round, so a saved theme carrying the stray key must not error and should have it tidied away —
- * the same precedent `REMOVED` (021's colour tokens) and the retired `dialog` typography role above
- * already set. `icons` is `Record<string, string>`, so parsing an extra key never actually errored;
- * this is about not carrying it forever, and about a custom/other theme's OWN `projectList` value
- * (an author's legitimate reuse of the identifier) not surviving a migrate pass it never needed.
+ * 069 (supersedes 007 FR-039/FR-040, 017 FR-003, 009 FR-021) — a theme carries no glyph map and no
+ * per-icon overrides. A file that still holds them (written by an earlier version, or by hand) is read
+ * with the two keys dropped, not refused. This replaces the per-token drops 046 and 048 once did:
+ * every icon token now goes with the map.
  */
-describe('migrateTheme drops the retired icons.projectList token (branch-review finding, 046 iterate round 2)', () => {
-  function themeWithProjectListIcon(): Theme {
-    return {
-      name: 'Has projectList',
+describe('migrateTheme drops the retired icons and iconOverrides keys (069, FR-018)', () => {
+  const withRetiredIconKeys = (): Theme =>
+    ({
+      name: 'Has icons',
       colours: { accent: '#111111' },
       fonts: THRONG_THEME.fonts,
-      icons: { ...THRONG_THEME.icons, projectList: '🗂' },
-    };
-  }
+      icons: { destroy: '✕', projectList: '🗂', resetName: '↺' },
+      iconOverrides: { destroy: { glyph: 'x' }, folder: { image: 'folder.svg' } },
+      iconPack: 'mine',
+    }) as unknown as Theme;
 
-  it('drops icons.projectList', () => {
-    const out = migrateTheme(themeWithProjectListIcon());
-    expect(out.icons.projectList).toBeUndefined();
+  it('drops icons and iconOverrides', () => {
+    const out = migrateTheme(withRetiredIconKeys()) as unknown as Record<string, unknown>;
+    expect('icons' in out).toBe(false);
+    expect('iconOverrides' in out).toBe(false);
   });
 
-  it('is lossless for every OTHER icon token', () => {
-    const theme = themeWithProjectListIcon();
-    const out = migrateTheme(theme);
-    for (const [token, value] of Object.entries(theme.icons)) {
-      if (token === 'projectList') continue;
-      expect(out.icons[token], token).toBe(value);
-    }
+  it('keeps the selected icon set, which is the one icon key a theme still carries', () => {
+    expect(migrateTheme(withRetiredIconKeys()).iconPack).toBe('mine');
   });
 
   it('is idempotent', () => {
-    const once = migrateTheme(themeWithProjectListIcon());
-    const twice = migrateTheme(once);
-    expect(twice).toEqual(once);
+    const once = migrateTheme(withRetiredIconKeys());
+    expect(migrateTheme(once)).toEqual(once);
   });
 
-  it('does not error, and needs no drop, on a theme that never carried it', () => {
-    const clean: Theme = { name: 'Clean', colours: { accent: '#111111' }, fonts: THRONG_THEME.fonts, icons: { unload: '⏏' } };
+  it('does not error on a theme that never carried them', () => {
+    const clean: Theme = { name: 'Clean', colours: { accent: '#111111' }, fonts: THRONG_THEME.fonts };
     expect(() => migrateTheme(clean)).not.toThrow();
-    expect(migrateTheme(clean).icons.projectList).toBeUndefined();
+    expect('icons' in migrateTheme(clean)).toBe(false);
+  });
+
+  it('THRONG_THEME no longer defines a glyph map', () => {
+    expect('icons' in THRONG_THEME).toBe(false);
+    expect('iconOverrides' in THRONG_THEME).toBe(false);
   });
 });
 
 /**
- * 048 (research R6) — `icons.resetName` is retired with panel renaming: its one call site was the
- * panel header's Reset Name row. Every install's `theme.json` carries it from the shipped seed, so it
- * is dropped on load the same way `projectList` is, rather than carried forever.
+ * 069 FR-014 — a theme the user creates starts on the default set: the clone keeps every token of its
+ * source and drops the source's choice of icon set (absent means the default set).
  */
-describe('migrateTheme drops the retired icons.resetName token (048 R6)', () => {
-  const withResetName = (): Theme => ({
-    name: 'Has resetName',
+describe('cloneTheme starts on the default icon set (069, FR-014)', () => {
+  const source = (): Theme => ({
+    name: 'Source',
     colours: { accent: '#111111' },
     fonts: THRONG_THEME.fonts,
-    icons: { ...THRONG_THEME.icons, resetName: '↺' },
+    iconPack: 'mine',
   });
 
-  it('drops icons.resetName and keeps every other icon token', () => {
-    const theme = withResetName();
-    const out = migrateTheme(theme);
-    expect(out.icons.resetName).toBeUndefined();
-    for (const [token, value] of Object.entries(theme.icons)) {
-      if (token !== 'resetName') expect(out.icons[token], token).toBe(value);
-    }
+  it('renames the copy and carries no iconPack', () => {
+    const out = cloneTheme(source(), 'Copy');
+    expect(out.name).toBe('Copy');
+    expect('iconPack' in out).toBe(false);
   });
 
-  it('is idempotent', () => {
-    const once = migrateTheme(withResetName());
-    expect(migrateTheme(once)).toEqual(once);
+  it('keeps every other token of the source', () => {
+    const out = cloneTheme(source(), 'Copy');
+    expect(out.colours).toEqual({ accent: '#111111' });
+    expect(out.fonts).toEqual(THRONG_THEME.fonts);
   });
 
-  it('is no longer a shipped icon token', () => {
-    expect(THRONG_THEME.icons.resetName).toBeUndefined();
+  it('does not mutate its source', () => {
+    const src = source();
+    cloneTheme(src, 'Copy');
+    expect(src.iconPack).toBe('mine');
+    expect(src.name).toBe('Source');
   });
 });
 

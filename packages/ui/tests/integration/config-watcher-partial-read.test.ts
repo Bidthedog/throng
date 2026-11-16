@@ -134,7 +134,7 @@ describe('a partially written settings.json is not mistaken for the defaults', (
      */
     expect(Object.keys(payload).sort()).toEqual([
       'generation',
-      'iconPacks',
+      'iconSets',
       'keybindings',
       'settings',
       'theme',

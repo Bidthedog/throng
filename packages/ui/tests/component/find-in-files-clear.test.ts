@@ -34,7 +34,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_APP_SETTINGS, THRONG_THEME, type AppSettings } from '@throng/core';
+import { DEFAULT_APP_SETTINGS, type AppSettings } from '@throng/core';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
 import {
   PANEL_ID,
@@ -44,6 +44,7 @@ import {
   resultRow,
   type FileSearchStub,
 } from './helpers/find-in-files.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 const CSS_PATH = resolve(process.cwd(), 'packages/ui/src/renderer/find-in-files/find-in-files.css');
 
@@ -188,10 +189,7 @@ describe('the clear reuses the vocabulary the application already ships (FR-080)
       // an invisible control with no error anywhere, which is how 029's Clear control shipped.
       const icon = clear.querySelector('.icon');
       expect(icon, `${field.what}'s clear draws no themed icon`).not.toBeNull();
-      const glyph = (icon?.textContent ?? '').trim();
-      if (clear.querySelector('svg') === null) {
-        expect(glyph, `${field.what}'s clear draws a blank icon`).toBe(THRONG_THEME.icons.dismiss);
-      }
+      expect(drawnIcon(clear), `${field.what}'s clear draws the dismiss icon`).toBe(iconMarkup('dismiss'));
 
       // The hover title is the control's whole accessible name, and it NAMES THE FIELD: three
       // controls all titled "Clear" would be three controls a screen reader cannot tell apart.
@@ -201,7 +199,7 @@ describe('the clear reuses the vocabulary the application already ships (FR-080)
       expect(title.toLowerCase()).toContain('clear');
 
       // No word label: everything the control renders is the icon.
-      expect((clear.textContent ?? '').replace(glyph, '').trim()).toBe('');
+      expect((clear.textContent ?? '').trim()).toBe('');
     });
   }
 

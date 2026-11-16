@@ -30,7 +30,7 @@
  */
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
+import { ICON_KEYS } from '@throng/core';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
 import {
   PANEL_ID,
@@ -40,6 +40,7 @@ import {
   resultRow,
   type FileSearchStub,
 } from './helpers/find-in-files.js';
+import { iconMarkup } from './helpers/icon-markup.js';
 
 let bridge: FileSearchStub;
 
@@ -58,9 +59,8 @@ afterEach(() => {
  * The whole of FR-011 for one control, in one place.
  *
  * "No text label" is asserted as "no text OUTSIDE the icon" rather than as "no text at all", for
- * the reason `explorer-toolbar.test.ts` records: at the shipped defaults no icon pack is selected,
- * so `Icon` takes its GLYPH branch and renders the theme's character as text. An empty-textContent
- * assertion would fail on all of them and would be testing that a pack was installed.
+ * the reason `explorer-toolbar.test.ts` records: what the icon draws is the icon set's business,
+ * not this test's.
  */
 function expectThemeableIconControl(control: HTMLElement, titleNames: RegExp): void {
   const icons = control.querySelectorAll('.icon');
@@ -195,8 +195,8 @@ describe('every action control in the panel toolbar is a titled, themeable icon 
  * surfaces would not be.
  */
 describe('FR-011 holds for every icon button the panel draws, named or not (T153a)', () => {
-  /** Every glyph the active theme can legitimately produce, for the "the token resolved" half. */
-  const THEME_GLYPHS = new Set(Object.values(THRONG_THEME.icons));
+  /** Every markup the default set can produce, for the "the key resolved" half. */
+  const KNOWN_ART = new Set(ICON_KEYS.map((key) => iconMarkup(key)));
 
   function sweepPanel(): void {
     const panel = screen.getByTestId(`fif-panel-${PANEL_ID}`);
@@ -215,12 +215,8 @@ describe('FR-011 holds for every icon button the panel draws, named or not (T153
        * release (029's Clear control, #127's clipboard rows). Either the theme's own glyph, or an
        * inlined pack SVG, and nothing else counts.
        */
-      const glyph = (icon.textContent ?? '').trim();
-      const svg = icon.querySelector('svg');
-      if (svg === null) {
-        expect(glyph, `${where} draws a blank icon`).not.toBe('');
-        expect(THEME_GLYPHS.has(glyph), `${where} draws a glyph no theme token defines`).toBe(true);
-      }
+      expect(icon.querySelector('svg'), `${where} draws no svg`).not.toBeNull();
+      expect(KNOWN_ART.has(icon.innerHTML), `${where} draws art no icon key defines`).toBe(true);
 
       // The hover title, which is the control's whole accessible name: the icon is `aria-hidden`.
       expect((button.getAttribute('title') ?? '').trim(), `${where} has no hover title`).not.toBe(
@@ -288,7 +284,7 @@ describe('the collapse/expand control names its direction (FR-011, FR-034)', () 
     emitResults();
 
     const glyph = (): string =>
-      control('fif-group-toggle-src/a.ts').querySelector('.icon')?.textContent?.trim() ?? '';
+      control('fif-group-toggle-src/a.ts').querySelector('.icon')?.innerHTML ?? '';
     const expanded = glyph();
     fireEvent.click(control('fif-group-toggle-src/a.ts'));
 
@@ -318,7 +314,7 @@ describe('the scope control draws a themeable icon and names itself (FR-011, FR-
     expect(icons).toHaveLength(1);
     // Rendered, not blank: a token the theme does not define renders NOTHING, silently, which is
     // exactly how an unresolved icon reaches a release (029's Clear control, #127's clipboard rows).
-    expect((icons[0]!.textContent ?? '').trim()).not.toBe('');
+    expect(icons[0]!.querySelector('svg')).not.toBeNull();
     expect(icons[0]!.getAttribute('aria-hidden')).toBe('true');
   });
 
@@ -373,7 +369,7 @@ describe('every panel action offered only in the menu carries a drawn icon (FR-0
     for (const label of MENU_ONLY_ACTIONS) {
       const cell = row(label).querySelector('.context-menu__icon');
       expect(cell, `${label} has no icon cell`).not.toBeNull();
-      expect((cell?.textContent ?? '').trim(), `${label} draws a blank icon`).not.toBe('');
+      expect(cell?.querySelector('svg'), `${label} draws a blank icon`).not.toBeNull();
     }
   });
 

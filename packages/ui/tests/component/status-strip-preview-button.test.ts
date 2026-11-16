@@ -23,7 +23,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolveIconAsset, THRONG_THEME, normaliseForCompare } from '@throng/core';
+import { resolveIcon, THRONG_THEME, normaliseForCompare, type IconKey } from '@throng/core';
 import { StatusStrip } from '../../src/renderer/editor/status-strip.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { removeEditorState, setEditorState } from '../../src/renderer/editor/editor-state.js';
@@ -110,6 +110,13 @@ afterEach(() => {
   removeEditorState(PANEL);
   Reflect.deleteProperty(window, 'throng');
 });
+
+/** The markup the default icon set draws for `key`, round-tripped through the DOM so it compares like `innerHTML`. */
+const markupFor = (key: IconKey): string => {
+  const host = document.createElement('div');
+  host.innerHTML = resolveIcon(THRONG_THEME, [], key);
+  return host.innerHTML;
+};
 
 describe('absent where a preview means nothing (FR-001, FR-004)', () => {
   it('is not rendered for a file no provider claims', async () => {
@@ -302,13 +309,11 @@ describe('where it lives and what it is drawn with (FR-001, 040 FR-023/FR-024)',
 
   it('draws the theme’s `preview` icon token, and no text label', async () => {
     await strip({ filePath: FILE });
-    const asset = resolveIconAsset(THRONG_THEME, {}, 'preview');
-    expect(asset.kind).toBe('glyph');
     const icon = (button() as HTMLElement).querySelector('.icon');
     expect(icon).not.toBeNull();
     expect(icon).toHaveAttribute('aria-hidden', 'true');
-    expect(icon?.textContent).toBe(asset.kind === 'glyph' ? asset.glyph : '');
-    expect((button() as HTMLElement).textContent).toBe(icon?.textContent);
+    expect(icon?.innerHTML).toBe(markupFor('preview'));
+    expect((button() as HTMLElement).textContent?.trim()).toBe('');
   });
 });
 
@@ -326,11 +331,9 @@ describe('the scroll-sync toggle (FR-122c)', () => {
     const controls = screen.getByTestId(`editor-status-controls-${PANEL}`);
     const t = within(controls).getByTestId(`editor-sync-scroll-${PANEL}`);
     expect(t.nextElementSibling).toBe(button());
-    const asset = resolveIconAsset(THRONG_THEME, {}, 'syncScroll');
-    expect(asset.kind).toBe('glyph');
     const icon = t.querySelector('.icon');
-    expect(icon?.textContent).toBe(asset.kind === 'glyph' ? asset.glyph : '');
-    expect(t.textContent).toBe(icon?.textContent);
+    expect(icon?.innerHTML).toBe(markupFor('syncScroll'));
+    expect(t.textContent?.trim()).toBe('');
   });
 
   it('is pressed while the setting is on, and not while it is off', async () => {

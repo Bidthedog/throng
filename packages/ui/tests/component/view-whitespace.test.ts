@@ -135,7 +135,7 @@ describe('the content menu item and the command (059 FR-058, FR-059)', () => {
     await waitFor(() => expect(toggle()).toHaveAttribute('aria-pressed', 'true'));
 
     fireEvent.contextMenu(h.content());
-    expect(await screen.findByTestId('menu-item-View Whitespace')).toHaveTextContent('View Whitespace ✓');
+    expect(await screen.findByTestId('menu-item-View Whitespace')).toHaveAttribute('aria-checked', 'true');
   });
 
   it('the command toggles it from its chord', async () => {

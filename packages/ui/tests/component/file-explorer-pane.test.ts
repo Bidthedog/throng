@@ -39,7 +39,6 @@
  * without any of them reaching an assertion.
  */
 import { render, screen, waitFor, within } from '@testing-library/react';
-import { THRONG_THEME } from '@throng/core';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -59,6 +58,7 @@ import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { FileExplorerPane } from '../../src/renderer/panes/file-explorer-pane.js';
 import type { FileTreeEntry } from '../../src/renderer/global.js';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 
 /** A daemon with no projects at all — the state a first launch is in (lazy loading, research D7). */
 function emptyProjectsClient(): ProjectsClient {
@@ -431,9 +431,8 @@ describe('the project-settings control WITH a project open (US8, FR-041, FR-043a
     await mountWithProject();
 
     /*
-     * `textContent` is NOT asserted empty: a `glyph` icon pack renders its glyph as text inside the
-     * `.icon` span (`common/icon.tsx:64`), so an empty-string assertion would fail on a perfectly
-     * conformant pack. What the rule actually forbids is a WORD naming the action, which is what the
+     * `textContent` is NOT asserted empty: what the `.icon` span draws is the icon set's business
+     * (spec 069), not this rule's. What the rule actually forbids is a WORD naming the action, which is what the
      * E2E's `not.toContainText(/remove/i)` was reaching for on the dialog's side.
      */
     const options = screen.getByTestId('project-settings-open');
@@ -445,8 +444,8 @@ describe('the project-settings control WITH a project open (US8, FR-041, FR-043a
     await mountWithProject();
 
     const options = screen.getByTestId('project-settings-open');
-    expect(options).toHaveTextContent(THRONG_THEME.icons.projectSettings);
-    expect(options).not.toHaveTextContent(THRONG_THEME.icons.settings);
+    expect(drawnIcon(options)).toBe(iconMarkup('projectSettings'));
+    expect(drawnIcon(options)).not.toBe(iconMarkup('settings'));
   });
 
   it('writes the right-clicked entry to the project’s search exclusions (060 FR-033)', async () => {

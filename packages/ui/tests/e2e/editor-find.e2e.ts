@@ -310,7 +310,7 @@ test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', {
   }
 });
 
-test('every find-bar action control is the same size, and match-case reads "Aa"', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+test('every find-bar action control is the same size, and the match toggles draw their icons', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -322,9 +322,11 @@ test('every find-bar action control is the same size, and match-case reads "Aa"'
       await expect(win.getByTestId(`find-bar-${pid}`)).toBeVisible();
       await expect(win.getByTestId('find-replace-row')).toBeVisible();
 
-      // The toggles say what they match on.
-      await expect(win.getByTestId('find-match-case')).toHaveText('Aa');
-      await expect(win.getByTestId('find-whole-word')).toHaveText('ab');
+      // The toggles draw what they match on: the icon set's matchCase and wholeWord art (069), no text beside it.
+      for (const id of ['find-match-case', 'find-whole-word']) {
+        await expect(win.getByTestId(id).locator('.icon svg')).toHaveCount(1);
+        await expect(win.getByTestId(id)).toHaveText(/^\s*$/);
+      }
 
       // The glyphs vary wildly in width (an emoji, arrows, two letters), so the BUTTONS
       // must be a fixed box — otherwise the bar's controls come out ragged.
