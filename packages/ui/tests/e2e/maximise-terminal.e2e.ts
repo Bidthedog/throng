@@ -103,16 +103,27 @@ test('Alt+Shift+Enter maximises a real terminal in place; Shift+Enter and Ctrl+E
     expect(between('b', 'c')).toBe('\x1b[13;5u'); // Ctrl+Enter — unchanged
     expect(between('c', 'd')).toBe('\r'); // plain Enter — unchanged
 
-    // Restore: the layout underneath is exactly as it was (FR-072, FR-073).
+    // Restore: the layout underneath settles exactly as it was (FR-072, FR-073). Polled, not sampled once:
+    // leaving Focus Mode also brings the side panes back (#635), and the panels reflow around them a frame
+    // after `data-maximised` clears — measured on Linux, the first sample is 14 px out and every one from
+    // 100 ms on is exact; on the Windows runner that first frame was 228 px out. "Exact" is where it lands.
     await win.keyboard.press('Alt+Shift+Enter');
     await expect(tabBody).not.toHaveAttribute('data-maximised', /.*/);
-    const layoutAfter = await panelBoxes(win);
-    for (const [id, box] of Object.entries(layoutBefore)) {
-      const now = layoutAfter[id]!;
-      expect(Math.abs(now.x - box.x), id).toBeLessThanOrEqual(1);
-      expect(Math.abs(now.y - box.y), id).toBeLessThanOrEqual(1);
-      expect(Math.abs(now.width - box.width), id).toBeLessThanOrEqual(1);
-      expect(Math.abs(now.height - box.height), id).toBeLessThanOrEqual(1);
-    }
+    await expect
+      .poll(async () => {
+        const after = await panelBoxes(win);
+        const off: string[] = [];
+        for (const [id, box] of Object.entries(layoutBefore)) {
+          const now = after[id];
+          if (now === undefined) {
+            off.push(`${id} missing`);
+            continue;
+          }
+          const d = [now.x - box.x, now.y - box.y, now.width - box.width, now.height - box.height];
+          if (d.some((v) => Math.abs(v) > 1)) off.push(`${id} dx,dy,dw,dh=${d.map(Math.round).join(',')}`);
+        }
+        return off;
+      }, { message: 'every panel back within 1 px of its pre-maximise box', timeout: FILE_OP_TIMEOUT_MS })
+      .toEqual([]);
   });
 });

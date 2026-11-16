@@ -55,6 +55,7 @@ import { LimitWarning } from './notifications/limit-warning.js';
 import { FileExplorerPane } from './panes/file-explorer-pane.js';
 import { usePersistedBool } from './panes/use-persisted-bool.js';
 import { NO_SIDE_PANES, panePrefs, SidePanesBridge, type SidePanesSync } from './panes/side-pane-prefs.js';
+import { FocusModeBridge, useFocusModePanes } from './panes/focus-mode-panes.js';
 import { TitleBar } from './title-bar/title-bar.js';
 import { useConfigWriteFailureNotices } from './config/config-write-notices.js';
 import { railWidthPx } from './panes/rail-width.js';
@@ -352,8 +353,11 @@ export function App(): ReactElement {
   const [autoLeft, setAutoLeft] = useState(false);
   const [autoRight, setAutoRight] = useState(false);
   const [shellWidth, setShellWidth] = useState(0);
-  const leftShown = leftVisible.value && !autoLeft;
-  const rightShown = rightToggle.value && !autoRight;
+  // #635 — Focus Mode collapses both panes (derived, never stored) and exit restores their entry state.
+  const [focusActive, setFocusActive] = useState(false);
+  const focusPanes = useFocusModePanes(focusActive);
+  const leftShown = focusPanes.shown('projects', leftVisible.value && !autoLeft);
+  const rightShown = focusPanes.shown('files', rightToggle.value && !autoRight);
   // 068 FR-082: a collapsed pane's strip and its show control share ONE hover, so the hover is the pane's.
   const leftHover = useCollapsedHover(!leftShown);
   const rightHover = useCollapsedHover(!rightShown);
@@ -443,15 +447,19 @@ export function App(): ReactElement {
   // auto-collapse flag and records the user's intent; because the coordinator above
   // does NOT run on this state change, the pane opens and stays open even at the
   // minimum window size (the workspace simply gets smaller).
+  // #635 — during Focus Mode a toggle or reveal shows or hides the pane for that Focus Mode only, so the
+  // stored preference (067 FR-056) still holds the entry state for the exit to restore.
   const toggleLeft = (): void => {
-    if (leftShown) leftVisible.set(false);
+    if (focusPanes.active) focusPanes.set('projects', !leftShown);
+    else if (leftShown) leftVisible.set(false);
     else {
       setAutoLeft(false);
       leftVisible.set(true);
     }
   };
   const toggleRight = (): void => {
-    if (rightShown) rightToggle.set(false);
+    if (focusPanes.active) focusPanes.set('files', !rightShown);
+    else if (rightShown) rightToggle.set(false);
     else {
       setAutoRight(false);
       rightToggle.set(true);
@@ -461,13 +469,17 @@ export function App(): ReactElement {
   // when the pane is already shown, so `focus.explorer` / `focus.projects` never hide a pane that
   // was already open the way a plain toggle would.
   const revealLeft = (): void => {
-    if (!leftShown) {
+    if (leftShown) return;
+    if (focusPanes.active) focusPanes.set('projects', true);
+    else {
       setAutoLeft(false);
       leftVisible.set(true);
     }
   };
   const revealRight = (): void => {
-    if (!rightShown) {
+    if (rightShown) return;
+    if (focusPanes.active) focusPanes.set('files', true);
+    else {
       setAutoRight(false);
       rightToggle.set(true);
     }
@@ -478,6 +490,7 @@ export function App(): ReactElement {
       <WorkspaceProvider client={workspace} activeProjectId={activeProject?.id ?? null}>
         <DetachProvider>
         <SidePanesBridge onSync={setPaneSync} />
+        <FocusModeBridge onChange={setFocusActive} />
         <div className="throng-root">
           <AppTitleBar />
           {!appReady ? <AppLoading /> : null}

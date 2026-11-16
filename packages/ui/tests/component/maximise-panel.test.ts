@@ -97,6 +97,17 @@ describe('the header control (FR-071)', () => {
     expect(screen.getByTestId('panel-p2')).not.toHaveAttribute('inert');
     expect(JSON.stringify(m!.ws().layout!.tabs[0]!.root)).toBe(before);
   });
+
+  it('Exit Focus Mode is never announced as disabled: no header ancestor carries aria-disabled (#635)', async () => {
+    // The drag that FR-074 turns off while maximised once spread dnd-kit's `aria-disabled="true"` over the
+    // whole header, so every control in it — Exit Focus Mode included — read as disabled to assistive tech.
+    const user = userEvent.setup({ delay: null });
+    await mount();
+    await user.click(screen.getByTestId('panel-maximise-p1'));
+    const button = screen.getByTestId('panel-maximise-p1');
+    expect(button.closest('[aria-disabled="true"]')).toBeNull();
+    expect(button).toBeEnabled();
+  });
 });
 
 describe('the title menu row (FR-071, FR-077)', () => {

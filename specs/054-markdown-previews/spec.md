@@ -692,7 +692,17 @@ starting state; repeat with a diagram's Full Pane.
     preview) MUST cover the maximised panel's area rather than restoring it, and Esc / Restore steps
     back **one level at a time** (diagram → maximised panel → layout). Maximising a **different panel**
     restores whatever is maximised first; the stack is never deeper than a panel plus its sections.
-  Actions outside the tab — side panes, other tabs, the title bar, other windows — are unaffected.
+  Actions outside the tab — other tabs, the title bar, other windows — are unaffected. The side panes
+  follow FR-074a.
+- **FR-074a** *(2026-11-16, #635 — supersedes "side panes … are unaffected" in FR-074's last line)*: While
+  the **active** tab holds a maximised **panel**, both side panes MUST be collapsed, as their own toggles
+  collapse them. Leaving Focus Mode by any route MUST return each pane to the state it had on entry. The
+  collapse is derived, like a collapse caused by window width (067 FR-058): it MUST NOT be written as the
+  project's pane preference (067 FR-056) or the window's own flags. A pane's toggle, `focus.explorer` and
+  `focus.projects` (046 FR-016) MUST still show a pane during Focus Mode, for that Focus Mode only, so exit
+  still restores the entry state. Focus Mode is per tab (FR-073), so a tab with nothing maximised shows the
+  panes as stored and returning to the maximised tab collapses them again. A section maximised with no
+  panel maximised (a diagram's Full Pane over its preview) is not Focus Mode and leaves the panes alone.
 - **FR-075**: A maximised **panel's type** can still change in place (e.g. a terminal exits and the
   panel becomes another type); it stays maximised. A maximised **section** whose panel closes, or whose
   section disappears (the diagram's block is deleted from the source), MUST restore automatically.
