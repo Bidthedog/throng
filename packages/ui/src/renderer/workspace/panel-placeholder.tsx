@@ -929,6 +929,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         }}
         {...dragFromNonInteractive(listeners)}
         {...attributes}
+        // dnd-kit marks a disabled drag `aria-disabled` on the handle — here the whole header — so while a tab
+        // is maximised (FR-074 turns the drag off) every control in it, Exit Focus Mode included, read as
+        // disabled to assistive tech. The drag being off is not the header being unavailable.
+        aria-disabled={undefined}
       >
         {/* 044 FR-104 — Back / Forward, top left, before the type icon, on editors and previews only (FR-100). */}
         {hasHistory ? (

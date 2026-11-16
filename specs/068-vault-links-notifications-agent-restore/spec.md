@@ -265,7 +265,7 @@ A user has Claude Code running in several terminal panels that have "Remember th
 - An image embed inside inline code or a code block stays literal (047 FR-050's rule for wikilinks).
 - A burst of notices (a project with many failed terminals at startup): their toasts leave after the toast duration, and the persistent ones fill the panel, which scrolls; grouped notices still group as 030 FR-037 describes.
 - A persistent notice is raised in a window with no Notifications panel — Preferences, the Resource Monitor, a sub-workspace window: FR-030.
-- The right pane is hidden by its toggle, or auto-collapsed on a narrow window: a persistent notice arriving then follows FR-039a. (Focus Mode maximises a tab and does not hide the side panes.)
+- The right pane is hidden by its toggle, or auto-collapsed on a narrow window: a persistent notice arriving then follows FR-039a. (Focus Mode collapses both side panes, 054 FR-074a (2026-11-16, #635, superseding this note's earlier "does not hide the side panes"), so a notice arriving in Focus Mode follows FR-039a and FR-060 on the collapsed rail.)
 - The user closes a persistent notice's toast with its X: the panel entry stays (FR-022).
 - The panel reaches its limit while the user is away: the oldest entries are dropped as new ones arrive, and the FR-031f warning waits on screen.
 - The user lowers the limit from 300 to 50 with 120 entries: the oldest 70 are dropped and logged.
