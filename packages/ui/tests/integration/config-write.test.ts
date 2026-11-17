@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_APP_SETTINGS, THRONG_THEME, type IConfigSettings } from '@throng/core';
+import { watchStarted } from '@throng/core/testing';
 import { FileConfigStore } from '../../src/main/config-store.js';
 import { writeConfigDoc } from '../../src/main/config-write-ipc.js';
 import { readConfigPayload, startConfigWatcher, type ConfigPayload } from '../../src/main/config-watcher.js';
@@ -68,6 +69,9 @@ describe('config.write — writeConfigDoc', () => {
       broadcast: (p) => broadcasts.push(p),
     });
     try {
+      // The write must land after the watch is live: on a loaded hosted Mac, libuv's FSEvents stream starts an instant
+      // after watch() returns, and a write inside that instant is never reported.
+      await watchStarted();
       const next = { ...DEFAULT_APP_SETTINGS, appearance: { theme: 'cyberpunk' } };
       await writeConfigDoc(store, { kind: 'settings' }, JSON.stringify(next));
       await waitFor(() => broadcasts.some((p) => p.settings.appearance.theme === 'cyberpunk'));

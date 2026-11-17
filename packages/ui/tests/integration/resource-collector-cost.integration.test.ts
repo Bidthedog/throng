@@ -14,6 +14,11 @@
  * processes; 0.52% after. Most of what is left is the kernel's process-table read, which grows with
  * everything running in the session, so the margin is real but not unlimited.
  *
+ * SC-004 is a claim about the machine the requirement describes, so the 1% is asserted only there: not on CI, and not
+ * where THRONG_NON_REFERENCE_HARDWARE is set (gate.yml sets it). Elsewhere the reading is logged as not measured,
+ * never relaxed: a hosted macOS runner read 1.03%, its process table being slower to read than the development
+ * machine's. The rule and its reasons are the E2E SLAs' (throng-testing, references/performance-sla.md).
+ *
  * Elevated, a second case opens the monitor once first, so the network trace (FR-113, research R20) is
  * running for the whole window: it is started on the first detail tick and kept, and SC-011 requires the
  * collector to stay inside SC-004 with it.
@@ -30,6 +35,8 @@ import { WindowsElevation, WindowsProcessMetrics } from '@throng/platform-window
 
 const ENTRY = fileURLToPath(new URL('../../dist/collector/resource-collector-entry.js', import.meta.url));
 const WINDOW_MS = 30_000;
+/** Whether SC-004's ceiling is adjudicated here: the E2E SLAs' rule (`slaMeasurable`), less its worker count. */
+const REFERENCE_HARDWARE = !process.env.CI && !process.env.THRONG_NON_REFERENCE_HARDWARE;
 
 /** Ten terminals' worth of roster, naming processes that may or may not exist — the attribution runs either way. */
 const ROSTER: ResourceRoster = {
@@ -86,9 +93,13 @@ async function measure(withTrace: boolean): Promise<void> {
     const c1 = await cpu();
     const elapsedMs = performance.now() - t0;
     const percentOfOneCore = ((c1 - c0) / 10_000 / elapsedMs) * 100;
-    console.log(`[sla] collector cost: ${percentOfOneCore.toFixed(2)}% of one core`);
     expect(summaries).toBeGreaterThanOrEqual(WINDOW_MS / 2_000 - 1);
-    expect(percentOfOneCore).toBeLessThan(1);
+    if (REFERENCE_HARDWARE) {
+      console.log(`[sla] collector cost: ${percentOfOneCore.toFixed(2)}% of one core`);
+      expect(percentOfOneCore).toBeLessThan(1);
+    } else {
+      console.log(`[sla-not-measured] 055 SC-004 collector cost: ${percentOfOneCore.toFixed(2)}% of one core (not reference hardware)`);
+    }
   } finally {
     // Disconnect, as main does: the collector then exits normally and stops its trace session. A kill is
     // TerminateProcess here, which runs no exit handler and would leave the session to the next collector.
