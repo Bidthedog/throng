@@ -13,6 +13,7 @@ import {
   V6_SEARCH_MATCH_COLOURS,
   buildShippedDefaults,
   reservedThemeNames,
+  toCssVariables,
   type ShippedDefaults,
   type Theme,
 } from '@throng/core';
@@ -646,9 +647,10 @@ describe.skipIf(skipOnMacos('upgrades a Windows or Linux seed from before v14; n
     // and 056 to 23 (the `warning` icon token), and 057 to 24 (the attention mark tokens),
     // and 060 to 25 (`busy`, `groupFolderTree`), then 060's hand-test round to 26 (the plain glyphs),
     // then 060 #532 to 27 (`projectSettings`, `searchExclusions`), and 059 to 28 (the `whitespace` icon token),
-    // and 055 to 29 (its twelve resource monitor icon tokens), and 069 to 34 (icons leave every theme).
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(34);
-    expect(await service.readAppliedVersion()).toBe(34);
+    // and 055 to 29 (its twelve resource monitor icon tokens), and 069 to 34 (icons leave every theme),
+    // then to 35 (`fileIconOther` reaches every theme file, FR-070).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(35);
+    expect(await service.readAppliedVersion()).toBe(35);
   });
 
   it('a second upgrade writes nothing', async () => {
@@ -670,5 +672,42 @@ describe.skipIf(skipOnMacos('upgrades a Windows or Linux seed from before v14; n
     const afterFirst = readFileSync(join(root, 'keybindings.json'), 'utf8');
     await service.upgrade();
     expect(readFileSync(join(root, 'keybindings.json'), 'utf8')).toBe(afterFirst);
+  });
+});
+
+/**
+ * Every theme setting is stored with its theme, so it changes when the theme does (069 FR-070).
+ *
+ * The maintainer switched themes and the file icon colours stayed put. 069 shipped version 34 and then
+ * added `fileIconOther` to every theme's record without moving the version, so an install already at 34
+ * never wrote it into a theme file: each theme then drew THRONG's value, the same one in every theme.
+ *
+ * This drives the startup decision exactly as `main.ts` makes it — upgrade when the applied version is
+ * not the record's — on a configuration written by version 34's record, then reads what each theme
+ * would paint.
+ */
+describe('a theme setting follows its theme across a switch (069 FR-070)', () => {
+  it('two themes that ship different Other File Icons colours paint them differently after startup', async () => {
+    const root = freshRoot();
+    const store = new FileConfigStore(root);
+    // What version 34 wrote: every theme as shipped, before fileIconOther existed.
+    const v34Themes: Record<string, Theme> = {};
+    for (const [name, theme] of Object.entries(SHIPPED.themes)) {
+      const colours = { ...theme.colours } as Record<string, string>;
+      delete colours.fileIconOther;
+      v34Themes[name] = { ...theme, colours } as Theme;
+    }
+    await new ShippedDefaultsService(store, { ...SHIPPED, version: 34, themes: v34Themes }).seed();
+
+    // Startup, as main.ts does it.
+    const service = new ShippedDefaultsService(store, SHIPPED);
+    if ((await service.readAppliedVersion()) !== SHIPPED.version) expect((await service.upgrade()).ok).toBe(true);
+
+    const painted = (name: string): string | undefined =>
+      toCssVariables(readJson(join(root, 'themes', `${name}.json`)) as Theme)['--throng-colour-fileIconOther'];
+    // Precondition: the two themes ship different values, so a switch between them must show a change.
+    expect(SHIPPED.themes.Snake.colours.fileIconOther).not.toBe(SHIPPED.themes['English Garden'].colours.fileIconOther);
+    expect(painted('Snake')).toBe(SHIPPED.themes.Snake.colours.fileIconOther);
+    expect(painted('English Garden')).toBe(SHIPPED.themes['English Garden'].colours.fileIconOther);
   });
 });

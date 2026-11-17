@@ -485,8 +485,9 @@ and the last folder chosen for a new project — which is not a preference.
 **Themes** — throng ships 14: **throng** (the default), Light, Snake, Gothic, Windows Terminal, Bash,
 VSCode, VI-VIM, English Garden, Matrix, Cyberpunk, Claude, Debian and Ubuntu. The **Themes** tab
 edits every token of a theme — colours, fonts and sizes, syntax colours, the icon colour and icon
-set — each with a plain-language label, using colour and size pickers drawn from the theme itself. **Clone** is
-how you make a theme of your own. Contrast is guarded automatically. The seven **File Icons** colours, under File Explorer, colour file icons by kind — code, markup,
+set — each with a plain-language label, using colour and size pickers drawn from the theme itself. Every one of
+those is stored in the theme's own file, so an edit belongs to the theme you made it in, and switching theme
+brings back everything that theme holds. **Clone** is how you make a theme of your own. Contrast is guarded automatically. The seven **File Icons** colours, under File Explorer, colour file icons by kind — code, markup,
 data, documents, media, archives and scripts — in the File Explorer and Find in Files, and **Other File
 Icons** colours a file of a kind throng does not recognise, in a neutral grey apart from the folders; every
 bundled theme sets all eight, and clearing one gives those icons the Icon Colour. **Title Bar Background**, under General, is

@@ -85,6 +85,12 @@ Token in the theme model + `theme-metadata.ts`, a value in every default theme, 
 themes tab, and no hardcoded colour at the call site — `css-variables-defined`, `theme-usage`,
 `surface-token-roles`, `icon-tokens-exist` and `no-inline-artwork` will catch you.
 
+**Bump `SHIPPED_DEFAULTS_VERSION` in the same change** and append the leaf to
+`packages/core/tests/fixtures/theme-leaves-by-version.json` under the new version. Theme files on disk
+receive a new token only through the additive upgrade that version gates; without it every existing
+install draws no value of its own for the token, in any theme (constitution X, *Every theme setting
+belongs to its theme*). `theme-leaves-version.test.ts` fails the build otherwise.
+
 ## Testing altitude
 
 Almost nothing here is an E2E. A descriptor, a bound, a clamp, a default, a format and a collision

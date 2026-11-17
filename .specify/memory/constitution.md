@@ -1,6 +1,32 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.8.0 → 6.9.0
+Bump rationale: MINOR — Principle X gains "Every theme setting belongs to its theme": everything a theme governs is
+                stored in that theme's file, activating a theme restores all of it, and a token added to the shipped
+                themes moves SHIPPED_DEFAULTS_VERSION so that every existing theme file receives it. From the
+                maintainer's spec 069 review (2026-11-17: "Every theme setting should be saved / restored with each
+                theme. This should be a constitution statement."). Additive guidance within an existing principle; no
+                guarantee is withdrawn.
+Modified principles: X (new sub-rule after its bullets).
+Added sections: none. Removed sections: none.
+Audit (2026-11-17): every theme value — colours, fonts, sizes, typography, the icon set and the icon colour — is
+                already a key of the theme document; no settings key holds one. One violation, found because the
+                maintainer saw it: 069 added `fileIconOther` to every shipped theme after version 34 was on disk, so
+                no install at 34 received it and each theme drew none of its own. Fixed in the same change (version
+                35, 069 FR-070), with `packages/core/tests/unit/theme-leaves-version.test.ts` failing the build for a
+                theme leaf added or removed under an unchanged version. One known gap stays open: a theme file
+                missing a token (deleted in the Themes JSON tab) draws throng's value, because `toCssVariables`
+                merges every theme over `THRONG_THEME`. Its issue is listed under Deferred.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks registered.
+           ✅ .claude/skills/throng-config-preferences/SKILL.md — its theme-token checklist gains the version step.
+Deferred: the JSON-tab gap above — a tracked issue is to be filed (the filing was refused in the session that made
+          this amendment; the body is ready).
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.7.0 → 6.8.0
 Bump rationale: MINOR — the "Action controls" quality gate gains "Toast controls": every button a notice offers
                 sits in the card's one control group at its top-right, to the left of Copy and Dismiss, never in
@@ -2978,6 +3004,23 @@ Configuration MUST be separated from code.
 - Defaults MUST be sensible and documented; environment- or machine-specific
   values MUST be overridable without code changes.
 
+**Every theme setting belongs to its theme (v6.9.0).** Switching theme is a promise that the whole
+look changes with it.
+
+- Everything a theme governs — every colour, font, size and typography role, its icon set and its
+  icon colour — MUST be stored in that theme's file, and nowhere else. No theme value lives in the
+  settings, in another theme, or in the session.
+- Activating a theme MUST restore every one of those values from its file. Nothing from the theme
+  that was active before may remain on screen, and an edit MUST be written to the theme it was made
+  in.
+- An optional token left unset is the theme's own choice, stored with it like any value.
+- A token added to the shipped themes MUST reach every theme file already on disk, through the
+  additive upgrade that `SHIPPED_DEFAULTS_VERSION` gates, so the version moves in the same change.
+  `theme-leaves-version.test.ts` fails the build for a theme leaf added or removed under an
+  unchanged version.
+- Known gap: a theme file missing a token, which the Themes JSON tab can produce, draws throng's
+  value for it, because `toCssVariables` merges every theme over the default theme. Do not add to it.
+
 Rationale: Externalised, injected configuration keeps the codebase portable
 across machines and future operating systems, makes behaviour testable by
 substituting settings, and prevents magic values from scattering through the
@@ -3388,7 +3431,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.8.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-16
+**Version**: 6.9.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-17
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and

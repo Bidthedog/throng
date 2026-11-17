@@ -504,6 +504,10 @@ icon sets folder in a plain text editor and follow it to override one icon.
   cursor. Lucide's row in the third-party list MUST read like every other package's — name, version and a
   licence link — with no control to show its licence text; FR-022's notice still ships in the application's
   third-party licence data and beside the art.
+- **FR-070**: Every setting a theme governs MUST be stored with that theme and restored when it is activated
+  (constitution 6.9.0, Principle X). In particular every file icon colour, Other File Icons (FR-064) included,
+  MUST reach every theme file already on disk, so `SHIPPED_DEFAULTS_VERSION` moves to 35 for it; switching
+  between two themes that ship different file icon colours MUST change them.
 
 **Upgrade**
 
@@ -676,6 +680,8 @@ icon sets folder in a plain text editor and follow it to override one icon.
 - Q: Why does Lucide have a "show licence text" control in About's third-party list? → A: It should not:
   list it like every other package. And the licence box's scrollbar must show the arrow, not the text
   cursor (maintainer, 2026-11-17; FR-069).
+- Q: Switching theme leaves the file icon colours as they were. → A: Every theme setting is saved and restored
+  with its theme, and that is a constitution statement (maintainer, 2026-11-17; FR-070, constitution 6.9.0).
 - Q: Does this feature cover macOS, which spec 070 made a supported target while it was in review? → A:
   Yes, at 070's level: everything here ships on macOS too and is proved there by CI alone, with no hand
   test on a Mac (constitution 6.6.0, Principle II; maintainer, 2026-11-16). Preferences on macOS keeps the
