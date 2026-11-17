@@ -24,9 +24,9 @@ Only the infra class has a bounded, evidenced retry path in CI; the test gate ne
 
 ## Adding a spec file — two registrations, both enforced
 
-1. **Tag every test in it.** Exactly one significance tag (`@core`, which gates CI and is capped at
-   50, or `@extended`, which runs in the gate and at release) and at least one category tag. A test with neither
-   runs in no lane and would disappear silently — the property the deleted shard plan used to guard,
+1. **Tag every test in it.** Exactly one significance tag (`@core`, a critical journey, or `@extended`, a
+   regression check; both run in every full pipeline run) and at least one category tag. A test with neither
+   would fall outside every selection and disappear silently — the property the deleted shard plan used to guard,
    now checked per test rather than per file.
 2. `packages/ui/tests/e2e/parallel-plan.json` — required if the spec **opens the preferences window,
    drives a context menu, or runs a long-lived real shell**. throng closes menus on blur, so a
@@ -102,8 +102,8 @@ user-facing UI change"* — was removed at constitution v5.0.0, because it was a
 grew the suite without bound. Before adding an E2E, answer in one sentence what a lower layer would
 be unable to see.
 
-Every E2E test carries exactly one significance tag (`@core`, which gates CI and is capped, or
-`@extended`, which runs in the gate and at release) and at least one category tag; the build fails otherwise, and
+Every E2E test carries exactly one significance tag (`@core`, a critical journey, or
+`@extended`, a regression check; both run in every full pipeline run) and at least one category tag; the build fails otherwise, and
 fails again if the suite exceeds its declared budget. Deleting an E2E is allowed and has one rule:
 the lower-layer replacement is written and observed **failing** against a broken implementation
 first.

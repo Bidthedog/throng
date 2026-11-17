@@ -21,7 +21,7 @@ the runner account's `~/Applications` as a user would. `gatekeeper-first-launch`
 refusal is proved through `THRONG_TEST_EXEC_PATH`. `macarchive` has no `in-use-upgrade`.
 
 **Moving the runner range** when Apple ships a new macOS: change the two labels in `.github/macos-runners.json` and
-nothing else. Every macOS job in `ci.yml`, `gate.yml` and `release.yml` reads them from there, and
+nothing else. Every macOS job in `pipeline.yml` reads them from there, and
 `macos-runners.test.ts` fails a workflow that names a label of its own.
 
 ## What is proved
@@ -163,7 +163,7 @@ A dispatch with `-f hand_tests=true` also runs the branch's manual test plan (MT
 a person at a VM:
 
 ```sh
-gh workflow run release.yml --ref <branch> -f publish=false -f skip_e2e=true -f hand_tests=true
+gh workflow run pipeline.yml --ref <branch> -f stages=package,verify -f hand_tests=true
 ```
 
 `scripts/verify-hand-tests.mjs` drives the real installers' dialogs through Windows UI Automation

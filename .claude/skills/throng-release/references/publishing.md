@@ -92,7 +92,7 @@ When all five hold, publication:
 
 The publish job runs only on a version tag, so the `gh release create` call itself, the on-`master`
 check and the prerelease flag are not reachable from an ordinary push. Everything upstream of them is
-— a `workflow_dispatch` builds, reconciles, verifies every artifact and renders the body, and never
+— a `pipeline.yml` dispatch builds, reconciles, verifies every artifact and renders the body, and never
 publishes. Use that as the rehearsal (the command is in
 [`SKILL.md`](../SKILL.md#when-something-breaks)); see
 [spec 042's plan](../../../../specs/042-release-notes-and-artifacts/plan.md) for the full breakdown

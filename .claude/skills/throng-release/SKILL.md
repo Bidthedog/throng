@@ -1,6 +1,6 @@
 ---
 name: throng-release
-description: Cut a throng release end to end, UNATTENDED — settle the version (the one named, or the next on the current prerelease track), sweep the dependencies (npm audit, patch and minor updates) as the release branch's first commit, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, bring the docs current, run the full gate, tag it, watch release.yml build, verify and publish every artifact with no human gate, and fix whatever breaks through its own PR and go again until a release is published. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. A release request is the whole authorisation: never stop to ask for the version, a sign-off, a merge or a re-run — the only stops are the ones in "When to stop". This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates. It also carries the build pipeline's area knowledge — tsc project references, the Vite renderer build, electron-builder and the NSIS installer, the bundled host-Node runtime, native module ABI errors, "the packaged app cannot find X", and GitHub Actions workflow edits.
+description: Cut a throng release end to end, UNATTENDED — settle the version (the one named, or the next on the current prerelease track), sweep the dependencies (npm audit, patch and minor updates) as the release branch's first commit, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, bring the docs current, run the full pipeline, tag it, watch release.yml build, verify and publish every artifact with no human gate, and fix whatever breaks through its own PR and go again until a release is published. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. A release request is the whole authorisation: never stop to ask for the version, a sign-off, a merge or a re-run — the only stops are the ones in "When to stop". This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates. It also carries the build pipeline's area knowledge — tsc project references, the Vite renderer build, electron-builder and the NSIS installer, the bundled host-Node runtime, native module ABI errors, "the packaged app cannot find X", and GitHub Actions workflow edits.
 ---
 
 # Releasing throng
@@ -14,11 +14,13 @@ overview.
 
 **The maintainer asks once, and the next thing they hear is a published release or a stop report.**
 Nobody signs off, approves a merge, or answers a question on the way (spec 065). The request is the
-authorisation for every run this skill dispatches — `gate.yml`, `release.yml`, re-runs — and every PR
+authorisation for every run this skill starts — `pipeline.yml` dispatches, the tag's `release.yml` run,
+re-runs, `release-discard.mjs` — and every PR
 it opens and merges, the dependency PR and fix PRs included.
 
 So: never end a turn mid-release to report progress or ask. A one-line progress note, then the next
-step. The waits are long (the gate ~1 h, `release.yml` ~1.5 h): one blocking watch each, and a
+step. The waits are long (a full `pipeline.yml` run, then `release.yml`, which runs the pipeline again
+before it publishes): one blocking watch each, and a
 `PushNotification` only for the final result or a stop.
 
 ### When to stop
@@ -62,9 +64,9 @@ How prerelease suffixes are compared and published: [references/versioning.md](r
 
 ```
 preflight → branch → dependency sweep (own commit) → CHANGELOG → version bump → docs
-  → test-suite audit → local checks → commit → PR → gate.yml (full) → merge → tag
-  → release.yml (full E2E → package → reconcile → verify ×9 combinations → coexistence
-  → render body → sign → publish → repositories) → target milestone's description
+  → test-suite audit → local checks → commit → PR (CI verdict) → pipeline.yml (full) → merge → tag
+  → release.yml (on-master → full pipeline: every test, package, reconcile, verify every combination,
+  coexistence, render body → sign → publish → repositories) → target milestone's description
 any failure → fix (own PR, merged) → back to the earliest step the fix invalidates
 ```
 
@@ -86,10 +88,10 @@ node scripts/release-preflight.mjs   # exit 0, or a line for each thing to fix
 
 - **Every line `release-preflight` prints is yours to fix, before the version is settled. Do not ask.**
   (065 FR-013.) Exit 2 means it could not read the facts: an outside fault, retried once.
-  - `[master]` is a red `release.yml`, a red full gate, a green only on a re-run, or an open nightly
-    issue. Treat it as a [failure to fix](#12-fix-and-go-again); a flake gets a real fix, with the
-    issue closed by its PR. Then `gh workflow run gate.yml --ref master`, wait for that gate and the
-    fix's own `release.yml` run on master, and run the preflight again.
+  - `[master]` is a red latest full pipeline on master, a green only on a re-run, or an open
+    "Nightly pipeline failed on master" issue. Treat it as a [failure to fix](#12-fix-and-go-again); a
+    flake gets a real fix, with the issue closed by its PR. Then `gh workflow run pipeline.yml --ref master`,
+    wait for it (a full green run on master's head closes the issue), and run the preflight again.
   - `[environment]` means the `release` Environment drifted from 065 FR-005. Apply it yourself: `PUT`
     `repos/{owner}/{repo}/environments/release` with no reviewers and `custom_branch_policies: true`,
     then `POST` `v*` (type `tag`) to its `deployment-branch-policies`. A guard refusing that is a
@@ -250,7 +252,7 @@ architecture means deleting its exclude there, or the packaged daemon cannot ope
 
 **Prove it locally before committing, because native code moved.** Electron and `koffi` ship binaries the
 daemon loads under the bundled host-Node runtime, so a patch bump is not a no-op. The OS-heavy layers
-are proved by the release's full gate (step 9), which runs on the tree this sweep leaves:
+are proved by the release's full pipeline run (step 9), which runs on the tree this sweep leaves:
 
 ```sh
 npm run build && npm run typecheck && npm run lint
@@ -288,7 +290,7 @@ already become slow. Do it on the release branch, alongside the docs audit, **be
 
 1. **Measure.** `td` (test-discipline) runs every layer through `.test-discipline/adapters.json`.
    Record a fresh smoke-tier run per vitest runner — `td run --runner <unit|component|integration|contract> --tier smoke --no-bail` —
-   and read the E2E stage and per-job durations from the last green `gate.yml` run. Never run the E2E
+   and read the E2E stage and per-job durations from the last green full `pipeline.yml` run. Never run the E2E
    suite locally for this.
 2. **Audit.** Dispatch the `test-discipline:test-auditor` agent, per the `writing-tests` skill's
    `references/suite-audit.md` (*Dispatching the audit*). For a large suite, segment it into disjoint
@@ -329,14 +331,14 @@ verdict == tag, and what the release carries over the previous one.
 
 ```sh
 git push -u origin release/v<version>
-gh pr create --title "chore(release): <version>" --body-file <file>      # not a draft: CI must run
+gh pr create --title "chore(release): <version>" --body-file <file>      # PR CI runs on every push
 ```
 
-Then **the full gate — every release, no exceptions** (065 FR-008). CI's lanes run on the PR, but
-`gate.yml` is what establishes done-ness:
+Then **the full pipeline — every release, no exceptions** (065 FR-008). PR CI runs on the PR, but a
+full `pipeline.yml` run is what establishes done-ness:
 
 ```sh
-gh workflow run gate.yml --ref release/v<version>
+gh workflow run pipeline.yml --ref release/v<version>
 gh run watch <run-id> --exit-status                              # one blocking watch
 gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
@@ -344,9 +346,9 @@ gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 Take the verdict from `run view`. `gh run watch` detaches early and its exit code lies in both
 directions. If `status` is not `completed`, the watch gave up and the run is still going.
 
-Merge once the gate is green and the PR's required checks pass on the head commit:
+Merge once that run is green and the PR's `CI verdict` passes on the head commit:
 `gh pr merge <n> --rebase` (merge commits are disabled). Any red is a [failure to fix](#fix-and-go-again).
-A change to the release branch after a green gate needs the gate again, unless the tree is unchanged
+A change to the release branch after a green run needs another, unless the tree is unchanged
 (`git diff --stat <green-sha> HEAD` empty).
 
 ## 10. Tag
@@ -366,17 +368,22 @@ Never force-push a tag, and never move one that has published. The tagged commit
 ### Re-cutting an unpublished tag
 
 A tag whose `release.yml` run failed **before `publish` created the release** was never released, so
-the version is still free (065 FR-011). Once the fix has merged and the release branch is rebased and
-re-gated:
+the version is still free (065 FR-011, 072 FR-031). What to do depends on the failure:
+
+- **An infrastructure fault** — a runner lost, a dependency download failed: re-run the failed jobs of
+  the same run on the same tag, `gh run rerun <run-id> --failed`. No re-tag.
+- **A test or build failure**: discard the attempt, fix it, and tag the same version again.
 
 ```sh
-gh release view v<version> >/dev/null 2>&1 && echo "PUBLISHED: cut the next version instead"
-git push origin --delete v<version> && git tag -d v<version>
-# then step 10 again, on the new master commit
+node scripts/release-discard.mjs v<version> --dry-run   # the plan; exit 3 means it is published
+node scripts/release-discard.mjs v<version>             # deletes the tag and that attempt's installers
+git tag -d v<version>
+# fix through its own PR (step 12), then step 10 again, on the new master commit
 ```
 
-If `publish` created the release, the version is spent: the fix goes into the next version. A failure
-in `deploy-repositories` alone never needs a re-cut — re-run that job.
+`release-discard.mjs` keeps the test evidence and refuses a published release. If `publish` created the
+release, the version is spent: the fix goes into the next version. A failure in `deploy-repositories`
+alone never needs a re-cut — re-run that job.
 
 ## 11. Watch `release.yml`
 
@@ -386,29 +393,27 @@ gh run watch <run-id> --exit-status                              # one blocking 
 gh run view <run-id> --json status,conclusion,jobs --jq '{status,conclusion,failed:[.jobs[]|select(.conclusion=="failure")|.name]}'
 ```
 
-**Two runs start, not one.** `release.yml` triggers on a push to `master` and on a `v*` tag, so the
-merge and the tag each fire one. They do not cancel each other — the concurrency group is keyed to
-the ref. The `master` run does everything except publish and is pure duplication; it is free on a
-public repo, so leave it unless runner minutes are being watched. **Take every verdict from the tag
-run**, which is the one carrying the publish job.
+**One run starts**: `release.yml` triggers on a `v*` tag and nothing else — nothing runs on the merge.
 
-The jobs, each gating the next (`needs` in brackets):
+The jobs, each gating the next (`needs` in brackets). Everything up to the body runs inside the called
+pipeline, so its jobs read `pipeline / <job>` in the run view, and it fails fast: the first failing job
+cancels the run.
 
-1. **E2E (full suite)** `e2e-full` — everything except `@core`'s 50; one worker, no shards. A red
-   suite means no artifact. **`e2e-reuse` omits it** when a full gate was green at its first attempt
-   on this exact tree (065 FR-014), the normal case once step 9's gate has passed and the release PR
-   has rebase-merged onto an unmoved master. The job summary names the gate it took the verdict from.
+0. **On master** `on-master` — refuses a tag whose commit is not on `master`, before anything else.
+1. **The full pipeline** `pipeline` [on-master] — `pipeline.yml` called with every stage on every
+   platform: lint, typecheck, unit, component, integration, contract, E2E sharded per platform, `@admin`,
+   calibration, then the build and verification jobs below. A red test means no publication.
 2. **Work out the verification matrix** `combinations` (ubuntu, beside the E2E) — emits
    `artifact-set.mjs list --combinations --json`.
-3. **Build the release artifacts** `build-installer` [e2e-full] — `npm run package`, then
+3. **Build the release artifacts** `build-installer` — `npm run package`, then
    `artifact-set.mjs reconcile`, which fails in **both** directions: a declared artifact that was not
    built, and a built artifact nobody declared. Four uploads (`throng-setup`, `throng-msi`,
    `throng-portable`, `throng-archive`); a guard step fails if the declared roles and the uploads
    differ. ~5 min.
-4a. **Build the Linux packages** `build-linux` [e2e-full] and **Verify `deb`/`rpm`/`tarball`** `verify-linux` ×3 —
+4a. **Build the Linux packages** `build-linux` and **Verify `deb`/`rpm`/`tarball`** `verify-linux` ×3 —
    on `ubuntu-22.04` and `ubuntu-24.04`, the `.rpm` in a Fedora container. `render-body` and `publish` need both.
    Detail: [references/verification.md](references/verification.md#linux).
-4b. **Build the macOS copies** `build-macos` [e2e-full] and **Verify `dmg`/`macarchive`** `verify-macos` ×4 — each
+4b. **Build the macOS copies** `build-macos` and **Verify `dmg`/`macarchive`** `verify-macos` ×4 — each
    copy on both runners in `.github/macos-runners.json` (current and previous macOS). `render-body` and `publish`
    need both. Detail: [references/verification.md](references/verification.md#macos).
 4. **Verify `<combination>`** `verify-installer` ×6 [build-installer, combinations] — one fresh runner
@@ -421,9 +426,10 @@ The jobs, each gating the next (`needs` in brackets):
 6. **Render the release body** `render-body` [all of the above, `!cancelled()`] — runs the gate
    (any refusal fails it), writes `unproven` steps to the job summary, and uploads `release-body`
    (`release-body-preview.md` + `verification-gaps.json`).
-7. **Sign the repository indexes** `sign-index` — tag runs only. Refuses a tag not on `master`, then
+7. **Sign the repository indexes** `sign-index` [on-master, pipeline] — the first job that can read the
+   signing key. Refuses a tag not on `master`, then
    builds, signs and uploads the `repo-index-bundle` run artifact. No approval.
-8. **Publish** [… , sign-index] — tag runs only, the same on-`master` check, then ~3 min to
+8. **Publish** [on-master, pipeline, sign-index] — the same on-`master` check, then ~3 min to
    compute the checksums, compose the body and create the release with the signed
    `throng-repo-index-<version>.tar.gz` attached. It has to go in at creation: the repository has immutable releases
    on, so nothing can be added afterwards (#571, which is why v1.0.0-alpha13 never reached the repositories).
@@ -458,7 +464,7 @@ each verification step proves, and the four-outcome verdict model, is
 
 ## 12. Fix and go again
 
-**Any failure — a local check, a required check, the gate, a `release.yml` job — is diagnosed, fixed
+**Any failure — a local check, `CI verdict`, a `pipeline.yml` run, a `release.yml` job — is diagnosed, fixed
 through its own PR, and the release resumes** (065 FR-009). Nothing is handed back unless a
 [stop condition](#when-to-stop) holds.
 
@@ -475,8 +481,8 @@ through its own PR, and the release resumes** (065 FR-009). Nothing is handed ba
 4. **Resume from the earliest step the fix invalidates.** The release branch is always rebased on
    `origin/master`, never merged with it: rebase it, re-run step 8's local checks, push with
    `git push --force-with-lease origin release/v<version>` as a command of its own (nothing chained,
-   never a bare `--force`), and re-run the full gate (step 9). If a tag was already pushed,
-   [re-cut it](#re-cutting-an-unpublished-tag).
+   never a bare `--force`), and re-run the full pipeline (step 9). If a tag was already pushed,
+   [discard and re-cut it](#re-cutting-an-unpublished-tag).
 5. **Count attempts per failure.** The third fix for the same symptom that still fails is a stop.
 
 Every fix PR and its link goes in the final report.
@@ -512,7 +518,7 @@ format, never by asking, and move no issue. Put any move it suggests in the fina
 that closes its milestone also runs that skill's *a milestone is about to be closed* sync first, as this
 skill stands in for `release-manager` in its table.
 
-Then say it plainly, in one report: the version, the release URL, the gate run URL, the release run URL,
+Then say it plainly, in one report: the version, the release URL, the full pipeline run URL, the release run URL,
 the milestone's changed lines and any suggested issue moves,
 the fix PRs (links), what the sweep took and held back, majors deliberately deferred, majors taken to clear an
 advisory, any dev-only advisory accepted (with its failed attempt and a suggested corrective action),
@@ -543,22 +549,13 @@ and anything left undone. Send a `PushNotification` with the version and release
 | `*-machine: not-elevated-launch` fails | The run-after-finish app ran elevated — or another throng was already running on the runner | Setup: `ExecShellAsUser`; MSI: the `explorer.exe` launch. |
 | The portable role fails verification | Three known traps | Copy the unpacked tree *before* stopping the launcher, wait for it to settle, and pass **no** `PORTABLE_EXECUTABLE_*` variables. Why: [references/verification.md](references/verification.md#the-portable-role). |
 
-**Rehearsing without releasing** — every dispatch is a rehearsal: it runs the full suite, packages,
-reconciles, verifies every artifact and renders the body, releasing nothing:
+**Rehearsing without releasing** — a full `pipeline.yml` dispatch is the rehearsal: it runs every test,
+packages, reconciles, verifies every artifact and renders the body, and never publishes on any trigger.
+`release.yml` cannot be dispatched.
 
 ```sh
-gh workflow run release.yml --ref master
-```
-
-Use it when the pipeline itself is what is being fixed.
-
-When only the installers or the verification harness are being fixed, add `-f skip_e2e=true`: it
-leaves out the full E2E suite and the build and verification jobs still run. `gate.yml`
-already runs that suite on the same tree. The publish job refuses to run when `skip_e2e` is set, so a
-release can never follow a skipped suite:
-
-```sh
-gh workflow run release.yml --ref <branch> -f skip_e2e=true
+gh workflow run pipeline.yml --ref <branch>
+gh workflow run pipeline.yml --ref <branch> -f stages=package,verify   # installers or the harness only
 ```
 
 ## Never
@@ -570,12 +567,11 @@ gh workflow run release.yml --ref <branch> -f skip_e2e=true
   tag may be re-cut ([how](#re-cutting-an-unpublished-tag)).
 - **Never ask mid-release.** Not for the version, a sign-off, a merge or a re-run. Only a
   [stop condition](#when-to-stop) ends a release before it publishes.
-- **Never skip the full gate** on a release commit, and never merge or tag on a red or stale one.
+- **Never skip the full pipeline** on a release commit, and never merge or tag on a red or stale one.
 - **Never write release prose in the workflow or the release body.** It comes from `CHANGELOG.md` or
   it does not exist.
-- **Never publish without the full E2E suite having passed on the released tree**, in `e2e-full` or
-  in the full gate `e2e-reuse` found. It is the other half of CI's 50-test `@core` trade; without it
-  the reduced surface is a hole rather than a reduction.
+- **Never publish without the full pipeline having passed in the same run.** Pull requests run no E2E
+  at all; the release's own pipeline call is what makes that a reduction rather than a hole.
 - **Never run Prettier in this repo.** There is no config, so it rewrites every string delimiter it
   touches. ESLint is the formatter.
 - **Never add an attribution footer or a session link** to a commit message, PR body, release body or

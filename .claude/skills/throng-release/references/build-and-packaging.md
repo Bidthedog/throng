@@ -92,21 +92,19 @@ fault, and launching a portable throng normally opens a window every time.
 `residue-scan` must come back `failed`. A pass there means the scan is looking somewhere the app
 never was, and its ordinary green is worthless.
 
-## CI (`.github/workflows/ci.yml`)
+## CI — three workflows (spec 072)
 
-Jobs: **Plan E2E** → **Lint & type-check** → **Unit / component / integration / contract** (builds
-first, for the daemon-spawning layers' `BUILD_ID`) → **E2E (@core)**, plus **E2E (@admin,
-elevated)**. Windows runners, one worker, 1920×1080 forced, an alias-free temp dir.
+- **`ci.yml`** — pull requests only, Linux: **lint** (lint + type-check), **unit**, **component** (two
+  shards), **contract** (builds first, for the daemon's `BUILD_ID`), **integration** (the
+  `critical-path` subset, named on the command line, no build) and **CI verdict**. No E2E.
+- **`pipeline.yml`** — nightly and on dispatch, and called by `release.yml`: every layer on Windows,
+  Linux and macOS; E2E sharded per platform through `THRONG_E2E_SHARD` (Windows 4, Linux 2, macOS 2 per
+  release by default), `@admin` in its own elevated job, calibration, then every build and verify job.
+- **`release.yml`** — a `v*` tag only: `on-master`, the `pipeline` call, then sign, publish, deploy.
 
-**There is one E2E job, not three shards** (034 FR-057). Sharding multiplied the runner-minutes and
-paid the `npm ci` + build toll once per shard before any test ran (#103) — a trade that does not pay
-for a ≤50-test critical lane. `shard-plan.json`,
-`THRONG_E2E_SHARDS`, `THRONG_E2E_GROUP`, the blob reporter, `THRONG_E2E_BLOB_OUT`, the `merge-e2e`
-job and `blob-report-naming.test.ts` are all gone with it; the last four existed only because three
-shards wrote one filename (#216).
-
-CI runs `--grep @core`. The rest of the suite runs in full at **release** (`release.yml`), where
-wall-clock is on nobody's critical path. Do not reintroduce a matrix without re-measuring the trade.
+**Sharding came back across runners (072).** Spec 034 removed it (FR-057) when the gating lane was a
+≤50-test `@core` run that could not pay a shard's `npm ci` + build toll (#103). The full suite on one
+Windows runner took 46 minutes, which does. Each shard runs both tiers on its share of the files.
 
 `scripts/ci-e2e-run.ps1` implements the constitution's infrastructure-fault rule: retry the lane once
 **only** when its report shows 0 unexpected and 0 flaky, comment the retry on issue #75, stay red
@@ -115,8 +113,8 @@ the shard script.
 
 ## Spending runner minutes well
 
-**E2E runs on CI, not on the workstation before a push.** The `@core` lane runs on every ready PR;
-`@extended` runs in `gate.yml`, and in `release.yml` unless a full gate passed on the same tree. Locally, run at most the one spec covering the
+**E2E runs on CI, not on the workstation before a push.** No E2E runs on a pull request; every E2E
+test runs in `pipeline.yml` — nightly, on dispatch, and inside every release. Locally, run at most the one spec covering the
 change, at one worker, when a lower layer cannot show the failure — the root `CLAUDE.md`'s *Running
 tests locally* owns that rule. Elevation is the thing only CI can answer either way: a developer
 machine is normally not elevated, GitHub's runners always are.
