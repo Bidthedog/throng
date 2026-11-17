@@ -50,7 +50,7 @@ function layoutWithPanelZoom(projectId: string, zoom: number): WorkspaceLayout {
   return layout;
 }
 
-describe('workspace layout v2 → v3 migration + per-panel zoom round-trip (012)', () => {
+describe('workspace layout v2 → v3 migration + per-panel zoom round-trip (012)', { tags: ['critical-path'] }, () => {
   it('forward-migrates a v2 layout to v3 (version bump only; no zoom field added)', () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {

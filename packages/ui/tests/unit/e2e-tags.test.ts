@@ -77,9 +77,6 @@ const RESERVE = [
   '@reserve:runtime', // real application-runtime identity
 ] as const;
 
-/** The constitutional ceiling on the lane that gates every push. */
-const CORE_CAP = 50;
-
 interface Declared {
   file: string;
   line: number;
@@ -232,23 +229,15 @@ describe('E2E significance and category tags', () => {
     ).toEqual([]);
   });
 
-  it('keeps the critical lane at or under its cap', () => {
-    const core = all.filter((d) => d.tags.includes('@core'));
-    expect(
-      core.length,
-      `@core holds ${core.length} tests against a cap of ${CORE_CAP}. The critical selection gates ` +
-        `every push; a test earns a place in it by what breaking it costs a USER, not by what ` +
-        `running it costs a machine. Demote the weakest to @extended.`,
-    ).toBeLessThanOrEqual(CORE_CAP);
-  });
-
-  it('does not put an elevation-gated test in the lane that gates merges', () => {
-    // @admin tests skip unless the process is elevated, and the critical lane runs unelevated.
-    // One in @core would be a permanent skip inside the gate — coverage that looks green and is not.
+  it('does not mark an elevation-gated test as a critical journey', () => {
+    // @admin tests skip unless the process is elevated, and a dispatch of the critical journeys
+    // (`e2e_filter=@core`) runs unelevated. One in @core would be a permanent skip inside that
+    // selection — coverage that looks green and is not. (072 FR-006 withdrew the @core cap: no
+    // significance tag selects a pull-request lane any more.)
     const offenders = all
       .filter((d) => d.tags.includes('@admin') && d.tags.includes('@core'))
       .map((d) => `${d.file}:${d.line} "${d.title}"`);
-    expect(offenders, `@admin tests cannot execute in the unelevated CI lane:\n  ${offenders.join('\n  ')}`).toEqual(
+    expect(offenders, `@admin tests cannot execute in an unelevated @core run:\n  ${offenders.join('\n  ')}`).toEqual(
       [],
     );
   });

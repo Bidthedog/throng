@@ -71,7 +71,7 @@ function newClient(): DaemonClient {
 
 const CHARS = ['t', 'h', 'r', 'o', 'n', 'g'];
 
-describe('#300 — terminal writes reach the daemon in typed order', () => {
+describe('#300 — terminal writes reach the daemon in typed order', { tags: ['critical-path'] }, () => {
   it('REPRODUCES the defect: unserialised writes arrive out of order', async () => {
     const arrivals: string[] = [];
     await startServer(arrivals, 40);

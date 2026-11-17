@@ -42,7 +42,7 @@ runConfigStoreContract('FileConfigStore', async () => {
   };
 });
 
-describe('FileConfigStore first-run + layout', () => {
+describe('FileConfigStore first-run + layout', { tags: ['critical-path'] }, () => {
   it('creates the defaults file on disk when it is absent', async () => {
     const store = new FileConfigStore(tempRoot());
     const doc: ConfigDocId = { kind: 'settings' };
@@ -84,7 +84,7 @@ describe('FileConfigStore first-run + layout', () => {
  * the same directory: nothing carries over but the file, which is all the second launch ever had. No window is
  * needed to observe it; the Preferences-window half of the old restart test is `component/preferences-app.test.ts`.
  */
-describe('what startup reads from a config root', () => {
+describe('what startup reads from a config root', { tags: ['critical-path'] }, () => {
   it('a setting written through the write path is what a fresh store reads (FR-006)', async () => {
     const root = tempRoot();
     const first = new FileConfigStore(root);

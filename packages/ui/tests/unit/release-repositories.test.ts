@@ -70,8 +70,13 @@ describe('what the repositories wait for (064 FR-010, FR-013)', () => {
     expect(uploaders.map(([name]) => name)).toEqual([]);
   });
 
+  // 072: the route checks are the pipeline's jobs, and publication needs the whole pipeline's success.
   it('a failed route check blocks publication', () => {
-    expect(needsOf(release.jobs.publish as Job)).toContain('verify-repositories');
+    const pipeline = load('pipeline.yml');
+    expect(pipeline.jobs['verify-repositories']).toBeDefined();
+    expect(pipeline.jobs.verdict).toBeDefined();
+    expect(needsOf(release.jobs.publish as Job)).toContain('pipeline');
+    expect((release.jobs.publish as Job).if).toContain("needs.pipeline.result == 'success'");
   });
 
   it('nothing else in the pipeline deploys the site', () => {

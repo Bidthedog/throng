@@ -15,7 +15,7 @@
  * everything running in the session, so the margin is real but not unlimited.
  *
  * SC-004 is a claim about the machine the requirement describes, so the 1% is asserted only there: not on CI, and not
- * where THRONG_NON_REFERENCE_HARDWARE is set (gate.yml sets it). Elsewhere the reading is logged as not measured,
+ * where THRONG_NON_REFERENCE_HARDWARE is set (pipeline.yml sets it). Elsewhere the reading is logged as not measured,
  * never relaxed: a hosted macOS runner read 1.03%, its process table being slower to read than the development
  * machine's. The rule and its reasons are the E2E SLAs' (throng-testing, references/performance-sla.md).
  *

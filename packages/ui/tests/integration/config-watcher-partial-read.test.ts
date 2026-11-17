@@ -66,7 +66,7 @@ const PARTIAL_STATES: Array<{ name: string; content: string }> = [
   { name: 'whitespace only', content: '   \n' },
 ];
 
-describe('a partially written settings.json is not mistaken for the defaults', () => {
+describe('a partially written settings.json is not mistaken for the defaults', { tags: ['critical-path'] }, () => {
   // The control (a COMPLETE document reads back as its non-default values) is the first assertion of
   // the payload-shape test at the end of this file.
 

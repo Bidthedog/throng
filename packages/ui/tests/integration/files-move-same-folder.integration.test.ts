@@ -30,7 +30,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe('FilesService move — same-folder drop (FR-080)', () => {
+describe('FilesService move — same-folder drop (FR-080)', { tags: ['critical-path'] }, () => {
   it('dropping a file onto its own parent folder is a no-op (no error)', async () => {
     const result = await svc.move([join('sub', 'a.txt')], 'sub');
     expect(result).toEqual({ ok: true });

@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
 /**
- * 065 FR-001 to FR-004: a release runs from tag to publish with nobody waiting on it, and what stands in for the human
- * sign-off it replaces. These are properties of the workflow's shape, which only a real publish would otherwise exercise.
+ * 065 FR-001 to FR-004 and 072 contracts/release-run.md: a release runs from tag to publish with nobody waiting on it, it
+ * runs the full pipeline first, and what stands in for the human sign-off it replaces. These are properties of the
+ * workflow's shape, which only a real publish would otherwise exercise.
  */
 
 const ROOT = process.cwd();
@@ -20,16 +21,79 @@ interface Job {
   needs?: string | string[];
   environment?: string | { name: string };
   if?: string;
+  uses?: string;
+  secrets?: unknown;
+  permissions?: Record<string, string>;
   steps?: Step[];
 }
 interface Workflow {
-  on: { workflow_dispatch?: { inputs?: Record<string, unknown> } };
+  on: Record<string, { tags?: string[]; branches?: string[]; inputs?: unknown } | null>;
+  concurrency?: { group: string; 'cancel-in-progress'?: unknown };
   jobs: Record<string, Job>;
 }
 
 const text = readFileSync(join(ROOT, '.github', 'workflows', 'release.yml'), 'utf8');
 const release = parse(text) as Workflow;
+const pipelineText = readFileSync(join(ROOT, '.github', 'workflows', 'pipeline.yml'), 'utf8');
+const pipeline = parse(pipelineText) as { jobs: Record<string, Job> };
 const PUBLISHING = ['sign-index', 'publish'] as const;
+const needsOf = (job: Job): string[] => (job.needs === undefined ? [] : Array.isArray(job.needs) ? job.needs : [job.needs]);
+
+describe('what starts a release (072 FR-022, FR-025)', () => {
+  it('is a pushed v* tag and nothing else: no branch, no dispatch, no input', () => {
+    expect(Object.keys(release.on)).toEqual(['push']);
+    expect(release.on.push?.tags).toEqual(['v*']);
+    expect(release.on.push?.branches).toBeUndefined();
+    expect(text).not.toMatch(/workflow_dispatch|inputs:/);
+  });
+
+  it('has no way to skip or reuse the pipeline, or to rehearse the manual plan', () => {
+    for (const gone of ['e2e-reuse', 'e2e-full', 'skip_e2e', 'hand_tests', 'trace']) expect(text, gone).not.toContain(gone);
+  });
+
+  it('cancels an older run of the same tag, in a group the called pipeline does not share (FR-026)', () => {
+    expect(release.concurrency?.group).toBe('release-${{ github.ref }}');
+    expect(release.concurrency?.['cancel-in-progress']).toBe(true);
+    expect(pipelineText).not.toContain('release-${{ github.ref }}');
+  });
+});
+
+describe('the full pipeline comes first (072 FR-022, FR-024)', () => {
+  it('checks the tagged commit is on master, then calls pipeline.yml, in that order', () => {
+    const onMaster = release.jobs['on-master'] as Job;
+    expect(JSON.stringify(onMaster.steps)).toContain('merge-base --is-ancestor');
+    const call = release.jobs.pipeline as Job;
+    expect(call.uses).toBe('./.github/workflows/pipeline.yml');
+    expect(needsOf(call)).toEqual(['on-master']);
+  });
+
+  it('passes no secret: the pipeline publishes nothing and needs none', () => {
+    expect(release.jobs.pipeline?.secrets).toBeUndefined();
+    expect(text).not.toContain('secrets: inherit');
+  });
+
+  it('grants the called jobs at least what they request, so the run is valid', () => {
+    const rank = { none: 0, read: 1, write: 2 } as Record<string, number>;
+    const granted = release.jobs.pipeline?.permissions ?? {};
+    expect(granted.actions).toBe('write');
+    expect(granted.contents).toBe('read');
+    for (const [id, job] of Object.entries(pipeline.jobs)) {
+      for (const [scope, level] of Object.entries(job.permissions ?? {})) {
+        expect(rank[granted[scope] ?? 'none'], `${id} needs ${scope}: ${level}`).toBeGreaterThanOrEqual(rank[level] ?? 0);
+      }
+    }
+  });
+
+  it('signing, publishing and the repositories wait for the pipeline', () => {
+    for (const id of [...PUBLISHING]) expect(needsOf(release.jobs[id] as Job), id).toContain('pipeline');
+    expect(needsOf(release.jobs.publish as Job)).toContain('sign-index');
+    expect(needsOf(release.jobs['deploy-repositories'] as Job)).toEqual(['publish']);
+  });
+
+  it('keeps no build or verification job of its own: the pipeline owns them', () => {
+    expect(Object.keys(release.jobs).sort()).toEqual(['deploy-repositories', 'on-master', 'pipeline', 'publish', 'sign-index']);
+  });
+});
 
 describe('an unattended release (065)', () => {
   it('no step supplies a human sign-off (FR-001)', () => {
@@ -37,8 +101,7 @@ describe('an unattended release (065)', () => {
     expect(text).not.toMatch(/QA sign-off is missing/);
   });
 
-  it('only a version tag can publish: a dispatch is always a rehearsal (FR-002)', () => {
-    expect(release.on.workflow_dispatch?.inputs).not.toHaveProperty('publish');
+  it('only a version tag can publish (FR-002)', () => {
     for (const id of PUBLISHING) {
       const job = release.jobs[id];
       expect(job?.if, id).toMatch(/startsWith\(github\.ref, 'refs\/tags\/v'\)/);
@@ -59,14 +122,13 @@ describe('an unattended release (065)', () => {
     }
   });
 
-  it('publishes when the E2E verdict is reused, and only when every job it needs succeeded (FR-002)', () => {
-    // A job `if` with no status function is ANDed with GitHub's implicit success(), which is false when ANY
-    // upstream job was skipped. e2e-full is skipped whenever e2e-reuse reuses the gate's verdict, so alpha16's
-    // tag built and verified everything and then skipped sign-index, publish and deploy-repositories.
-    const needsOf = (job: Job): string[] => (job.needs === undefined ? [] : Array.isArray(job.needs) ? job.needs : [job.needs]);
+  it('publishes only when every job it needs succeeded (FR-002)', () => {
+    // A job `if` with no status function is ANDed with GitHub's implicit success(), which is false when ANY upstream job
+    // was skipped. alpha16's tag built and verified everything and then skipped sign-index, publish and
+    // deploy-repositories. Every need is named, with its own result.
     for (const id of [...PUBLISHING, 'deploy-repositories']) {
       const job = release.jobs[id] as Job;
-      expect(job.if, `${id} has no status function, so a skipped e2e-full skips it`).toMatch(/!cancelled\(\)/);
+      expect(job.if, `${id} has no status function`).toMatch(/!cancelled\(\)/);
       for (const need of needsOf(job)) {
         expect(job.if, `${id} runs without ${need} having succeeded`).toContain(`needs.${need}.result == 'success'`);
       }
@@ -74,7 +136,7 @@ describe('an unattended release (065)', () => {
   });
 
   it('the rendered body is refused for any unmet condition, not all but one (FR-004)', () => {
-    const steps = release.jobs['render-body']?.steps ?? [];
+    const steps = pipeline.jobs['render-body']?.steps ?? [];
     const gate = steps.find((step) => step.run?.includes('publish-gates.mjs'));
     expect(gate?.run).toBeDefined();
     expect(gate?.run).not.toMatch(/grep -q/);

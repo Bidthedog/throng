@@ -41,7 +41,7 @@ afterEach(() => {
   rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
-describe('per-project workspace persistence', () => {
+describe('per-project workspace persistence', { tags: ['critical-path'] }, () => {
   it('isolates layouts per project with no cross-contamination (SC-006)', () => {
     const p1 = seedProject('p1', 'one');
     const p2 = seedProject('p2', 'two');
