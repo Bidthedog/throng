@@ -48,11 +48,16 @@ async function openSettings(app: ElectronApplication, win: Page): Promise<Page> 
  * collapsed (070). A pane the width coordinator collapses after a resize is caught the same way.
  */
 async function showRightPane(win: Page): Promise<void> {
-  await expect(async () => {
-    const show = win.getByTestId('pane-show-right');
-    if (await show.isVisible()) await show.click();
-    await expect(win.getByTestId('pane-hide-right')).toBeVisible({ timeout: 1_000 });
-  }).toPass({ timeout: 20_000 });
+  const show = win.getByTestId('pane-show-right');
+  const hide = win.getByTestId('pane-hide-right');
+  // Wait for the panes to render one way or the other, then act at most once. Show and Hide are ONE button whose
+  // test id follows the state, running one toggle: retrying the click whenever Hide was slow to appear (a 1 s
+  // `toPass` loop) clicked the toggle again before React re-rendered it, closing the pane it had just opened. On a
+  // loaded hosted Mac that churned the File Explorer pane in and out, so Restore was either never found or never
+  // stable for a click.
+  await expect(show.or(hide).first()).toBeVisible({ timeout: 20_000 });
+  if (await show.isVisible()) await show.click();
+  await expect(hide).toBeVisible({ timeout: 20_000 });
   await expect(win.getByTestId('notifications-panel')).toBeVisible();
 }
 
@@ -126,8 +131,16 @@ test('a kept notice raised in Preferences reaches the main window panel, and it 
 
   // FR-031, FR-038: a fresh launch on the same user data — the entry and the minimised state are back.
   await runApp(
-    async (_app, win) => {
+    async (app, win) => {
       await settle(win);
+      // A window that is not on screen draws no frames, and both the panels' sizing (a ResizeObserver) and a click's
+      // stability check wait on frames: a relaunch left behind something else on a loaded runner kept Restore at its
+      // first-paint place and never stable. Bring the main window forward first.
+      await app.evaluate(({ BrowserWindow }) => {
+        const [main] = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id);
+        main?.show();
+        main?.focus();
+      });
       await showRightPane(win);
       await expect(win.getByTestId('notifications-restore')).toBeVisible({ timeout: 20_000 });
       await expect(win.getByTestId('notifications-pending-badge')).toHaveText('1');
