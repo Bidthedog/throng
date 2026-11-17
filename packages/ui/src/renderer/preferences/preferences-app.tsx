@@ -27,6 +27,7 @@ import { KeybindingsTab } from './keybindings-tab.js';
 import { ThemesTab } from './themes-tab.js';
 import { JsonTab } from './json-tab.js';
 import { JsonEditGateProvider, useJsonEditGate } from './json-edit-gate.js';
+import { settleConfigWrites } from '../config/write-config.js';
 import {
   PreferencesToolbar,
   editorLabel,
@@ -179,7 +180,17 @@ function PreferencesShell({ initialTab, initialSection }: { initialTab: Tab; ini
       // escape is on screen and pressable the whole time rather than appearing only once a close
       // has already been rejected.
       const allow = jsonGate.tryLeave();
-      window.throng?.replyPreferencesClose?.({ requestId, allow });
+      if (!allow) {
+        window.throng?.replyPreferencesClose?.({ requestId, allow });
+        return;
+      }
+      /*
+       * Yes, but only once what leaving applied has landed. Main closes the window the moment it reads the reply,
+       * and the write the commit just issued leaves through `writeConfig`'s chain a few microtasks later: replying
+       * first let main tear the renderer down with the edit still inside it. A write that hangs is no trap, since
+       * main stops waiting after CLOSE_REPLY_TIMEOUT_MS and closes anyway.
+       */
+      void settleConfigWrites().then(() => window.throng?.replyPreferencesClose?.({ requestId, allow }));
     });
     return () => off?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
