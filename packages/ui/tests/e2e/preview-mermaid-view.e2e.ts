@@ -334,12 +334,39 @@ async function ringThickness(app: OpenApp['app'], panel: Locator, panelId: strin
 }
 
 /**
+ * Wait until `target`'s box reads the same twice, 400ms apart. Entering a diagram's Focus Mode also collapses the
+ * side panes (069 FR-066), and the drawing re-centres on the viewport that grows only once the frame's resize
+ * debounce has passed (`DIAGRAM_RESIZE_DEBOUNCE_MS`, 150ms, B5). A drag measured before that lands 258px short of the
+ * edge (the alpha17 release gate on Windows, and 4 of 4 runs of B8 alone on Linux); two animation frames apart was
+ * not enough (1 of 5 still short).
+ */
+async function settledBox(target: Locator): Promise<void> {
+  // Each poll compares the box with the one before it; the 400ms between polls is the quiet window.
+  let last: string | undefined;
+  await expect
+    .poll(
+      async () => {
+        const now = JSON.stringify(await target.boundingBox());
+        const still = now === last && now !== 'null';
+        last = now;
+        return still;
+      },
+      { message: 'the box stops moving', intervals: [400] },
+    )
+    .toBe(true);
+}
+
+/**
  * Zoom a diagram in and middle-drag its first node onto the left edge of `edgeOf`, so a drawn element lies
  * under whatever border runs down that edge; the node's centre line, in window coordinates.
  */
 async function nodeOntoLeftEdge(win: Page, frame: Locator, edgeOf: Locator): Promise<number> {
   for (let i = 0; i < 3; i += 1) await byTitle(frame, 'Zoom in').first().click();
   const node = frame.locator('svg .node').first();
+  // The drag is sized from where the node is; wait until it stays put. In Focus Mode the layer is still centring on
+  // a viewport that grew as the side panes collapsed, and it moved 258px between the measurement and the press.
+  await settledBox(node);
+  await settledBox(edgeOf);
   const n = await node.boundingBox();
   const edge = await edgeOf.boundingBox();
   const viewport = await frame.locator('.preview-diagram-frame__viewport').first().boundingBox();
@@ -350,7 +377,9 @@ async function nodeOntoLeftEdge(win: Page, frame: Locator, edgeOf: Locator): Pro
   await win.mouse.move(from.x + (edge!.x - (n!.x + n!.width / 2)), from.y, { steps: 4 });
   await win.mouse.up({ button: 'middle' });
   const moved = await node.boundingBox();
-  expect(moved!.x, 'the node now spans the left edge').toBeLessThan(edge!.x + 2);
+  const pane = await edgeOf.boundingBox();
+  const where = `node ${JSON.stringify(n)} → ${JSON.stringify(moved)}; edge ${JSON.stringify(edge)} (now ${JSON.stringify(pane)}); viewport ${JSON.stringify(viewport)}; drag from ${JSON.stringify(from)} by ${edge!.x - (n!.x + n!.width / 2)}`;
+  expect(moved!.x, `the node now spans the left edge — ${where}`).toBeLessThan(edge!.x + 2);
   expect(moved!.x + moved!.width, 'the node now spans the left edge').toBeGreaterThan(edge!.x + 4);
   return moved!.y + moved!.height / 2;
 }
