@@ -245,8 +245,9 @@ describe('upgradeNotificationDocument (FR-021d, research D4, FR-092)', () => {
         os: false,
         error: { toast: true, panel: true, os: true },
         warning: { toast: false, panel: false },
-        info: { toast: true, panel: false },
-        success: { toast: true, panel: false },
+        // `timed` keeps the panel: it was these types' shipped default, written into every settings.json.
+        info: { toast: true, panel: true },
+        success: { toast: true, panel: true },
         attention: { toast: true, panel: true, os: false },
       },
     });
