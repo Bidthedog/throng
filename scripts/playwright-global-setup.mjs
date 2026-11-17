@@ -72,10 +72,12 @@ export default async function () {
       await new Promise((resolve) => setTimeout(resolve, WARM_UP_MS));
       if (child.pid !== undefined) {
         if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-        // 070 FR-047: a Mac's Electron helpers are its children, and outlive a killed parent for a moment; end the
-        // whole tree, deepest first, so the first spec starts on a machine with no warm-up processes in it.
-        else if (process.platform === 'darwin') killTreesDeepestFirst(darwinProcessTable(), [child.pid]);
-        else child.kill('SIGKILL');
+        // 070 FR-047: Electron's helpers are its children, and outlive a killed parent; so does the daemon it spawns
+        // detached, with its pty-agent. End the whole tree, deepest first, read while the daemon is still the
+        // warm-up's child, so the first spec starts on a machine with no warm-up processes in it. Killing the main
+        // process alone left the NetworkService, the daemon and the pty-agent running into the first Linux spec.
+        // BSD `ps -axo` reads the same table on Linux.
+        else killTreesDeepestFirst(darwinProcessTable(), [child.pid]);
       }
     } catch {
       // Ignore — worst case the first spec bears the cold start and recovers on retry.
