@@ -3,7 +3,8 @@
  * and Find in Files.
  *
  * Seven categories rather than a colour per language: about seven hues stay distinguishable from one
- * another; forty do not. Colour is a SECOND signal — every icon already differs by its art or label —
+ * another; forty do not. An eighth, `other`, is the unknown file's: a neutral grey, so a file throng cannot
+ * place reads apart both from the seven kinds and from the folders, which keep the Icon Colour (069 FR-064). Colour is a SECOND signal — every icon already differs by its art or label —
  * so a reader who cannot tell two hues apart loses nothing (WCAG 2.1 SC 1.4.1), and no separate
  * colour-blind mode is needed.
  *
@@ -17,7 +18,7 @@
  */
 import { contrastRatio, hexToRgb, relativeLuminance } from './colour-math.js';
 
-export const FILE_ICON_CATEGORIES = ['code', 'markup', 'data', 'document', 'media', 'archive', 'script'] as const;
+export const FILE_ICON_CATEGORIES = ['code', 'markup', 'data', 'document', 'media', 'archive', 'script', 'other'] as const;
 export type FileIconCategory = (typeof FILE_ICON_CATEGORIES)[number];
 
 /** The theme colour token each category paints with. */
@@ -29,13 +30,15 @@ export const FILE_ICON_CATEGORY_TOKENS: Readonly<Record<FileIconCategory, string
   media: 'fileIconMedia',
   archive: 'fileIconArchive',
   script: 'fileIconScript',
+  other: 'fileIconOther',
 });
 
 /**
- * Which category each file icon key belongs to. A key not listed — the unknown `file`, folders, the
- * link badges — takes the plain Icon Colour.
+ * Which category each file icon key belongs to. A key not listed — folders and the link badges — takes the
+ * plain Icon Colour.
  */
 export const FILE_ICON_KEY_CATEGORY: Readonly<Record<string, FileIconCategory>> = Object.freeze({
+  file: 'other',
   fileCode: 'code',
   fileC: 'code',
   fileCpp: 'code',
@@ -85,7 +88,7 @@ export function fileIconCategory(key: string): FileIconCategory | null {
 /**
  * Each category's hue, in degrees: seven spread round the wheel so that neighbours in the tree differ
  * by hue as well as by art. Code is blue, markup red-orange, data teal, documents amber, media magenta,
- * archives violet, scripts and keys lime.
+ * archives violet, scripts and keys lime. `other` has no hue: it is drawn grey ({@link NEUTRAL_CATEGORIES}).
  */
 export const FILE_ICON_HUES: Readonly<Record<FileIconCategory, number>> = Object.freeze({
   code: 210,
@@ -95,7 +98,11 @@ export const FILE_ICON_HUES: Readonly<Record<FileIconCategory, number>> = Object
   media: 325,
   archive: 265,
   script: 95,
+  other: 0,
 });
+
+/** Categories drawn with no saturation at all: a neutral grey at the same contrast as the hues. */
+const NEUTRAL_CATEGORIES: ReadonlySet<FileIconCategory> = new Set(['other']);
 
 /**
  * The floor every derived colour clears against every background it is drawn on: WCAG 2.1 AA for text
@@ -122,7 +129,7 @@ export function deriveFileIconColours(backgrounds: readonly string[]): Record<st
   const out: Record<string, string> = {};
   for (const category of FILE_ICON_CATEGORIES) {
     const hue = FILE_ICON_HUES[category];
-    const saturation = dark ? 0.7 : 0.8;
+    const saturation = NEUTRAL_CATEGORIES.has(category) ? 0 : dark ? 0.7 : 0.8;
     let lightness = dark ? 0.6 : 0.42;
     let colour = hslToHex(hue, saturation, lightness);
     const clears = (c: string): boolean => backgrounds.every((bg) => contrastRatio(c, bg) >= FILE_ICON_MIN_CONTRAST);

@@ -332,8 +332,11 @@ test('both toggles live in Editor · Navigation, ship off, and turning them off 
          * satisfied by a descriptor dropped anywhere in the registry, and the group's contents are
          * rendered in registry order.
          */
-        const group = prefs.getByTestId('settings-group-Editor · Navigation');
-        await expect(group, 'there is no Editor · Navigation group in the Settings tab').toBeVisible();
+        // 069 FR-068 — Navigation is a subgroup of the one Editor heading; a top-level heading may start folded.
+        const editor = prefs.getByTestId('settings-group-Editor-toggle');
+        if ((await editor.getAttribute('aria-expanded')) === 'false') await editor.click();
+        const group = prefs.getByTestId('settings-subgroup-Editor-Navigation');
+        await expect(group, 'there is no Editor › Navigation subgroup in the Settings tab').toBeVisible();
         /*
          * `:scope > .fold-content >` — the group's contents container's DIRECT children, which is what a
          * row is. (056: every heading's contents sit in one `.fold-content` so a fold can hide them.)
@@ -354,8 +357,7 @@ test('both toggles live in Editor · Navigation, ship off, and turning them off 
           );
         /*
          * `historySize` joined this group in 044 FR-108 (#136), which put it in the EXISTING
-         * `Editor · Navigation` group deliberately — 040 FR-037a pins exactly three `Editor · …`
-         * groups, so a fourth sibling was not available. It sits AFTER the two remember toggles, so
+         * `Editor · Navigation` group deliberately (now Editor › Navigation, 069 FR-068). It sits AFTER the two remember toggles, so
          * FR-059's actual claim — the two are adjacent and beside `quickOpenExcludeHidden`, the
          * sibling that was already there — is unchanged; this line is a whole-membership assertion,
          * so a legitimately added row has to be named here rather than the list being loosened.

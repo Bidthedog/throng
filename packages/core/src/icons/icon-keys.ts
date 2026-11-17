@@ -431,13 +431,13 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
   panelMaximise:
     'The icon on a panel header\'s Maximise button and its menu row, which puts the panel in Focus Mode: it fills its tab\'s middle section until it is restored.',
   panelRestore:
-    'The icon on the Restore control of a maximised panel, and on the Minimise control of a maximised diagram, which leaves Focus Mode and puts it back where it was.',
+    'The icon on the Exit Focus Mode control of a panel or a diagram in Focus Mode, which puts it back where it was.',
   diagramFit:
     'The icon on a diagram\'s Fit control, which shrinks the diagram to fit the width of its box.',
   diagramZoomReset:
     'The icon on a diagram\'s Zoom 100% control, which shows the diagram at its actual size, between the zoom-out and zoom-in controls.',
   diagramFullPane:
-    'The icon on a diagram\'s Maximise control, which puts the diagram in Focus Mode over the whole middle section until it is minimised.',
+    'The icon on a diagram\'s Enter Focus Mode control, which fills the whole middle section with the diagram and hides the side panes until you leave Focus Mode.',
   warning:
     'The marker on a folded Preferences section or subsection that hides a setting holding an invalid entry.',
   whitespace:

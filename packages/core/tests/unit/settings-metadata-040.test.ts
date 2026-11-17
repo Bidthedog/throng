@@ -227,7 +227,9 @@ describe('the three status-bar settings sit together under Editor → Status Bar
         !(d.subgroup === 'Previews' && d.key.startsWith('editor.previews.')) &&
         // 054 FR-051 — a provider subsection's Editor row (Markdown sections open) is not a stray.
         !(d.subgroup === 'Previews' && d.subsection !== undefined && providerSubsections.has(d.subsection)) &&
-        !(d.subgroup === 'Links' && d.key.startsWith('editor.links.')),
+        !(d.subgroup === 'Links' && d.key.startsWith('editor.links.')) &&
+        // 069 FR-068 — the former Editor · Navigation / Indentation / Languages sections, now subgroups of Editor.
+        !['Navigation', 'Indentation', 'Languages'].includes(d.subgroup),
     ).map((d) => d.key);
     expect(strays).toEqual([]);
   });
@@ -251,19 +253,17 @@ describe('the three status-bar settings sit together under Editor → Status Bar
  * FR-037a — the shipped sibling-string groups do not move
  * ────────────────────────────────────────────────────────────────────────── */
 
-describe('the shipped sibling-string sub-groups are left exactly as they are (FR-037a)', () => {
-  it('still declares the same three "Editor · …" group strings, and no more', () => {
+describe('every editor setting sits under the one Editor heading (069 FR-068, superseding FR-037a)', () => {
+  it('declares no "Editor · …" sibling-string group: Navigation, Indentation and Languages are subgroups of Editor', () => {
     /*
-     * A MUST that nothing else asserts. This feature adds a SECOND sub-grouping mechanism
-     * (`subgroup`) beside the sibling-string one, and the decision recorded in FR-037a is that the
-     * existing three are not migrated onto it. The failure this guards is the tempting one: a
-     * later sweep turns `Editor · Navigation` into `Editor` + `subgroup: 'Navigation'` and every
-     * user's mental map of the form changes with no requirement asking for it.
+     * FR-037a kept the three sibling strings off the `subgroup` mechanism so the form would not change
+     * without a requirement asking for it. 069 FR-068 is that requirement (maintainer, 2026-11-17): all editor
+     * preferences under one main heading, a sub-heading for each section.
      */
-    const siblings = [...new Set(SETTINGS_METADATA.map((d) => d.group))]
-      .filter((g) => g.startsWith('Editor ·'))
-      .sort();
-    expect(siblings).toEqual(['Editor · Indentation', 'Editor · Languages', 'Editor · Navigation']);
+    const siblings = [...new Set(SETTINGS_METADATA.map((d) => d.group))].filter((g) => g.startsWith('Editor ·'));
+    expect(siblings).toEqual([]);
+    const subgroups = new Set(SETTINGS_METADATA.filter((d) => d.group === 'Editor').map((d) => d.subgroup));
+    for (const s of ['Navigation', 'Indentation', 'Languages']) expect(subgroups, s).toContain(s);
   });
 });
 

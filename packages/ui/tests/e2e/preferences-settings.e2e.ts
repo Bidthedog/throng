@@ -250,7 +250,7 @@ test('the settings search box sits above the first group (FR-049)', { tag: ['@ex
       await expect(search).toBeVisible();
 
       const searchBox = await search.boundingBox();
-      const firstGroup = await prefs.getByTestId('settings-group-Appearance').boundingBox();
+      const firstGroup = await prefs.getByTestId('settings-group-General').boundingBox(); // 069 FR-068 — General leads
       // Both must be REAL boxes, or "y is less than y" is a comparison of two zeroes.
       expect(searchBox!.height).toBeGreaterThan(0);
       expect(firstGroup!.height).toBeGreaterThan(0);

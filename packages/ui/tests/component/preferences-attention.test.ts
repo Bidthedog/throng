@@ -19,7 +19,8 @@ import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice.js';
 import { SettingsTab } from '../../src/renderer/preferences/settings-tab.js';
 
-const ATTENTION_GROUP = SETTINGS_METADATA.filter((d) => d.group === 'Attention');
+// 069 FR-068 — Attention is a subgroup of General.
+const ATTENTION_GROUP = SETTINGS_METADATA.filter((d) => d.group === 'General' && d.subgroup === 'Attention');
 const TERMINAL_ATTENTION = SETTINGS_METADATA.filter((d) => d.group === 'Terminal' && d.subgroup === 'Attention');
 const SIGNALS = TERMINAL_ATTENTION.filter((d) => d.key.startsWith('terminals.attention.signals.'));
 
@@ -58,7 +59,8 @@ describe('Attention settings, as drawn (057 US4)', () => {
   it('draws the Attention group and Terminal › Attention with every setting and description, and the notification choices live elsewhere (FR-108)', async () => {
     await mount({});
 
-    const group = screen.getByTestId('settings-group-Attention');
+    expect(ATTENTION_GROUP, 'the General › Attention rows are registered').toHaveLength(2);
+    const group = screen.getByTestId('settings-subgroup-General-Attention');
     for (const d of ATTENTION_GROUP) {
       const el = within(group).getByTestId(`setting-${d.key}`);
       expect(el, d.key).toHaveTextContent(d.label);

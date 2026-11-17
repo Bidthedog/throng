@@ -1312,20 +1312,22 @@ textarea,
 /* The Panel's assigned type, shown as a small muted pill after its name (005). */
 /* Panel-type marker icon (012) — a small glyph at the head of the title, before
    the name, indicating the panel's type. Replaces the former type/flavour text
-   pill; the type and flavour now live in its hover title. */
+   pill; the type and flavour now live in its hover title. 069 FR-065: the first
+   thing in the header, in every window; anything else left of the title sits
+   between it and the title. */
 .panel-box__type-icon {
   flex: 0 0 auto;
-  order: -1; /* pin to the far left of the header, before the title */
+  order: -2; /* pin to the far left of the header, before Back / Forward and the title */
   margin-right: 6px;
   font-size: 13px;
   line-height: 1;
   color: var(--throng-colour-textMuted);
 }
 
-/* 044 FR-104 — Back / Forward, at the very top left: before the type icon, which is itself pinned first. */
+/* 044 FR-104, as 069 FR-065 amends it — Back / Forward, after the type icon and before the title. */
 .panel-box__history {
   flex: 0 0 auto;
-  order: -2;
+  order: -1;
   display: flex;
   gap: 1px;
   margin-right: 4px;
@@ -2473,6 +2475,11 @@ textarea,
 
 [data-icon-category='script'] .icon {
   color: var(--throng-colour-fileIconScript, var(--throng-colour-iconColour, inherit));
+}
+
+/* 069 FR-064 — the unknown file, in a neutral grey apart from the folders' Icon Colour. */
+[data-icon-category='other'] .icon {
+  color: var(--throng-colour-fileIconOther, var(--throng-colour-iconColour, inherit));
 }
 
 /* 069 FR-059 — the File Explorer row's hover popover: the tab popover's surface, with the row's icon at

@@ -79,7 +79,7 @@ once throng has restarted, so it is safe to delete by hand.
 A package adds **Open as throng project** to the folder menu of Nemo and Dolphin. GNOME Files has no such menu for
 applications, so there it is listed under **Open With**. From a terminal, `throng <path>` does the same, with a relative
 path read from where you ran it. The archive adds nothing to a file manager.
-To remove the item for your account only, turn it off in [Preferences](preferences.md#projects); that needs no
+To remove the item for your account only, turn it off in [Preferences](preferences.md#file-manager); that needs no
 administrator rights.
 
 ## Downgrading

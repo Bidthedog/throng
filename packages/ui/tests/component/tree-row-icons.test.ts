@@ -38,10 +38,10 @@ describe('tree row icons (069 FR-056)', () => {
     expect(row.querySelector('.tree-icon .icon')!.innerHTML).toBe(asDrawn('folderDependencies'));
   });
 
-  it('marks a file icon with its category, and leaves an unknown file and a folder unmarked (069 FR-061)', () => {
+  it('marks a file icon with its category, an unknown file as other, and leaves a folder unmarked (069 FR-061, FR-064)', () => {
     expect(mountRow({ name: 'app.py', relPath: 'app.py' }).querySelector('.tree-icon')).toHaveAttribute('data-icon-category', 'code');
     cleanup();
-    expect(mountRow({ name: 'notes.xyz', relPath: 'notes.xyz' }).querySelector('.tree-icon')).not.toHaveAttribute('data-icon-category');
+    expect(mountRow({ name: 'notes.xyz', relPath: 'notes.xyz' }).querySelector('.tree-icon')).toHaveAttribute('data-icon-category', 'other');
     cleanup();
     expect(mountRow({ name: 'src', kind: 'folder', relPath: 'src' }).querySelector('.tree-icon')).not.toHaveAttribute('data-icon-category');
   });

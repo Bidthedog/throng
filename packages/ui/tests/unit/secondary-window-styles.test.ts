@@ -57,11 +57,13 @@ describe('one look for every secondary window (069 FR-054)', () => {
   });
 
   it.each([
-    ['about/about-app.tsx', 'icon-button about-thirdparty__text-toggle'],
-    ['preferences/icon-section.tsx', 'icon-button icon-colour__clear'],
     ['project-settings/project-settings-dialog.tsx', 'icon-button hidden-path__remove'],
   ])('%s draws its icon controls as the shared icon button', (file, classes) => {
     expect(renderer(file)).toContain(`className="${classes}"`);
+  });
+
+  it('shows the arrow over the About licence box and its scrollbar, not the text cursor (069 FR-069)', () => {
+    expect(rule(renderer('about/about.css'), '.about-licence-text')).toMatch(/cursor:\s*default/);
   });
 
   it('paints every window\'s title bar apart from the window: the Title Bar Background, or a shade off the app background (069 FR-060)', () => {

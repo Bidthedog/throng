@@ -468,8 +468,8 @@ export const OPTIONAL_THEME_COLOUR_TOKENS: readonly string[] = Object.freeze([
   // toward the text colour, so every theme's bar stands apart from the window beneath it — lighter on a dark
   // theme, darker on a light one — without any bundled theme carrying a value.
   'titleBarSurface',
-  // 069 FR-061 — the seven file icon categories (file-icon-colours.ts). Unset, a category's icons take
-  // the Icon Colour, as every icon did before; the bundled themes carry derived values.
+  // 069 FR-061 — the file icon categories (file-icon-colours.ts), and FR-064's `other` for the unknown file.
+  // Unset, a category's icons take the Icon Colour, as every icon did before; the bundled themes carry derived values.
   'fileIconCode',
   'fileIconMarkup',
   'fileIconData',
@@ -477,6 +477,7 @@ export const OPTIONAL_THEME_COLOUR_TOKENS: readonly string[] = Object.freeze([
   'fileIconMedia',
   'fileIconArchive',
   'fileIconScript',
+  'fileIconOther',
 ]);
 
 export const TOKEN_PARENT: Readonly<Record<string, string>> = Object.freeze({

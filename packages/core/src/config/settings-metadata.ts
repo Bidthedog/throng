@@ -266,7 +266,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'appearance.theme',
     label: 'Theme',
     description: 'The active appearance theme applied across the whole app.',
-    group: 'Appearance',
+    group: 'General',
+    subgroup: 'Appearance',
     control: 'select', // options are the themes on disk (populated at runtime)
   },
 
@@ -285,7 +286,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Use native Wayland',
     description:
       'Run the window directly on Wayland instead of through XWayland. Dragging a tab out, placing windows, and keeping Preferences and About above the main window work best through XWayland. Dragging files out of the File Explorer into GNOME Files works only on native Wayland. Takes effect the next time throng starts.',
-    group: 'Window',
+    group: 'General',
+    subgroup: 'Window',
     control: 'toggle',
     onlyOn: 'linux',
   },
@@ -293,7 +295,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'projects.openFromOutside',
     label: 'Folder opened from outside throng',
     description: 'What happens when a folder arrives from the OS file manager or the command line: switch to its project, or only load it.',
-    group: 'Projects',
+    group: 'General',
+    subgroup: 'Projects',
     control: 'select',
     allowedValues: ['switch', 'load'],
     optionLabels: { switch: 'Switch to the project', load: 'Load it without switching' },
@@ -360,7 +363,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'behaviour.submenuHoverMs',
     label: 'Submenu hover delay',
     description: 'Dwell time (ms) before a context-menu submenu opens.',
-    group: 'Behaviour',
+    group: 'General',
+    subgroup: 'Behaviour',
     control: 'slider',
     min: 0,
     max: 2000,
@@ -960,7 +964,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Quick Open hides excluded files',
     description:
       'Leave the files this project hides out of Quick Open — both the excluded file patterns and anything you chose "Hide in this project" for. The modal has a control that shows them just for that search, without changing this.',
-    group: 'Editor · Navigation',
+    group: 'Editor',
+    subgroup: 'Navigation',
     control: 'toggle',
   },
   /*
@@ -979,7 +984,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Remember the last Quick Open query',
     description:
       'Reopen Quick Open with the last query that actually opened a file, selected so typing replaces it. A query you abandoned with Escape is not kept, nor is one from another project. Held for this session only — never written to disk.',
-    group: 'Editor · Navigation',
+    group: 'Editor',
+    subgroup: 'Navigation',
     control: 'toggle',
   },
   {
@@ -987,7 +993,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Remember the last Go To Line number',
     description:
       'Reopen Go To Line with the last line number you actually went to, selected so typing replaces it. Held for this session only — never written to disk.',
-    group: 'Editor · Navigation',
+    group: 'Editor',
+    subgroup: 'Navigation',
     control: 'toggle',
   },
   {
@@ -1002,7 +1009,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Navigation history size',
     description:
       'How many files Back and Forward remember in each editor and preview panel. Older files drop off first, and lowering this trims every open panel at once — never the file it is showing.',
-    group: 'Editor · Navigation',
+    group: 'Editor',
+    subgroup: 'Navigation',
     control: 'slider',
     min: 1,
     max: 100,
@@ -1260,7 +1268,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Clear delay',
     description:
       'How long, in milliseconds, you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
-    group: 'Attention',
+    group: 'General',
+    subgroup: 'Attention',
     control: 'slider',
     min: 0,
     max: 10000,
@@ -1273,7 +1282,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Taskbar badge',
     description:
       'Show the number of marked panels, across every project, on throng’s taskbar button, whether or not throng is focused. It uses the Failed style while any marked panel is Failed, and is not affected by the notification settings.',
-    group: 'Attention',
+    group: 'General',
+    subgroup: 'Attention',
     control: 'toggle',
   },
 
@@ -1285,7 +1295,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Indent with',
     description:
       'What a new indent inserts, unless the file already indents differently or its language says otherwise.',
-    group: 'Editor · Indentation',
+    group: 'Editor',
+    subgroup: 'Indentation',
     control: 'select',
     allowedValues: ['spaces', 'tabs'],
   },
@@ -1296,7 +1307,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.indent.indentWidth',
     label: 'Indent width',
     description: 'How many spaces one indent level inserts.',
-    group: 'Editor · Indentation',
+    group: 'Editor',
+    subgroup: 'Indentation',
     control: 'slider',
     min: 1,
     max: 16,
@@ -1307,7 +1319,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Tab width',
     description:
       'How many columns a literal tab occupies on screen. Display only — it never changes the file’s contents.',
-    group: 'Editor · Indentation',
+    group: 'Editor',
+    subgroup: 'Indentation',
     control: 'slider',
     min: 1,
     max: 16,
@@ -1318,7 +1331,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Indentation by language',
     description:
       'Per-language indentation. A file that already indents differently still wins — this decides what a new indent inserts.',
-    group: 'Editor · Indentation',
+    group: 'Editor',
+    subgroup: 'Indentation',
     control: 'map',
     keyLabel: 'Language',
     keyKind: 'language',
@@ -1336,7 +1350,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Language by file extension',
     description:
       'Map a file extension to a language, e.g. “.foo” → Python. Overrides the built-in detection.',
-    group: 'Editor · Languages',
+    group: 'Editor',
+    subgroup: 'Languages',
     control: 'map',
     keyLabel: 'Extension',
     keyKind: 'text',
@@ -1378,7 +1393,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Find delay',
     description:
       'How long find waits after you stop typing before it re-runs the search and updates the highlights.',
-    group: 'Search · Find Bar',
+    group: 'Search',
+    subgroup: 'Find Bar',
     control: 'slider',
     min: 0,
     max: 1000,
@@ -1411,7 +1427,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Find in Files results open in',
     description:
       'Whether a new search reuses the Find in Files panel that ran the last one, or opens a fresh panel each time and leaves the earlier results where they are.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'select',
     allowedValues: FIND_IN_FILES_OPEN_TARGETS,
     optionLabels: {
@@ -1427,7 +1444,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Find in Files searches',
     description:
       'Whether a Find in Files search waits for you to press Run, or starts on its own once you stop typing. Running on its own searches the whole project, so it costs more than the find bar does.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'select',
     allowedValues: FIND_IN_FILES_TRIGGERS,
     optionLabels: {
@@ -1456,7 +1474,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Find in Files delay',
     description:
       'How long Find in Files waits after you stop typing before it starts searching, when it is set to search as you type.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'slider',
     min: 0,
     max: 2000,
@@ -1467,7 +1486,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Find in Files groups results by',
     description:
       'How Find in Files panels arrange their rows. Choosing a grouping in a panel changes this setting, and every open panel follows it.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'select',
     allowedValues: FIND_IN_FILES_GROUPINGS,
     optionLabels: {
@@ -1482,7 +1502,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Show results',
     description:
       'Whether Find in Files shows its result headings collapsed or expanded. The panel’s collapse toggle changes this setting too.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'select',
     allowedValues: FIND_IN_FILES_SHOW_RESULTS,
     optionLabels: { collapsed: 'Collapsed', expanded: 'Expanded' },
@@ -1499,7 +1520,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Excluded from search',
     description:
       'Glob patterns Find in Files skips. Separate from the File Explorer’s excluded globs, which only decide what the tree shows. A panel’s exclusions toggle switches this list off for that panel.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'array',
     itemControl: 'text',
     clearable: true, // empty = exclude nothing; the parser honours an explicit empty list
@@ -1509,7 +1531,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'New panels use the exclusions',
     description:
       'Whether a new Find in Files panel starts with its exclusions toggle on, applying the list above. Each panel can switch it for itself.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'toggle',
   },
   {
@@ -1517,7 +1540,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Ask before a replace that cannot be undone',
     description:
       'Whether Find in Files confirms before writing replacements it has no way to take back, such as into files that are not open in an editor.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'toggle',
   },
   /*
@@ -1543,7 +1567,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Replace summary notices',
     description:
       'Whether the notice reporting what a Find in Files replace changed is never shown, shown as a toast only, or shown as a toast and kept in the Notifications panel until you dismiss it. This governs the notice whether the replace succeeded, partly succeeded or failed, and it is used instead of the notification settings for that severity. Whatever this says, the outcome is still written to the log.',
-    group: 'Search · Find in Files',
+    group: 'Search',
+    subgroup: 'Find in Files',
     control: 'select',
     allowedValues: DISPLAY_MODES,
     optionLabels: DISPLAY_MODE_LABELS,

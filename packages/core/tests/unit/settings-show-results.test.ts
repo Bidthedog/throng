@@ -17,11 +17,11 @@ describe('search.inFiles.showResults', () => {
     expect(parse(1)).toBe('expanded');
   });
 
-  it('is a two-value select under Search · Find in Files, labelled Show results', () => {
+  it('is a two-value select under Search › Find in Files, labelled Show results', () => {
     const d = SETTINGS_METADATA.find((m) => m.key === 'search.inFiles.showResults');
     expect(d).toMatchObject({
       label: 'Show results',
-      group: 'Search · Find in Files',
+      group: 'Search', subgroup: 'Find in Files',
       control: 'select',
       allowedValues: ['collapsed', 'expanded'],
     });

@@ -934,14 +934,6 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         // disabled to assistive tech. The drag being off is not the header being unavailable.
         aria-disabled={undefined}
       >
-        {/* 044 FR-104 — Back / Forward, top left, before the type icon, on editors and previews only (FR-100). */}
-        {hasHistory ? (
-          <BackForwardButtons
-            panelId={panel.id}
-            onBack={() => void navigatePanelHistory(wsRef.current, panel.id, 'back')}
-            onForward={() => void navigatePanelHistory(wsRef.current, panel.id, 'forward')}
-          />
-        ) : null}
         {/* Panel-type marker (012): a small themeable icon at the head of the title,
             replacing the former "TERMINAL/EDITOR PANEL" text pill. The type and
             flavour move into its hover title. */}
@@ -969,6 +961,15 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               );
             })()
           : null}
+        {/* 044 FR-104 — Back / Forward, on editors and previews only (FR-100). 069 FR-065: after the type icon,
+            which leads the header, and before the title. */}
+        {hasHistory ? (
+          <BackForwardButtons
+            panelId={panel.id}
+            onBack={() => void navigatePanelHistory(wsRef.current, panel.id, 'back')}
+            onForward={() => void navigatePanelHistory(wsRef.current, panel.id, 'forward')}
+          />
+        ) : null}
         <span
           className={`panel-box__title${titleTruncated && previewTitle === null ? ' panel-box__title--truncated' : ''}`}
           data-testid={`panel-title-${panel.id}`}

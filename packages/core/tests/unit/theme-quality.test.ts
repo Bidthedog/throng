@@ -221,7 +221,8 @@ describe('contrast (WCAG 2.1 AA over enumerated pairings)', () => {
   });
 
   it('measures every enumerated pairing', () => {
-    // 069 FR-061 — plus each file icon category the theme sets, on each of the four tree backgrounds.
-    expect(measureContrast(THRONG_THEME)).toHaveLength(CONTRAST_PAIRINGS.length + 7 * 4);
+    // 069 FR-061 — plus each file icon category the theme sets (FR-064's `other` among them), on each of the
+    // four tree backgrounds.
+    expect(measureContrast(THRONG_THEME)).toHaveLength(CONTRAST_PAIRINGS.length + 8 * 4);
   });
 });

@@ -272,6 +272,12 @@ export function useMaximisedPanel(tabId: string | null): string | null {
   return useSyncExternalStore(subscribeMaximise, read, read);
 }
 
+/** Whether `tabId` is in Focus Mode — anything maximised in it, a panel or a diagram (069 FR-066). */
+export function useTabInFocusMode(tabId: string | null): boolean {
+  const read = (): boolean => tabId !== null && getMaximiseStack(tabId).length > 0;
+  return useSyncExternalStore(subscribeMaximise, read, read);
+}
+
 /**
  * Whether the section `sectionId` of `panelId` is one of the tab's targets — what a section reads to
  * swap its Full Pane control for Restore and to leave its in-place slot empty while the layer draws it.

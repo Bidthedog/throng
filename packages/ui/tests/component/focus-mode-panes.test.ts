@@ -84,7 +84,7 @@ describe('useFocusModePanes: a derived collapse with an entry-state restore', ()
   });
 });
 
-describe('FocusModeBridge: Focus Mode is a whole panel maximised in the active tab', () => {
+describe('FocusModeBridge: Focus Mode is anything maximised in the active tab — a panel or a diagram', () => {
   const mountWithBridge = async (layout: WorkspaceLayout, panelId: string) => {
     const onChange = vi.fn();
     m = mountTabGroup(layout, { extras: [createElement(FocusModeBridge, { key: 'focus', onChange })] });
@@ -103,9 +103,11 @@ describe('FocusModeBridge: Focus Mode is a whole panel maximised in the active t
     expect(last(onChange)).toBe(false);
   });
 
-  it('a diagram maximised on its own is a section target, not Focus Mode', async () => {
+  it('a diagram maximised on its own is Focus Mode too, and leaving it ends it (069 FR-066)', async () => {
     const onChange = await mountWithBridge(oneTab(), 'p1');
     act(() => maximiseSection('t1', 'p1', 'diagram-1', () => null));
+    expect(last(onChange)).toBe(true);
+    act(() => restore('t1'));
     expect(last(onChange)).toBe(false);
   });
 

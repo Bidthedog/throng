@@ -7,25 +7,25 @@
  * the stored state exactly as it was on entry. A pane the user shows (or hides again) during Focus Mode is
  * an override held here for that Focus Mode only, dropped on exit, so exit restores the ENTRY state.
  *
- * "Focus Mode" is a whole PANEL maximised in the active tab. A diagram maximised over a preview with no
- * panel maximised is a section target, not Focus Mode, and leaves the panes alone; one nested inside a
- * maximised panel is already inside it. Focus Mode is per tab (054 FR-073), so the panes follow the active
- * tab: a tab with nothing maximised shows them as stored, and returning to the maximised tab collapses them
- * again.
+ * "Focus Mode" is ANYTHING maximised in the active tab: a whole panel, or a diagram (069 FR-066, which
+ * supersedes this file's earlier rule that a diagram maximised on its own was a section target and left the
+ * panes alone). A diagram nested inside a maximised panel is already inside its Focus Mode. Focus Mode is per
+ * tab (054 FR-073), so the panes follow the active tab: a tab with nothing maximised shows them as stored,
+ * and returning to the maximised tab collapses them again.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useWorkspace } from '../state/workspace-store.js';
-import { useMaximisedPanel } from '../workspace/maximise-store.js';
+import { useTabInFocusMode } from '../workspace/maximise-store.js';
 
 export type SidePane = 'projects' | 'files';
 
 /**
  * Mounted inside the workspace provider (App renders the provider itself, so it cannot read the layout —
- * the same shape as `SidePanesBridge`): reports whether the active tab holds a maximised panel.
+ * the same shape as `SidePanesBridge`): reports whether anything is maximised in the active tab.
  */
 export function FocusModeBridge({ onChange }: { onChange: (active: boolean) => void }): null {
   const { layout } = useWorkspace();
-  const active = useMaximisedPanel(layout?.activeTabId ?? null) !== null;
+  const active = useTabInFocusMode(layout?.activeTabId ?? null);
   useEffect(() => {
     onChange(active);
   }, [active, onChange]);

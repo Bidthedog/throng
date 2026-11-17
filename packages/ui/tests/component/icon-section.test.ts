@@ -57,6 +57,7 @@ async function mountSection(
     remove?: Reply;
     resetIcon?: Reply;
   } = {},
+  baselines: { entryTheme?: Theme; shippedTheme?: Theme } = {},
 ) {
   const overrideReplies = [...(replies.override ?? [])];
   const iconSets = {
@@ -79,6 +80,7 @@ async function mountSection(
     iconSets,
   });
   const onSetIconSet = vi.fn();
+  const onSetIconColour = vi.fn();
   render(
     createElement(
       NotificationProvider,
@@ -91,8 +93,9 @@ async function mountSection(
           null,
           createElement(IconSection, {
             theme,
+            ...baselines,
             onSetIconSet,
-            onSetIconColour: () => undefined,
+            onSetIconColour,
             folded: false,
             onToggleFold: () => undefined,
           }),
@@ -103,7 +106,7 @@ async function mountSection(
   await waitFor(() => expect(screen.getByTestId('icon-grid')).toBeInTheDocument());
   // The sets arrive on the same payload as the theme; wait for them before asserting on a set.
   if (sets.length > 0) await waitFor(() => expect(screen.getByTestId(`icon-set-option-${sets[0]!.name}`)).toBeInTheDocument());
-  return { iconSets, onSetIconSet, user: userEvent.setup({ delay: null }) };
+  return { iconSets, onSetIconSet, onSetIconColour, user: userEvent.setup({ delay: null }) };
 }
 
 const withSet = (name: string): Theme => ({ ...THRONG_THEME, iconPack: name });
@@ -145,13 +148,51 @@ describe('the default set is a read-only grid (FR-012, FR-027, FR-028, FR-032)',
     }
   });
 
-  it('shows the icon colour Clear greyed out while there is no colour, and usable once there is one (FR-049)', async () => {
-    await mountSection();
-    expect(screen.getByTestId('icon-colour-clear')).toBeDisabled();
+  it('gives the icon set and icon colour rows Revert, Reset and Clear, greyed out while none applies (FR-049, FR-063)', async () => {
+    await mountSection(THRONG_THEME, [], {}, { entryTheme: THRONG_THEME, shippedTheme: THRONG_THEME });
+    for (const key of ['iconPack', 'colours.iconColour']) {
+      for (const action of ['revert', 'reset', 'clear']) {
+        const control = screen.getByTestId(`theme-${action}-${key}`);
+        expect(control, `${action} ${key}`).toBeDisabled();
+        expect(control.getAttribute('title'), `${action} ${key} says why`).not.toBe('');
+      }
+    }
+  });
+
+  it('reverts, resets and clears the icon colour through the colour write', async () => {
+    const entry = { ...THRONG_THEME, colours: { ...THRONG_THEME.colours, iconColour: '#00ff00' } };
+    const now = { ...THRONG_THEME, colours: { ...THRONG_THEME.colours, iconColour: '#ff0000' } };
+    const { onSetIconColour, user } = await mountSection(now, [], {}, { entryTheme: entry, shippedTheme: THRONG_THEME });
+
+    await user.click(screen.getByTestId('theme-revert-colours.iconColour'));
+    expect(onSetIconColour).toHaveBeenLastCalledWith('#00ff00');
+    // The shipped theme sets no icon colour, so its default is empty.
+    await user.click(screen.getByTestId('theme-reset-colours.iconColour'));
+    expect(onSetIconColour).toHaveBeenLastCalledWith('');
+    onSetIconColour.mockClear();
+    await user.click(screen.getByTestId('theme-clear-colours.iconColour'));
+    expect(onSetIconColour).toHaveBeenLastCalledWith('');
+  });
+
+  it('reverts, resets and clears the icon set through the set write, and declines Reset on a theme of your own', async () => {
+    const { onSetIconSet, user } = await mountSection(withSet('Mine'), [userSet('Mine')], {}, {
+      entryTheme: withSet('Other'),
+      shippedTheme: THRONG_THEME,
+    });
+
+    await user.click(screen.getByTestId('theme-revert-iconPack'));
+    expect(onSetIconSet).toHaveBeenLastCalledWith('Other');
+    await user.click(screen.getByTestId('theme-reset-iconPack'));
+    expect(onSetIconSet).toHaveBeenLastCalledWith(undefined);
+    onSetIconSet.mockClear();
+    await user.click(screen.getByTestId('theme-clear-iconPack'));
+    expect(onSetIconSet).toHaveBeenLastCalledWith(undefined);
     cleanup();
 
-    await mountSection({ ...THRONG_THEME, colours: { ...THRONG_THEME.colours, iconColour: '#ff0000' } });
-    expect(screen.getByTestId('icon-colour-clear')).not.toBeDisabled();
+    await mountSection(withSet('Mine'), [userSet('Mine')], {}, { entryTheme: withSet('Mine') });
+    expect(screen.queryByTestId('theme-reset-iconPack')).toBeNull();
+    expect(screen.getByTestId('theme-revert-iconPack')).toBeDisabled();
+    expect(screen.getByTestId('theme-clear-iconPack')).toBeEnabled();
   });
 
   it('labels its picker “Icon set”, and has no “(default glyphs)” option', async () => {

@@ -148,7 +148,7 @@ can keep browsing or press **F2** to rename the file.
   A file is recognised by its name as well as its extension — `Dockerfile`, `.env`, `.gitignore`,
   and `tsconfig.json` as JSON with comments. The language comes from, first to last: the picker's
   choice for that file, a name throng recognises, your
-  [Language by file extension](preferences.md#editor--languages) table, then the extension. The **✕**
+  [Language by file extension](preferences.md#languages) table, then the extension. The **✕**
   beside a language you picked, or **Reset Language** in the editor's right-click menu, hands the file
   back to detection.
 - The status bar shows the caret's position, the selection and the document's size.
@@ -183,8 +183,8 @@ can keep browsing or press **F2** to rename the file.
   shows it at once and can undo it.
 - **Diagrams**: a `mermaid` code block in a preview draws as its diagram, and a `.mmd` or `.mermaid`
   file previews as one, filling its panel. The buttons at a diagram's top left fit it, zoom it in or
-  out, show it at 100%, or **Maximise** it into Focus Mode over the whole middle section of the tab
-  (**Minimise**, or Esc, puts it back); drag with the middle mouse button to pan. With a diagram focused, the panel zoom
+  out, show it at 100%, or **Enter Focus Mode**: it fills the whole middle section of the tab and the side panes
+  close, as with a panel's Focus Mode (**Exit Focus Mode**, or Esc, puts it and them back); drag with the middle mouse button to pan. With a diagram focused, the panel zoom
   keys zoom just that diagram, and Ctrl+wheel zooms it about the pointer. Each zoom step, here or on an editor
   or preview panel, briefly shows the new zoom percentage in that box's top-right corner. Right-click a diagram to **Copy Diagram as Image** or
   enter Focus Mode with it. Embed a diagram file in a Markdown document with

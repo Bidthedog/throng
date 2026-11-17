@@ -300,10 +300,9 @@ describe('editor.previews.* and editor.navigation.historySize are required leave
     }
   });
 
-  it('describes the history size as a 1–100 slider in steps of 1, shipping 10, under Editor · Navigation (FR-108)', () => {
+  it('describes the history size as a 1–100 slider in steps of 1, shipping 10, under Editor › Navigation (FR-108)', () => {
     const d = byKey.get('editor.navigation.historySize');
-    expect(d).toMatchObject({ control: 'slider', min: 1, max: 100, step: 1, group: 'Editor · Navigation' });
-    expect(d?.subgroup).toBeUndefined();
+    expect(d).toMatchObject({ control: 'slider', min: 1, max: 100, step: 1, group: 'Editor', subgroup: 'Navigation' });
     const shipped = DEFAULT_APP_SETTINGS.editor.navigation.historySize;
     expect(shipped).toBe(10);
     expect((shipped - d!.min!) % d!.step!, 'the shipped 10 is between two stops').toBe(0);
@@ -456,32 +455,28 @@ describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/
     ).toBe(0);
   });
 
-  it('gives Find in Files a section of its own (FR-076)', () => {
+  // 069 FR-068 — one Search heading, a sub-heading for each of FR-076's two sections.
+  it('gives Find in Files a sub-section of its own under Search (FR-076)', () => {
     for (const key of FIND_IN_FILES_KEYS) {
-      expect(byKey.get(key)?.group, key).toBe('Search · Find in Files');
+      expect(byKey.get(key)?.group, key).toBe('Search');
+      expect(byKey.get(key)?.subgroup, key).toBe('Find in Files');
     }
   });
 
-  it('leaves the find bar’s delay in a section of its own (FR-076)', () => {
-    expect(byKey.get('search.asYouTypeDebounceMs')?.group).toBe('Search · Find Bar');
+  it('leaves the find bar’s delay in a sub-section of its own under Search (FR-076)', () => {
+    expect(byKey.get('search.asYouTypeDebounceMs')).toMatchObject({ group: 'Search', subgroup: 'Find Bar' });
   });
 
-  it('leaves no descriptor in the undivided "Search" group', () => {
-    // The half a rename is likeliest to leave behind: one key still pointing at the old group name
-    // renders a third section holding a single orphan, and nothing else in the suite would say so.
-    const orphans = SETTINGS_METADATA.filter((d) => d.group === 'Search').map((d) => d.key);
+  it('leaves no Search descriptor outside a sub-section', () => {
+    // The half a regroup is likeliest to leave behind: one key straight under Search, above both sub-headings.
+    const orphans = SETTINGS_METADATA.filter((d) => d.group === 'Search' && d.subgroup === undefined).map((d) => d.key);
     expect(orphans).toEqual([]);
   });
 
-  it('names both sub-sections after the parent, so a search for "search" still returns both', () => {
-    // 021 FR-015 matches a field by its GROUP as a substring, which is the whole reason the editor's
-    // sub-sections are spelled "Editor · Navigation" rather than "Navigation". Splitting the section
-    // must not cost the user the one query that used to reach every one of these keys.
-    const groups = new Set(
-      SETTINGS_METADATA.map((d) => d.group).filter((g) => g.startsWith('Search')),
-    );
-    expect([...groups].sort()).toEqual(['Search · Find Bar', 'Search · Find in Files']);
-    for (const g of groups) expect(g.toLowerCase()).toContain('search');
+  it('keeps every search setting under the Search heading, so a search for "search" still returns them all', () => {
+    // 021 FR-015 matches a field by its group as a substring; one group named Search keeps that true.
+    const groups = new Set(SETTINGS_METADATA.filter((d) => d.key.startsWith('search.')).map((d) => d.group));
+    expect([...groups]).toEqual(['Search']);
   });
 });
 
@@ -586,7 +581,8 @@ describe('the Unload settings in the registry after FR-111 (046 US4)', () => {
  * the guard that the registry holds what the form is asserted to draw never needed a DOM.
  */
 describe('the Attention settings in the registry (057 US4)', () => {
-  const attentionGroup = SETTINGS_METADATA.filter((d) => d.group === 'Attention');
+  // 069 FR-068 — Attention is a subgroup of General.
+  const attentionGroup = SETTINGS_METADATA.filter((d) => d.group === 'General' && d.subgroup === 'Attention');
   const terminalAttention = SETTINGS_METADATA.filter((d) => d.group === 'Terminal' && d.subgroup === 'Attention');
 
   it('keeps the clear delay and the taskbar badge in Attention (FR-108/FR-111: the notification choices moved to Notifications)', () => {

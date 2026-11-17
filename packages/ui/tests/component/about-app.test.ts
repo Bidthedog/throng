@@ -1,11 +1,11 @@
 /**
- * 069 FR-022 — the About window credits the vendored Lucide icons, and a package that carries its own
- * licence text offers it in an expandable block.
+ * 069 FR-022 — the About window credits the vendored Lucide icons as it does every other package: name,
+ * version and licence link, with no block of licence text of its own (FR-069).
  *
  * Layer: component — what the About window renders from the third-party list main hands it. That the
  * list carries Lucide at all is `generate-licenses.test.ts`'s (a script over files).
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AboutApp } from '../../src/renderer/about/about-app.js';
@@ -54,23 +54,11 @@ describe('third-party licence text (069 FR-022)', () => {
     expect(within(box).getByText('react')).toBeInTheDocument();
   });
 
-  it('offers the licence text of a package that carries one, collapsed until opened', async () => {
+  it('treats Lucide like every other package: a licence link, and no licence text block (FR-069)', async () => {
     const box = await mount();
-    const toggle = within(box).getByTestId('about-licence-text-toggle-lucide');
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(within(box).queryByTestId('about-licence-text-lucide')).toBeNull();
-
-    fireEvent.click(toggle);
-
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(within(box).getByTestId('about-licence-text-lucide').textContent).toBe(LUCIDE_TEXT);
-
-    fireEvent.click(toggle);
-    expect(within(box).queryByTestId('about-licence-text-lucide')).toBeNull();
-  });
-
-  it('offers no toggle for a package without licence text', async () => {
-    const box = await mount();
-    expect(within(box).queryByTestId('about-licence-text-toggle-react')).toBeNull();
+    const row = within(box).getByText('lucide').closest('.about-thirdparty__row') as HTMLElement;
+    expect(within(row).getByText('ISC').closest('a')).toHaveAttribute('href', 'https://spdx.org/licenses/ISC.html');
+    expect(row.querySelector('button')).toBeNull();
+    expect(row).not.toHaveTextContent(LUCIDE_TEXT);
   });
 });

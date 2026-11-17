@@ -142,7 +142,7 @@ upgrading and uninstalling never disturb your work.
 Right-click a folder, or the background of a folder, and choose **Open as throng project**. On Windows 11 it is under
 **Show more options**. From a terminal, `throng <path>` does the same, with a relative path read from where you ran it.
 The portable build and the archive add nothing to File Explorer or `PATH`, but take a path all the same.
-To remove the menu item for your account only, turn it off in [Preferences](preferences.md#projects). An install for
+To remove the menu item for your account only, turn it off in [Preferences](preferences.md#file-manager). An install for
 everyone can only be changed by running its installer as an administrator.
 
 ## More than one copy
