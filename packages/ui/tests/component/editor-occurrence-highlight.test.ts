@@ -283,17 +283,31 @@ describe('the setting (FR-019)', () => {
 describe('cost on a 10,000-line document (Principle XII, SC-005)', () => {
   const LINES = 10_000;
   const doc = Array.from({ length: LINES }, (_, i) => (i % 5 === 0 ? `const needle = value${i}; // needle` : `plain line ${i}`)).join('\n');
-  const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+  /**
+   * The work's cost in this thread's CPU time, as a mean over enough runs to use at least `minTotalMs` of it.
+   *
+   * Wall time measured the machine, not the code: in a full parallel suite, or with every core busy, a
+   * 2.9 ms scan read 21.6-26.1 ms (best of five) and failed a 20 ms budget it clears sevenfold. Thread
+   * CPU time does not count the time the scheduler kept the thread waiting. Windows reports it in clock
+   * ticks (about 15.6 ms), so one run cannot be timed alone; a total of 200 ms keeps that within 8%.
+   * Node before 23.9 has no `threadCpuUsage`, and there it falls back to wall time.
+   */
+  function cpuMsPerRun(fn: (i: number) => void, minTotalMs = 200): number {
+    const now = (): number => {
+      const u = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : null;
+      return u ? (u.user + u.system) / 1000 : performance.now();
+    };
+    fn(0); // warm
+    const start = now();
+    let runs = 0;
+    do fn(++runs);
+    while (now() - start < minTotalMs);
+    return (now() - start) / runs;
+  }
 
-  function time(extensions: Parameters<typeof viewOf>[1], action: (v: EditorView, i: number) => void, runs = 15): number {
-    const samples: number[] = [];
+  function time(extensions: Parameters<typeof viewOf>[1], action: (v: EditorView, i: number) => void): number {
     const view = viewOf(doc, extensions);
-    for (let i = 0; i < runs; i++) {
-      const t0 = performance.now();
-      action(view, i);
-      samples.push(performance.now() - t0);
-    }
-    return median(samples);
+    return cpuMsPerRun((i) => action(view, i));
   }
 
   it('a selection change and a single-character insert each take well under 100 ms, and typing is no slower than with tinting off', () => {
@@ -312,7 +326,7 @@ describe('cost on a 10,000-line document (Principle XII, SC-005)', () => {
     const insOn = time(withPlugin, typeOne);
     const insOff = time(without, typeOne);
     const summary =
-      `[049 T037 timings, 10,000 lines, median of 15] selection change ${selOn.toFixed(2)} ms; ` +
+      `[049 T037 timings, 10,000 lines, CPU ms per run] selection change ${selOn.toFixed(2)} ms; ` +
       `insert with tint ${insOn.toFixed(2)} ms vs without ${insOff.toFixed(2)} ms`;
     // Shown for the PR body with `--silent=false`, which prints a passing test's console output.
     console.info(summary);

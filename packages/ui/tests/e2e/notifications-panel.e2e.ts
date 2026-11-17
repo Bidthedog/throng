@@ -56,9 +56,17 @@ async function showRightPane(win: Page): Promise<void> {
   // loaded hosted Mac that churned the File Explorer pane in and out, so Restore was either never found or never
   // stable for a click.
   await expect(show.or(hide).first()).toBeVisible({ timeout: 20_000 });
-  if (await show.isVisible()) await show.click();
-  await expect(hide).toBeVisible({ timeout: 20_000 });
-  await expect(win.getByTestId('notifications-panel')).toBeVisible();
+  // A relaunch can collapse the pane again after the first click, once its stored state lands (macOS CI, #633:
+  // Hide was seen, then "Show File Explorer" was back and the panel gone). So click again while it is collapsed,
+  // but each click first waits for the button to become Hide: the next pass never clicks a stale Show and closes
+  // the pane it has just opened.
+  await expect(async () => {
+    if (await show.isVisible()) {
+      await show.click();
+      await expect(hide).toBeVisible({ timeout: 10_000 });
+    }
+    await expect(win.getByTestId('notifications-panel')).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 45_000 });
 }
 
 /**

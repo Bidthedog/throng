@@ -17,10 +17,42 @@ const LINE = 'The quick brown fox jumps over the lazy dog, 0123456789 — café 
 const TEXT = LINE.repeat(Math.ceil((5 * 1024 * 1024) / LINE.length));
 const ROUNDS = 15;
 
+const threadCpu = (process as { threadCpuUsage?: () => { user: number; system: number } }).threadCpuUsage;
+
+/** This thread's CPU time in ms, or `null` on a Node without `threadCpuUsage`. */
+function cpuNow(): number | null {
+  if (typeof threadCpu !== 'function') return null;
+  const u = threadCpu.call(process);
+  return (u.user + u.system) / 1000;
+}
+
+/** The thread CPU clock's smallest step in ms: microseconds on most systems, a clock tick (about 15.6 ms) on some. */
+function cpuClockStep(): number {
+  const first = cpuNow();
+  if (first === null) return Number.POSITIVE_INFINITY;
+  let next = first;
+  while (next === first) next = cpuNow()!;
+  return next - first;
+}
+
+/** Fine enough to time one read: well under the few milliseconds a 5 MB read takes. */
+const CPU_CLOCK_IS_FINE = cpuClockStep() < 1;
+
+/**
+ * One read's cost in milliseconds of THIS thread's CPU time. Wall time also counted the time the thread spent
+ * waiting for a core, which a parallel unit run hands out unevenly between the two sides of a round: the median
+ * ratio still read 2.0x+ for Windows-1252 on a loaded workstation while it read well under it alone. A clock that
+ * steps in ticks coarser than a read (Windows) keeps wall time, as does a Node without `threadCpuUsage`.
+ */
 function time(fn: () => void): number {
-  const t = performance.now();
+  if (!CPU_CLOCK_IS_FINE) {
+    const t = performance.now();
+    fn();
+    return performance.now() - t;
+  }
+  const before = cpuNow()!;
   fn();
-  return performance.now() - t;
+  return cpuNow()! - before;
 }
 
 /** Median over `rounds` rounds of `cost / base`, the two timed back to back in alternating order. */
