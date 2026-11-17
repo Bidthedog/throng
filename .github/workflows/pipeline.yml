@@ -1,0 +1,1741 @@
+name: Pipeline
+# The title the preflight and the nightly report key on (072 contracts/pipeline-dispatch.md): a run that proves the whole
+# tree is exactly `pipeline (full)`; any narrower one says what it ran.
+run-name: "${{ (github.event_name != 'workflow_dispatch' || ((inputs.stages == '' || inputs.stages == 'all') && (inputs.platforms == '' || inputs.platforms == 'all') && inputs.e2e_filter == '' && inputs.test_filter == '' && inputs.stress_spec == '')) && 'pipeline (full)' || format('pipeline (partial: {0} on {1})', inputs.stress_spec && 'stress' || inputs.stages || 'all', inputs.platforms || 'all') }}"
+
+# THE FULL PIPELINE (072): every test of every layer on every supported platform, every artifact built and verified, and
+# nothing published. It is the nightly, the agent-started dispatch, and the first half of every release run.
+#
+#   gh workflow run pipeline.yml --ref <branch>                                   everything
+#   gh workflow run pipeline.yml --ref <branch> -f stages=unit -f platforms=windows
+#   gh workflow run pipeline.yml --ref <branch> -f stress_spec=packages/ui/tests/e2e/x.e2e.ts -f stress_rounds=20
+#
+# IT PUBLISHES NOTHING, ON ANY TRIGGER OR INPUT (FR-013). It never reads the signing key, never uses the `release`
+# Environment, never creates a release and never deploys the site: packages/ui/tests/unit/pipeline-workflow.test.ts fails
+# the build on any of them. Publishing is release.yml's, after this has passed.
+#
+# FAIL FAST, OR NOT (FR-019, FR-020). The nightly runs every job and every test to completion. A dispatch and a release
+# run stop at the first failure: GitHub Actions has no cross-job fail-fast, so every job ends with a step that cancels the
+# whole run when it failed (R2), and vitest and Playwright stop at their first failing test.
+#
+# NO TRIGGER BUT THESE THREE, AND THERE MUST NEVER BE ANOTHER. This repository is PUBLIC. `workflow_dispatch` needs write
+# access, `schedule` runs only on the default branch, and `workflow_call` only from release.yml. None has a fork-shaped
+# path in. Adding `pull_request`, `pull_request_target`, `issue_comment` or `repository_dispatch` re-opens that hole in one
+# line: refuse that change.
+
+on:
+  schedule:
+    # 01:00 UTC. Nobody is waiting on it overnight. GitHub disables scheduled workflows after 60 days without repository
+    # activity, silently: a nightly that stopped looks exactly like a nightly that keeps passing.
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      stages:
+        description: 'Comma list from: lint, typecheck, unit, component, integration, contract, e2e, admin, calibration, package, verify. all = every stage. verify needs package (stages=package,verify).'
+        type: string
+        default: all
+      platforms:
+        description: 'Comma list from: windows, linux, macos-current, macos-previous. all = every platform.'
+        type: string
+        default: all
+      e2e_filter:
+        description: 'E2E only: a Playwright grep, a spec path (packages/ui/tests/e2e/x.e2e.ts) or a category tag (@editor).'
+        type: string
+        default: ''
+      test_filter:
+        description: 'unit, component, integration, contract only. A vitest file path (under tests/unit, tests/component, tests/integration or tests/contract) runs in the ONE layer that owns it; a test-name pattern runs in every selected layer.'
+        type: string
+        default: ''
+      shards:
+        description: 'E2E shard counts per platform, as windows=4,linux=2,macos=2 (any subset).'
+        type: string
+        default: ''
+      stress_spec:
+        description: 'Stress ONE E2E spec instead (full path, .e2e.ts). Implies stages=e2e on one platform (platforms, default windows).'
+        type: string
+        default: ''
+      stress_grep:
+        description: 'With stress_spec: --grep for one test in the file.'
+        type: string
+        default: ''
+      stress_rounds:
+        description: 'With stress_spec: separate invocations to run.'
+        type: number
+        default: 20
+      hand_tests:
+        description: 'Also run the manual test plan (MT-01..MT-08) on runners and upload the evidence. Never in a nightly or a release.'
+        type: boolean
+        default: false
+      trace:
+        description: 'Capture Playwright traces and terminal diagnostics on failure (perturbs timing).'
+        type: boolean
+        default: false
+  workflow_call:
+    outputs:
+      verdict:
+        description: 'success or failure: whether every selected job succeeded.'
+        value: ${{ jobs.verdict.outputs.result }}
+
+# A called run is keyed by its own run id, because the caller already serialises and its `release-<ref>` group must never
+# be the same group (a called workflow in its caller's group deadlocks). A schedule gets its own group, so a dispatch and
+# the nightly never cancel each other; a stress run is its own group, so several can sample a flake at once.
+concurrency:
+  group: pipeline-${{ (github.event_name == 'push' || inputs.stress_spec != '') && format('run-{0}', github.run_id) || format('{0}-{1}', github.event_name, github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  npm_config_loglevel: error
+  # A hosted runner is not hardware a performance requirement is about, so wall-clock SLAs are recorded, not adjudicated
+  # (docs/testing.md, "Where a performance SLA is measured").
+  THRONG_NON_REFERENCE_HARDWARE: '1'
+
+jobs:
+  # ── The plan ────────────────────────────────────────────────────────────────────────────────────────────────────────
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      fail_fast: ${{ steps.plan.outputs.fail_fast }}
+      full: ${{ steps.plan.outputs.full }}
+      stress: ${{ steps.plan.outputs.stress }}
+      stress_platform: ${{ steps.plan.outputs.stress_platform }}
+      stress_spec: ${{ steps.plan.outputs.stress_spec }}
+      stress_grep: ${{ steps.plan.outputs.stress_grep }}
+      stress_rounds: ${{ steps.plan.outputs.stress_rounds }}
+      hand_tests: ${{ steps.plan.outputs.hand_tests }}
+      trace: ${{ steps.plan.outputs.trace }}
+      e2e_filter: ${{ steps.plan.outputs.e2e_filter }}
+      test_filter: ${{ steps.plan.outputs.test_filter }}
+      stage_lint: ${{ steps.plan.outputs.stage_lint }}
+      stage_typecheck: ${{ steps.plan.outputs.stage_typecheck }}
+      stage_unit: ${{ steps.plan.outputs.stage_unit }}
+      stage_component: ${{ steps.plan.outputs.stage_component }}
+      stage_integration: ${{ steps.plan.outputs.stage_integration }}
+      stage_contract: ${{ steps.plan.outputs.stage_contract }}
+      stage_e2e: ${{ steps.plan.outputs.stage_e2e }}
+      stage_admin: ${{ steps.plan.outputs.stage_admin }}
+      stage_calibration: ${{ steps.plan.outputs.stage_calibration }}
+      stage_package: ${{ steps.plan.outputs.stage_package }}
+      stage_verify: ${{ steps.plan.outputs.stage_verify }}
+      p_windows: ${{ steps.plan.outputs.p_windows }}
+      p_linux: ${{ steps.plan.outputs.p_linux }}
+      p_macos: ${{ steps.plan.outputs.p_macos }}
+      p_macos_current: ${{ steps.plan.outputs.p_macos_current }}
+      p_macos_previous: ${{ steps.plan.outputs.p_macos_previous }}
+      layers: ${{ steps.plan.outputs.layers }}
+      shards_windows: ${{ steps.plan.outputs.shards_windows }}
+      shards_linux: ${{ steps.plan.outputs.shards_linux }}
+      shards_macos: ${{ steps.plan.outputs.shards_macos }}
+      shard_n_windows: ${{ steps.plan.outputs.shard_n_windows }}
+      shard_n_linux: ${{ steps.plan.outputs.shard_n_linux }}
+      shard_n_macos: ${{ steps.plan.outputs.shard_n_macos }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/ci-plan.sh
+          sparse-checkout-cone-mode: false
+      # Every input arrives through the environment, never interpolated into the script, and scripts/ci-plan.sh checks each
+      # against an allowlist.
+      - id: plan
+        name: Resolve the mode, the stages and the platforms
+        env:
+          EVENT: ${{ github.event_name }}
+          STAGES: ${{ inputs.stages }}
+          PLATFORMS: ${{ inputs.platforms }}
+          E2E_FILTER: ${{ inputs.e2e_filter }}
+          TEST_FILTER: ${{ inputs.test_filter }}
+          SHARDS: ${{ inputs.shards }}
+          STRESS_SPEC: ${{ inputs.stress_spec }}
+          STRESS_GREP: ${{ inputs.stress_grep }}
+          STRESS_ROUNDS: ${{ inputs.stress_rounds }}
+          HAND_TESTS: ${{ inputs.hand_tests }}
+          TRACE: ${{ inputs.trace }}
+        run: bash scripts/ci-plan.sh
+
+  # The macOS runner labels are named once, in .github/macos-runners.json, and every macOS job takes its machine from here
+  # (070 FR-037). The matrix is derived from the declared artifact set, one leg per copy per supported release.
+  macos-runners:
+    name: 'macOS: read the runners and the matrix'
+    needs: plan
+    if: needs.plan.outputs.p_macos == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      labels: ${{ steps.list.outputs.labels }}
+      runners: ${{ steps.list.outputs.runners }}
+      selected: ${{ steps.list.outputs.selected }}
+      matrix: ${{ steps.list.outputs.matrix }}
+      verify: ${{ needs.plan.outputs.stage_verify }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core
+        run: npx tsc -b packages/core
+      # `selected` is the releases the dispatch asked for (platforms=macos-current or macos-previous), by slot, so no label is
+      # written here.
+      - id: list
+        name: Emit the runners, the selected releases and the matrix
+        shell: bash
+        env:
+          WANT_CURRENT: ${{ needs.plan.outputs.p_macos_current }}
+          WANT_PREVIOUS: ${{ needs.plan.outputs.p_macos_previous }}
+        run: |
+          set -euo pipefail
+          listed=$(node scripts/macos-runners.mjs)
+          echo "$listed" >> "$GITHUB_OUTPUT"
+          runners=$(printf '%s\n' "$listed" | sed -n 's/^runners=//p')
+          selected=$(jq -c --arg c "$WANT_CURRENT" --arg p "$WANT_PREVIOUS" \
+            '[(if $c == "true" then .current else empty end), (if $p == "true" then .previous else empty end)]' <<<"$runners")
+          echo "selected=$selected" >> "$GITHUB_OUTPUT"
+          # Only the legs on a release the dispatch selected: each leg names its release by slot (`runner`).
+          matrix=$(node scripts/artifact-set.mjs list --combinations --json --platform darwin | tr -d '\n' |
+            jq -c --arg c "$WANT_CURRENT" --arg p "$WANT_PREVIOUS" \
+              '[.[] | select((.runner == "current" and $c == "true") or (.runner == "previous" and $p == "true"))]')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Verifying these macOS combinations:"
+          node scripts/artifact-set.mjs list --combinations --platform darwin
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # THE VERIFICATION MATRIX, derived (058 FR-028, FR-030): what to verify is a property of the declared artifact set, so it
+  # is READ from `artifact-set.mjs list --combinations --json`, never written out here. It needs no build.
+  combinations:
+    name: Work out the verification matrix
+    needs: plan
+    if: needs.plan.outputs.stage_verify == 'true' && (needs.plan.outputs.p_windows == 'true' || needs.plan.outputs.p_linux == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      linux-matrix: ${{ steps.matrix.outputs.linux-matrix }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # Scripts are skipped (no native build) and only @throng/core is compiled: the declaration is all this job reads.
+      - name: Install dependencies (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core
+        run: npx tsc -b packages/core
+      - name: Emit the matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix=$(node scripts/artifact-set.mjs list --combinations --json --platform win32 | tr -d '\n')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          linux_matrix=$(node scripts/artifact-set.mjs list --combinations --json --platform linux | tr -d '\n')
+          echo "linux-matrix=$linux_matrix" >> "$GITHUB_OUTPUT"
+          echo "Verifying these combinations:"
+          node scripts/artifact-set.mjs list --combinations
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ── Lint and typecheck: once, on Linux (FR-003) ─────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & type-check
+    needs: plan
+    if: needs.plan.outputs.stage_lint == 'true' || needs.plan.outputs.stage_typecheck == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: ESLint
+        if: needs.plan.outputs.stage_lint == 'true'
+        run: npm run lint
+      - name: TypeScript type-check
+        if: needs.plan.outputs.stage_typecheck == 'true'
+        run: npm run typecheck
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ── The vitest layers, one job per layer per platform (FR-015) ──────────────────────────────────────────────────────
+  # scripts/ci-vitest.sh runs one layer, writes its JSON result file (read by the nightly report) and stops at the first
+  # failing test only when the plan says fail fast.
+  vitest-windows:
+    name: 'Windows: ${{ matrix.layer }}'
+    needs: plan
+    if: needs.plan.outputs.layers != '[]' && needs.plan.outputs.p_windows == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: ${{ fromJSON(needs.plan.outputs.layers) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # RUNNER_TEMP has no 8.3 short-name components; the default %TEMP% does, and some file specs compare a realpath
+      # against the raw root they were given.
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Run ${{ matrix.layer }}
+        shell: bash
+        env:
+          LAYER: ${{ matrix.layer }}
+          RESULT_FILE: results-windows-${{ matrix.layer }}.json
+          FAIL_FAST: ${{ needs.plan.outputs.fail_fast }}
+          TEST_FILTER: ${{ needs.plan.outputs.test_filter }}
+        run: bash scripts/ci-vitest.sh
+      - name: Upload the result
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: json-results-vitest-windows-${{ matrix.layer }}
+          path: results-*.json
+          if-no-files-found: ignore
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # Ubuntu 24.04 restricts the user namespaces Electron's sandbox needs, as a developer's machine does, and
+  # ci-linux-setup.sh takes the same one step a developer takes. The sandbox stays on throughout (062 FR-003).
+  vitest-linux:
+    name: 'Linux: ${{ matrix.layer }}'
+    needs: plan
+    if: needs.plan.outputs.layers != '[]' && needs.plan.outputs.p_linux == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: ${{ fromJSON(needs.plan.outputs.layers) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Run ${{ matrix.layer }}
+        env:
+          LAYER: ${{ matrix.layer }}
+          RESULT_FILE: results-linux-${{ matrix.layer }}.json
+          FAIL_FAST: ${{ needs.plan.outputs.fail_fast }}
+          TEST_FILTER: ${{ needs.plan.outputs.test_filter }}
+        run: bash scripts/ci-vitest.sh
+      - name: Upload the result
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: json-results-vitest-linux-${{ matrix.layer }}
+          path: results-*.json
+          if-no-files-found: ignore
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # Every layer on each supported macOS release (070 FR-036). A hosted Mac has a logged-in desktop, so no display server.
+  vitest-macos:
+    name: 'macOS ${{ matrix.runner }}: ${{ matrix.layer }}'
+    needs: [plan, macos-runners]
+    if: needs.plan.outputs.layers != '[]' && needs.plan.outputs.p_macos == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.macos-runners.outputs.selected) }}
+        layer: ${{ fromJSON(needs.plan.outputs.layers) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # These layers start real shells, and zsh on a fresh account stops at its new-user wizard.
+      - name: Prepare the runner
+        run: scripts/ci-macos-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Run ${{ matrix.layer }}
+        env:
+          LAYER: ${{ matrix.layer }}
+          RESULT_FILE: results-macos-${{ matrix.layer }}.json
+          FAIL_FAST: ${{ needs.plan.outputs.fail_fast }}
+          TEST_FILTER: ${{ needs.plan.outputs.test_filter }}
+        run: bash scripts/ci-vitest.sh
+      - name: Upload the result
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: json-results-vitest-macos-${{ matrix.runner }}-${{ matrix.layer }}
+          path: results-*.json
+          if-no-files-found: ignore
+      - name: Clear what the run left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ── E2E: every test, in shards (R4) ─────────────────────────────────────────────────────────────────────────────────
+  # THRONG_E2E_SHARD gives each runner its share of the parallel tier and then of the serial tier; a runner is its own
+  # machine, so the serial tier stays one-at-a-time inside it. One worker everywhere: each worker is a full Electron app, a
+  # detached daemon and real shells, and failures RISE with worker count on a hosted runner (measured). Retries are
+  # diagnostic only: `failOnFlakyTests` still fails a test that passes only on retry. THRONG_CALIBRATE=none because the
+  # memory calibration has a job of its own.
+  e2e-windows:
+    name: 'Windows: E2E ${{ matrix.shard }}/${{ needs.plan.outputs.shard_n_windows }}'
+    needs: plan
+    if: needs.plan.outputs.stage_e2e == 'true' && needs.plan.outputs.p_windows == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards_windows) }}
+    env:
+      THRONG_E2E_WORKERS: 1
+      THRONG_E2E_RETRIES: ${{ needs.plan.outputs.fail_fast == 'true' && '1' || '3' }}
+      THRONG_E2E_JSON_OUT: e2e-results/e2e-report-windows-${{ matrix.shard }}.json
+      THRONG_E2E_TRACE: ${{ needs.plan.outputs.trace == 'true' && '1' || '' }}
+      THRONG_CALIBRATE: none
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      # LOAD-BEARING: a hosted runner's virtual display starts at 1024x768, and several specs assert layout that only holds
+      # at a realistic size.
+      - name: Set screen resolution to 1920x1080
+        shell: pwsh
+        run: ./scripts/ci-set-resolution.ps1
+      - name: Run E2E shard ${{ matrix.shard }}
+        shell: bash
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ needs.plan.outputs.shard_n_windows }}
+          E2E_FILTER: ${{ needs.plan.outputs.e2e_filter }}
+          FAIL_FAST: ${{ needs.plan.outputs.fail_fast }}
+        run: bash scripts/ci-e2e-shard.sh
+      # The nightly report reads only this small file; the full artifact below is for people.
+      - name: Upload the result file
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: json-results-e2e-windows-${{ matrix.shard }}
+          path: e2e-results/*.json
+          if-no-files-found: ignore
+      - name: Upload the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-e2e-windows-${{ matrix.shard }}
+          path: |
+            test-results/
+            e2e-results/
+          if-no-files-found: ignore
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  e2e-linux:
+    name: 'Linux: E2E ${{ matrix.shard }}/${{ needs.plan.outputs.shard_n_linux }}'
+    needs: plan
+    if: needs.plan.outputs.stage_e2e == 'true' && needs.plan.outputs.p_linux == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards_linux) }}
+    env:
+      THRONG_E2E_WORKERS: 1
+      THRONG_E2E_RETRIES: ${{ needs.plan.outputs.fail_fast == 'true' && '1' || '3' }}
+      THRONG_E2E_JSON_OUT: e2e-results/e2e-report-linux-${{ matrix.shard }}.json
+      THRONG_E2E_TRACE: ${{ needs.plan.outputs.trace == 'true' && '1' || '' }}
+      THRONG_CALIBRATE: none
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Run E2E shard ${{ matrix.shard }}
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ needs.plan.outputs.shard_n_linux }}
+          E2E_FILTER: ${{ needs.plan.outputs.e2e_filter }}
+          FAIL_FAST: ${{ needs.plan.outputs.fail_fast }}
+        run: bash scripts/ci-linux-display.sh bash scripts/ci-e2e-shard.sh
+      - name: Upload the result file
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: json-results-e2e-linux-${{ matrix.shard }}
+          path: e2e-results/*.json
+          if-no-files-found: ignore
+      - name: Upload the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-e2e-linux-${{ matrix.shard }}
+          path: |
+            test-results/
+            e2e-results/
+          if-no-files-found: ignore
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  e2e-macos:
+    name: 'macOS ${{ matrix.runner }}: E2E ${{ matrix.shard }}/${{ needs.plan.outputs.shard_n_macos }}'
+    needs: [plan, macos-runners]
+    if: needs.plan.outputs.stage_e2e == 'true' && needs.plan.outputs.p_macos == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.macos-runners.outputs.selected) }}
+        shard: ${{ fromJSON(needs.plan.outputs.shards_macos) }}
+    env:
+      THRONG_E2E_WORKERS: 1
+      THRONG_E2E_RETRIES: ${{ needs.plan.outputs.fail_fast == 'true' && '1' || '3' }}
+      THRONG_E2E_JSON_OUT: e2e-results/e2e-report-macos-${{ matrix.shard }}.json
+      THRONG_E2E_TRACE: ${{ needs.plan.outputs.trace == 'true' && '1' || '' }}
+      THRONG_CALIBRATE: none
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: scripts/ci-macos-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Run E2E shard ${{ matrix.shard }}
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ needs.plan.outputs.shard_n_macos }}
+          E2E_FILTER: ${{ needs.plan.outputs.e2e_filter }}
+          FAIL_FAST: ${{ needs.plan.outputs.fail_fast }}
+        run: bash scripts/ci-e2e-shard.sh
+      - name: Upload the result file
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: json-results-e2e-macos-${{ matrix.runner }}-${{ matrix.shard }}
+          path: e2e-results/*.json
+          if-no-files-found: ignore
+      - name: Upload the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-e2e-macos-${{ matrix.runner }}-${{ matrix.shard }}
+          path: |
+            test-results/
+            e2e-results/
+          if-no-files-found: ignore
+      - name: Clear what the run left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # FR-050, SC-012: typing in the visible terminal, with 10 others printing, must echo within 100 ms at the 95th percentile.
+  # There is no macOS reference hardware, so it is asserted on the hosted Mac itself.
+  macos-latency:
+    name: 'macOS ${{ matrix.runner }}: typing latency'
+    needs: [plan, macos-runners]
+    if: needs.plan.outputs.stage_e2e == 'true' && needs.plan.outputs.p_macos == 'true' && needs.plan.outputs.e2e_filter == ''
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.macos-runners.outputs.selected) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: scripts/ci-macos-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Build
+        run: npm run build
+      - name: Measure typing latency with 10 busy terminals
+        env:
+          THRONG_MEASURE_BUSY: '10'
+          THRONG_MEASURE_ASSERT_P95_MS: '100'
+        run: npx playwright test -c packages/ui/tests/measure/playwright.measure.config.ts
+      - name: Upload the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-macos-latency-${{ matrix.runner }}
+          path: test-results/
+          if-no-files-found: ignore
+      - name: Clear what the run left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # The @admin subset, which the E2E jobs' Playwright config excludes. Hosted Windows runners are ELEVATED, which is the
+  # precondition 019 FR-013a needs; it runs here and nowhere else now that PR CI has no E2E.
+  admin:
+    name: 'Windows: E2E (@admin, elevated)'
+    needs: plan
+    if: needs.plan.outputs.stage_admin == 'true' && needs.plan.outputs.p_windows == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Build
+        run: npm run build
+      - name: Run @admin E2E suite (this runner is elevated)
+        shell: pwsh
+        run: ./scripts/ci-run-admin-e2e.ps1
+      - name: Upload the result file
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: json-results-admin-windows
+          path: admin-report.json
+          if-no-files-found: ignore
+      - name: Upload the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-admin-windows
+          path: |
+            test-results/
+            admin-report.json
+          if-no-files-found: ignore
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # 055 SC-009's memory calibration is minutes of a one-worker E2E run, so it has a job of its own. It is ASSERTED on every
+  # full run, the release run included (R13): THRONG_CALIBRATE is left unset, which is the trimmed asserted set.
+  calibration:
+    name: 'Windows: memory calibration'
+    needs: plan
+    if: needs.plan.outputs.stage_calibration == 'true' && needs.plan.outputs.p_windows == 'true' && needs.plan.outputs.e2e_filter == ''
+    runs-on: windows-2022
+    timeout-minutes: 45
+    permissions:
+      actions: write
+      contents: read
+    env:
+      THRONG_E2E_WORKERS: 1
+      THRONG_E2E_RETRIES: 0
+      THRONG_E2E_JSON_OUT: e2e-results/e2e-report-windows-calibration.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Set screen resolution to 1920x1080
+        shell: pwsh
+        run: ./scripts/ci-set-resolution.ps1
+      - name: Run the calibration
+        shell: bash
+        run: npm run test:e2e:raw -- packages/ui/tests/e2e/resource-estimates-calibration.e2e.ts --workers=1
+      - name: Upload the result file
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: json-results-calibration-windows
+          path: e2e-results/*.json
+          if-no-files-found: ignore
+      - name: Upload the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-calibration-windows
+          path: |
+            test-results/
+            e2e-results/
+          if-no-files-found: ignore
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ── Packaging: starts at minute 0, needing only the plan (R4) ───────────────────────────────────────────────────────
+  # windows-2022 + Node 24 to match the native builds, so the bundled runtime's ABI matches the daemon's modules
+  # (better-sqlite3, node-pty, koffi). Linux builds on ubuntu-22.04, the oldest supported glibc (063 FR-020).
+  build-installer:
+    name: Build the release artifacts
+    needs: plan
+    if: needs.plan.outputs.stage_package == 'true' && needs.plan.outputs.p_windows == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Read product version
+        id: ver
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Package (build + stage runtime + electron-builder targets)
+        run: npm run package -- --publish never
+      # 042 FR-013: the artifacts actually built must be exactly the declared set, in BOTH directions.
+      - name: Reconcile the built artifacts against the declared set
+        shell: bash
+        run: node scripts/artifact-set.mjs reconcile --platform win32
+      # Each artifact is uploaded under its own name, resolved by ROLE (042 FR-012). This guard fails the build when the
+      # declared set gains a role the upload steps below do not cover.
+      - name: Check every declared role is uploaded below
+        id: artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          declared=$(node scripts/artifact-set.mjs list --platform win32 | cut -f1 | sort | paste -sd' ' -)
+          uploaded="archive msi portable setup"
+          if [ "$declared" != "$uploaded" ]; then
+            echo "::error::the declared roles are '$declared' but this job uploads '$uploaded' — add the missing upload step"
+            exit 1
+          fi
+          for role in $uploaded; do
+            echo "$role=$(node scripts/artifact-set.mjs resolve "$role")" >> "$GITHUB_OUTPUT"
+          done
+      # Seven days (FR-014): a failed `publish` (a repository outage, a transient `gh` error) is repaired by re-running that
+      # job inside the release run, which downloads these. The bytes anyone wants are the ones `publish` attaches to the
+      # GitHub Release, which does not expire.
+      - name: Upload the setup
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-setup
+          path: ${{ steps.artifacts.outputs.setup }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the MSI
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-msi
+          path: ${{ steps.artifacts.outputs.msi }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the portable build
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-portable
+          path: ${{ steps.artifacts.outputs.portable }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-archive
+          path: ${{ steps.artifacts.outputs.archive }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # THE LINUX PACKAGES (063). The oldest supported Ubuntu builds them, because natives compiled against its glibc run on
+  # everything newer (FR-020); the bundled runtime is the build's own node, as on Windows.
+  build-linux:
+    name: Build the Linux packages
+    needs: plan
+    if: needs.plan.outputs.stage_package == 'true' && needs.plan.outputs.p_linux == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # electron-builder's rpm target drives rpmbuild.
+      - name: Install rpmbuild
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Package (build + stage runtime + electron-builder targets)
+        run: npm run package:linux -- --publish never
+      - name: Reconcile the built packages against the declared set
+        run: node scripts/artifact-set.mjs reconcile --platform linux
+      - name: Check every declared role is uploaded below
+        id: artifacts
+        run: |
+          set -euo pipefail
+          declared=$(node scripts/artifact-set.mjs list --platform linux | cut -f1 | sort | paste -sd' ' -)
+          uploaded="deb rpm tarball"
+          if [ "$declared" != "$uploaded" ]; then
+            echo "::error::the declared roles are '$declared' but this job uploads '$uploaded' — add the missing upload step"
+            exit 1
+          fi
+          for role in $uploaded; do
+            echo "$role=$(node scripts/artifact-set.mjs resolve "$role")" >> "$GITHUB_OUTPUT"
+          done
+      - name: Upload the .deb
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-deb
+          path: ${{ steps.artifacts.outputs.deb }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the .rpm
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-rpm
+          path: ${{ steps.artifacts.outputs.rpm }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-tarball
+          path: ${{ steps.artifacts.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+      # An older build of this same tree, for the upgrade over a running copy. Its name does not start with `throng-`, so
+      # the jobs that collect the release's artifacts never see it: it is declared nowhere and never published.
+      - name: Package the older build the upgrade step installs first
+        run: |
+          set -euo pipefail
+          npm version 0.9.0 --workspaces --include-workspace-root --no-git-tag-version
+          npm run package:linux -- --publish never
+          mkdir -p upgrade-fixture
+          cp dist/installer/throng-0.9.0-amd64.deb dist/installer/throng-0.9.0-x86_64.rpm upgrade-fixture/
+      - name: Upload the older build
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-upgrade-fixture
+          path: upgrade-fixture/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # THE macOS COPIES (070 FR-003, FR-042 to FR-045). Built on the current release's Apple silicon runner: `npm run package`
+  # there is the same command as on Windows, and packaging/macos/after-sign.cjs fails the build on any binary a Mac would
+  # refuse to run.
+  build-macos:
+    name: Build the macOS copies
+    needs: [plan, macos-runners]
+    if: needs.plan.outputs.stage_package == 'true' && needs.plan.outputs.p_macos == 'true'
+    runs-on: ${{ fromJSON(needs.macos-runners.outputs.runners).current }}
+    timeout-minutes: 40
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Package (build + stage runtime + electron-builder targets, signed ad hoc)
+        run: npm run package -- --publish never
+      - name: Reconcile the built copies against the declared set
+        run: node scripts/artifact-set.mjs reconcile --platform darwin
+      - name: Check every declared role is uploaded below
+        id: artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          declared=$(node scripts/artifact-set.mjs list --platform darwin | cut -f1 | sort | paste -sd' ' -)
+          uploaded="dmg macarchive"
+          if [ "$declared" != "$uploaded" ]; then
+            echo "::error::the declared roles are '$declared' but this job uploads '$uploaded' — add the missing upload step"
+            exit 1
+          fi
+          for role in $uploaded; do
+            echo "$role=$(node scripts/artifact-set.mjs resolve "$role")" >> "$GITHUB_OUTPUT"
+          done
+      - name: Upload the disk image
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-dmg
+          path: ${{ steps.artifacts.outputs.dmg }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-macarchive
+          path: ${{ steps.artifacts.outputs.macarchive }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Package the older build the upgrade step installs first
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm version 0.9.0 --workspaces --include-workspace-root --no-git-tag-version
+          npm run package -- --publish never
+          mkdir -p upgrade-fixture
+          cp dist/installer/throng-0.9.0-mac-arm64.dmg upgrade-fixture/
+      - name: Upload the older build
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-upgrade-fixture
+          path: upgrade-fixture/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clear what the build left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ── Verification: each job needs its own build only (R3), so a failing test never skips packaging ───────────────────
+  # ONE RUNNER PER COMBINATION (058 FR-028): each starts from a clean machine. `fail-fast: false` because every
+  # combination's verdict is wanted even when one fails; the render-body gate names exactly which did not pass.
+  verify-installer:
+    name: Verify ${{ matrix.id }}
+    needs: [plan, build-installer, combinations]
+    if: ${{ !cancelled() && needs.build-installer.result == 'success' && needs.combinations.result == 'success' }}
+    runs-on: windows-2022
+    timeout-minutes: 40
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.combinations.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (@throng/core for the verify harness)
+        run: npm run build
+      - name: Download the artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-${{ matrix.role }}
+          path: dist/installer
+      # 042 FR-012/FR-014: the artifact is resolved by ROLE, not by extension or position.
+      - name: Verify ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact=$(node scripts/artifact-set.mjs resolve "${{ matrix.role }}")
+          scope_args=()
+          if [ "${{ matrix.scope }}" != "-" ] && [ -n "${{ matrix.scope }}" ] && [ "${{ matrix.scope }}" != "null" ]; then
+            scope_args=(--scope "${{ matrix.scope }}")
+          fi
+          echo "Verifying ${{ matrix.id }} — $artifact"
+          node scripts/verify-installer.mjs "$artifact" \
+            --role "${{ matrix.role }}" \
+            "${scope_args[@]}" \
+            --expected-version "${{ needs.build-installer.outputs.version }}" \
+            --verdict-out "${{ matrix.verdictFile }}"
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-${{ matrix.id }}
+          path: ${{ matrix.verdictFile }}
+          if-no-files-found: warn
+          retention-days: 7
+      # The verbose Windows Installer logs and the second account's daemon output: the only record of why a scope, an
+      # in-use decision or a daemon start went the way it did.
+      - name: Upload the installer logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v6
+        with:
+          name: installer-logs-${{ matrix.id }}
+          path: installer-logs/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # EVERY COPY ON ONE MACHINE (058 FR-031): the five copies that can coexist do, with the real per-user namespace and data
+  # folder. It needs only the build: a nightly runs it whatever the per-combination legs did.
+  coexistence:
+    name: Verify coexistence
+    needs: [plan, build-installer]
+    if: ${{ !cancelled() && needs.build-installer.result == 'success' && needs.plan.outputs.stage_verify == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 40
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (@throng/core for the verify harness)
+        run: npm run build
+      - name: Download the artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: throng-*
+          merge-multiple: true
+          path: dist/installer
+      - name: Verify coexistence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-installer.mjs --coexistence \
+            --dir dist/installer \
+            --expected-version "${{ needs.build-installer.outputs.version }}" \
+            --verdict-out verification-verdict-coexistence.json
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-coexistence
+          path: verification-verdict-coexistence.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ONE CLEAN MACHINE PER LINUX PACKAGE (063 FR-017). ubuntu-24.04 restricts user namespaces, so the .deb's profile and the
+  # archive's refusal are both exercised for real. No hosted runner is rpm-based, so the .rpm's machine is a Fedora
+  # container, privileged because Chromium's sandbox needs what a default container withholds.
+  verify-linux:
+    name: Verify ${{ matrix.id }}
+    needs: [plan, build-linux, combinations]
+    if: ${{ !cancelled() && needs.build-linux.result == 'success' && needs.combinations.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.combinations.outputs.linux-matrix) }}
+    container:
+      image: ${{ matrix.container }}
+      options: --privileged
+    steps:
+      # throng refuses to start as root, and a container's default account is root.
+      - name: Prepare the Fedora machine
+        if: matrix.container != ''
+        run: |
+          dnf install -y -q git tar gzip sudo shadow-utils procps-ng findutils util-linux-core which \
+            xorg-x11-server-Xvfb xfwm4 dbus-daemon dbus-x11
+          useradd -m verify
+          echo 'verify ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/verify
+      - name: Prepare the Ubuntu machine
+        if: matrix.container == ''
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends xvfb xfwm4 dbus-x11
+      - name: Install the desktop libraries an archive expects
+        if: matrix.role == 'tarball'
+        run: |
+          sudo apt-get install -y -qq --no-install-recommends libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 \
+            libdrm2 libgbm1 libgtk-3-0t64 libasound2t64 libnotify4 libsecret-1-0 libxss1 libxtst6
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # Only the harness runs from this checkout. Nothing here may stand in for what a package has to bring.
+      - name: Install the harness (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core for the harness
+        run: npx tsc -b packages/core
+      - name: Download the package
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-${{ matrix.role }}
+          path: dist/installer
+      - name: Download the older build
+        if: matrix.role != 'tarball'
+        uses: actions/download-artifact@v7
+        with:
+          name: linux-upgrade-fixture
+          path: upgrade-fixture
+      - name: Verify ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          artifact=$(node scripts/artifact-set.mjs resolve "${{ matrix.role }}")
+          older=()
+          if [ "${{ matrix.role }}" = deb ]; then older=(--older upgrade-fixture/throng-0.9.0-amd64.deb); fi
+          if [ "${{ matrix.role }}" = rpm ]; then older=(--older upgrade-fixture/throng-0.9.0-x86_64.rpm); fi
+          command=(bash scripts/ci-linux-display.sh node scripts/verify-linux-package.mjs "$artifact"
+            --role "${{ matrix.role }}" --expected-version "$version"
+            --verdict-out "${{ matrix.verdictFile }}" "${older[@]}")
+          if [ -n "${{ matrix.container }}" ]; then
+            chown -R verify .
+            runuser -u verify -- env PATH="$PATH" HOME=/home/verify "${command[@]}"
+          else
+            "${command[@]}"
+          fi
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-${{ matrix.id }}
+          path: ${{ matrix.verdictFile }}
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload the logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v6
+        with:
+          name: installer-logs-${{ matrix.id }}
+          path: installer-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+      # No `gh` in the Fedora image, so the step falls back to the REST call it wraps.
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # THE REPOSITORY ROUTE (064 FR-013). Each package family on a clean machine: install from an index, upgrade through a
+  # newer one, keep the channels apart, and refuse a tampered or unsigned index. It uses its own throwaway key and local
+  # servers, so it needs no secret and publishes nothing.
+  verify-repositories:
+    name: Verify the ${{ matrix.role }} repository
+    needs: [plan, build-linux]
+    if: ${{ !cancelled() && needs.build-linux.result == 'success' && needs.plan.outputs.stage_verify == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { role: deb, container: '' }
+          - { role: rpm, container: 'fedora:43' }
+    container:
+      image: ${{ matrix.container }}
+      options: --privileged
+    steps:
+      - name: Prepare the Fedora machine
+        if: matrix.container != ''
+        run: dnf install -y -q git tar gzip createrepo_c gnupg2
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Install the harness (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core for the harness
+        run: npx tsc -b packages/core
+      - name: Download the package
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-${{ matrix.role }}
+          path: dist/installer
+      - name: Download the older build
+        uses: actions/download-artifact@v7
+        with:
+          name: linux-upgrade-fixture
+          path: upgrade-fixture
+      - name: Verify the route
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          current=$(node scripts/artifact-set.mjs resolve "${{ matrix.role }}")
+          older=upgrade-fixture/throng-0.9.0-amd64.deb
+          if [ "${{ matrix.role }}" = rpm ]; then older=upgrade-fixture/throng-0.9.0-x86_64.rpm; fi
+          command=(node scripts/verify-package-repo.mjs --role "${{ matrix.role }}" --older "$older" --older-version 0.9.0
+            --current "$current" --version "$version")
+          if [ -n "${{ matrix.container }}" ]; then "${command[@]}"; else sudo env "PATH=$PATH" "${command[@]}"; fi
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ONE CLEAN MAC PER COPY PER SUPPORTED RELEASE (070 FR-010, FR-045). A failed step on either release fails its verdict,
+  # and the publish gate then refuses the whole release; only the Gatekeeper first launch may be unproven.
+  verify-macos:
+    name: Verify ${{ matrix.id }}
+    needs: [plan, build-macos, macos-runners]
+    if: ${{ !cancelled() && needs.build-macos.result == 'success' && needs.macos-runners.outputs.verify == 'true' }}
+    runs-on: ${{ fromJSON(needs.macos-runners.outputs.runners)[matrix.runner] }}
+    timeout-minutes: 40
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.macos-runners.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Install the harness (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core for the harness
+        run: npx tsc -b packages/core
+      - name: Download the copy
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-${{ matrix.role }}
+          path: dist/installer
+      - name: Download the older build
+        if: matrix.role == 'dmg'
+        uses: actions/download-artifact@v7
+        with:
+          name: macos-upgrade-fixture
+          path: upgrade-fixture
+      - name: Verify ${{ matrix.id }}
+        shell: bash
+        env:
+          ROLE: ${{ matrix.role }}
+          RUNNER: ${{ matrix.runner }}
+          VERDICT: ${{ matrix.verdictFile }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          artifact=$(node scripts/artifact-set.mjs resolve "$ROLE")
+          older=()
+          if [ "$ROLE" = dmg ]; then older=(--older upgrade-fixture/throng-0.9.0-mac-arm64.dmg); fi
+          # The ${older[@]+...} form, because macOS's bash 3.2 calls an empty array unbound under `set -u`.
+          node scripts/verify-macos-package.mjs "$artifact" --role "$ROLE" --runner "$RUNNER" \
+            --expected-version "$version" --verdict-out "$VERDICT" ${older[@]+"${older[@]}"}
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-${{ matrix.id }}
+          path: ${{ matrix.verdictFile }}
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload the logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v6
+        with:
+          name: installer-logs-${{ matrix.id }}
+          path: installer-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Clear what the check left behind
+        if: always()
+        run: node scripts/clear-dev-state.mjs
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ── On demand only ──────────────────────────────────────────────────────────────────────────────────────────────────
+  # THE MANUAL TEST PLAN, ON RUNNERS (058; .claude/.manual-test-plans/). Enabled by the `hand_tests` dispatch input, which
+  # the plan never sets on a schedule or a call. One fresh runner per MT group; each drives the real installers' dialogs
+  # through Windows UI Automation (scripts/verify-hand-tests.mjs) and uploads `hand-test-MT-0N.json`.
+  #   node scripts/verify-hand-tests.mjs --list     shows every step a run will claim
+  hand-tests:
+    name: Hand test ${{ matrix.group }}
+    needs: [plan, build-installer]
+    if: ${{ !cancelled() && needs.plan.outputs.hand_tests == 'true' && needs.build-installer.result == 'success' }}
+    runs-on: windows-2022
+    timeout-minutes: 50
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [MT-01, MT-02, MT-03, MT-04, MT-05, MT-06, MT-07, MT-08]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # MT-08 needs an OLDER build of this branch's setup: the same sources with the version set to 0.9.0, on this runner's
+      # copy only (nothing is committed or published).
+      - name: Build the older setup (MT-08)
+        if: matrix.group == 'MT-08'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm version 0.9.0 --workspaces --include-workspace-root --no-git-tag-version
+          npm run package
+          mkdir -p older
+          cp dist/installer/throng-setup-0.9.0.exe older/throng-setup-0.9.0.exe
+          git checkout -- .
+          rm -rf dist/installer
+      - name: Build (@throng/core for the driver)
+        run: npm run build
+      - name: Download the artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: throng-*
+          merge-multiple: true
+          path: dist/installer
+      # MT-06: the previous release's archive, to run beside the current copy.
+      - name: Download the previous release (MT-06)
+        if: matrix.group == 'MT-06'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p older
+          gh release download v1.0.0-alpha10 -p '*.zip' -D older
+          ls older
+      - name: Run ${{ matrix.group }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra=()
+          if [ "${{ matrix.group }}" = "MT-06" ]; then extra=(--older-zip "$(ls older/*.zip | head -n 1)"); fi
+          if [ "${{ matrix.group }}" = "MT-08" ]; then extra=(--older-setup older/throng-setup-0.9.0.exe); fi
+          node scripts/verify-hand-tests.mjs --group "${{ matrix.group }}" \
+            --expected-version "${{ needs.build-installer.outputs.version }}" \
+            --out-dir hand-test-evidence "${extra[@]}"
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: hand-test-${{ matrix.group }}
+          path: |
+            hand-test-evidence/**
+            installer-logs/*.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # Stress ONE E2E test until it fails on demand, or show it no longer does. scripts/ci-stress-rounds.sh runs separate
+  # invocations with retries off and keeps every round's log. Here and not on a workstation because repeated Electron
+  # launches pin every core and steal focus. It gates nothing; the verdict is the pass count in the job summary.
+  stress:
+    name: Stress ${{ needs.plan.outputs.stress_spec }}
+    needs: plan
+    if: needs.plan.outputs.stress == 'true'
+    runs-on: ${{ needs.plan.outputs.stress_platform == 'linux' && 'ubuntu-24.04' || 'windows-2022' }}
+    timeout-minutes: 340
+    permissions:
+      actions: write
+      contents: read
+    env:
+      SPEC: ${{ needs.plan.outputs.stress_spec }}
+      GREP: ${{ needs.plan.outputs.stress_grep }}
+      ROUNDS: ${{ needs.plan.outputs.stress_rounds }}
+      THRONG_E2E_RETRIES: 0
+      THRONG_E2E_WORKERS: 1
+      # So a spec in an @admin file can be stressed: the Windows runner is elevated, and these two stand as
+      # scripts/ci-run-admin-e2e.ps1 sets them, for the reason given there.
+      THRONG_E2E_INCLUDE_ADMIN: 1
+      THRONG_AGENT_CONNECT_TIMEOUT_MS: 20000
+      THRONG_AGENT_READY_TIMEOUT_MS: 8000
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Use an alias-free temp dir
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Prepare the runner
+        if: runner.os == 'Linux'
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Set screen resolution to 1920x1080
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ci-set-resolution.ps1
+      - name: Build
+        run: npm run build
+      - name: Run the rounds (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: bash scripts/ci-stress-rounds.sh
+      - name: Run the rounds (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/ci-linux-display.sh bash scripts/ci-stress-rounds.sh
+      - name: Upload every round's log and the test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-stress
+          path: |
+            round-*.log
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ── The body publication will use ───────────────────────────────────────────────────────────────────────────────────
+  # THE BODY PUBLICATION WILL USE (042 FR-006, as 065 FR-004 restates it), with the verification gaps in it (058 FR-032,
+  # FR-033). It collects every verdict, asks the publish gate EVERY condition, renders the exact release body and writes
+  # each `unproven` step to the job summary. A refusal here fails the run, so a release run never reaches signing on a
+  # release that would be refused. It runs whatever the verification legs did, so the refusal that names the missing
+  # verdict is the one a maintainer reads; it does not run when a build never happened.
+  render-body:
+    name: Render the release body
+    needs: [plan, combinations, build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, build-macos, verify-macos]
+    if: ${{ !cancelled() && needs.combinations.result == 'success' && needs.build-installer.result == 'success' && needs.build-linux.result == 'success' && needs.build-macos.result == 'success' }}
+    runs-on: windows-2022
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (@throng/core for the gate and the renderer)
+        run: npm run build
+      - name: Download the artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: throng-*
+          merge-multiple: true
+          path: dist/installer
+      - name: Download every verdict
+        uses: actions/download-artifact@v7
+        with:
+          pattern: verdict-*
+          merge-multiple: true
+          path: .
+      # Every condition the publish job will check, except "already published", which only publish can know.
+      - name: Ask the publish gate
+        shell: bash
+        env:
+          THRONG_GAPS_OUT: verification-gaps.json
+          # A tag run checks the real tag. A dispatch or a nightly has no tag, and the gate would otherwise compare the
+          # version with the BRANCH name and refuse; it binds to the tag the version would publish as.
+          THRONG_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', needs.build-installer.outputs.version) }}
+        run: |
+          set -uo pipefail
+          THRONG_VERDICT_FILES="$(node scripts/artifact-set.mjs list --combinations | cut -f4 | paste -sd, -),verification-verdict-coexistence.json"
+          export THRONG_VERDICT_FILES
+          set +e
+          node scripts/publish-gates.mjs 2> gates.log
+          code=$?
+          set -e
+          cat gates.log
+          if [ ! -f verification-gaps.json ]; then echo '[]' > verification-gaps.json; fi
+          if [ "$code" -ne 0 ]; then
+            echo "::error::the publish gate would refuse this release (see the reason above)"
+            exit 1
+          fi
+      - name: Report the verification gaps
+        if: always()
+        shell: bash
+        run: node scripts/verification-summary.mjs verification-gaps.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Render the release body
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release-notes.mjs render \
+            --version "${{ needs.build-installer.outputs.version }}" \
+            --artifacts "$(node scripts/artifact-set.mjs checksums)" \
+            --gaps "$(cat verification-gaps.json)" \
+            --sha "${{ github.sha }}" \
+            --out release-body-preview.md
+          echo "--- release body preview ---"
+          cat release-body-preview.md
+      - name: Upload the rendered body and the gaps
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-body
+          path: |
+            release-body-preview.md
+            verification-gaps.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Fail fast, cancel the run
+        if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
+        uses: ./.github/actions/fail-fast-cancel
+        with:
+          token: ${{ github.token }}
+
+  # ── The verdict and the report ──────────────────────────────────────────────────────────────────────────────────────
+  # The one result of the run (FR-018): the tree it proves, whether it was full, and success only when every selected job
+  # succeeded. A cancelled job is a failure; in a full run a job that was skipped is one too, apart from the two that exist
+  # only on request.
+  verdict:
+    name: Pipeline verdict
+    needs: [plan, macos-runners, combinations, lint, vitest-windows, vitest-linux, vitest-macos, e2e-windows, e2e-linux, e2e-macos, macos-latency, admin, calibration, build-installer, build-linux, build-macos, verify-installer, coexistence, verify-linux, verify-repositories, verify-macos, hand-tests, stress, render-body]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      result: ${{ steps.verdict.outputs.result }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .
+      - id: verdict
+        name: Decide
+        shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          FULL: ${{ needs.plan.outputs.full }}
+          MODE: ${{ needs.plan.outputs.mode }}
+        run: |
+          set -euo pipefail
+          tree=$(git rev-parse 'HEAD^{tree}')
+          printf '%s' "$NEEDS" > needs.json
+          failed=$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key' needs.json | paste -sd, -)
+          skipped=''
+          if [ "$FULL" = true ]; then
+            skipped=$(jq -r 'to_entries[] | select(.value.result == "skipped") | select(.key != "stress" and .key != "hand-tests") | .key' needs.json | paste -sd, -)
+          fi
+          # A selection whose jobs all skipped proves nothing: at least one job that does the work must have succeeded. The
+          # plan and the two matrix writers are infrastructure and do not count.
+          worked=$(jq -r 'to_entries[] | select(.key != "plan" and .key != "macos-runners" and .key != "combinations") | select(.value.result == "success") | .key' needs.json | paste -sd, -)
+          none=''
+          if [ -z "$worked" ]; then none='no selected job succeeded'; fi
+          result=success
+          if [ -n "$failed$skipped$none" ]; then result=failure; fi
+          if [ -n "$none" ]; then echo "::error::$none"; skipped="${skipped:+$skipped, }$none"; fi
+          jq -n --arg result "$result" --arg tree "$tree" --arg sha "$GITHUB_SHA" --arg ref "$GITHUB_REF" --arg run "$GITHUB_RUN_ID" \
+            --arg event "$GITHUB_EVENT_NAME" --arg mode "$MODE" --arg full "$FULL" --arg failed "$failed" --arg skipped "$skipped" \
+            '{result: $result, tree: $tree, sha: $sha, ref: $ref, run: $run, event: $event, mode: $mode, full: ($full == "true"), failed: $failed, skipped: $skipped}' \
+            > pipeline-verdict.json
+          cat pipeline-verdict.json
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Pipeline verdict: $result"
+            echo "- full run: $FULL"
+            echo "- tree: \`$tree\`"
+            if [ -n "$failed" ]; then echo "- failed or cancelled: $failed"; fi
+            if [ -n "$skipped" ]; then echo "- skipped in a full run: $skipped"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$result" = success ]
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-pipeline
+          path: pipeline-verdict.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  # A red nightly nobody is awake for is a red nobody sees. On a full run on master it writes ONE consolidated report to the
+  # single open issue, and a later fully green full run closes it (FR-021, contracts/nightly-report.md).
+  report:
+    name: Nightly report
+    needs: [plan, macos-runners, combinations, lint, vitest-windows, vitest-linux, vitest-macos, e2e-windows, e2e-linux, e2e-macos, macos-latency, admin, calibration, build-installer, build-linux, build-macos, verify-installer, coexistence, verify-linux, verify-repositories, verify-macos, hand-tests, stress, render-body, verdict]
+    if: always() && needs.plan.outputs.full == 'true' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Download every test result
+        uses: actions/download-artifact@v7
+        with:
+          pattern: json-results-*
+          path: results
+      - name: Write the report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          FULL: ${{ needs.plan.outputs.full }}
+        run: node scripts/pipeline-report.mjs --run-id "$RUN_ID" --sha "$SHA" --ref "$REF" --full "$FULL" --results-dir results
