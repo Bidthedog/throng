@@ -165,6 +165,8 @@ const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import
 const EXPECTED = 'throngClip42';
 const B64 = 'dGhyb25nQ2xpcDQy';
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('an OSC 52 sequence from inside the terminal writes to the system clipboard', { tag: ['@extended', '@terminal', '@reserve:native'] }, async () => {
   const pipe = `\\\\.\\pipe\\throng-clip-${process.pid}-${Date.now()}`;
   const dataDir = mkdtempSync(join(tmpdir(), 'clip-data-'));

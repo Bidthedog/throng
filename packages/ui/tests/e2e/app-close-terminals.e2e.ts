@@ -18,6 +18,8 @@ async function requestClose(app: ElectronApplication): Promise<void> {
 // in the multi-terminal test below (Cancel step before Terminate), and "Terminate all closes the app" is
 // the tail of that same test.
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('warns with the right count when several terminals run (incl. a busy one); Cancel keeps the app open, Terminate all quits', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close-many-'));
   try {

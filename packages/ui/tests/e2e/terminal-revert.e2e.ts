@@ -10,6 +10,8 @@ import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, r
 // exit info, and can be re-typed: selecting Terminal again + Confirm starts a fresh
 // session. The Panel's type is fixed only while content is live.
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('typing exit reverts the Panel to the form with exit info, then it re-types', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-revert-'));
   try {

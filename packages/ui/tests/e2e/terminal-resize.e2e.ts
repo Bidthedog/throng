@@ -26,6 +26,8 @@ function xtermRows(win: Page, pid: string): Promise<number> {
     .evaluate((el) => el.querySelector('.xterm-rows')?.children.length ?? -1);
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-term-resize-'));
   try {

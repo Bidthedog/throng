@@ -35,6 +35,8 @@ import { skipIfElevated } from './admin.js';
 /** The status-bar indicator: present only when the daemon is NOT healthy (029 FR-008). */
 const indicator = (win: Page) => win.getByTestId('status-daemon');
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('the daemon indicator reports the state, restarts on demand, and outlives the notice', { tag: ['@extended', '@failure', '@reserve:process'] }, async () => {
   // An elevated daemon lives in a different process tree (the de-elevated agent), which
   // `forceKillProcessTree` on the health.ping pid does not describe.

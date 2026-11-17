@@ -177,6 +177,8 @@ async function typeTimingEchoes(win: Page, panelId: string, text: string): Promi
 
 // ── MT-01 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('Unload with End Terminals then an immediate switch succeeds four times running (#468, SC-001)', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   test.setTimeout(300_000);
   const TARGET = '127.0.0.71';

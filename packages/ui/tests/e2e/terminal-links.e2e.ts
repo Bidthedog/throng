@@ -189,6 +189,8 @@ function rowText(raw: string): string {
 }
 
 // One line, deliberately: e2e-budget.test.ts and e2e-tags.test.ts match the declaration with a LINE-based regex.
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a detected path is marked and a look-alike is marked too, a wrapped link is marked on every row and an unfollowable hyperlink on none (045)', { tag: ['@extended', '@terminal', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-links-'));
   // The file one token names, and deliberately NOT the other. Both are path-shaped, so both are links

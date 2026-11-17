@@ -226,6 +226,8 @@ let realRoot = '';
 let realPid = '';
 let ghostPid = '';
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test.beforeAll(async () => {
   test.setTimeout(300_000);
   realRoot = makeRealRoot('throng-pfb-real-');

@@ -30,6 +30,8 @@ import {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test.beforeAll(async () => {
   shared = await openApp();
 });

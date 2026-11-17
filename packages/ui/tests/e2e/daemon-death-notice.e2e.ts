@@ -77,6 +77,8 @@ async function allNoticeText(win: import('@playwright/test').Page): Promise<stri
   return parts.join(' | ');
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a daemon that dies is reported to the user, not turned into a raw RPC error', { tag: ['@extended', '@failure', '@reserve:process'] }, async () => {
   // An elevated daemon lives in a different process tree (the de-elevated agent), which
   // `forceKillProcessTree` on the health.ping pid does not describe.

@@ -64,6 +64,8 @@ async function makeTerminal(win: Page, panelId: string, marker: string): Promise
   await expect(term).toContainText(marker, { timeout: 20000 });
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('switching tabs asks each rebuilt terminal to redraw, and its content survives', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tabswitch-'));
   const marker = basename(root);

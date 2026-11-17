@@ -49,6 +49,8 @@ let rootB: string;
 const nameA = 'AttnProjA';
 const nameB = 'AttnProjB';
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test.beforeAll(async () => {
   rootA = mkdtempSync(join(tmpdir(), 'throng-attn-a-'));
   rootB = mkdtempSync(join(tmpdir(), 'throng-attn-b-'));

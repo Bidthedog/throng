@@ -287,6 +287,8 @@ async function zoomInTwice(win: Page, pid: string): Promise<void> {
 // The test below FAILS without the drain, and it fails on the ORDINARY close — the exit the issue treats as safe.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('#86 AC3/AC4/C23: layout, zoom, a language override and a config write set immediately before an ORDINARY close all survive the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-oc-data-'));

@@ -172,6 +172,8 @@ async function openTerminal(win: Page, root: string): Promise<string> {
 // wrapped declaration is counted in the total while belonging to no category at all (see
 // `wrappedDeclarations` in e2e-budget.json).
 // prettier-ignore
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a window opened by a terminal command comes to the front, not behind throng', { tag: ['@extended', '@terminal', '@window', '@reserve:pty'] }, async () => {
     // An elevated daemon routes terminals through the de-elevated agent, which creates the window at
     // a different integrity level — a different chain from the one this assertion describes, and one
