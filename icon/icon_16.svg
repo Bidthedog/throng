@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- throng's crowd t, drawn on a 16px pixel grid so it stays sharp at 16px. -->
+  <rect width="16" height="16" rx="3.5" fill="#000000" shape-rendering="geometricPrecision"/>
+  <rect x="5" y="1" width="2" height="2" fill="#2bb3a3"/>
+  <rect x="5" y="3" width="2" height="2" fill="#8a7cf0"/>
+  <rect x="3" y="5" width="2" height="2" fill="#2bb3a3"/>
+  <rect x="5" y="5" width="2" height="2" fill="#f2a93b"/>
+  <rect x="7" y="5" width="2" height="2" fill="#8a7cf0"/>
+  <rect x="9" y="5" width="2" height="2" fill="#f2665e"/>
+  <rect x="5" y="7" width="2" height="2" fill="#f2a93b"/>
+  <rect x="5" y="9" width="2" height="2" fill="#f2665e"/>
+  <rect x="5" y="11" width="2" height="2" fill="#f2a93b"/>
+  <rect x="11" y="11" width="2" height="2" fill="#8a7cf0"/>
+  <rect x="7" y="13" width="2" height="2" fill="#2bb3a3"/>
+  <rect x="9" y="13" width="2" height="2" fill="#f2a93b"/>
+</svg>
