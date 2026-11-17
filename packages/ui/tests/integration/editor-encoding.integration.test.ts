@@ -8,6 +8,7 @@
  * of a behaviour that only this path can get wrong — a save that writes a view's ending, a reload that
  * forgets a chosen encoding, a refused save that writes something anyway.
  */
+import { watchStarted } from '@throng/core/testing';
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -341,6 +342,8 @@ describe('an external change to the format alone (059 step 8)', () => {
     await writeFile(file, TEXT_FIXTURES.powershell.bytes);
     await watched.load({ ...meta(file, 'w1'), absPath: file });
     try {
+      // The load opened the watch; on macOS a change in the instant after that is never reported.
+      await watchStarted();
       await writeFile(file, concat('héllo\n'));
       const deadline = Date.now() + 4000;
       while (Date.now() < deadline && watched.getContent('w1')?.encoding !== 'utf8') {
