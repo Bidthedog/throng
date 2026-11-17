@@ -82,9 +82,16 @@ interface Listed {
 function makeService() {
   const host = new FakeHost();
   const processCwd = new FakeProcessCwd();
+  const events = new TerminalEvents();
+  const published: Array<{ panelId: string; cwd: string }> = [];
+  const publishCwd = events.publishCwd.bind(events);
+  events.publishCwd = (panelId: string, cwd: string) => {
+    published.push({ panelId, cwd });
+    publishCwd(panelId, cwd);
+  };
   const service = new TerminalService(
     host,
-    new TerminalEvents(),
+    events,
     new TerminalLockManager(noopLock),
     { isElevated: () => false },
     undefined,
@@ -99,6 +106,7 @@ function makeService() {
   return {
     host,
     processCwd,
+    published,
     call,
     attach: () => call('terminal.attach', { panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 }),
     list: (params: object) => call('terminal.list', params) as Promise<Listed>,
@@ -152,6 +160,25 @@ describe('terminal.list { refreshCwd } (029 FR-013)', () => {
 
     expect(listed.sessions[0]?.cwd).toBe('C:/proj');
     expect(s.processCwd.reads, 'there was nothing to read').toBe(0);
+  });
+
+  it('publishes the cwd again to a view that re-attaches to the running shell', async () => {
+    const s = makeService();
+    await s.attach();
+    s.processCwd.cwd = 'C:/proj/Inner';
+    await s.list({ refreshCwd: true });
+    expect(s.published).toEqual([{ panelId: 'p1', cwd: 'C:/proj/Inner' }]);
+
+    // A reloaded window re-attaches to the shell the daemon kept, with an empty cwd store of its own. The daemon
+    // publishes only a change, so without this the header loses its directory until the user next moves — on
+    // Linux, where bash reports no cwd of its own, indefinitely.
+    await s.attach();
+    await s.list({ refreshCwd: true });
+
+    expect(s.published).toEqual([
+      { panelId: 'p1', cwd: 'C:/proj/Inner' },
+      { panelId: 'p1', cwd: 'C:/proj/Inner' },
+    ]);
   });
 
   it('reports the launch cwd when the OS will not say, rather than dropping the field', async () => {
