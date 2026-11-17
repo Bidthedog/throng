@@ -14,8 +14,7 @@ export const markdownProvider: PreviewProviderDescriptor = {
   extensions: ['.md', '.markdown'],
   kind: 'text',
   settings: [
-    // 054 FR-041. First of the own settings: the contract places it straight after Open previews in. The
-    // dotted key is not spelled out here, for the inertness guard's reason given on `showFrontMatter`.
+    // 054 FR-041. First of the own settings: the contract places it straight after Open previews in.
     {
       leaf: 'renderMermaid',
       label: 'Render Mermaid diagrams',
@@ -33,9 +32,7 @@ export const markdownProvider: PreviewProviderDescriptor = {
       default: true,
     },
     // FR-117 (refines FR-085). Declared here, so its key, descriptor, default and parse are generated
-    // (FR-071), drawn disabled while Markdown is off. The full dotted key is deliberately NOT written in
-    // this comment: `settings-inertness-044.test.ts` matches a property read of the leaf, and a comment
-    // spelling it out would count as a reader and pass that guard before anything consumes the setting.
+    // (FR-071), drawn disabled while Markdown is off.
     {
       leaf: 'showFrontMatter',
       label: 'Show front matter',
@@ -45,9 +42,7 @@ export const markdownProvider: PreviewProviderDescriptor = {
       default: true,
     },
     // 047 FR-032b. Declared here for the same reason as `showFrontMatter` above: generated (FR-071),
-    // drawn disabled while Markdown is off. The full dotted key is deliberately NOT written in this
-    // comment — `settings-inertness-047.test.ts` matches a property read of the leaf, and a comment
-    // spelling it out would count as a reader and pass that guard before anything consumes it.
+    // drawn disabled while Markdown is off.
     {
       leaf: 'gutter',
       label: 'Preview gutter',

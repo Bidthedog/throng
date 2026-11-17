@@ -300,9 +300,6 @@ export class ReplaceCommitService {
     /*
      * FR-057b/c/d — the gate, BEFORE anything is written and computed from the partition rather
      * than from anything the renderer said.
-     *
-     * `warnIrreversibleCommit` is read by name here so `settings-inertness-043.test.ts` can see the
-     * wire, and the whole section is named in this file for the same reason.
      */
     const inFiles = this.settings().search.inFiles;
     const unopened = planned.filter(({ absPath }) => !this.editors.isOpen(absPath));
