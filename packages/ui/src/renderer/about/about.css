@@ -101,6 +101,10 @@
   width: 100%;
   resize: none;
   overflow: auto;
+  /* 069 FR-069 — the arrow, not the text cursor. A textarea's scrollbar takes the element's cursor once the
+     theme styles it (scrollbar-color), so the UA's text cursor showed over the scrollbar. The text is
+     read-only and still selectable. */
+  cursor: default;
   padding: 8px 10px;
   border: 1px solid var(--throng-colour-border);
   border-radius: 4px;
@@ -167,22 +171,6 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-
-/* 069 FR-022 — a package's own licence text, opened under its row, by the shared `.icon-button` (FR-054). */
-
-.about-thirdparty__text {
-  grid-column: 1 / -1;
-  margin: 2px 0 4px;
-  padding: 6px 8px;
-  border: 1px solid var(--throng-colour-border);
-  border-radius: 4px;
-  max-height: 160px;
-  overflow: auto;
-  white-space: pre-wrap;
-  font-family: var(--throng-font-editor-family, monospace);
-  font-size: 11px;
-  user-select: text;
 }
 
 .about-thirdparty__licence {

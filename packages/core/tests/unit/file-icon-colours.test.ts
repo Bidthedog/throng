@@ -22,15 +22,16 @@ const TOKENS = Object.values(FILE_ICON_CATEGORY_TOKENS);
 const BACKGROUNDS = ['sidebarBg', 'hoverSurface', 'surfaceActive', 'appBg'] as const;
 
 describe('file icon categories (069 FR-061)', () => {
-  it('gives every file kind but the unknown file a category, and nothing else one', () => {
+  it('gives every file kind a category, the unknown file its own, and nothing else one', () => {
     const fileKinds = ICON_KEYS.filter((k) => /^file[A-Z]/.test(k));
     expect(fileKinds.filter((k) => fileIconCategory(k) === null)).toEqual([]);
-    expect(fileIconCategory('file')).toBeNull();
+    // 069 FR-064 — the fallback file icon is set apart from the folders, which keep the Icon Colour.
+    expect(fileIconCategory('file')).toBe('other');
     for (const k of ['folder', 'folderOpen', 'symlink', 'folderGit', 'save']) expect(fileIconCategory(k)).toBeNull();
   });
 
   it('makes each category an optional theme colour, so an unset one falls back to the Icon Colour', () => {
-    expect(FILE_ICON_CATEGORIES).toHaveLength(7);
+    expect(FILE_ICON_CATEGORIES).toHaveLength(8);
     for (const t of TOKENS) expect(OPTIONAL_THEME_COLOUR_TOKENS).toContain(t);
   });
 
@@ -54,6 +55,15 @@ describe('file icon categories (069 FR-061)', () => {
         expect(ciede2000(a, b), `${TOKENS[i]} / ${TOKENS[j]}`).toBeGreaterThanOrEqual(12);
       }
     }
+  });
+
+  it.each(Object.entries(ALL_DEFAULT_THEMES))('%s: draws the unknown file in a neutral grey, apart from the folders', (_name, theme) => {
+    const other = theme.colours.fileIconOther!;
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(other.slice(i, i + 2), 16));
+    expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!), `${other} is grey`).toBeLessThanOrEqual(2);
+    // Folders keep the Icon Colour, which no bundled theme sets: they draw in the text colour.
+    const folders = theme.colours.iconColour ?? theme.colours.text;
+    expect(ciede2000(rgbToLab(hexToRgb(other)), rgbToLab(hexToRgb(folders))), `${other} / ${folders}`).toBeGreaterThanOrEqual(12);
   });
 
   it('lightens on a dark background and darkens on a light one', () => {

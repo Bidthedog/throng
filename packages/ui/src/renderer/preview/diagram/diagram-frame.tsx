@@ -420,7 +420,8 @@ export function DiagramFrame({
         {maximisable ? (
           <IconButton
             token={fullPane ? 'panelRestore' : 'diagramFullPane'}
-            title={fullPane ? 'Minimise' : 'Maximise'}
+            // 069 FR-066 — Focus Mode, named as the panel header and the menu name it.
+            title={fullPane ? 'Exit Focus Mode' : 'Enter Focus Mode'}
             onClick={onFullPane}
             disabled={tabId === null}
           />

@@ -61,7 +61,7 @@ describe('a standalone Mermaid preview (FR-042, FR-043)', () => {
   it('offers no inline Maximise: the file is its one diagram, maximised from the panel header (FR-046f)', async () => {
     await mount('graph TD; A-->B\n');
     await waitFor(() => expect(within(frame()!).getByTitle('Fit diagram')).toBeInTheDocument(), COLD);
-    expect(within(frame()!).queryByTitle('Maximise')).toBeNull();
+    expect(within(frame()!).queryByTitle('Enter Focus Mode')).toBeNull();
   });
 
   it('the diagram sanitiser is in the path (FR-045)', async () => {

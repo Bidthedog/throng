@@ -243,8 +243,12 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * lightness follows the theme, so seven near-alike tokens join the mean and pull it down by construction;
  * no existing colour changed. The threshold is untouched at 4.3, and the closest pair clears it with 1.58
  * of headroom.
+ *
+ * Re-measured by 069 FR-064, which added `fileIconOther`, the unknown file's grey: 5.88067402240191 →
+ * 5.848699684485654. One more token that is grey in every theme, so the mean moves down by construction; no
+ * existing colour changed, and the closest pair still clears the untouched 4.3.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.88067402240191;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.848699684485654;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

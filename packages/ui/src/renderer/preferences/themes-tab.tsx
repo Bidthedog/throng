@@ -743,6 +743,8 @@ export function ThemesTab(): ReactElement {
         folded={folds.isFolded(ICONS_FOLD_KEY)}
         onToggleFold={() => folds.toggle(ICONS_FOLD_KEY)}
         theme={activeTheme}
+        entryTheme={entryTheme}
+        shippedTheme={shippedTheme}
         onSetIconSet={setIconSet}
         // An ordinary token edit — the same debounced, theme-captured write path every colour uses,
         // so the icon colour cannot misfile itself into another theme any more than a colour can.

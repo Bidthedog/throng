@@ -70,11 +70,54 @@ mid-save; if it still will not parse, throng runs on the shipped defaults, says 
 log, and leaves your file exactly as it is for you to repair. A key throng does not recognise is kept
 when it writes the file; a retired key it once used is dropped.
 
-## Appearance
+## General
+
+The window, the app-wide behaviour and the attention marks, each under a heading of its own.
+
+### Appearance
+
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Theme | `appearance.theme` | `throng` | Any theme on disk | The active theme, applied across the whole app. See [Themes and icon sets](#themes-and-icon-sets). |
+
+### Window
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Use native Wayland (Linux only) | `window.nativeWayland` | `false` | on · off | Run the window directly on Wayland instead of through XWayland. XWayland suits dragging a tab out, placing windows, and keeping Preferences and About above the main window; dragging files out to GNOME Files needs native Wayland ([Linux](linux.md#display)). Takes effect at the next start. |
+
+### Projects
+
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Folder opened from outside throng | `projects.openFromOutside` | `switch` | `switch` · `load` | What happens when a folder arrives from the file manager or the command line: switch to its project, or only load it. |
+
+### Behaviour
+
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Submenu hover delay | `behaviour.submenuHoverMs` | 100 | 0 – 2,000 ms, step 25 | How long the pointer rests on a context-menu item before its submenu opens. |
+
+### Attention
+
+
+An attention mark flags a panel that needs you; these settings decide how a mark clears and whether
+the taskbar counts it, whatever raised it. How it is announced is the Attention row under
+[Notifications](#notifications); which terminal events raise one is under [Terminal](#terminal).
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Clear delay | `attention.clearDelayMs` | 1,000 | 0 – 10,000 ms, step 100 | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
+| Taskbar badge (Windows only) | `attention.taskbarBadge` | on | on · off | Show the number of marked panels, across every project, on throng's taskbar button, whether or not throng is focused. It is not affected by the notification settings. |
+
+### File Manager
+
+The **Open as throng project** control, under General › **File Manager**, which folds like every other heading, turns the file manager's menu item on or off for your account. It shows what is
+really registered, so it has no entry in `settings.json`. It is disabled, with the reason, for an install made for everyone
+on Windows and for a portable or archive copy.
 
 ## Confirmations
 
@@ -82,7 +125,6 @@ when it writes the file; a retired key it once used is dropped.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Use native Wayland (Linux only) | `window.nativeWayland` | `false` | on · off | Run the window directly on Wayland instead of through XWayland. XWayland suits dragging a tab out, placing windows, and keeping Preferences and About above the main window; dragging files out to GNOME Files needs native Wayland ([Linux](linux.md#display)). Takes effect at the next start. |
 | Remove a project | `confirmations.destroyProject` | `double` | `none` · `single` · `double` | Confirmations before a project is removed. It is unregistered; no files are deleted. |
 | Unload project: default terminal action | `projects.unloadTerminalAction` | `keepRunning` | `keepRunning` (Keep terminals running) · `endTerminals` (End terminals) | What the project menu's **Unload Project** row does to the project's terminals; the menu's second Unload row does the other — **Unload Project and End Terminals** under the shipped setting, **Unload Project and Keep Terminals Running** otherwise. Keep leaves every terminal alive, idle shells included, and reattaches each when the project is next loaded; End ends every terminal, running processes included; one that cannot be ended stays running, says so once, and reattaches when the project is next loaded. Neither row asks anything; the only prompt Unload can show is the usual one for unsaved editors. |
 | Destroy a tab | `confirmations.destroyTab` | `double` | `none` · `single` · `double` | Confirmations before a tab and its panels are destroyed. |
@@ -98,12 +140,6 @@ Each project remembers for itself which side panes are expanded.
 |---|---|---|---|---|
 | Projects pane max width | `panes.projects.maxWidth` | 400 | 200 – 1,200 px, step 10 | The widest the Projects pane can be dragged. |
 | File Explorer pane max width | `panes.fileExplorer.maxWidth` | 700 | 200 – 1,200 px, step 10 | The widest the File Explorer pane can be dragged. |
-
-## Behaviour
-
-| Setting | Key | Default | Values | What it does |
-|---|---|---|---|---|
-| Submenu hover delay | `behaviour.submenuHoverMs` | 100 | 0 – 2,000 ms, step 25 | How long the pointer rests on a context-menu item before its submenu opens. |
 
 ## Tabs
 
@@ -234,7 +270,8 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 | Allowed link protocols | `editor.links.protocolAllowlist` | `mailto`, `tel`, `slack` | A list of scheme names, with or without the colon, any case; may be empty | Schemes, besides the web, that are drawn as links and go to their handler. An email address written on its own is a `mailto:` link while that scheme is listed. Schemes that run code — `javascript`, `data`, `vbscript`, `ms-msdt`, `search-ms` and the like — are refused whatever the list says. |
 | File extensions that end a spaced path | `editor.links.knownFileExtensions` | The extensions throng ships with | A list, each with or without its leading dot, any case; may be empty | Extensions that let an unquoted path run across spaces, in terminals and editors. An empty list means none do. Once you have edited it, extensions added in a later release do not appear in it. |
 
-## Editor · Navigation
+### Navigation
+
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
@@ -242,6 +279,27 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 | Remember the last Quick Open query | `editor.navigation.rememberQuickOpenQuery` | off | on · off | Reopen Quick Open with the last query that actually opened a file, selected so typing replaces it. For this session only; never written to disk. |
 | Remember the last Go To Line number | `editor.navigation.rememberGotoLineNumber` | off | on · off | Reopen Go To Line with the last line you went to. For this session only. |
 | Navigation history size | `editor.navigation.historySize` | 10 | 1 – 100, step 1 | How many files Back and Forward remember in each editor and preview panel. Lowering it trims every open panel at once — never the file it is showing. History persists across restarts. |
+
+### Indentation
+
+
+A file that already indents one way keeps doing so; otherwise its language's entry applies, and
+otherwise the defaults below. A setting never reformats an existing document — it decides what the
+next indent inserts.
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Indent with | `editor.indent.style` | `spaces` | `spaces` · `tabs` | What a new indent inserts. |
+| Indent width | `editor.indent.indentWidth` | 2 | 1 – 16 | Spaces per indent level. |
+| Tab width | `editor.indent.tabWidth` | 4 | 1 – 16 | Columns a literal tab occupies on screen. Display only. |
+| Indentation by language | `editor.indentByLanguage` | Each language's convention | A table: language → style, width (1 – 16), tab width (1 – 16) | Per-language indentation. It cannot be emptied, because that would re-indent every language with the global default. |
+
+### Languages
+
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Language by file extension | `editor.languageByExtension` | empty | A table: extension → language | Map an extension to a language (for example `.foo` → Python), overriding detection by extension. A file throng recognises by name, such as `tsconfig.json`, keeps that language; only the picker changes it ([how the language is chosen](quick-start.md#4-edit-files)). |
 
 ## Terminal
 
@@ -286,46 +344,6 @@ program set · `{shell}` the terminal type · `{path}` the working directory · 
   `ping localhost -t | Git Bash (D:\git\throng)` while a command runs, and `Git Bash (D:\git\throng)` at a prompt.
 - In text, `((` is a bracket, so an expression that opens on a bracket needs a space: `( ({title} ?? {app}) ? … )`.
 
-## Attention
-
-An attention mark flags a panel that needs you; these settings decide how a mark clears and whether
-the taskbar counts it, whatever raised it. How it is announced is the Attention row under
-[Notifications](#notifications); which terminal events raise one is under [Terminal](#terminal).
-
-| Setting | Key | Default | Values | What it does |
-|---|---|---|---|---|
-| Clear delay | `attention.clearDelayMs` | 1,000 | 0 – 10,000 ms, step 100 | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
-| Taskbar badge (Windows only) | `attention.taskbarBadge` | on | on · off | Show the number of marked panels, across every project, on throng's taskbar button, whether or not throng is focused. It is not affected by the notification settings. |
-
-## Editor · Indentation
-
-A file that already indents one way keeps doing so; otherwise its language's entry applies, and
-otherwise the defaults below. A setting never reformats an existing document — it decides what the
-next indent inserts.
-
-| Setting | Key | Default | Values | What it does |
-|---|---|---|---|---|
-| Indent with | `editor.indent.style` | `spaces` | `spaces` · `tabs` | What a new indent inserts. |
-| Indent width | `editor.indent.indentWidth` | 2 | 1 – 16 | Spaces per indent level. |
-| Tab width | `editor.indent.tabWidth` | 4 | 1 – 16 | Columns a literal tab occupies on screen. Display only. |
-| Indentation by language | `editor.indentByLanguage` | Each language's convention | A table: language → style, width (1 – 16), tab width (1 – 16) | Per-language indentation. It cannot be emptied, because that would re-indent every language with the global default. |
-
-## Editor · Languages
-
-| Setting | Key | Default | Values | What it does |
-|---|---|---|---|---|
-| Language by file extension | `editor.languageByExtension` | empty | A table: extension → language | Map an extension to a language (for example `.foo` → Python), overriding detection by extension. A file throng recognises by name, such as `tsconfig.json`, keeps that language; only the picker changes it ([how the language is chosen](quick-start.md#4-edit-files)). |
-
-## Projects
-
-| Setting | Key | Default | Values | What it does |
-|---|---|---|---|---|
-| Folder opened from outside throng | `projects.openFromOutside` | `switch` | `switch` · `load` | What happens when a folder arrives from the file manager or the command line: switch to its project, or only load it. |
-
-The **Open as throng project** control, in its own **File manager** group, turns the file manager's menu item on or off for your account. It shows what is
-really registered, so it has no entry in `settings.json`. It is disabled, with the reason, for an install made for everyone
-on Windows and for a portable or archive copy.
-
 ## New Project
 
 | Setting | Key | Default | Values | What it does |
@@ -333,13 +351,17 @@ on Windows and for a portable or archive copy.
 | New project folder starts at | `newProject.startingFolder` | `lastViewed` | `profile` · `lastViewed` · `override` | Where the new-project folder picker opens: your user profile, the last folder you chose, or the fixed folder below. |
 | Override start folder | `newProject.overridePath` | empty | A folder path; may be empty | The folder the picker opens at when **Override** is chosen. Empty falls back to the last folder, then the profile. |
 
-## Search · Find Bar
+## Search
+
+### Find Bar
+
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Find delay | `search.asYouTypeDebounceMs` | 120 | 0 – 1,000 ms, step 10 | How long the find bar waits after you stop typing before it re-runs the search and updates the highlights. |
 
-## Search · Find in Files
+### Find in Files
+
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
@@ -465,8 +487,9 @@ VSCode, VI-VIM, English Garden, Matrix, Cyberpunk, Claude, Debian and Ubuntu. Th
 edits every token of a theme — colours, fonts and sizes, syntax colours, the icon colour and icon
 set — each with a plain-language label, using colour and size pickers drawn from the theme itself. **Clone** is
 how you make a theme of your own. Contrast is guarded automatically. The seven **File Icons** colours, under File Explorer, colour file icons by kind — code, markup,
-data, documents, media, archives and scripts — in the File Explorer and Find in Files; every bundled
-theme sets them, and clearing one gives that kind the Icon Colour. **Title Bar Background**, under General, is
+data, documents, media, archives and scripts — in the File Explorer and Find in Files, and **Other File
+Icons** colours a file of a kind throng does not recognise, in a neutral grey apart from the folders; every
+bundled theme sets all eight, and clearing one gives those icons the Icon Colour. **Title Bar Background**, under General, is
 the bar across the top of every window; left empty, it is a shade apart from the window background.
 **Icon Button Background**, under
 General › Buttons, is what every icon button sits on in every window; left empty, an icon button shows only its

@@ -234,10 +234,10 @@ foldSectionCollapsed.svg - The marker on a collapsed heading's line in a Markdow
 foldPreviewExpanded.svg - The disclosure triangle beside an expanded heading in a Markdown preview’s fold gutter. Clicking it collapses the section.
 foldPreviewCollapsed.svg - The disclosure triangle beside a collapsed heading in a Markdown preview’s fold gutter. Clicking it expands the section.
 panelMaximise.svg - The icon on a panel header's Maximise button and its menu row, which puts the panel in Focus Mode: it fills its tab's middle section until it is restored.
-panelRestore.svg - The icon on the Restore control of a maximised panel, and on the Minimise control of a maximised diagram, which leaves Focus Mode and puts it back where it was.
+panelRestore.svg - The icon on the Exit Focus Mode control of a panel or a diagram in Focus Mode, which puts it back where it was.
 diagramFit.svg - The icon on a diagram's Fit control, which shrinks the diagram to fit the width of its box.
 diagramZoomReset.svg - The icon on a diagram's Zoom 100% control, which shows the diagram at its actual size, between the zoom-out and zoom-in controls.
-diagramFullPane.svg - The icon on a diagram's Maximise control, which puts the diagram in Focus Mode over the whole middle section until it is minimised.
+diagramFullPane.svg - The icon on a diagram's Enter Focus Mode control, which fills the whole middle section with the diagram and hides the side panes until you leave Focus Mode.
 warning.svg - The marker on a folded Preferences section or subsection that hides a setting holding an invalid entry.
 whitespace.svg - The icon on the editor status bar toggle that shows or hides a symbol for every space, tab, line break and invisible character.
 busy.svg - The icon on the Find in Files cancel control while a search is running. It turns while the search runs; clicking it cancels.

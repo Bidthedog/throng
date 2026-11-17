@@ -27,10 +27,23 @@ import { FormHistoryControl } from './form-history-control.js';
 import { foldKey, groupDescriptors } from './group-descriptors.js';
 import { Subsection } from './subsection.js';
 import { FoldAllButtons, FoldHeading } from './fold-heading.js';
-import { useTabFolding } from './use-preference-folds.js';
+import { useTabFolding, type FoldCount } from './use-preference-folds.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { createApplyClient } from './apply-client.js';
 import { logCaught } from '@throng/core';
+
+/**
+ * 069 FR-067, FR-068 — the File Manager item sits under General as its last subgroup, and folds like one. It is
+ * not a setting (the OS registration is the state), so it has no descriptor and the tab names its key itself.
+ */
+const GENERAL = 'General';
+const FILE_MANAGER = 'File Manager';
+const FILE_MANAGER_FOLD_KEY = foldKey(GENERAL, FILE_MANAGER);
+/** What a query must name to find the File Manager item (067 FR-034). */
+const FILE_MANAGER_QUERY = /file manager|open as throng project|context menu|explorer|nautilus|dolphin|nemo/i;
+const EXTRA_FOLD_KEYS: readonly string[] = [FILE_MANAGER_FOLD_KEY];
+/** A window with no file manager bridge draws no File manager category, so Collapse All has no key to write for it. */
+const NO_EXTRA_FOLD_KEYS: readonly string[] = [];
 
 /**
  * The Settings tab (feature 007, US2 — FR-026/027/028). A generic form rendered
@@ -213,7 +226,16 @@ export function SettingsTab({
     () => (applied.trim() === '' ? allGroups : groupDescriptors(matches)),
     [applied, allGroups, matches],
   );
-  const { folds, countOf } = useTabFolding('settings', query, applied, allGroups, groups);
+  const fileManagerAvailable = window.throng?.fileManagerItem !== undefined;
+  const showFileManager = fileManagerAvailable && (query.trim() === '' || FILE_MANAGER_QUERY.test(query));
+  const { folds, countOf } = useTabFolding(
+    'settings',
+    query,
+    applied,
+    allGroups,
+    groups,
+    fileManagerAvailable ? EXTRA_FOLD_KEYS : NO_EXTRA_FOLD_KEYS,
+  );
 
   // 068 — open and scroll to the requested section. Sections start folded (056 FR-016), so a link that only
   // scrolled would land on a closed heading: unfold first, and scroll once the unfolded section has rendered
@@ -520,7 +542,7 @@ export function SettingsTab({
             titleClassName="settings-group__title"
             folded={folds.isFolded(foldKey(group))}
             onToggle={() => folds.toggle(foldKey(group))}
-            {...countOf(foldKey(group))}
+            {...groupCount(group)}
           >
             {/* FR-036b — the fields with no subgroup FIRST. A field must never appear below a
                 subsection heading it does not belong to. */}
@@ -558,21 +580,60 @@ export function SettingsTab({
                 ))}
               </Subsection>
             ))}
+            {group === GENERAL ? fileManagerSubgroup() : null}
           </FoldHeading>
         </section>
       ))}
-
-      {/* 067 FR-034 — the file manager's folder item. Not a setting (the OS registration is the state), so it
-          has no descriptor; it is found by search like one. */}
-      {window.throng?.fileManagerItem !== undefined &&
-      (query.trim() === '' || /file manager|open as throng project|context menu|explorer|nautilus|dolphin|nemo/i.test(query)) ? (
-        <section className="settings-group" data-testid="settings-group-file-manager">
-          <h3 className="settings-group__title">File manager</h3>
-          <FileManagerItemControl />
+      {/* A query that finds only the File Manager item still shows it, under its General heading. */}
+      {showFileManager && !groups.some((g) => g.group === GENERAL) ? (
+        <section className="settings-group" data-testid={`settings-group-${GENERAL}`}>
+          <FoldHeading
+            level={3}
+            testId={`settings-group-${GENERAL}`}
+            name={GENERAL}
+            titleClassName="settings-group__title"
+            folded={folds.isFolded(foldKey(GENERAL))}
+            onToggle={() => folds.toggle(foldKey(GENERAL))}
+            {...groupCount(GENERAL)}
+          >
+            {fileManagerSubgroup()}
+          </FoldHeading>
         </section>
       ) : null}
+
     </div>
   );
+
+  /**
+   * 067 FR-034's file manager item, under General as its own subgroup (069 FR-067, FR-068), found by search
+   * like a setting. Its key is in `EXTRA_FOLD_KEYS`, so Expand All and Collapse All reach it.
+   */
+  function fileManagerSubgroup(): ReactElement | null {
+    if (!showFileManager) return null;
+    return (
+      <Subsection
+        key={FILE_MANAGER}
+        testIdPrefix="settings-subgroup"
+        group={GENERAL}
+        subgroup={FILE_MANAGER}
+        folded={folds.isFolded(FILE_MANAGER_FOLD_KEY)}
+        onToggle={() => folds.toggle(FILE_MANAGER_FOLD_KEY)}
+        count={{ total: 1, matches: applied.trim() !== '' ? 1 : undefined }}
+      >
+        <FileManagerItemControl />
+      </Subsection>
+    );
+  }
+
+  /** A group's fold count; General's counts the File Manager item too, when it is shown. */
+  function groupCount(group: string): FoldCount {
+    const count = countOf(foldKey(group));
+    if (group !== GENERAL || !fileManagerAvailable) return count;
+    return {
+      total: count.total + 1,
+      matches: count.matches === undefined ? undefined : count.matches + (showFileManager ? 1 : 0),
+    };
+  }
 
   /**
    * Render a list of descriptors, folding CONSECUTIVE ones that share a `row.id` into one row (057

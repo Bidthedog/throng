@@ -204,7 +204,7 @@ describe('the toolbar (FR-046b, FR-046h)', () => {
       'Zoom in',
       'Zoom 100%',
       'Zoom out',
-      'Maximise',
+      'Enter Focus Mode',
     ]);
     for (const b of buttons) {
       b.focus();
@@ -416,7 +416,7 @@ describe('Maximise (FR-046f)', () => {
   it('maximises the diagram as a section of its panel, drawn in the maximise layer with its view kept', () => {
     const { frame } = mountWithLayer();
     fireEvent.click(within(frame()).getByTitle('Zoom in'));
-    fireEvent.click(within(frame()).getByTitle('Maximise'));
+    fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
 
     expect(getMaximiseStack('t1')).toEqual([expect.objectContaining({ kind: 'section', panelId: 'p1', sectionId: 'diagram-0' })]);
     const layer = screen.getByTestId('maximise-layer');
@@ -431,17 +431,17 @@ describe('Maximise (FR-046f)', () => {
   it('its control becomes Minimise, which — like Esc — returns it to its place with the same zoom', () => {
     const { frame } = mountWithLayer();
     fireEvent.click(within(frame()).getByTitle('Zoom in'));
-    fireEvent.click(within(frame()).getByTitle('Maximise'));
+    fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
     const inLayer = within(screen.getByTestId('maximise-layer'));
     expect(inLayer.queryByTitle('Restore')).toBeNull();
-    expect(inLayer.queryByTitle('Maximise')).toBeNull();
-    fireEvent.click(inLayer.getByTitle('Minimise'));
+    expect(inLayer.queryByTitle('Enter Focus Mode')).toBeNull();
+    fireEvent.click(inLayer.getByTitle('Exit Focus Mode'));
 
     expect(getMaximiseStack('t1')).toEqual([]);
     expect(screen.queryByTestId('maximise-layer')).toBeNull();
     expect(frame().querySelector<HTMLElement>('.preview-diagram-frame__layer')!.style.transform).toContain('scale(0.625)');
 
-    fireEvent.click(within(frame()).getByTitle('Maximise'));
+    fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(getMaximiseStack('t1')).toEqual([]);
     expect(frame().querySelector('svg')).toBeTruthy();
@@ -451,7 +451,7 @@ describe('Maximise (FR-046f)', () => {
     const { frame } = mountWithLayer();
     fireEvent.click(within(frame()).getByTitle('Zoom in')); // scale 0.625 → 500×187.5
     box = { width: 600, height: 400 }; // the maximised viewport is bigger than the inline one
-    fireEvent.click(within(frame()).getByTitle('Maximise'));
+    fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
 
     const moved = screen.getByTestId('maximise-layer').querySelector<HTMLElement>('.preview-diagram-frame__layer')!;
     expect(moved.style.transform).toBe('translate(50px, 106.25px) scale(0.625)');
@@ -460,7 +460,7 @@ describe('Maximise (FR-046f)', () => {
   it('a diagram maximised in Fit is fitted to, and centred in, the maximised viewport (A4)', () => {
     const { frame } = mountWithLayer();
     box = { width: 600, height: 400 };
-    fireEvent.click(within(frame()).getByTitle('Maximise'));
+    fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
 
     const moved = screen.getByTestId('maximise-layer').querySelector<HTMLElement>('.preview-diagram-frame__layer')!;
     // 600 / 800 = 0.75 → 600×225 in 600×400.
@@ -469,7 +469,7 @@ describe('Maximise (FR-046f)', () => {
 
   it('a frame that unmounts (its tab switched away) keeps the target, and the remounted frame fills the layer again (FR-073)', () => {
     const { view, frame } = mountWithLayer();
-    fireEvent.click(within(frame()).getByTitle('Maximise'));
+    fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
 
     // Tab away: the panel, and so the frame, unmounts. The target is the tab's, not the frame's.
     view.rerender(createElement('div', null, createElement(MaximiseLayer, { tabId: 't1' })));
@@ -546,7 +546,7 @@ describe('panel zoom while a diagram has focus (A5)', () => {
         createElement(MaximiseLayer, { tabId: 't1' }),
       ),
     );
-    fireEvent.click(within(screen.getByTestId('diagram-frame-p1-diagram-0')).getByTitle('Maximise'));
+    fireEvent.click(within(screen.getByTestId('diagram-frame-p1-diagram-0')).getByTitle('Enter Focus Mode'));
     const pane = screen.getByTestId('maximise-layer');
     pane.querySelector<HTMLElement>('.preview-diagram-frame__viewport')!.focus();
     expect(zoomFocusedDiagram('in')).toBe(true);

@@ -232,6 +232,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The colour of the File Explorer and Find in Files icons for shell and PowerShell scripts, keys and certificates. Leave it empty and they take the Icon Colour.',
   },
+  'colours.fileIconOther': {
+    label: 'Other File Icons',
+    description:
+      'The colour of the File Explorer and Find in Files icon for a file whose kind throng does not recognise. Leave it empty and it takes the Icon Colour, like the folders.',
+  },
   'colours.titleBarSurface': {
     label: 'Title Bar Background',
     description:

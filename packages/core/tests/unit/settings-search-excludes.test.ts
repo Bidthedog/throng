@@ -34,17 +34,17 @@ describe('search.inFiles.excludeGlobs', () => {
     expect(copy.search.inFiles.excludeGlobs).not.toBe(DEFAULT_APP_SETTINGS.search.inFiles.excludeGlobs);
   });
 
-  it('is edited as a list under Search · Find in Files', () => {
+  it('is edited as a list under Search › Find in Files', () => {
     const d = SETTINGS_METADATA.find((m) => m.key === 'search.inFiles.excludeGlobs');
-    expect(d).toMatchObject({ group: 'Search · Find in Files', control: 'array', itemControl: 'text' });
+    expect(d).toMatchObject({ group: 'Search', subgroup: 'Find in Files', control: 'array', itemControl: 'text' });
   });
 });
 
 describe('search.inFiles.useExcludeGlobs', () => {
-  it('defaults to on, and is a toggle under Search · Find in Files', () => {
+  it('defaults to on, and is a toggle under Search › Find in Files', () => {
     expect(DEFAULT_APP_SETTINGS.search.inFiles.useExcludeGlobs).toBe(true);
     const d = SETTINGS_METADATA.find((m) => m.key === 'search.inFiles.useExcludeGlobs');
-    expect(d).toMatchObject({ group: 'Search · Find in Files', control: 'toggle' });
+    expect(d).toMatchObject({ group: 'Search', subgroup: 'Find in Files', control: 'toggle' });
   });
 
   it('falls back to its default for a non-boolean', () => {

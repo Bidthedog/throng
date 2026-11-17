@@ -8,6 +8,8 @@
  * fed only by main's `changed` broadcast (`HistoryMirrorSync`); the tests seed it the way that broadcast
  * would.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -101,18 +103,33 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('drawn on editor and preview headers, before the type icon, and on no other kind (FR-100, FR-104)', () => {
-  it('a preview draws Back then Forward before its type icon', async () => {
+describe('drawn on editor and preview headers, between the type icon and the title, and on no other kind (FR-100, FR-104, 069 FR-065)', () => {
+  /** `a` comes before `b` in the header. */
+  const precedes = (a: Element, b: Element): boolean => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+  it('a preview draws its type icon, then Back, then Forward, then its title', async () => {
     const { id } = await mountPreview();
     const kind = screen.getByTestId(`panel-kind-${id}`);
-    expect(back(id).compareDocumentPosition(kind) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(back(id).compareDocumentPosition(forward(id)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const title = screen.getByTestId(`panel-title-${id}`);
+    expect(precedes(kind, back(id))).toBe(true);
+    expect(precedes(back(id), forward(id))).toBe(true);
+    expect(precedes(forward(id), title)).toBe(true);
   });
 
-  it('an editor draws them before its type icon', async () => {
+  it('an editor draws them after its type icon and before its title', async () => {
     const { id } = mountEditorPanel();
     const kind = await screen.findByTestId(`panel-kind-${id}`);
-    expect(back(id).compareDocumentPosition(kind) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(precedes(kind, back(id))).toBe(true);
+    expect(precedes(forward(id), screen.getByTestId(`panel-title-${id}`))).toBe(true);
+  });
+
+  it('pins the type icon ahead of Back / Forward in the stylesheet too, which decides what the eye sees', () => {
+    const css = readFileSync(join(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');
+    const orderOf = (selector: string): number => {
+      const body = css.slice(css.indexOf(`${selector} {`));
+      return Number(/order:\s*(-?\d+)/.exec(body.slice(0, body.indexOf('}')))?.[1]);
+    };
+    expect(orderOf('.panel-box__type-icon')).toBeLessThan(orderOf('.panel-box__history'));
   });
 
   it('an untyped panel draws neither', async () => {

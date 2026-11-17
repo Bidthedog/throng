@@ -86,6 +86,9 @@ const closeGate: {
   held: Array<() => void>;
 } = { ask: null, replies: [], holdWrites: false, held: [] };
 
+/** Extra members for the bridge, for the test that needs one (the file manager item, 069 FR-067). */
+let bridgeExtras: Record<string, unknown> = {};
+
 /** Read a dotted path out of a settings-shaped record — what the shipped record holds there. */
 function getAtDottedPath(source: Record<string, unknown>, path: string): unknown {
   let cursor: unknown = source;
@@ -201,6 +204,7 @@ function mount(
       listThemes: () => Promise.resolve(themeList),
       listFonts: () => Promise.resolve([]),
     },
+    ...bridgeExtras,
     onPreferencesCloseRequest: (cb: (payload: { requestId: number }) => void) => {
       closeGate.ask = cb;
       return () => {
@@ -266,6 +270,7 @@ function setJson(text: string): void {
  * and awaits what is in flight, into the bridge that scheduled it; only then is the bridge removed.
  */
 afterEach(async () => {
+  bridgeExtras = {};
   closeGate.holdWrites = false;
   for (const release of closeGate.held.splice(0)) release();
   closeGate.replies.length = 0;
@@ -394,6 +399,29 @@ describe('an invalid JSON document blocks every exit, says so ONCE, and writes n
     await user.click(screen.getByTestId('prefs-tab-keybindings'));
 
     await waitFor(() => expect(screen.getByTestId('json-tab-keybindings')).toBeInTheDocument());
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The File manager category folds like every other (069 FR-067)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('the File manager category', () => {
+  it('is a subgroup of General of its own that expands and collapses', async () => {
+    bridgeExtras = {
+      fileManagerItem: { status: () => Promise.resolve({ state: 'off' }), setEnabled: () => Promise.resolve({ state: 'off' }) },
+    };
+    const { user } = mount();
+    await ready();
+    const toggle = await screen.findByTestId('settings-subgroup-General-File Manager-toggle');
+    // Folded content stays mounted under `hidden` (fold-heading.tsx), and a category may start either way.
+    const content = (): Element => screen.getByTestId('file-manager-item-toggle').closest('.fold-content')!;
+    const startsFolded = content().hasAttribute('hidden');
+
+    await user.click(toggle);
+    expect(content().hasAttribute('hidden')).toBe(!startsFolded);
+    await user.click(toggle);
+    expect(content().hasAttribute('hidden')).toBe(startsFolded);
   });
 });
 

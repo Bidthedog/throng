@@ -5,35 +5,42 @@ Spec: `specs/069-lucide-icon-set/spec.md`
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
 | MT-01 | Icon mapping review page | signed off | 4e0952c993c6 | 2026-11-16 | |
-| MT-02 | Icons in the File Explorer | signed off | 4e0952c993c6 | 2026-11-16 | |
-| MT-03 | Icons on panels, tabs and panes | signed off | 4e0952c993c6 | 2026-11-16 | |
+| MT-02 | Icons in the File Explorer | needs retest | 4e0952c993c6 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/explorer/drag-action-label.tsx |
+| MT-03 | Icons on panels, tabs and panes | needs retest | 4e0952c993c6 | 2026-11-16 | fc68b332 touched packages/ui/src/renderer/panes/focus-mode-panes.tsx |
 | MT-04 | Icons on the window controls and title bar | signed off | 4e0952c993c6 | 2026-11-16 | |
 | MT-05 | Icons in context menus | signed off | 4e0952c993c6 | 2026-11-16 | |
 | MT-06 | Icons in Find and Find in Files | signed off | 4e0952c993c6 | 2026-11-16 | |
-| MT-07 | Icons in Preferences | signed off | 4e0952c993c6 | 2026-11-16 | |
-| MT-08 | Icons in the Resource Monitor | signed off | 3858e6604516 | 2026-11-16 | |
-| MT-09 | Icons in editors, previews and diagrams | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-10 | Icons in notifications | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-11 | The read-only icon grid | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-12 | Create a set and override icons | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-13 | Upgrade from an alpha16 configuration | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-14 | Lucide licence and the icon sets README | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-15 | Rename, delete and reset in Preferences | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-16 | The Icon set row: order, toasts and the asterisk | signed off | 586d05c607b0 | 2026-11-16 | |
+| MT-07 | Icons in Preferences | needs retest | 4e0952c993c6 | 2026-11-16 | 1213c42a touched packages/ui/src/renderer/preferences/preferences-app.tsx |
+| MT-08 | Icons in the Resource Monitor | needs retest | 3858e6604516 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/resources/help-panel.tsx |
+| MT-09 | Icons in editors, previews and diagrams | needs retest | 586d05c607b0 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/editor/editor.css |
+| MT-10 | Icons in notifications | needs retest | 586d05c607b0 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/notifications/place-popover.tsx |
+| MT-11 | The read-only icon grid | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/core/src/icons/icon-keys.ts |
+| MT-12 | Create a set and override icons | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/icon-section.tsx |
+| MT-13 | Upgrade from an alpha16 configuration | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched FR-037 in specs/069-lucide-icon-set/spec.md |
+| MT-14 | Lucide licence and the icon sets README | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/core/src/icons/icon-sets-README.txt |
+| MT-15 | Rename, delete and reset in Preferences | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/icon-section.tsx |
+| MT-16 | The Icon set row: order, toasts and the asterisk | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/icon-section.tsx |
 | MT-17 | The Preferences window: maximise, and folders above it | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-18 | Themes tab: every action always shown, greyed when unusable | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-19 | Toast controls: placement, spacing and hover | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-20 | Notification hover delay | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-21 | The project settings dialog | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-22 | One look for the secondary windows | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-23 | The File Explorer's Delete as a rubbish bin | signed off | 586d05c607b0 | 2026-11-16 | |
+| MT-18 | Themes tab: every action always shown, greyed when unusable | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/icon-section.tsx |
+| MT-19 | Toast controls: placement, spacing and hover | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/ui/src/renderer/common/command-line-notice.tsx |
+| MT-20 | Notification hover delay | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/core/src/config/settings-metadata.ts |
+| MT-21 | The project settings dialog | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/settings-tab.tsx |
+| MT-22 | One look for the secondary windows | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/ui/src/renderer/theme.css |
+| MT-23 | The File Explorer's Delete as a rubbish bin | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/core/src/icons/icon-keys.ts |
 | MT-24 | File and folder kinds in the tree | signed off | 586d05c607b0 | 2026-11-16 | |
 | MT-25 | Language file icons | signed off | 586d05c607b0 | 2026-11-16 | |
 | MT-26 | The Markdown mark | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-27 | File Explorer row popover | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-28 | Title bars apart from their windows | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-29 | File icons coloured by category | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-30 | Resource Monitor "?" helpers | signed off | 4e0952c993c6 | 2026-11-16 | |
+| MT-27 | File Explorer row popover | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/core/src/config/settings-metadata.ts |
+| MT-28 | Title bars apart from their windows | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/core/src/config/theme.ts |
+| MT-29 | File icons coloured by category | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/ui/src/renderer/theme.css |
+| MT-30 | Resource Monitor "?" helpers | needs retest | 4e0952c993c6 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/resources/info-helper.tsx |
+| MT-31 | Icon set and Icon colour row actions | untested | | | |
+| MT-32 | The unknown file's own colour | untested | | | |
+| MT-33 | Panel type icon first in the header | untested | | | |
+| MT-34 | A diagram's Focus Mode | untested | | | |
+| MT-35 | The File Manager category | untested | | | |
+| MT-36 | Settings grouped under General, Editor and Search | untested | | | |
+| MT-37 | About: the licence box's pointer, and Lucide's row | untested | | | |
 
 ## MT-01: Icon mapping review page
 
@@ -235,7 +242,7 @@ Covers: FR-022, FR-023, US5
 Paths: `packages/ui/src/renderer/about/**`, `scripts/generate-licenses.mjs`, `packages/core/src/icons/icon-sets-README.txt`
 
 ### Steps
-1. Open About. Lucide 1.66.0 is listed with ISC; expanding it shows the full licence text, including the Feather MIT notice.
+1. Open About. Lucide 1.66.0 is listed with ISC, like every other package, and its ISC link opens the licence (FR-069: no licence text control).
 2. Open `icon-packs/README.txt` in a text editor. It reads as plain text, explains making a set, Override this icon, Open folder, Reload the icon sets from disk and the `.bak` backups, and lists every key with its file name and description.
 
 ### Negative cases
@@ -449,7 +456,7 @@ Covers: FR-061
 Paths: `packages/core/src/config/file-icon-colours.ts`, `packages/ui/src/renderer/theme.css`, `packages/ui/src/renderer/explorer/tree-node.tsx`, `packages/ui/src/renderer/find-in-files/results-list.tsx`
 
 ### Steps
-1. Open a project with code, HTML or CSS, JSON or YAML, Markdown, images, a zip and a shell script. In the File Explorer each kind is a different colour: code blue, markup red-orange, data teal, documents amber, media pink, archives violet, scripts green. An unknown file and every folder keep the normal icon colour.
+1. Open a project with code, HTML or CSS, JSON or YAML, Markdown, images, a zip and a shell script. In the File Explorer each kind is a different colour: code blue, markup red-orange, data teal, documents amber, media pink, archives violet, scripts green. Every folder keeps the normal icon colour; an unknown file is grey (MT-32).
 2. Hover and select a row of each colour: every icon stays clearly readable on the hover and selection backgrounds.
 3. Search in Find in Files: each file heading's icon has the same colour as in the tree, and so does the row popover's large icon.
 4. Switch to the Light theme: the same kinds keep the same hues, darker, and still read clearly. Try two or three dark themes too.
@@ -471,3 +478,87 @@ Paths: `packages/ui/src/renderer/theme.css`, `packages/ui/src/renderer/resources
 
 ### Negative cases
 - At 200% display scaling the same holds.
+
+## MT-31: Icon set and Icon colour row actions
+
+Covers: FR-063
+Paths: `packages/ui/src/renderer/preferences/icon-section.tsx`, `packages/ui/src/renderer/preferences/themes-tab.tsx`
+
+### Steps
+1. Open Preferences → Themes on a bundled theme and unfold Icons. The Icon set and Icon colour rows each end in Revert, Reset and Clear, in the same column and order as the colour rows above, all greyed out, each saying why on hover.
+2. Pick a different icon colour: its Revert, Reset and Clear light up. Revert puts back the colour the window opened with; Reset and Clear empty it.
+3. Pick one of your own icon sets: the Icon set row's three light up. Revert goes back to the set the window opened with; Reset and Clear go back to the default set.
+4. Clone the theme and open the clone: both rows show Revert and Clear but no Reset.
+
+### Negative cases
+- The old lone Clear button beside the icon colour is gone.
+
+## MT-32: The unknown file's own colour
+
+Covers: FR-064
+Paths: `packages/core/src/config/file-icon-colours.ts`, `packages/ui/src/renderer/theme.css`
+
+### Steps
+1. Open a project with a file of a kind throng does not know (for example `notes.xyz`) beside some folders. The unknown file's icon is a neutral grey, different from the folders' colour and from every coloured file kind.
+2. Switch through a dark theme and the Light theme: the grey changes with the theme, stays readable, and still differs from the folders.
+3. Preferences → Themes → File Explorer → File Icons: Other File Icons is listed; change it and the unknown file follows; clear it and the file takes the Icon Colour, like the folders.
+
+### Negative cases
+- Folders do not change colour.
+
+## MT-33: Panel type icon first in the header
+
+Covers: FR-065
+Paths: `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/theme.css`
+
+### Steps
+1. Open an editor panel: its header reads type icon, then Back and Forward, then the title.
+2. Open a Markdown preview: the same order.
+3. Open a terminal: the type icon is first, then the title.
+4. Tear a panel out into a sub-workspace window: the order is the same there.
+
+## MT-34: A diagram's Focus Mode
+
+Covers: FR-066
+Paths: `packages/ui/src/renderer/preview/diagram/diagram-frame.tsx`, `packages/ui/src/renderer/panes/focus-mode-panes.tsx`, `packages/ui/src/renderer/workspace/maximise-store.ts`
+
+### Steps
+1. Open a Markdown preview with a mermaid diagram, with both side panes showing. Hover the diagram's toolbar: the control reads Enter Focus Mode.
+2. Click it: the diagram fills the middle and both side panes close, as with a panel's Focus Mode. The control now reads Exit Focus Mode.
+3. Click Exit Focus Mode: the diagram goes back and both side panes return.
+4. Hide one side pane first, then do the same: on exit only the pane that was showing comes back.
+5. Right-click the diagram: the menu's Enter / Exit Focus Mode does the same.
+
+## MT-35: The File Manager category
+
+Covers: FR-067
+Paths: `packages/ui/src/renderer/preferences/settings-tab.tsx`
+
+### Steps
+1. Open Preferences → Settings and unfold General: File Manager is its last sub-heading, with a fold chevron like the others.
+2. Click it: it folds and unfolds the "Open as throng project" item.
+3. Collapse All and Expand All fold and unfold it with the rest.
+4. Search for "file manager": General appears with only File Manager in it, unfolded with its item.
+
+## MT-36: Settings grouped under General, Editor and Search
+
+Covers: FR-068
+Paths: `packages/core/src/config/settings-metadata.ts`, `packages/ui/src/renderer/preferences/settings-tab.tsx`
+
+### Steps
+1. Open Preferences → Settings. The first heading is General; unfold it: Appearance, Window, Projects, Behaviour, Attention and File Manager are sub-headings inside it, each with its settings.
+2. There is no separate Appearance, Window, Projects, Behaviour or Attention heading any more.
+3. Unfold Editor: Status Bar, Previews, Links, Navigation, Indentation and Languages are sub-headings inside it. There is no "Editor · Navigation", "Editor · Indentation" or "Editor · Languages" heading.
+4. Unfold Search: Find Bar and Find in Files are sub-headings inside it. There is no "Search · …" heading.
+5. Search for "navigation", then "indentation", then "find in files": each shows its sub-heading's settings under its parent heading.
+6. Change a setting in each regrouped section: it saves and takes effect as before.
+
+## MT-37: About: the licence box's pointer, and Lucide's row
+
+Covers: FR-069
+Paths: `packages/ui/src/renderer/about/about.css`, `packages/ui/src/renderer/about/about-app.tsx`
+
+### Steps
+1. Open About and move the pointer over the licence box's scrollbar: it is the arrow, not the text cursor. Drag the scrollbar: the text scrolls.
+2. Select some licence text with the mouse and copy it: it copies.
+3. Scroll the third-party list to lucide: it shows its version and an ISC link, and no button to show its licence text, like the packages around it.

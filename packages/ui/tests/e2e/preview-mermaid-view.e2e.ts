@@ -155,7 +155,7 @@ test('B2: a maximised diagram fills the whole middle section, as a layer above e
   // An inline diagram: a standalone `.mmd` maximises from its panel header only.
   const id = await previewFromEditor(win, 'max.md', 'Max doc');
   const frame = await drawnFrame(win, id);
-  await byTitle(frame, 'Maximise').click();
+  await byTitle(frame, 'Enter Focus Mode').click();
 
   const layer = win.getByTestId('maximise-layer');
   await expect(layer).toBeVisible();
@@ -183,7 +183,7 @@ test('B2: a maximised diagram fills the whole middle section, as a layer above e
   // The whole drawing is shown (not its top half).
   expect(svg!.bottom, 'the drawing’s bottom against the viewport’s').toBeLessThanOrEqual(viewport!.bottom + 1);
 
-  await byTitle(layer, 'Minimise').click();
+  await byTitle(layer, 'Exit Focus Mode').click();
   await expect(layer).toHaveCount(0);
 });
 
@@ -196,7 +196,7 @@ test('B3: a maximised diagram sits above an open find bar, which stays open', { 
   const bar = win.getByTestId(`find-bar-${id}`);
   await expect(bar).toBeVisible();
 
-  await byTitle(frame, 'Maximise').click();
+  await byTitle(frame, 'Enter Focus Mode').click();
   const layer = win.getByTestId('maximise-layer');
   await expect(layer).toBeVisible();
 
@@ -223,7 +223,7 @@ test('B3: a maximised diagram sits above an open find bar, which stays open', { 
   expect(top.inBar, `the find bar is the topmost element at its own centre (topmost: ${top.what})`).toBe(false);
   expect(top.inLayer, `the maximised diagram’s layer is the topmost element there (topmost: ${top.what})`).toBe(true);
 
-  await byTitle(layer, 'Minimise').click();
+  await byTitle(layer, 'Exit Focus Mode').click();
   await win.keyboard.press('Escape');
 });
 
@@ -243,7 +243,7 @@ test('B6: a maximised inline diagram covers its preview’s status bar', { tag: 
   const strip = win.getByTestId(`preview-status-bar-${id}`);
   await expect(strip).toBeVisible();
 
-  await byTitle(frame, 'Maximise').click();
+  await byTitle(frame, 'Enter Focus Mode').click();
   const layer = win.getByTestId('maximise-layer');
   await expect(layer).toBeVisible();
   const box = await strip.boundingBox();
@@ -252,7 +252,7 @@ test('B6: a maximised inline diagram covers its preview’s status bar', { tag: 
   expect(top.inTarget, 'the preview’s status bar is the topmost element at its own centre').toBe(false);
   expect(top.inLayer, 'the maximised diagram’s layer is the topmost element there').toBe(true);
 
-  await byTitle(layer, 'Minimise').click();
+  await byTitle(layer, 'Exit Focus Mode').click();
 });
 
 test('B7: collapsing a heading hides the diagram in its region with the rest of it', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
@@ -377,7 +377,7 @@ test('B8: focus borders paint above a zoomed diagram — a .mmd preview’s pane
   )
     .slice(0, 3)
     .map(Number) as [number, number, number];
-  await byTitle(mdFrame, 'Maximise').click();
+  await byTitle(mdFrame, 'Enter Focus Mode').click();
   const pane = win.getByTestId('maximise-layer').locator('.preview-diagram-frame--in-pane');
   await expect(pane.locator('.preview-diagram-frame__layer svg').first()).toBeVisible();
   const paneY = await nodeOntoLeftEdge(win, pane, pane);

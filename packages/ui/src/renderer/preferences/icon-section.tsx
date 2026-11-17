@@ -3,7 +3,9 @@ import {
   DEFAULT_ICON_SET_NAME,
   ICON_KEYS,
   ICON_KEY_DESCRIPTIONS,
+  isThemeTokenOverridden,
   logCaught,
+  themeTokenDiffersFromEntry,
   validateIconSetName,
   type IconKey,
   type Theme,
@@ -19,6 +21,7 @@ import { useConfirm } from '../confirm-dialog.js';
 import type { IconSetsResult } from '../global.js';
 import { FoldHeading } from './fold-heading.js';
 import { NameDialog } from './name-dialog.js';
+import { RowActions } from './row-actions.js';
 
 /**
  * Icon section of the Themes tab (007 US4, 017 / #54, reworked by 069).
@@ -68,10 +71,18 @@ export interface IconSectionProps {
   /** Is the section folded? The Themes tab's `usePreferenceFolds` answers (056 FR-001, FR-013). */
   folded: boolean;
   onToggleFold: () => void;
+  /**
+   * The theme as it stood when this window opened, and as it shipped (`undefined` for a theme of the user's own).
+   * The two rows above the grid take Revert and Reset against them, as every token row does (069 FR-063).
+   */
+  entryTheme?: Theme;
+  shippedTheme?: Theme;
 }
 
 export function IconSection({
   theme,
+  entryTheme = theme,
+  shippedTheme,
   onSetIconSet,
   onSetIconColour,
   filter = null,
@@ -360,6 +371,19 @@ export function IconSection({
               ))}
             </select>
           </div>
+          {/* 069 FR-063 — the row actions every preference row carries. Clear and Reset both mean the default set
+              for a built-in, which ships none; Reset is declined on a theme of the user's own. */}
+          <RowActions
+            kind="theme"
+            itemKey="iconPack"
+            label="Icon set"
+            overridden={isThemeTokenOverridden(theme, shippedTheme, 'iconPack')}
+            changed={themeTokenDiffersFromEntry(theme, entryTheme, 'iconPack')}
+            clearable={theme.iconPack !== undefined}
+            onReset={shippedTheme ? () => onSetIconSet(shippedTheme.iconPack) : undefined}
+            onRevert={() => onSetIconSet(entryTheme.iconPack)}
+            onClear={() => onSetIconSet(undefined)}
+          />
         </div>
       ) : null}
 
@@ -389,21 +413,20 @@ export function IconSection({
               // colour of whatever it sits on, which is why no bundled theme sets it.
               clearable
             />
-            {/* FR-043a — an action control, therefore a THEMED ICON with a hover title, not a text
-                button. 069 FR-049: always on screen, greyed out while there is nothing to clear. */}
-            <IconButton
-              token={ROW_ACTION_TOKENS.clear}
-              className="icon-button icon-colour__clear"
-              testId="icon-colour-clear"
-              title={
-                theme.colours.iconColour
-                  ? 'Clear the icon colour — icons take the colour of what they sit on'
-                  : 'The icon colour is already empty: icons take the colour of what they sit on'
-              }
-              disabled={!theme.colours.iconColour}
-              onClick={() => onSetIconColour('')}
-            />
           </div>
+          {/* 069 FR-063 — Revert, Reset and Clear, as on every colour row. Clear empties it: icons then take the
+              colour of what they sit on. */}
+          <RowActions
+            kind="theme"
+            itemKey="colours.iconColour"
+            label="Icon colour"
+            overridden={isThemeTokenOverridden(theme, shippedTheme, 'colours.iconColour')}
+            changed={themeTokenDiffersFromEntry(theme, entryTheme, 'colours.iconColour')}
+            clearable={(theme.colours.iconColour ?? '') !== ''}
+            onReset={shippedTheme ? () => onSetIconColour(shippedTheme.colours.iconColour ?? '') : undefined}
+            onRevert={() => onSetIconColour(entryTheme.colours.iconColour ?? '')}
+            onClear={() => onSetIconColour('')}
+          />
         </div>
       ) : null}
 

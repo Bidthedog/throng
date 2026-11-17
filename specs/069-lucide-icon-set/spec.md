@@ -471,6 +471,39 @@ icon sets folder in a plain text editor and follow it to override one icon.
   sixth-feedback placement, "superscript and close beside", which the code had read as no margin at all;
   the Lucide art also sized itself from the theme's icon size and overflowed the helper's box onto its
   text.)*
+- **FR-063**: The Themes tab's **Icon set** and **Icon colour** rows MUST carry Revert, Reset and Clear in
+  the same place and with the same rules as every other preference row (015 FR-015, issue #76): all three
+  always on screen, an action that does not apply greyed out with its reason as its title, and Reset
+  declined on a theme of the user's own. Clear on Icon set selects the default set; Clear on Icon colour
+  empties it. *(Replaces FR-049's lone Clear beside the icon colour.)*
+- **FR-064**: The unknown file's icon — a file whose kind matches no category — MUST be coloured by its
+  own optional theme token, **Other File Icons** (`colours.fileIconOther`), which every bundled theme sets
+  to a neutral grey derived as FR-061's categories are and held to the same 4.5:1. Folders keep the Icon
+  Colour, so the unknown file reads apart from them and from the seven kinds. *(Amends FR-061, which left
+  the unknown file on the Icon Colour with the folders.)*
+- **FR-065**: A panel's type icon MUST be the first thing in its header, at the far left, in every window.
+  Anything else drawn left of the title — today the editor's and preview's Back and Forward — MUST sit
+  between the type icon and the title. *(Supersedes 044 FR-104's "before the panel's type icon": Back
+  and Forward keep everything else FR-104 requires.)*
+- **FR-066**: A Markdown preview diagram's Maximise MUST be Focus Mode: its control MUST be named **Enter
+  Focus Mode** and **Exit Focus Mode**, as the panel header's and the diagram menu's are, and entering it
+  MUST collapse both side panes and leaving it restore them exactly as a panel's Focus Mode does (#635).
+  *(Supersedes #635's rule that a diagram maximised on its own is a section target that leaves the panes
+  alone.)*
+- **FR-067**: The Settings tab's **File Manager** item MUST sit under a heading of its own — General's last
+  subgroup (FR-068) — that expands and collapses like every other, and that Expand All and Collapse All reach.
+- **FR-068**: The Settings tab MUST group its preferences as follows. **General** holds Appearance, Window,
+  Projects, Behaviour, Attention and File Manager, each a subgroup. Every editor preference sits under the one
+  **Editor** heading, with a subgroup for each section: Status Bar, Previews, Links, Navigation, Indentation
+  and Languages. Every search preference sits under the one **Search** heading, with Find Bar and Find in Files
+  as subgroups. No key, default or control changes, and search still finds each row by its subgroup's name.
+  *(Supersedes 040 FR-037a, which kept the three "Editor · …" sibling-string groups off the subgroup
+  mechanism, and 043 FR-076's "Search · Find Bar" and "Search · Find in Files" group strings, whose two
+  sections it keeps.)*
+- **FR-069**: In About, the pointer over the licence box and its scrollbar MUST be the arrow, not the text
+  cursor. Lucide's row in the third-party list MUST read like every other package's — name, version and a
+  licence link — with no control to show its licence text; FR-022's notice still ships in the application's
+  third-party licence data and beside the art.
 
 **Upgrade**
 
@@ -626,6 +659,23 @@ icon sets folder in a plain text editor and follow it to override one icon.
   FR-061).
 - Q: Where should a Resource Monitor "?" helper sit? → A: Raised to the top right of what it explains,
   overlapping nothing, with the elements around it moved to make room (maintainer, 2026-11-16; FR-062).
+- Q: Do Icon colour and Icon set get the row actions? → A: Yes: revert, reset and clear, laid out as on
+  every other preference (maintainer, 2026-11-17; FR-063).
+- Q: Should the fallback file icon share the default icon colour? → A: No: it gets a colour of its own,
+  neutral in every theme, distinct from the other icons and the folders; folders may keep the default icon
+  colour (maintainer, 2026-11-17; FR-064).
+- Q: Where does the panel type icon go when a header has other icons left of its title? → A: Furthest
+  left in every window, with the other icons between it and the title (maintainer, 2026-11-17; FR-065).
+- Q: Is a Markdown diagram's Maximise a Focus Mode? → A: Yes: called Focus Mode, and it closes the side
+  panes as a panel's Focus Mode does (maintainer, 2026-11-17; FR-066).
+- Q: Where does the File Manager preference go? → A: Under its own category that expands and collapses
+  (maintainer, 2026-11-17; FR-067), which FR-068 then puts inside General.
+- Q: How should the Settings tab be grouped? → A: Appearance, Window, Projects, Behaviour, Attention and File
+  Manager in one General category; every editor preference under one Editor heading with a sub-heading per
+  section; the same for search (maintainer, 2026-11-17; FR-068).
+- Q: Why does Lucide have a "show licence text" control in About's third-party list? → A: It should not:
+  list it like every other package. And the licence box's scrollbar must show the arrow, not the text
+  cursor (maintainer, 2026-11-17; FR-069).
 - Q: Does this feature cover macOS, which spec 070 made a supported target while it was in review? → A:
   Yes, at 070's level: everything here ships on macOS too and is proved there by CI alone, with no hand
   test on a Mac (constitution 6.6.0, Principle II; maintainer, 2026-11-16). Preferences on macOS keeps the
