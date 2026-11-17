@@ -74,6 +74,18 @@ vi.mock('../../src/renderer/editor/standalone-editor.js', async () => {
 
 const CFG = { appearance: { theme: 'throng' } };
 
+/**
+ * Main's side of the close gate (`preferences-window.ts`, `wireCloseGate`): the window's subscription, so a
+ * test can ask "may I close?", and every reply it sends back. `holdWrites` keeps each `write` unanswered until
+ * the test releases it, which is the instant the close race lives in.
+ */
+const closeGate: {
+  ask: ((payload: { requestId: number }) => void) | null;
+  replies: Array<{ requestId: number; allow: boolean }>;
+  holdWrites: boolean;
+  held: Array<() => void>;
+} = { ask: null, replies: [], holdWrites: false, held: [] };
+
 /** Read a dotted path out of a settings-shaped record — what the shipped record holds there. */
 function getAtDottedPath(source: Record<string, unknown>, path: string): unknown {
   let cursor: unknown = source;
@@ -139,6 +151,7 @@ function mount(
           // An invalid document must never reach the write path at all — see FR-017 below. If one
           // does, the test that allowed it should fail on `written`, not here.
         }
+        if (closeGate.holdWrites) return new Promise((resolve) => closeGate.held.push(() => resolve({ ok: true })));
         return Promise.resolve({ ok: true });
       },
       /*
@@ -187,6 +200,15 @@ function mount(
       readRaw: () => Promise.resolve(JSON.stringify(settings, null, 2)),
       listThemes: () => Promise.resolve(themeList),
       listFonts: () => Promise.resolve([]),
+    },
+    onPreferencesCloseRequest: (cb: (payload: { requestId: number }) => void) => {
+      closeGate.ask = cb;
+      return () => {
+        closeGate.ask = null;
+      };
+    },
+    replyPreferencesClose: (payload: { requestId: number; allow: boolean }) => {
+      closeGate.replies.push(payload);
     },
   });
 
@@ -244,6 +266,10 @@ function setJson(text: string): void {
  * and awaits what is in flight, into the bridge that scheduled it; only then is the bridge removed.
  */
 afterEach(async () => {
+  closeGate.holdWrites = false;
+  for (const release of closeGate.held.splice(0)) release();
+  closeGate.replies.length = 0;
+  closeGate.ask = null;
   cleanup();
   await settleConfigWrites();
   Reflect.deleteProperty(window, 'throng');
@@ -368,6 +394,41 @@ describe('an invalid JSON document blocks every exit, says so ONCE, and writes n
     await user.click(screen.getByTestId('prefs-tab-keybindings'));
 
     await waitFor(() => expect(screen.getByTestId('json-tab-keybindings')).toBeInTheDocument());
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * Closing the window applies the buffer, and only then says yes (032 FR-017)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('closing the Preferences window with a valid edit (FR-017)', () => {
+  it('answers main only once the write it applied has been answered', async () => {
+    /*
+     * Main closes the window the moment it reads "allow", and the renderer goes with it. The write the
+     * close applied is issued from `writeConfig`'s chain, a few microtasks after the commit, so a reply sent
+     * straight after the commit reached main first and the window could be gone before the write left it:
+     * `preferences-json.e2e.ts`'s close test lost the edit on a loaded Windows runner (#633's gate,
+     * 2026-11-17), with `settings.json` still reading `throng` ten seconds later.
+     */
+    const { user, written } = mount();
+    await ready();
+    await intoJson(user);
+    setJson(VALID_DOC);
+    await waitFor(() => expect(screen.queryByTestId('json-invalid')).toBeNull());
+
+    closeGate.holdWrites = true;
+    expect(closeGate.ask, 'the window subscribes to main\'s close question').not.toBeNull();
+    act(() => closeGate.ask!({ requestId: 1 }));
+
+    // The edit is on its way…
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(JSON.parse(written[0].json)).toEqual({ appearance: { theme: 'throng' }, editor: { autoSave: true } });
+    // …and main has not been told it may close while the write is still unanswered.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(closeGate.replies).toEqual([]);
+
+    for (const release of closeGate.held.splice(0)) release();
+    await waitFor(() => expect(closeGate.replies).toEqual([{ requestId: 1, allow: true }]));
   });
 });
 
