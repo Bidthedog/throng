@@ -3,7 +3,7 @@
  * can show that the koffi binding and the `/Volumes` listing find a real case-sensitive APFS volume (070 R4).
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -30,11 +30,14 @@ describe.skipIf(skipUnlessMacos('pathconf(_PC_CASE_SENSITIVE) and hdiutil exist 
       try {
         // A fresh volume is briefly held by the system's own indexers, so a detach straight after the tests can answer
         // "Resource busy" (hosted macOS, 1.0.0-alpha17's CI). Try again for a few seconds; the last refusal still fails.
-        for (let attempt = 1; ; attempt += 1) {
+        // A forced detach can also finish after reporting busy, and a second one then finds nothing to detach ("No
+        // such file or directory"), so the volume being gone is the success the loop waits for.
+        for (let attempt = 1; existsSync(MOUNT); attempt += 1) {
           try {
             execFileSync('hdiutil', ['detach', MOUNT, '-force'], { stdio: 'pipe' });
             break;
           } catch (error) {
+            if (!existsSync(MOUNT)) break;
             if (attempt >= 10) throw error;
             // sleep-justified: the holder is outside this process and announces nothing; half a second between tries.
             await new Promise((resolve) => setTimeout(resolve, 500));
