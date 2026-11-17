@@ -138,7 +138,9 @@ test('MT-05: a large real-world flowchart in a folder with a space and capitals 
   await expect(win.getByTestId(`preview-mermaid-${id}`)).toBeVisible();
   const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('.preview-diagram-frame__layer svg').first();
   await expect(svg).toBeVisible({ timeout: 15_000 });
-  await expect(svg).toContainText('Catalog Service');
+  // Mermaid wraps a label at the node's width, and where it wraps depends on the runner's fonts: a wrapped
+  // "Catalog Service" is two <tspan>s whose text joins with no space ("CatalogService" on hosted Linux).
+  await expect(svg).toContainText(/Catalog\s*Service/);
   await expect(win.getByTestId(`diagram-notice-${id}-diagram-0`)).toHaveCount(0);
 });
 
