@@ -14,7 +14,11 @@ Configuration is a constitutional area, not a convenience. Two rules govern ever
 2. **Configuration-editor completeness (a quality gate).** Every configurable setting, key binding
    and theme token MUST be exposed and editable through the **visual** preference editors. Nothing is
    editable only by hand-editing JSON. This is enforced mechanically by a descriptor registry plus
-   completeness tests — a new key without a descriptor fails the build.
+   completeness tests — a new key without a descriptor fails the build. The reverse is enforced
+   too (071): a Settings descriptor that nothing outside the configuration layer reads fails
+   `packages/core/tests/unit/no-inert-settings.test.ts`. Read a setting through the typed settings
+   object (a key-path string is not a reader). The configuration-layer list and the allowlist live in
+   `packages/core/tests/unit/inert-settings-policy.ts`.
 3. **Displayed quantities are digit-grouped; grouping is never stored** (constitution 4.5.0, scope
    widened by **5.4.0** from preference editors to every surface). Use `formatGrouped` /
    `parseGrouped` from `@throng/core` — never `toLocaleString` at a call site, and never a hand-rolled
