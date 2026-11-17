@@ -1,6 +1,29 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.9.0 → 7.0.0
+Bump rationale: MAJOR — the quality gates no longer run every Principle V layer on every pull request. Pull requests
+                run lint, type-check, unit, component, contract and a declared critical-path integration subset, on
+                Linux, with no E2E; every layer on every platform runs in the full pipeline (nightly, an agent's
+                dispatch, and inside every release before anything publishes). A guarantee is withdrawn ("every
+                layer, including @core E2E, gates every pull request"), so the bump is MAJOR. From spec 072
+                (maintainer, 2026-11-17: PR CI must answer in about five minutes; alpha17 spent hours in a 13-minute
+                PR lane and a 61-minute gate).
+Modified principles: II ("macOS is proved by CI" names the full pipeline as where the proof runs);
+                V (significance tags classify a test and no longer select a pull-request lane).
+Modified sections: Development Workflow & Quality Gates (Static analysis & linting; the code-review bullet names the
+                `CI verdict` check).
+Added sections: none. Removed sections: none.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no CI lane; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks registered.
+           ⏳ CLAUDE.md, docs/testing.md, docs/releasing.md, CONTRIBUTING.md, the throng-testing and throng-release
+              skills — updated by spec 072 tasks T030–T034 in the same branch.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.8.0 → 6.9.0
 Bump rationale: MINOR — Principle X gains "Every theme setting belongs to its theme": everything a theme governs is
                 stored in that theme's file, activating a theme restores all of it, and a token added to the shipped
@@ -2170,9 +2193,11 @@ application logic MUST remain platform-independent.
   missing, and Incremental Delivery staging applies inside the feature only, never across
   to a later one. Where a capability genuinely does not exist on one platform, the
   abstraction MUST report it as absent and the feature's spec MUST say so.
-- **macOS is proved by CI (v6.6.0).** The project has no macOS hardware. The macOS side of
-  a feature is tested on hosted macOS CI runners, at the lowest layer that can show it, and
-  no feature MAY require a manual test on a Mac. A macOS behaviour no automated test can
+- **macOS is proved by CI (v6.6.0, v7.0.0).** The project has no macOS hardware. The macOS
+  side of a feature is tested on hosted macOS CI runners, at the lowest layer that can show it,
+  and no feature MAY require a manual test on a Mac. Pull-request CI is Linux-only, so that proof
+  runs in the full pipeline: an agent's dispatch for that platform before merge, the nightly, and
+  every release before anything publishes. A macOS behaviour no automated test can
   show MUST be listed in the macOS known differences, never left unverified in silence.
   *Known violations at adoption — end-state requirement under Incremental Delivery:*
   no seam has a macOS implementation. Spec 070 (#22, #551) adopts this rule and closes
@@ -2630,9 +2655,10 @@ Red-Green-Refactor cycle.
   paid by every contributor on every push rather than by the feature that caused it.
 - **Every E2E test MUST carry exactly one significance tag and at least one category
   tag**, and the build MUST fail on a test that carries neither. Significance is
-  `@core` — a critical journey, which gates continuous integration — or `@extended`,
-  which runs at release. Category names the area the test covers so a targeted run
-  is possible without reading the suite.
+  `@core` — a critical journey — or `@extended` — a regression check. Significance
+  classifies a test; it does not select a pull-request lane, because no E2E test runs on
+  a pull request, and every E2E test runs in the full pipeline (v7.0.0). Category names
+  the area the test covers so a targeted run is possible without reading the suite.
 - **A reported defect MUST begin with a test that reproduces it**, observed failing
   for the reason that was reported, before any production code changes — and that
   test MUST be written at the **lowest layer that reproduces the defect**, preferring
@@ -3291,13 +3317,16 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
   scoped in the **shared lint configuration** where a rule is genuinely inapplicable
   (with the reason evident from the config), but MUST NOT be disabled ad hoc to mask a
   real defect; a line-level suppression MUST carry a justification. These gates MUST be
-  enforced automatically: the linter, the type-check, and the layered test suites of
-  Principle V (unit, component, integration, contract, and E2E) MUST run in
-  **continuous integration on every pull request**, so that a red gate blocks merge
-  without relying on local discipline. The E2E layer runs its `@core` significance tier
-  on every pull request and its full extent on a release; a lane that gates merge is
-  worth only what it costs every contributor to wait for, so the expensive remainder is
-  paid once, at the point a release is actually cut.
+  enforced automatically, so that a red gate blocks merge without relying on local
+  discipline. **Pull-request CI** MUST run the linter, the type-check, and Principle V's
+  unit, component and contract layers in full, plus a declared critical-path subset of the
+  integration layer bounded at 15 files; it runs on Linux, runs no E2E, and reports one
+  verdict. **The full pipeline** MUST run every layer of Principle V — every E2E test on
+  every supported platform included — and build and verify every artifact: nightly on
+  master, on an agent's dispatch, and inside every release before anything publishes. A
+  release MUST NOT publish unless the full pipeline in its own run is green. A lane that
+  gates merge is worth only what it costs every contributor to wait for, so the expensive
+  remainder is paid by the nightly and by the release, not by every push (v7.0.0).
 - Changes that touch the OS abstraction boundary, the daemon/terminal process
   lifecycle, persisted edit/layout state, or **the state of a document presented in more
   than one Panel** MUST be reviewed with particular scrutiny against Principles II, III,
@@ -3402,8 +3431,8 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
   merged, while that control uses a text label outside the stated exception, or takes its icon or
   colours from anywhere but the theme.
 - Code review MUST verify the engineering gates: that lint (ESLint) and type-check
-  (`tsc`) both pass with **zero errors** and the CI gate is green (Static analysis &
-  linting rule above), Red-Green-Refactor with each change covered at the lowest
+  (`tsc`) both pass with **zero errors** and pull-request CI's `CI verdict` check is
+  green (Static analysis & linting rule above), Red-Green-Refactor with each change covered at the lowest
   layer that can prove it and no E2E added for what a lower layer could assert (V),
   SOLID/DRY/YAGNI adherence (VIII),
   constructor DI wired only through each boundary's single composition-root
@@ -3432,7 +3461,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.9.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-17
+**Version**: 7.0.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-17
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
