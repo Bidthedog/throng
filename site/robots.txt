@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /apt/
+Disallow: /rpm/
+
+Sitemap: https://throng-ide.com/sitemap.xml

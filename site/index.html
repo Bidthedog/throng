@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>throng — every project, every terminal, one window</title>
+<meta name="description" content="throng is a free, open-source, themeable desktop workspace for people who live in the command line: projects, split panels, terminals that survive a restart, and an editor with live Markdown previews. Windows, Linux and macOS.">
+<meta property="og:title" content="throng — every project, every terminal, one window">
+<meta property="og:description" content="A free, open-source, themeable desktop workspace for the command line: projects, split panels, terminals that survive a restart, and an editor with live Markdown previews.">
+<meta property="og:url" content="https://throng-ide.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="throng">
+<meta property="og:image" content="https://throng-ide.com/assets/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The throng icon beside the words: Every project, every terminal, one window.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#172033">
+<link rel="canonical" href="https://throng-ide.com/">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "throng",
+  "url": "https://throng-ide.com/",
+  "description": "A free, open-source, themeable desktop workspace for people who live in the command line: projects, split panels, terminals that survive a restart, and an editor with live Markdown previews.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Windows 11, Linux, macOS",
+  "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+  "downloadUrl": "https://github.com/Bidthedog/throng/releases",
+  "sameAs": ["https://github.com/Bidthedog/throng"],
+  "image": "https://throng-ide.com/assets/social-card.png"
+}
+</script>
+<link rel="preload" href="assets/fonts/schibsted-grotesk-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body id="top">
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="/"><img src="assets/logo.svg" alt="" width="34" height="48">throng</a>
+    <nav aria-label="Site"><a href="#features">Features</a><a href="#install">Install</a><a href="#contribute">Build</a><a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng">GitHub</a></nav>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div>
+        <h1>Every project, every terminal, one window.</h1>
+        <p>A themeable desktop workspace for people who live in the command line. Each project gets its own folder, colour and layout of terminals, editors and previews, restored exactly as you left it.</p>
+        <div class="cta"><a class="btn primary" href="#install">Install throng</a><a class="btn ghost" target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng">View on GitHub</a></div>
+        <ul class="badges" aria-label="Build status">
+          <li><a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/releases"><img src="https://img.shields.io/github/v/release/Bidthedog/throng?include_prereleases&amp;sort=date&amp;label=release&amp;color=2bb3a3" alt="Latest release" height="20"></a></li>
+          <li><a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/actions/workflows/ci.yml?query=branch%3Amaster"><img src="https://github.com/Bidthedog/throng/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI status" height="20"></a></li>
+          <li><a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/actions/workflows/gate.yml?query=event%3Aschedule"><img src="https://github.com/Bidthedog/throng/actions/workflows/gate.yml/badge.svg?branch=master&amp;event=schedule" alt="Nightly gate status" height="20"></a></li>
+          <li><a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/actions/workflows/release.yml"><img src="https://github.com/Bidthedog/throng/actions/workflows/release.yml/badge.svg" alt="Release pipeline status" height="20"></a></li>
+        </ul>
+      </div>
+      <figure class="shot"><a class="zoom" href="assets/shots/hero-full.webp" aria-label="Enlarge the screenshot"><img src="assets/shots/hero.webp" width="1600" height="838" alt="A throng window: the project list on the left, a tab split into an editor, a Markdown preview, Claude Code in a terminal and a shell, and the file explorer on the right." fetchpriority="high"></a></figure>
+    </section>
+
+    <!-- The intro video (#445) returns here once it is recorded: set data-yt to its YouTube id.
+    <section class="video" aria-label="Intro video">
+      <a target="_blank" rel="noopener" href="https://www.youtube.com/@bidthedog" data-yt="" aria-label="Watch the throng tour on YouTube"><span class="play"><b></b>The two-minute tour</span></a>
+    </section>
+    -->
+
+    <div id="features">
+      <section class="feature" style="--c: var(--teal)">
+        <div>
+          <h2>Projects and workspaces</h2>
+          <p>Each project owns a folder and a colour, and a workspace of tabs laid out the way you work. Group projects into categories and switch between them in a keystroke.</p>
+        </div>
+        <figure class="shot portrait"><img src="assets/shots/projects.webp" width="319" height="524" alt="The project list: projects grouped into categories, each with its own colour, and badges counting what needs attention." loading="lazy"></figure>
+      </section>
+      <section class="feature" style="--c: var(--amber)">
+        <div>
+          <h2>Panels</h2>
+          <p>Drag to split any tab into terminals, editors and previews. Tear a tab or panel off onto a second monitor, and the windows move as one group.</p>
+        </div>
+        <figure class="shot"><a class="zoom" href="assets/shots/panels.webp" aria-label="Enlarge the screenshot"><img src="assets/shots/panels.webp" width="1564" height="877" alt="A tab split into panels: an editor beside its live preview above a terminal, with more panels below." loading="lazy"></a></figure>
+      </section>
+      <section class="feature" style="--c: var(--violet)">
+        <div>
+          <h2>Persistent terminals</h2>
+          <p>Your real shells run in a background service. Close throng and builds, servers and AI agents keep going; reopen it and they are still there, scrollback and all.</p>
+        </div>
+        <figure class="shot"><a class="zoom" href="assets/shots/terminals.webp" aria-label="Enlarge the screenshot"><img src="assets/shots/terminals.webp" width="1409" height="805" alt="Two terminals side by side: Claude Code working in one, a build running in the other." loading="lazy"></a></figure>
+      </section>
+      <section class="feature" style="--c: var(--coral)">
+        <div>
+          <h2>Editor and Markdown previews</h2>
+          <p>A fast editor with highlighting for 55 languages, one buffer per file across every window. Markdown renders live beside it, with scroll in sync, an outline, wikilinks and Mermaid diagrams.</p>
+        </div>
+        <figure class="shot"><a class="zoom" href="assets/shots/editor-full.webp" aria-label="Enlarge the screenshot"><img src="assets/shots/editor.webp" width="1600" height="1053" alt="A Markdown file in the editor, with folded sections, beside its rendered preview." loading="lazy"></a></figure>
+      </section>
+    </div>
+
+    <section id="install" aria-labelledby="install-heading">
+      <h2 id="install-heading">Install throng</h2>
+      <div class="install" data-install>
+        <div class="tablist" role="tablist" aria-label="Your system">
+          <button type="button" role="tab" id="tab-windows" aria-controls="panel-windows" data-os="windows">Windows</button>
+          <button type="button" role="tab" id="tab-linux" aria-controls="panel-linux" data-os="linux">Linux</button>
+          <button type="button" role="tab" id="tab-macos" aria-controls="panel-macos" data-os="macos">macOS</button>
+        </div>
+        <p class="os-note" data-os-note aria-live="polite"></p>
+
+        <section class="panel" role="tabpanel" id="panel-windows" aria-labelledby="tab-windows" tabindex="0">
+          <h3>Windows 11, x64</h3>
+          <ol>
+            <li>Download <code>throng-setup-&lt;version&gt;.exe</code> from the <a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/releases">releases page</a>.</li>
+            <li>Run it. If Windows warns about an unrecognised app, choose <b>More info</b>, then <b>Run anyway</b>.</li>
+            <li>Choose <b>Only for me</b>, and open throng from the Start menu.</li>
+          </ol>
+          <p class="aside">No administrator rights are needed. An MSI, a portable build and a zip are on the same page.
+            <a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/blob/master/docs/install-windows.md">Every Windows option</a></p>
+        </section>
+
+        <section class="panel" role="tabpanel" id="panel-linux" aria-labelledby="tab-linux" tabindex="0">
+          <h3>Ubuntu, Debian and relatives</h3>
+<pre data-copy><code>wget -qO- https://throng-ide.com/throng-repo-key.asc | sudo tee /usr/share/keyrings/throng.asc > /dev/null
+echo 'deb [signed-by=/usr/share/keyrings/throng.asc] mirror+https://throng-ide.com/apt/prerelease.list prerelease main' | sudo tee /etc/apt/sources.list.d/throng.list
+sudo apt update
+sudo apt install throng</code></pre>
+          <h3>Fedora and relatives</h3>
+<pre data-copy><code>sudo curl -fsSL -o /etc/yum.repos.d/throng.repo https://throng-ide.com/rpm/throng-prerelease.repo
+sudo dnf install throng</code></pre>
+          <p class="aside">Upgrades then arrive with your system updates. From 1.0.0, swap <code>prerelease</code> for <code>stable</code> to get full releases only.
+            <a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/blob/master/docs/install-linux.md">Every Linux option</a></p>
+        </section>
+
+        <section class="panel" role="tabpanel" id="panel-macos" aria-labelledby="tab-macos" tabindex="0">
+          <h3>macOS, Apple silicon</h3>
+          <ol>
+            <li>Download <code>throng-&lt;version&gt;-mac-arm64.dmg</code> from the <a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/releases">releases page</a>.</li>
+            <li>Open it and drag throng into Applications.</li>
+            <li>Open throng. macOS blocks the first launch, because the build is not notarised.</li>
+            <li>In <b>System Settings › Privacy &amp; Security</b>, choose <b>Open Anyway</b>. Later launches open straight away.</li>
+          </ol>
+          <p class="aside">macOS support is best endeavours: the current and previous macOS releases on Apple silicon, tested by automated runs only. Bug reports are very welcome.
+            <a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/blob/master/docs/install-macos.md">Every macOS option</a></p>
+        </section>
+      </div>
+    </section>
+    <section id="contribute" class="contribute" aria-labelledby="contribute-heading">
+      <h2 id="contribute-heading">Help build it</h2>
+      <p>throng is open source and built in the open. Report a bug, suggest a feature, or pick up an issue: the contributing guide explains how work is proposed, specced, built and reviewed.</p>
+      <div class="cta"><a class="btn ghost" target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/blob/master/CONTRIBUTING.md">Read the contributing guide</a><a class="btn ghost" target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/issues">Browse open issues</a></div>
+    </section>
+  </main>
+
+  <footer>
+    <div>
+      <p>throng is free and open source under the <a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/blob/master/LICENSE">GNU AGPL-3.0</a>.</p>
+      <p>This site sets no cookies and collects nothing. The build badges load from GitHub and shields.io.</p>
+    </div>
+    <span><a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng">GitHub</a> · <a target="_blank" rel="noopener" href="https://github.com/Bidthedog/throng/releases">Releases</a></span>
+  </footer>
+</div>
+<a class="to-top" href="#top" aria-label="Back to the top"><span aria-hidden="true">↑</span></a>
+<script src="assets/site.js"></script>
+</body>
+</html>

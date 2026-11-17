@@ -28,6 +28,7 @@
     "generate:licenses": "node scripts/generate-licenses.mjs",
     "generate:icons": "node scripts/generate-default-icon-set.mjs",
     "stamp:build": "node scripts/stamp-build.mjs",
+    "site:preview": "node scripts/site.mjs preview",
     "stage:runtime": "node scripts/stage-runtime.mjs",
     "prepackage": "node scripts/clean-dist.mjs",
     "package": "npm run build && npm run stage:runtime && electron-builder --config electron-builder.yml",

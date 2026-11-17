@@ -3,6 +3,7 @@
 // needs no signing key to do it.
 //
 //   node scripts/site.mjs assemble --out <dir>      what pages.yml deploys; needs `gh`, and fails on a missing bundle
+//   node scripts/site.mjs preview [--port <n>]      serves site/ locally, publishing nothing (FR-003); `npm run site:preview`
 //
 // Node built-ins only.
 import { spawnSync } from 'node:child_process';
@@ -89,6 +90,10 @@ const CONTENT_TYPES = {
   '.asc': 'text/plain; charset=utf-8',
   '.list': 'text/plain; charset=utf-8',
   '.repo': 'text/plain; charset=utf-8',
+  '.woff2': 'font/woff2',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.jpg': 'image/jpeg',
 };
 
 /** A static server over `dir`, as Pages is. Used by the repository route check. */
@@ -132,7 +137,13 @@ async function main(argv) {
     await assembleSite({ out: resolve(out) });
     return;
   }
-  throw new Error('usage: site.mjs assemble --out <dir>');
+  if (command === 'preview') {
+    const port = Number(flag(rest, '--port') ?? 8080);
+    await serveStatic(join(ROOT, 'site'), port);
+    console.log(`[site] previewing site/ on http://127.0.0.1:${port}/ (no package indexes; Ctrl+C to stop)`);
+    return;
+  }
+  throw new Error('usage: site.mjs assemble --out <dir> | site.mjs preview [--port <n>]');
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

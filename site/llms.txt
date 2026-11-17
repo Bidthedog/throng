@@ -1,0 +1,26 @@
+# throng
+
+> throng is a free, open-source (AGPL-3.0), themeable desktop workspace for people who live in the command line. Each project gets its own folder, colour and workspace of tabs, split into panels holding real terminals, a code editor, a live file tree and rendered Markdown previews. Terminals run in a background service, so closing the window never kills a build, a server or an AI agent. It runs on Windows 11 (x64), Linux (x64; apt and dnf repositories) and, at a best-endeavours level, macOS on Apple silicon.
+
+The four headline features are projects and workspaces, panels (drag-to-split, with tabs torn off onto other monitors), persistent terminals that survive a restart with their scrollback, and an editor with live Markdown previews (Mermaid diagrams, wikilinks, an outline and synced scroll).
+
+## Install
+
+- [Installing on Windows](https://github.com/Bidthedog/throng/blob/master/docs/install-windows.md): setup .exe, MSI, portable build or zip; no administrator rights needed
+- [Installing on Linux](https://github.com/Bidthedog/throng/blob/master/docs/install-linux.md): signed apt and dnf repositories on throng-ide.com, or a .deb, .rpm or tarball
+- [Installing on macOS](https://github.com/Bidthedog/throng/blob/master/docs/install-macos.md): a .dmg for Apple silicon; not notarised, so the first launch needs Open Anyway
+- [Releases](https://github.com/Bidthedog/throng/releases): every download, with SHA-256 checksums
+
+## Docs
+
+- [README](https://github.com/Bidthedog/throng/blob/master/README.md): what throng is and the full feature list
+- [Quick start](https://github.com/Bidthedog/throng/blob/master/docs/quick-start.md): a tour from first launch to a working project
+- [Key bindings](https://github.com/Bidthedog/throng/blob/master/docs/key-bindings.md): every default chord, all rebindable
+- [Preferences](https://github.com/Bidthedog/throng/blob/master/docs/preferences.md): every setting, themes and icon sets
+- [Architecture](https://github.com/Bidthedog/throng/blob/master/docs/architecture.md): the app, the background service and how they talk
+
+## Optional
+
+- [Contributing](https://github.com/Bidthedog/throng/blob/master/CONTRIBUTING.md): how work is proposed, specced, built and reviewed
+- [Issues](https://github.com/Bidthedog/throng/issues): bug reports and feature requests
+- [Changelog](https://github.com/Bidthedog/throng/blob/master/CHANGELOG.md): what changed in each release
