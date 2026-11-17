@@ -178,8 +178,9 @@ file outside the configuration layer.
 - **A setting read only by key name in a generic routine** (for example, a loop over every descriptor): this is not
   a reader, because it proves only that the setting exists. If such a setting really is meant to act only that way,
   it goes on the allowlist with its reason.
-- **A setting read by a key-path string**: this counts as a read only where the type checker validates that string
-  as a settings key path, so a mistyped key cannot count as a reader. An unchecked string is not a reader.
+- **A setting read by a key-path string** (such as `'explorer.sortOrder'` passed to a lookup): this is not a reader,
+  because a string is text and FR-009 bars deciding readership from text. Code that acts on a setting reads it
+  through the typed settings object. The first run found no setting read only this way.
 - **A map-shaped setting** (`editor.indentByLanguage`, `editor.languageByExtension`) is read when the map itself is
   read. Entries are user data, not keys.
 - **A descriptor that covers a whole object** (a table such as terminal flavours) is read when that object, or any
@@ -205,8 +206,8 @@ file outside the configuration layer.
 **What counts as a reader**
 
 - **FR-003**: A setting is **read** when production code outside the configuration layer reads its value, as
-  resolved by the language's type checker: a property access, a destructuring or a typed key-path that denotes that
-  setting.
+  resolved by the language's type checker: a property access, an element access or a destructuring that denotes
+  that setting.
 - **FR-004**: Reads MUST resolve through aliases (a section object bound to a local name), destructuring, and
   sections or sub-objects passed to helpers as typed parameters.
 - **FR-005**: A read by a computed index MUST count for every key that the index's type allows it to reach, and for
@@ -215,10 +216,13 @@ file outside the configuration layer.
   of the same shape in a different section (`panes.projects.maxWidth` against `panes.fileExplorer.maxWidth`).
   Where the code genuinely cannot be attributed to one path (a helper typed on a shared shape and called with
   more than one section), the read counts for every path that the calls to it supply.
-- **FR-007**: The **configuration layer** MUST NOT count as a reader. It covers the declaration, parsing, defaults,
-  descriptor registry, shipped defaults, persistence and upgrade code, and the generic by-path machinery: bounds
-  guard, settings search, override detection, config patching and the Preferences form. The check MUST name these
-  modules in one place, so that adding a module to the layer is a reviewed change.
+- **FR-007**: The **configuration layer** MUST NOT count as a reader. It covers the code that handles settings
+  generically, by key or by path, rather than acting on any one value: the declaration, parsing, defaults,
+  descriptor registry, shipped defaults and validation, and the by-path machinery (bounds guard, settings search,
+  override detection, config patching and the Preferences form). Code that loads, stores or watches the settings
+  file **and** acts on a particular value is a reader of that value, for example choosing the active theme file
+  by `appearance.theme`. The check MUST name the layer's modules in one place, so that adding a module to the
+  layer is a reviewed change.
 - **FR-008**: Test files and test helpers MUST NOT count as readers.
 - **FR-009**: The check MUST NOT decide readership by searching source text for a setting's name or any part of it.
   (019 C16: measured unsound, 11 false positives.)
@@ -287,8 +291,13 @@ file outside the configuration layer.
 
 ## First-run findings
 
-*Filled in during implementation (FR-012): each setting the first full run reports, its outcome, and the
-requirement behind that outcome.*
+**First full run, 2026-11-17, on the branch's base `442ad306` with the guard added: 150 Settings descriptors
+scanned, 0 unread.** No setting is wired or removed by this feature, and `INERT_ALLOWLIST` ships empty.
+
+The zero is not leniency. The same run with two real readers hidden (`explorer/file-tree.tsx` and
+`workspace/destroy.ts` treated as configuration layer) reports exactly the ten settings those files read
+(research R5). The ten per-feature guards, and 019's removal of `explorer.openMode`, had already caught what
+this guard would have found.
 
 ## Assumptions
 
