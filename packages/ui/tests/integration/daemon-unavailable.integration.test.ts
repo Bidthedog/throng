@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DaemonClient } from '../../src/main/daemon-client.js';
 
-describe('DaemonClient when the daemon is unavailable (FR-010)', () => {
+describe('DaemonClient when the daemon is unavailable (FR-010)', { tags: ['critical-path'] }, () => {
   it('resolves to an unavailable outcome within the ping timeout, never throwing', async () => {
     const client = new DaemonClient({
       // A pipe with no listening server.

@@ -67,7 +67,7 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('a patch and a reset — different channels, one document (G11/G12)', () => {
+describe('a patch and a reset — different channels, one document (G11/G12)', { tags: ['critical-path'] }, () => {
   it('the reset does not revert the patch', async () => {
     const seeded = structuredClone(DEFAULT_APP_SETTINGS) as unknown as Record<string, unknown>;
     (seeded.appearance as Record<string, unknown>).theme = 'Matrix';
@@ -96,7 +96,7 @@ describe('a patch and a reset — different channels, one document (G11/G12)', (
   // the patch's result.
 });
 
-describe('a patch and a whole-document write — different channels, one document', () => {
+describe('a patch and a whole-document write — different channels, one document', { tags: ['critical-path'] }, () => {
   it('produces one writer\u2019s document, never a blend', async () => {
     const { store, root } = fresh(DEFAULT_APP_SETTINGS);
     const wholeDocument = {
@@ -127,7 +127,7 @@ describe('a patch and a whole-document write — different channels, one documen
   });
 });
 
-describe('the lock does not over-serialise', () => {
+describe('the lock does not over-serialise', { tags: ['critical-path'] }, () => {
   it('a keybindings reset runs alongside a settings patch', async () => {
     // Per DOCUMENT, not global. A theme or keybinding write has no reason to wait behind a settings
     // write, and a global lock would serialise the whole configuration subsystem to prevent a
@@ -165,7 +165,7 @@ describe('the lock does not over-serialise', () => {
   });
 });
 
-describe('a whole-document write and a reset — one KEYBINDINGS document (#333)', () => {
+describe('a whole-document write and a reset — one KEYBINDINGS document (#333)', { tags: ['critical-path'] }, () => {
   /*
    * ══ THE GAP THIS CLOSES ══
    *

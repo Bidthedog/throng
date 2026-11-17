@@ -48,9 +48,9 @@ import { writeSettingsAtomic } from './helpers/config-write.js';
  *   every terminal case, the editor's own cost, and the three benchmark runs.
  * - **A comma list of `editor`, `preview`, `terminal`** — those sections' full case lists alone.
  * - **`bench-a`, `bench-b`, `bench-c`** (alone or in the list) — those benchmark runs alone.
- * - **`none`** — nothing; every test skips. gate.yml sets it on a dispatched run and leaves it unset on the
- *   nightly one: the sweep is 11 minutes of a one-worker gate, so SC-009 is asserted once a night rather than
- *   on every PR gate (test-suite audit, 2026-10-31).
+ * - **`none`** — nothing; every test skips. pipeline.yml's E2E shards set it, and its own `calibration` job
+ *   leaves it unset on every full run, the release's included (072 FR-011): the sweep is 11 minutes on one worker,
+ *   so it runs once per full run in a job of its own (test-suite audit, 2026-10-31).
  *
  * Each test launches its own app on a root holding only the files it opens: the explorer tree draws only
  * the rows in view, and a benchmark measured after another's panels is not the benchmark it was fitted on.
@@ -62,10 +62,10 @@ const BOUND = 0.1;
 const RHO_FLOOR = 0.85;
 const SHARE_POINTS = 0.05;
 /**
- * `THRONG_CALIBRATE_LOG_ONLY=1`: measure and log every case, assert none. Set by the release lane: on the
- * same code and Electron, a hosted runner there measured previews and the full-scrollback terminal 9–14%
- * heavier than gate.yml's did (0.852–0.894 against 0.928–1.028), a spread as wide as the bound itself.
- * gate.yml asserts SC-009; the release lane keeps the figures.
+ * `THRONG_CALIBRATE_LOG_ONLY=1`: measure and log every case, assert none. No workflow sets it since 072, which
+ * asserts SC-009 on every full run (FR-011). It was set by the old release lane, whose hosted runner measured
+ * previews and the full-scrollback terminal 9–14% heavier than the old gate's (0.852–0.894 against 0.928–1.028), a
+ * spread as wide as the bound itself; if that recurs in the pipeline's calibration job, it is a finding to fix.
  */
 const LOG_ONLY = process.env.THRONG_CALIBRATE_LOG_ONLY === '1';
 

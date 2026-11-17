@@ -69,7 +69,7 @@ afterEach(async () => {
   await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
-describe('a CRLF file stays a CRLF file (FR-023)', () => {
+describe('a CRLF file stays a CRLF file (FR-023)', { tags: ['critical-path'] }, () => {
   it('writes CRLF back after an INDENT — every line, not just the edited one', async () => {
     // The failure this catches: the buffer is LF internally (the fidelity model normalises on read
     // and re-applies on write), so an editor that saved what it HOLDS would silently convert the
@@ -102,7 +102,7 @@ describe('a CRLF file stays a CRLF file (FR-023)', () => {
   });
 });
 
-describe('an LF file stays an LF file', () => {
+describe('an LF file stays an LF file', { tags: ['critical-path'] }, () => {
   it('does not acquire CRLF from a paste of CRLF text (FR-023a)', async () => {
     // Text pasted from another application arrives with ITS line endings. Inserting those verbatim
     // would make the file MIXED — half LF, half CRLF — which no test of the pasted region alone
@@ -122,7 +122,7 @@ describe('an LF file stays an LF file', () => {
   });
 });
 
-describe('a BOM survives (FR-023)', () => {
+describe('a BOM survives (FR-023)', { tags: ['critical-path'] }, () => {
   it('is still there after the document has been edited and saved', async () => {
     const file = join(root, 'bom.txt');
     await writeFile(file, '﻿hello\n', 'utf8');
@@ -143,7 +143,7 @@ describe('a BOM survives (FR-023)', () => {
   });
 });
 
-describe('the authority does not normalise what it is given', () => {
+describe('the authority does not normalise what it is given', { tags: ['critical-path'] }, () => {
   it('preserves a file with NO trailing newline — it does not add one', async () => {
     // An editor that "helpfully" terminates the last line changes a file the user only read.
     const file = join(root, 'noeol.txt');

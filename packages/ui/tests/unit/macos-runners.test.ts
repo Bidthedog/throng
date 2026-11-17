@@ -63,17 +63,16 @@ describe('no workflow names a macOS runner except through the list (FR-037, SC-0
     );
     expect(macosJobs).toEqual(
       expect.arrayContaining([
-        'ci.yml:macos-runners',
-        'ci.yml:macos-fast',
-        'ci.yml:macos-test',
-        'ci.yml:macos-e2e',
-        'gate.yml:macos-runners',
-        'gate.yml:gate-macos',
-        'release.yml:macos-runners',
-        'release.yml:build-macos',
-        'release.yml:verify-macos',
+        'pipeline.yml:macos-runners',
+        'pipeline.yml:vitest-macos',
+        'pipeline.yml:e2e-macos',
+        'pipeline.yml:macos-latency',
+        'pipeline.yml:build-macos',
+        'pipeline.yml:verify-macos',
       ]),
     );
+    // 072: PR CI is Linux-only and release.yml calls the pipeline, so neither carries a macOS job of its own.
+    expect(macosJobs.filter((id) => !id.startsWith('pipeline.yml:'))).toEqual([]);
   });
 
   describe('the check itself', () => {

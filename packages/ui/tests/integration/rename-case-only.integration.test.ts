@@ -34,7 +34,7 @@ const shell = {
   openExternal: async () => {},
 } as unknown as ConstructorParameters<typeof FilesService>[1];
 
-describe('case-only rename (026 / #194)', () => {
+describe('case-only rename (026 / #194)', { tags: ['critical-path'] }, () => {
   let root: string;
   let svc: FilesService;
   let started: string[][];

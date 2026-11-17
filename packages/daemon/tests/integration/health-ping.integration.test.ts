@@ -54,7 +54,7 @@ async function startServer(pipeName: string): Promise<void> {
   await server.start();
 }
 
-describe('daemon health.ping IPC', () => {
+describe('daemon health.ping IPC', { tags: ['critical-path'] }, () => {
   it('responds to health.ping with a well-formed pong over the real pipe', async () => {
     const pipeName = uniquePipeName();
     await startServer(pipeName);

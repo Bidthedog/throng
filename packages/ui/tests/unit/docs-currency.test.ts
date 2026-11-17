@@ -174,6 +174,26 @@ describe('README.md stays an entry point', () => {
       expect(readme, `README.md has no ${platform} platform badge`).toMatch(new RegExp(`img\\.shields\\.io/badge/[^)]*${platform}`));
     }
   });
+
+  // 072 FR-029: one badge per pipeline, each reading the runs that pipeline actually makes. CI runs only on pull
+  // requests and the nightly only on schedule, so a badge filtered by branch alone would read a stale or empty status.
+  it('badges each of the three pipelines by the runs it makes', () => {
+    const readme = read(join(ROOT, 'README.md'));
+    const actions = 'https://github.com/Bidthedog/throng/actions/workflows';
+    expect(readme).toContain(`${actions}/ci.yml/badge.svg?event=pull_request`);
+    expect(readme).toContain(`${actions}/pipeline.yml/badge.svg?branch=master&event=schedule`);
+    expect(readme).toContain(`${actions}/release.yml/badge.svg)`);
+    expect(readme, 'README.md still badges a retired workflow').not.toMatch(/workflows\/gate\.yml/);
+  });
+
+  it('gives the website the same three pipeline badges', () => {
+    const site = read(join(ROOT, 'site', 'index.html'));
+    const actions = 'https://github.com/Bidthedog/throng/actions/workflows';
+    expect(site).toContain(`${actions}/ci.yml/badge.svg?event=pull_request`);
+    expect(site).toContain(`${actions}/pipeline.yml/badge.svg?branch=master&amp;event=schedule`);
+    expect(site).toContain(`${actions}/release.yml/badge.svg"`);
+    expect(site, 'site/index.html still badges a retired workflow').not.toMatch(/workflows\/gate\.yml/);
+  });
 });
 
 describe('macOS coverage of the quick start (070 SC-007)', () => {

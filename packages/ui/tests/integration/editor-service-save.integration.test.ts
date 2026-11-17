@@ -36,7 +36,7 @@ afterEach(async () => {
   await rm(outside, { recursive: true, force: true });
 });
 
-describe('EditorService save round-trip (006, contracts/editor-service.md)', () => {
+describe('EditorService save round-trip (006, contracts/editor-service.md)', { tags: ['critical-path'] }, () => {
   it('preserves encoding/BOM/CRLF on an unchanged line after a single-line edit', async () => {
     const svc = new EditorService(fs, settings());
     const file = join(root, 'sub', 'doc.txt');

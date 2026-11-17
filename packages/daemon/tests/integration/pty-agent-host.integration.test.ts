@@ -83,7 +83,7 @@ function startFakeAgent(pipeName: string): Promise<FakeAgent> {
   });
 }
 
-describe('PtyAgentHost — agent death is surfaced, not swallowed', () => {
+describe('PtyAgentHost — agent death is surfaced, not swallowed', { tags: ['critical-path'] }, () => {
   it('surfaces an unexpected exit for every live terminal when the agent connection drops', async () => {
     const pipe = uniquePipe();
     const agent = await startFakeAgent(pipe);

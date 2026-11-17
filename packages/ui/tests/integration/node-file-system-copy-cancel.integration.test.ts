@@ -29,7 +29,7 @@ function payload(megabytes: number): Buffer {
   return buf;
 }
 
-describe('NodeFileSystem.copyFileCancellable (050 R5)', () => {
+describe('NodeFileSystem.copyFileCancellable (050 R5)', { tags: ['critical-path'] }, () => {
   it('copies the bytes exactly', async () => {
     const src = join(dir, 'src.bin');
     const dest = join(dir, 'dest.bin');

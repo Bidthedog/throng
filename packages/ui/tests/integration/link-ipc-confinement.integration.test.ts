@@ -95,7 +95,7 @@ afterAll(() => {
   }
 });
 
-describe('I1 \u2014 the request carries a LINK, and a renderer-supplied path is ignored', () => {
+describe('I1 \u2014 the request carries a LINK, and a renderer-supplied path is ignored', { tags: ['critical-path'] }, () => {
   it('an absolute path smuggled beside the text does not become the target', async () => {
     const { ipc, revealed } = wired();
     await ipc.handles.get('throng:links:reveal')!(event, {
@@ -124,7 +124,7 @@ describe('I1 \u2014 the request carries a LINK, and a renderer-supplied path is 
   });
 });
 
-describe('I2 \u2014 the renderer names a project ID; MAIN derives the root', () => {
+describe('I2 \u2014 the renderer names a project ID; MAIN derives the root', { tags: ['critical-path'] }, () => {
   it('a renderer-claimed project ROOT changes nothing about the verdict', async () => {
     const { ipc } = wired();
     const answer = (await ipc.handles.get('throng:links:resolve')!(event, {
@@ -178,7 +178,7 @@ describe('I2 \u2014 the renderer names a project ID; MAIN derives the root', () 
   });
 });
 
-describe('FR-035a \u2014 the third reveal policy, and what it deliberately does NOT do', () => {
+describe('FR-035a \u2014 the third reveal policy, and what it deliberately does NOT do', { tags: ['critical-path'] }, () => {
   it('reveals a file OUTSIDE every project root, which neither existing policy can', async () => {
     // This is the whole reason FR-035a exists: `throng:files:reveal` is confined by a path prefix
     // and `throng:files:revealDocument` refuses any path no panel has open. A link to a file
@@ -226,7 +226,7 @@ describe('FR-035a \u2014 the third reveal policy, and what it deliberately does 
   });
 });
 
-describe('FR-055 \u2014 nothing outside the project is ever reported as inside it', () => {
+describe('FR-055 \u2014 nothing outside the project is ever reported as inside it', { tags: ['critical-path'] }, () => {
   it('over every panel and every spelling the channel accepts', async () => {
     const { ipc } = wired();
     const outsideFile = join(base, 'outside.txt');
@@ -247,7 +247,7 @@ describe('FR-055 \u2014 nothing outside the project is ever reported as inside i
   });
 });
 
-describe('the two existing reveal policies keep their own confinements', () => {
+describe('the two existing reveal policies keep their own confinements', { tags: ['critical-path'] }, () => {
   it('neither is registered by registerLinkIpc, and neither is referenced by it', () => {
     const { ipc } = wired();
     expect([...ipc.handles.keys()]).not.toContain('throng:files:reveal');
