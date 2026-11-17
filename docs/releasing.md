@@ -12,13 +12,14 @@ stage. This page is the overview.
 
 A release runs **unattended**: the maintainer asks for one, naming a version or taking the next on the
 current prerelease track, and the next thing they see is a published release or a report of why there
-is none. The skill sweeps the dependencies, writes the notes, runs the full gate, fixes what breaks
-through its own pull requests, and pushes a `v*` tag on `master`.
-[`release.yml`](../.github/workflows/release.yml) then builds every artifact, verifies each one on a
-clean runner, and publishes the GitHub Release. Nobody approves it.
+is none. The skill sweeps the dependencies, writes the notes, checks that master's latest full pipeline
+run is green, fixes what breaks through its own pull requests, and pushes a `v*` tag on `master`.
+[`release.yml`](../.github/workflows/release.yml) runs on that tag and nothing else: it runs the full
+pipeline (every test on every platform, every artifact built and verified on a clean runner) in the
+same run, and only then publishes the GitHub Release. Nobody approves it.
 
 ```
-dependencies  →  version  →  release notes  →  full gate  →  tag  →  build & package  →  verify every artifact  →  publish
+dependencies  →  version  →  release notes  →  tag  →  full pipeline: every test, build & package, verify every artifact  →  publish
 ```
 
 Nothing about a release is done by hand copying files around, and no step has an override. What
@@ -99,10 +100,21 @@ Publication is refused, with no override, unless all five hold:
 4. **The release notes bind to this version** — not missing, not empty, not headed with another
    version.
 5. **The tag is on `master`** — the tagged commit must already be on `master`. A tag anywhere else is
-   refused before the signing key is read. A dispatched run never publishes.
+   refused before the signing key is read. `release.yml` cannot be dispatched, and `pipeline.yml`
+   never publishes on any trigger.
 
 The first four are checked when the body is rendered, before anything is signed. Detail:
 [publishing](../.claude/skills/throng-release/references/publishing.md).
+
+## When a release run fails
+
+Nothing has been published, so the version is not spent.
+
+- **An infrastructure fault** — a runner lost, a dependency download failed: re-run the failed jobs of the same run, on
+  the same tag (`gh run rerun <run-id> --failed`).
+- **A test or build failure**: run `node scripts/release-discard.mjs v<version>`, which deletes the tag and that
+  attempt's installers and packages and keeps the test evidence (`--dry-run` shows the plan; it refuses a published
+  release). Fix the failure through a pull request, then tag the same version again on the new master commit.
 
 ## Publishing
 
@@ -127,8 +139,8 @@ in the repository. Each index points at its release's assets.
   `throng-repo-index-<version>.tar.gz` when it creates the release, because a published release is immutable. Once the
   release is out, `deploy-repositories` deploys the site. A full release updates both channels, and a prerelease updates
   only `prerelease`.
-- **A change under `site/`** deploys on merge with no key, because each deployment reads the signed bundles back from the
-  releases.
+- **A change under `site/`** deploys with the next release, or sooner by dispatching `pages.yml`, with no key, because each
+  deployment reads the signed bundles back from the releases. Nothing deploys on a merge.
 - **The website** is `site/index.html`, at the site root. `npm run site:preview` serves `site/` on
   `http://127.0.0.1:8080/` and publishes nothing; the package indexes are absent from a preview. The deployment minifies
   the page's script and stylesheet; `site/` keeps them readable.
