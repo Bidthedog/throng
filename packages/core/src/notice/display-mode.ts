@@ -214,10 +214,17 @@ function upgradedMode(mode: unknown): unknown {
  * A type row's stored `mode` as FR-092's two switches, for whichever of them the row does not state
  * itself: a switch the user has set since wins over the mode it replaced. An unrecognised mode adds
  * nothing, and the parse then falls back to the defaults.
+ *
+ * A pre-068 `timed` ("Display for") keeps the panel too, unlike FR-021d's `toast` reading of it, which
+ * the Find in Files summary still takes. `timed` was the shipped default for Information, Success and
+ * Attention, and settings.json stores every key, so reading it as Toast alone landed every upgraded
+ * install with Panel clear for those three — against FR-092's defaults. No `timed` row chose against a
+ * panel: there was none when it was written, and its one distinction, a toast that leaves on its own,
+ * is now every toast's (maintainer, 2026-11-17).
  */
 function switchesFromMode(row: Record<string, unknown>): Record<string, unknown> {
   const { mode, ...rest } = row;
-  const upgraded = upgradedMode(mode);
+  const upgraded = mode === 'timed' ? 'panel' : upgradedMode(mode);
   if (!DISPLAY_MODES.includes(upgraded as DisplayMode)) return rest;
   const switches = displayOf(upgraded as DisplayMode);
   return {
