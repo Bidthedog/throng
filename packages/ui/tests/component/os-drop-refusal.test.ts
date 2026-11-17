@@ -69,7 +69,7 @@
  */
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { OS_DROP_EVENT, PanelDropTarget, type DropContext } from '../../src/renderer/editor/drop-target.js';
 
@@ -158,8 +158,23 @@ function mount(options: MountOptions = {}) {
   return { onOpen, ctx };
 }
 
+/*
+ * A refusal's notice is a toast, and a toast leaves after `toastDurationMs` (068 FR-021, 3s by default). On a
+ * loaded hosted Mac the two refusals' toasts had both gone between the wait that saw them and the line that read
+ * them by id (1.0.0-alpha17's CI, a 652s component lane). What these tests assert is what the notices SAY, not
+ * how long they stay, so each one runs with a lifetime no run reaches, through the same `?toastMs=` seam the E2E
+ * harness uses (`effectiveToastDurationMs`).
+ */
+const NO_EXPIRY = '?toastMs=600000';
+let pageSearch = '';
+beforeEach(() => {
+  pageSearch = window.location.search;
+  window.history.replaceState(null, '', NO_EXPIRY);
+});
+
 afterEach(() => {
   Reflect.deleteProperty(window, 'throng');
+  window.history.replaceState(null, '', pageSearch || window.location.pathname);
 });
 
 /**
