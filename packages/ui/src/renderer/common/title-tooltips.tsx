@@ -14,8 +14,21 @@
  * - While a title is aside its element keeps an EMPTY `title`, never none: the OS takes the nearest element that has
  *   the attribute, so removing it would hand the OS an ancestor's title to draw beside this one (a project row's path
  *   inside its "Double-click to rename" button, a panel header's icons inside the header that names the panel).
- * - A `title` written while the pointer is already on the element (the terminal's hovered-link target) is taken over on
- *   the next pointer move, and one rewritten while moved aside is moved aside again with the new text shown.
+ *
+ * ══ A TITLE ITS OWNER CHANGES UNDER A RESTING POINTER ══
+ *
+ * The terminal has no element per link, so it writes the hovered link's target into its host's `title` and blanks it
+ * (`''`) when the pointer leaves the link — the same element, under a pointer that never left it. Three rules follow,
+ * and each was a reported defect before it was a rule:
+ *
+ * - **The owner blanking it hides the tooltip at once.** Only this module's own writes are ignored, and they are told
+ *   apart by being swallowed as they are made (`write`), not by their value: the owner's `''` and ours are the same
+ *   string, and reading them as one left a link's tooltip up after the pointer had left the link.
+ * - **New text is a new request.** It arms the delay as a fresh rest would, and it ends a press: the press was on the
+ *   link that was there, and the next one is a different label. (A click to focus the terminal used to silence every
+ *   link in it until the pointer left the whole terminal — so links read reliably only while throng was unfocused.)
+ * - **A title written onto the element under the pointer is noticed without a move.** xterm finds a link
+ *   asynchronously after the move that reached it, so the pointer has usually stopped by the time the title exists.
  *
  * One host per window, mounted at the renderer entry every window kind shares (`window-popups.tsx`).
  */
@@ -86,8 +99,12 @@ export function installTitleTooltips(
   const view = doc.defaultView;
   /** The element whose title is moved aside now. */
   let current: Element | null = null;
-  /** An element pressed while hovered: left alone until the pointer leaves it. */
+  /** Whether `current`'s owner REMOVED its title while it was aside, rather than blanking it. */
+  let removedByOwner = false;
+  /** An element pressed while hovered: left alone until the pointer leaves it, or its owner retitles it. */
   let pressed: Element | null = null;
+  /** The element under the pointer, for a title written there without a move. */
+  let under: Element | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pointer = { x: 0, y: 0 };
   let visible = false;
@@ -103,44 +120,8 @@ export function installTitleTooltips(
     visible = false;
   };
 
-  // React (or anything else) may write the title again while it is moved aside: move the new text aside too.
-  const observer = new (view?.MutationObserver ?? MutationObserver)(() => {
-    if (current === null) return;
-    const rewritten = current.getAttribute('title');
-    // Our own blanking — or the owner taking its title away, which leaves nothing to show either.
-    if (rewritten === null || rewritten === '') {
-      if (rewritten === null) {
-        current.setAttribute(MOVED_TITLE, '');
-        current.setAttribute('title', '');
-        conceal();
-      }
-      return;
-    }
-    current.setAttribute('title', '');
-    current.setAttribute(MOVED_TITLE, rewritten);
-    if (visible) show(rewritten, pointer.x, pointer.y + BELOW_POINTER);
-  });
-
-  /** Put the moved title back, and take the tooltip down. */
-  const release = (): void => {
-    conceal();
-    if (current === null) return;
-    observer.disconnect();
-    const text = current.getAttribute(MOVED_TITLE);
-    current.removeAttribute(MOVED_TITLE);
-    // Our blank goes; a title the owner took away while it was aside stays away.
-    if (text) current.setAttribute('title', text);
-    else current.removeAttribute('title');
-    current = null;
-  };
-
-  const take = (el: Element): void => {
-    const text = el.getAttribute('title') ?? '';
-    current = el;
-    el.setAttribute(MOVED_TITLE, text);
-    // EMPTY, not removed: removing it would hand the OS the nearest ancestor's title to draw instead.
-    el.setAttribute('title', '');
-    observer.observe(el, { attributes: true, attributeFilter: ['title'] });
+  const arm = (): void => {
+    stopTimer();
     timer = setTimeout(() => {
       timer = undefined;
       const now = current?.getAttribute(MOVED_TITLE);
@@ -150,9 +131,100 @@ export function installTitleTooltips(
     }, delayMs);
   };
 
+  /** The owner wrote `current`'s title while it was aside. */
+  const rewritten = (el: Element): void => {
+    const text = el.getAttribute('title');
+    if (text === null || text === '') {
+      // Taken away or blanked: nothing to show, so the tooltip goes now.
+      removedByOwner = text === null;
+      if (text === null) write(el, () => el.setAttribute('title', ''));
+      el.setAttribute(MOVED_TITLE, '');
+      conceal();
+      return;
+    }
+    removedByOwner = false;
+    const previous = el.getAttribute(MOVED_TITLE);
+    write(el, () => el.setAttribute('title', ''));
+    el.setAttribute(MOVED_TITLE, text);
+    if (visible) {
+      show(text, pointer.x, pointer.y + BELOW_POINTER);
+      return;
+    }
+    if (text === previous) return; // the same label restated — a repaint, not a new request
+    if (pressed === el) pressed = null;
+    if (pressed === null) arm();
+  };
+
+  /** Re-judge the element under a pointer that has not moved — as a move to the same point would. */
+  const reconsider = (): void => {
+    if (under === null || !under.isConnected) return;
+    if (pressed !== null && pressed.contains(under)) return;
+    const target = titledAncestor(under, current);
+    if (target === current) return;
+    release();
+    if (target !== null) take(target);
+  };
+
+  const handle = (records: readonly MutationRecord[]): void => {
+    let currentChanged = false;
+    let nearPointer = false;
+    for (const record of records) {
+      if (record.target === current) currentChanged = true;
+      else if (under !== null && record.target instanceof Node && record.target.contains(under)) nearPointer = true;
+    }
+    if (currentChanged && current !== null) rewritten(current);
+    if (nearPointer) reconsider();
+  };
+
+  // Every `title` in the document: the owner's writes are what this listens for, so this module's own are swallowed.
+  const observer = new (view?.MutationObserver ?? MutationObserver)(handle);
+
+  /**
+   * Make one of this module's own writes to `el`, which the observer must not mistake for the owner's. The owner's
+   * records still pending for `el` go too: the caller read `el`'s title as it stands, so they are already acted on,
+   * and replayed after the write they would read this module's blank as the owner's.
+   */
+  function write(el: Element, change: () => void): void {
+    const pending = observer.takeRecords().filter((record) => record.target !== el);
+    change();
+    observer.takeRecords();
+    if (pending.length > 0) handle(pending);
+  }
+
+  /** Put the moved title back, and take the tooltip down. */
+  function release(): void {
+    conceal();
+    if (current === null) return;
+    const el = current;
+    const text = el.getAttribute(MOVED_TITLE);
+    const removed = removedByOwner;
+    current = null;
+    removedByOwner = false;
+    write(el, () => {
+      el.removeAttribute(MOVED_TITLE);
+      // Our blank goes; a title the owner blanked stays blank, and one it took away stays away.
+      if (text) el.setAttribute('title', text);
+      else if (removed) el.removeAttribute('title');
+      else el.setAttribute('title', '');
+    });
+  }
+
+  function take(el: Element): void {
+    const text = el.getAttribute('title') ?? '';
+    current = el;
+    removedByOwner = false;
+    write(el, () => {
+      el.setAttribute(MOVED_TITLE, text);
+      // EMPTY, not removed: removing it would hand the OS the nearest ancestor's title to draw instead.
+      el.setAttribute('title', '');
+    });
+    arm();
+  }
+
   const onMove = (event: Event): void => {
     const e = event as PointerEvent;
     pointer = { x: e.clientX, y: e.clientY };
+    under = e.target instanceof Element ? e.target : null;
     if (pressed !== null) {
       if (e.target instanceof Node && pressed.contains(e.target)) return;
       pressed = null;
@@ -166,6 +238,7 @@ export function installTitleTooltips(
   const onOut = (event: Event): void => {
     const related = (event as PointerEvent).relatedTarget;
     const inside = (el: Element | null): boolean => el !== null && related instanceof Node && el.contains(related);
+    if (related === null) under = null;
     if (!inside(pressed)) pressed = null;
     if (current !== null && !inside(current)) release();
   };
@@ -177,6 +250,8 @@ export function installTitleTooltips(
     conceal();
   };
 
+  const root = doc.documentElement ?? doc;
+  observer.observe(root, { attributes: true, attributeFilter: ['title'], subtree: true });
   doc.addEventListener('pointerover', onMove, true);
   doc.addEventListener('pointermove', onMove, true);
   doc.addEventListener('pointerout', onOut, true);
@@ -187,6 +262,7 @@ export function installTitleTooltips(
   view?.addEventListener('blur', release);
   return () => {
     release();
+    observer.disconnect();
     doc.removeEventListener('pointerover', onMove, true);
     doc.removeEventListener('pointermove', onMove, true);
     doc.removeEventListener('pointerout', onOut, true);
