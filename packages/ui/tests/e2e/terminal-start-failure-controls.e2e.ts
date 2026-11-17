@@ -140,6 +140,8 @@ async function enterProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a terminal that could not start offers Try again and Clear, on the badge and in its menu', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent — a different process tree
   // from the one these assertions describe.

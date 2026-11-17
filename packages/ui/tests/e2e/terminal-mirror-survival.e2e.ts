@@ -31,6 +31,8 @@ async function newTerminal(win: Page, root: string): Promise<string> {
   return pid;
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a running terminal survives being mirrored into a new sub-workspace and streams to both windows', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-termsurv-'));
   try {

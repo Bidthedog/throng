@@ -41,6 +41,8 @@ import { skipIfElevated } from './admin.js';
  * distinguishable at all.
  */
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a terminal sees the environment of the app that launched it, not the daemon (#209)', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent, a different process tree
   // from the one this asserts about.

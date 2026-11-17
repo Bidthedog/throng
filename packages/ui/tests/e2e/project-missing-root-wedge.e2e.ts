@@ -128,6 +128,8 @@ async function allNoticeText(win: Page): Promise<string> {
   return parts.join(' | ').replace(/\n/g, ' ') || '(no notices)';
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('entering a project whose folder is gone reports it and does not split the workspace', { tag: ['@extended', '@window', '@reserve:runtime'] }, async () => {
   skipIfElevated();
   test.setTimeout(240_000);

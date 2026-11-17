@@ -70,6 +70,8 @@ import { runApp, createProject, panelIds, addPanels, cleanupTemp } from './harne
 const focusedTestId = (win: Page): Promise<string> =>
   win.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? '');
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('the notice chord reaches the app while a real shell has the keyboard', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-noticechord-'));
   writeFileSync(join(root, 'doc.txt'), 'alpha\n');

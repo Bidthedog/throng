@@ -196,6 +196,8 @@ for (const flavour of FLAVOURS) {
   });
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these

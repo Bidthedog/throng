@@ -128,6 +128,8 @@ async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
  * rebuilding a four-casualty workspace three times would spend three launches to observe three
  * facets of one clipboard.
  */
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a copied notice carries everything it renders, plus the system error it must not render', { tag: ['@extended', '@failure'] }, async () => {
   test.setTimeout(300_000);
   const real = mkdtempSync(join(tmpdir(), 'throng-copy-real-'));

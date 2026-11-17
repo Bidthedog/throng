@@ -40,6 +40,8 @@ async function projectWithMirroredPanel(app: ElectronApplication, win: Page) {
   return { a, b, child };
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('destroying a mirrored Panel in the PROJECT removes it from the sub-workspace too (with warning)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     const { a, b, child } = await projectWithMirroredPanel(app, win);

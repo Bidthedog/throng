@@ -77,6 +77,8 @@ const requestClose = (app: ElectronApplication): Promise<void> =>
  */
 const TERMINAL_VIEW = /^terminal-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a pre-existing terminal reattaches after restart and still warns on close', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   skipIfElevated();
   const pipe = `\\\\.\\pipe\\throng-reattach-${process.pid}-${Date.now()}`;

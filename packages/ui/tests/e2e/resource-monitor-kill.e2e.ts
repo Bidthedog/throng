@@ -43,6 +43,8 @@ async function acceptKill(win: Page): Promise<void> {
 const rowOf = (win: Page, prefix: string, text?: string): Locator =>
   win.locator(`[data-testid^="breakdown-row-${prefix}"]`, text === undefined ? {} : { hasText: text });
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('Kill All Below ends a parent and its two children, which show ended while the shell lives; on the panel it ends the shell too and the panel keeps its place', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   test.setTimeout(180_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-resmon-kill-'));

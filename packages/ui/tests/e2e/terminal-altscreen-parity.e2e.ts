@@ -146,6 +146,8 @@ async function newTerminal(win: Page, root: string): Promise<string> {
  * enumerable in the meantime:
  *   THRONG_E2E_INCLUDE_QUARANTINE=1 npx playwright test --grep @quarantine --list
  */
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('@quarantine a full-screen (alt-screen) program renders identically in two different-sized views, and stays identical when either window is resized', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-alt-'));

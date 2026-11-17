@@ -152,6 +152,8 @@ async function openFirstTab(win: Page): Promise<void> {
  * workspace, and rebuilding it four times would cost four two-launch dances (~4 minutes) to observe
  * four facets of one state. What each block is proving is stated where it sits.
  */
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('one cause across several tabs is one notice, listing every panel it defeated', { tag: ['@extended', '@failure', '@reserve:window'] }, async () => {
   test.setTimeout(420_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-consol-root-'));

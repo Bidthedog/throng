@@ -59,6 +59,8 @@ function freshRoot(): string {
   return dir;
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test.afterAll(() => {
   for (const d of cfgRoots.splice(0)) cleanupTemp(d);
   for (const d of roots.splice(0)) cleanupTemp(d);

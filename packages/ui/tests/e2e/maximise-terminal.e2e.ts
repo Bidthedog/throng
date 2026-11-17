@@ -45,6 +45,8 @@ async function splitFrom(win: Page, panelId: string, row: 'Split Right' | 'Split
   await expect(win.locator('.panel-box')).toHaveCount(before + 1);
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('Alt+Shift+Enter maximises a real terminal in place; Shift+Enter and Ctrl+Enter still reach its program; restore is exact', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   skipIfHostCannotDeliverReencodedKeys();
   const root = tmpDir('throng-max-term-');

@@ -53,6 +53,8 @@ import { openApp, createProject, firstPanelId, type OpenApp, panelGrip, splitPan
  */
 let shared: OpenApp;
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test.beforeAll(async () => {
   shared = await openApp();
 });

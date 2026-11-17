@@ -172,6 +172,8 @@ async function enterProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a generated name the daemon adjusts is not a rename — the panel still auto-names itself (#218 A1)', { tag: ['@extended', '@window'] }, async () => {
   const rootA = makeProject('throng-a1-alpha-');
   const rootB = makeProject('throng-a1-beta-');

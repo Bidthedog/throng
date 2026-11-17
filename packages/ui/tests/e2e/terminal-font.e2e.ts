@@ -9,6 +9,8 @@ import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, r
 // Consolas monospace). This E2E confirms the terminal font applies (rather than
 // silently assuming terminals cannot be styled).
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('a terminal renders in the themeable monospace font (terminals are stylable)', { tag: ['@extended', '@terminal', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tf-'));
   try {
