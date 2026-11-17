@@ -4,45 +4,45 @@ Spec: `specs/069-lucide-icon-set/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Icon mapping review page | signed off | 4e0952c993c6 | 2026-11-16 | |
-| MT-02 | Icons in the File Explorer | needs retest | 4e0952c993c6 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/explorer/drag-action-label.tsx |
-| MT-03 | Icons on panels, tabs and panes | needs retest | 4e0952c993c6 | 2026-11-16 | fc68b332 touched packages/ui/src/renderer/panes/focus-mode-panes.tsx |
-| MT-04 | Icons on the window controls and title bar | signed off | 4e0952c993c6 | 2026-11-16 | |
-| MT-05 | Icons in context menus | signed off | 4e0952c993c6 | 2026-11-16 | |
-| MT-06 | Icons in Find and Find in Files | signed off | 4e0952c993c6 | 2026-11-16 | |
-| MT-07 | Icons in Preferences | needs retest | 4e0952c993c6 | 2026-11-16 | 1213c42a touched packages/ui/src/renderer/preferences/preferences-app.tsx |
-| MT-08 | Icons in the Resource Monitor | needs retest | 3858e6604516 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/resources/help-panel.tsx |
-| MT-09 | Icons in editors, previews and diagrams | needs retest | 586d05c607b0 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/editor/editor.css |
-| MT-10 | Icons in notifications | needs retest | 586d05c607b0 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/notifications/place-popover.tsx |
-| MT-11 | The read-only icon grid | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/core/src/icons/icon-keys.ts |
-| MT-12 | Create a set and override icons | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/icon-section.tsx |
-| MT-13 | Upgrade from an alpha16 configuration | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched FR-037 in specs/069-lucide-icon-set/spec.md |
-| MT-14 | Lucide licence and the icon sets README | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/core/src/icons/icon-sets-README.txt |
-| MT-15 | Rename, delete and reset in Preferences | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/icon-section.tsx |
-| MT-16 | The Icon set row: order, toasts and the asterisk | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/icon-section.tsx |
-| MT-17 | The Preferences window: maximise, and folders above it | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-18 | Themes tab: every action always shown, greyed when unusable | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/icon-section.tsx |
-| MT-19 | Toast controls: placement, spacing and hover | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/ui/src/renderer/common/command-line-notice.tsx |
-| MT-20 | Notification hover delay | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/core/src/config/settings-metadata.ts |
-| MT-21 | The project settings dialog | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/ui/src/renderer/preferences/settings-tab.tsx |
-| MT-22 | One look for the secondary windows | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/ui/src/renderer/theme.css |
-| MT-23 | The File Explorer's Delete as a rubbish bin | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/core/src/icons/icon-keys.ts |
-| MT-24 | File and folder kinds in the tree | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-25 | Language file icons | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-26 | The Markdown mark | signed off | 586d05c607b0 | 2026-11-16 | |
-| MT-27 | File Explorer row popover | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/core/src/config/settings-metadata.ts |
-| MT-28 | Title bars apart from their windows | needs retest | 586d05c607b0 | 2026-11-16 | d637e3a0 touched packages/core/src/config/theme.ts |
-| MT-29 | File icons coloured by category | needs retest | 586d05c607b0 | 2026-11-16 | 95240bf6 touched packages/ui/src/renderer/theme.css |
-| MT-30 | Resource Monitor "?" helpers | needs retest | 4e0952c993c6 | 2026-11-16 | e672c636 touched packages/ui/src/renderer/resources/info-helper.tsx |
-| MT-31 | Icon set and Icon colour row actions | untested | | | |
-| MT-32 | The unknown file's own colour | untested | | | |
-| MT-33 | Panel type icon first in the header | untested | | | |
-| MT-34 | A diagram's Focus Mode | untested | | | |
-| MT-35 | The File Manager category | untested | | | |
-| MT-36 | Settings grouped under General, Editor and Search | untested | | | |
-| MT-37 | About: the licence box's pointer, and Lucide's row | untested | | | |
-| MT-38 | File icon colours change with the theme | untested | | | |
-| MT-39 | A colour deleted in the theme JSON draws the theme's own | untested | | | |
+| MT-01 | Icon mapping review page | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-02 | Icons in the File Explorer | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-03 | Icons on panels, tabs and panes | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-04 | Icons on the window controls and title bar | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-05 | Icons in context menus | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-06 | Icons in Find and Find in Files | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-07 | Icons in Preferences | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-08 | Icons in the Resource Monitor | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-09 | Icons in editors, previews and diagrams | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-10 | Icons in notifications | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-11 | The read-only icon grid | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-12 | Create a set and override icons | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-13 | Upgrade from an alpha16 configuration | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-14 | Lucide licence and the icon sets README | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-15 | Rename, delete and reset in Preferences | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-16 | The Icon set row: order, toasts and the asterisk | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-17 | The Preferences window: maximise, and folders above it | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-18 | Themes tab: every action always shown, greyed when unusable | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-19 | Toast controls: placement, spacing and hover | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-20 | Notification hover delay | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-21 | The project settings dialog | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-22 | One look for the secondary windows | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-23 | The File Explorer's Delete as a rubbish bin | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-24 | File and folder kinds in the tree | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-25 | Language file icons | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-26 | The Markdown mark | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-27 | File Explorer row popover | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-28 | Title bars apart from their windows | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-29 | File icons coloured by category | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-30 | Resource Monitor "?" helpers | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-31 | Icon set and Icon colour row actions | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-32 | The unknown file's own colour | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-33 | Panel type icon first in the header | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-34 | A diagram's Focus Mode | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-35 | The File Manager category | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-36 | Settings grouped under General, Editor and Search | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-37 | About: the licence box's pointer, and Lucide's row | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-38 | File icon colours change with the theme | signed off | 1deeae3c7d9e | 2026-11-17 | |
+| MT-39 | A colour deleted in the theme JSON draws the theme's own | signed off | 1deeae3c7d9e | 2026-11-17 | |
 
 ## MT-01: Icon mapping review page
 
