@@ -129,6 +129,9 @@ in the repository. Each index points at its release's assets.
   only `prerelease`.
 - **A change under `site/`** deploys on merge with no key, because each deployment reads the signed bundles back from the
   releases.
+- **The website** is `site/index.html`, at the site root. `npm run site:preview` serves `site/` on
+  `http://127.0.0.1:8080/` and publishes nothing; the package indexes are absent from a preview. The deployment minifies
+  the page's script and stylesheet; `site/` keeps them readable.
 
 `verify-repositories` proves the route before publication: install, upgrade through a newer index, channel separation, and
 refusal of tampered and unsigned indexes. `scripts/repo-signing-key.sh` creates the key, once. Replacing it means every
