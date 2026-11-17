@@ -150,12 +150,19 @@ test('a kept notice raised in Preferences reaches the main window panel, and it 
         main?.focus();
       });
       await showRightPane(win);
-      await expect(win.getByTestId('notifications-restore')).toBeVisible({ timeout: 20_000 });
+      const restore = win.getByTestId('notifications-restore');
+      await expect(restore).toBeVisible({ timeout: 20_000 });
       await expect(win.getByTestId('notifications-pending-badge')).toHaveText('1');
-      await win.getByTestId('notifications-restore').click();
+      // The pane can collapse again after it was shown, once its stored state lands, and Restore goes with it
+      // (macOS CI, 1.0.0-alpha17: Restore seen, then a 30s click timeout). Re-show and restore until the entry is
+      // on screen; Restore is clicked only while it is there, so a pass never re-minimises a restored panel.
+      await expect(async () => {
+        await showRightPane(win);
+        if (await restore.isVisible()) await restore.click({ timeout: 5_000 });
+        await expect(win.getByTestId('notification-entry')).toHaveCount(1, { timeout: 5_000 });
+      }).toPass({ timeout: 60_000 });
       // FR-059: restoring the panel does not clear the count.
       await expect(win.getByTestId('notifications-pending-badge')).toHaveText('1');
-      await expect(win.getByTestId('notification-entry')).toHaveCount(1, { timeout: 20_000 });
     },
     { userDataDir, env },
   );
