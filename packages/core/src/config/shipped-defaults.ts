@@ -372,7 +372,11 @@ import { setAtPath } from './metadata.js';
 // overrides or a choice of icon set: every icon is a file in the one default set (FR-017, FR-018). {@link planThemeIconSetUpgrade}
 // deletes `icons`, `iconOverrides` and `iconPack` from every theme on disk, built-in and user alike, and a second pass finds nothing.
 // The guarded icon-value rewrites of versions 6, 25 and 30 are retired with the map they rewrote.
-export const SHIPPED_DEFAULTS_VERSION = 34;
+//
+// Bumped by 069 again (34 → 35): a THEMES payload, additive. FR-064's `fileIconOther` reached every theme's record after 34
+// was already on disk, and theme files take a new token ONLY through the upgrade this version gates — so an install at 34
+// painted no Other File Icons colour of its own in any theme, and the colour did not change with the theme (FR-070).
+export const SHIPPED_DEFAULTS_VERSION = 35;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved

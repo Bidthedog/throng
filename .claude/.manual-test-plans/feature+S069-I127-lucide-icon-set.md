@@ -41,6 +41,7 @@ Spec: `specs/069-lucide-icon-set/spec.md`
 | MT-35 | The File Manager category | untested | | | |
 | MT-36 | Settings grouped under General, Editor and Search | untested | | | |
 | MT-37 | About: the licence box's pointer, and Lucide's row | untested | | | |
+| MT-38 | File icon colours change with the theme | untested | | | |
 
 ## MT-01: Icon mapping review page
 
@@ -562,3 +563,15 @@ Paths: `packages/ui/src/renderer/about/about.css`, `packages/ui/src/renderer/abo
 1. Open About and move the pointer over the licence box's scrollbar: it is the arrow, not the text cursor. Drag the scrollbar: the text scrolls.
 2. Select some licence text with the mouse and copy it: it copies.
 3. Scroll the third-party list to lucide: it shows its version and an ISC link, and no button to show its licence text, like the packages around it.
+
+## MT-38: File icon colours change with the theme
+
+Covers: FR-070
+Paths: `packages/core/src/config/shipped-defaults.ts`, `packages/core/src/config/file-icon-colours.ts`
+
+### Steps
+1. Start throng on a configuration from an earlier build of this branch (your dev profile will do). Open a project whose File Explorer shows code files and a file throng has no icon for (e.g. `notes.xyz`).
+2. Open Preferences → Themes → File Explorer → File Icons on Snake: every row, Other File Icons included, has a colour.
+3. Switch to English Garden: the code and unknown files' icons in the tree change to English Garden's darker colours, and the rows show English Garden's values.
+4. On English Garden, change Code File Icons to a bright red. Switch to Snake: code icons are Snake's blue, not red. Switch back to English Garden: they are red again.
+5. Reset the row on English Garden: back to its own colour.
