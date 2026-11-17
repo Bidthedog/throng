@@ -305,8 +305,32 @@ async function ringThickness(app: OpenApp['app'], panel: Locator, panelId: strin
   const title = await panel.getByTestId(`panel-title-${panelId}`).boundingBox();
   const body = await panel.getByTestId(`panel-body-${panelId}`).boundingBox();
   const atTitle = await ringPixelsAt(app, panel, title!.y + title!.height / 2);
-  const atBody = await ringPixelsAt(app, panel, body!.y + body!.height / 2);
-  return { title: atTitle.count, body: atBody.count, detail: `title: ${atTitle.painted}; body: ${atBody.painted}` };
+  const bodyY = body!.y + body!.height / 2;
+  const atBody = await ringPixelsAt(app, panel, bodyY);
+  // What is drawn where the ring's inner pixel should be, and the overlay that should paint above it: the detail a
+  // Windows-only 1px-against-2px reading needs (1.0.0-alpha17 release gate).
+  const box = await panel.boundingBox();
+  const stack = await panel.evaluate(
+    (el, at) => {
+      const style = (node: Element) => {
+        const s = getComputedStyle(node);
+        return `${node.tagName.toLowerCase()}.${[...node.classList].join('.')}[pos=${s.position} z=${s.zIndex} bg=${s.backgroundColor} transform=${s.transform} will=${s.willChange} contain=${s.contain}]`;
+      };
+      const after = getComputedStyle(el, '::after');
+      return [
+        `dpr=${window.devicePixelRatio} zoom=${getComputedStyle(document.documentElement).zoom}`,
+        `::after content=${after.content} pos=${after.position} inset=${after.inset} z=${after.zIndex} outline=${after.outline} offset=${after.outlineOffset} will=${after.willChange} radius=${after.borderRadius}`,
+        `panel border=${getComputedStyle(el).borderLeftWidth} outline=${getComputedStyle(el).outline} offset=${getComputedStyle(el).outlineOffset}`,
+        `at (${at.x}, ${at.y}): ${document.elementsFromPoint(at.x, at.y).slice(0, 6).map(style).join(' > ')}`,
+      ].join(' || ');
+    },
+    { x: box!.x + 1.5, y: bodyY },
+  );
+  return {
+    title: atTitle.count,
+    body: atBody.count,
+    detail: `title: ${atTitle.painted}; body: ${atBody.painted}; panel x=${box!.x}; ${stack}`,
+  };
 }
 
 /**

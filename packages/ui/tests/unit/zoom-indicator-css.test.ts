@@ -38,9 +38,10 @@ describe('.zoom-indicator', () => {
   // and above the indicator too.
   it('the active panel ring is redrawn above everything inside the panel, the indicator included', () => {
     const ring = rule('.panel-box--active::after');
+    // The ring's inner pixel, drawn as a 1px border on the padding box: the panel's own outline keeps the outer one.
     expect(ring).toMatch(/position:\s*absolute/);
-    expect(ring).toMatch(/outline:\s*inherit/);
-    expect(ring).toMatch(/outline-offset:\s*inherit/);
+    expect(ring).toMatch(/inset:\s*0/);
+    expect(ring).toMatch(/border:\s*1px solid/);
     expect(ring).toMatch(/pointer-events:\s*none/);
     const z = (block: string): number => Number(/z-index:\s*(\d+)/.exec(block)![1]);
     expect(z(ring)).toBeGreaterThan(z(rule('.zoom-indicator')));

@@ -2820,22 +2820,30 @@ textarea,
 
 /* The ring again, as an overlay above the panel's content: the outline is painted under positioned
    descendants, and an editor's or a preview's body is positioned, so beside the body its inner pixel was
-   covered and the ring read 1px against the title's 2px (MT-04 retest, 2026-10-13). The overlay takes the
-   outline's own width, style, colour and offset — the project colour and the dimmed state included — and sits
-   above every overlay inside the panel. The panel's border box, so the offset lands where the outline's does. */
+   covered and the ring read 1px against the title's 2px (MT-04 retest, 2026-10-13). Content never reaches the
+   panel's 1px border, so the outline's outer pixel always shows; this overlay draws the inner one, as a 1px
+   border on the padding box, above every overlay inside the panel. A border, not a copy of the outline: on
+   Windows Chromium placed the inherited negative-offset outline 1px further out than on Linux, so it painted
+   only the border pixel and CodeMirror's line-number gutter showed through beside an editor's body (the alpha17
+   release gate, B8: 20 of 20 on hosted Windows). Its colour follows the outline's: the project colour while the
+   window is foreground, the active token otherwise, the dimmed token in a background window. */
 .panel-box--active::after {
   content: '';
   position: absolute;
-  inset: -1px;
+  inset: 0;
   z-index: 7;
-  outline: inherit;
-  outline-offset: inherit;
-  border-radius: inherit;
+  border: 1px solid var(--panel-border-colour, var(--throng-colour-activePanelBorder));
+  /* The panel's 6px corner, less its 1px border: the padding box's own curve. */
+  border-radius: 5px;
   pointer-events: none;
 }
 
 .panel-box--active-dimmed {
   outline-color: var(--throng-colour-activePanelBorderInactive);
+}
+
+.panel-box--active-dimmed::after {
+  border-color: var(--throng-colour-activePanelBorderInactive);
 }
 
 .panel-box--active .panel-box__header {
