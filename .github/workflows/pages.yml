@@ -39,6 +39,10 @@ jobs:
           node-version: 24
       - name: Assemble
         run: node scripts/site.mjs assemble --out _site
+      # The page's script and stylesheet are kept readable in site/; only the deployed copies are minified.
+      # esbuild is pinned and fetched alone, so the job still installs none of the workspace's dependencies.
+      - name: Minify the script and stylesheet
+        run: npx --yes esbuild@0.28.2 _site/assets/site.js _site/assets/site.css --minify --outdir=_site/assets --allow-overwrite
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
