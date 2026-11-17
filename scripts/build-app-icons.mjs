@@ -10,9 +10,9 @@
  *     node scripts/build-app-icons.mjs          # inkscape must be on PATH
  *     INKSCAPE=/path/to/inkscape node scripts/build-app-icons.mjs
  *
- * Why two source SVGs: the detailed mark (prompt caret, window controls, prongs)
- * turns to mush below ~32px, so `icon_small.svg` carries a simplified drawing for
- * the small sizes. An .ico is a container of independent images, which lets us put
+ * Why several source SVGs: the 5x7 tile grid of `icon_large.svg` smears into blur
+ * below ~48px, so 16, 24 and 32px each have a drawing on their own pixel grid
+ * (`icon_16.svg`, `icon_24.svg`, `icon_small.svg`). An .ico is a container of independent images, which lets us put
  * the RIGHT ARTWORK in each size rather than downscaling one drawing everywhere —
  * Windows then picks the entry matching whatever it is about to render.
  */
@@ -28,11 +28,15 @@ const outDir = join(repoRoot, 'packages', 'ui', 'assets');
 const inkscape = process.env.INKSCAPE ?? 'inkscape';
 
 /** The cut-over is the artwork's own brief: simplified at <=32px, detailed above. */
+// The small sizes each have a drawing on their own pixel grid (icon_16, icon_24, icon_small at 32), so every
+// tile edge lands on a whole pixel; the 1024 drawing scaled down to them smears the 5x7 grid into blur.
+const SVG_16 = join(iconDir, 'icon_16.svg');
+const SVG_24 = join(iconDir, 'icon_24.svg');
 const SMALL_SVG = join(iconDir, 'icon_small.svg');
 const LARGE_SVG = join(iconDir, 'icon_large.svg');
 const SIZES = [
-  { px: 16, svg: SMALL_SVG },
-  { px: 24, svg: SMALL_SVG },
+  { px: 16, svg: SVG_16 },
+  { px: 24, svg: SVG_24 },
   { px: 32, svg: SMALL_SVG },
   { px: 48, svg: LARGE_SVG },
   { px: 64, svg: LARGE_SVG },
@@ -103,7 +107,7 @@ try {
   mkdirSync(outDir, { recursive: true });
   const images = SIZES.map(({ px, svg }) => {
     const png = rasterise(svg, px, join(scratch, `throng-${px}.png`));
-    console.log(`  ${String(px).padStart(3)}px  ${png.length.toLocaleString()} bytes  ${svg.endsWith('icon_small.svg') ? 'small' : 'large'} artwork`);
+    console.log(`  ${String(px).padStart(3)}px  ${png.length.toLocaleString()} bytes  ${svg.split(/[\\/]/).pop()}`);
     return { px, png };
   });
 
