@@ -679,6 +679,8 @@ export {
   resetBindingValue,
   resetSettingValue,
   fillMissingThemeProps,
+  completeTheme,
+  themeFillSource,
   planThemeUpgrade,
 } from './config/shipped-defaults.js';
 // The overridden-test (015): is this item still what the app shipped? Decides when a

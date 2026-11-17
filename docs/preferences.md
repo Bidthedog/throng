@@ -487,7 +487,9 @@ VSCode, VI-VIM, English Garden, Matrix, Cyberpunk, Claude, Debian and Ubuntu. Th
 edits every token of a theme — colours, fonts and sizes, syntax colours, the icon colour and icon
 set — each with a plain-language label, using colour and size pickers drawn from the theme itself. Every one of
 those is stored in the theme's own file, so an edit belongs to the theme you made it in, and switching theme
-brings back everything that theme holds. **Clone** is how you make a theme of your own. Contrast is guarded automatically. The seven **File Icons** colours, under File Explorer, colour file icons by kind — code, markup,
+brings back everything that theme holds. A colour deleted from a theme's JSON takes that theme's own shipped
+value again (a theme of your own takes the default theme's), never the one from the theme you switched from.
+**Clone** is how you make a theme of your own. Contrast is guarded automatically. The seven **File Icons** colours, under File Explorer, colour file icons by kind — code, markup,
 data, documents, media, archives and scripts — in the File Explorer and Find in Files, and **Other File
 Icons** colours a file of a kind throng does not recognise, in a neutral grey apart from the folders; every
 bundled theme sets all eight, and clearing one gives those icons the Icon Colour. **Title Bar Background**, under General, is

@@ -42,6 +42,7 @@ Spec: `specs/069-lucide-icon-set/spec.md`
 | MT-36 | Settings grouped under General, Editor and Search | untested | | | |
 | MT-37 | About: the licence box's pointer, and Lucide's row | untested | | | |
 | MT-38 | File icon colours change with the theme | untested | | | |
+| MT-39 | A colour deleted in the theme JSON draws the theme's own | untested | | | |
 
 ## MT-01: Icon mapping review page
 
@@ -575,3 +576,15 @@ Paths: `packages/core/src/config/shipped-defaults.ts`, `packages/core/src/config
 3. Switch to English Garden: the code and unknown files' icons in the tree change to English Garden's darker colours, and the rows show English Garden's values.
 4. On English Garden, change Code File Icons to a bright red. Switch to Snake: code icons are Snake's blue, not red. Switch back to English Garden: they are red again.
 5. Reset the row on English Garden: back to its own colour.
+
+## MT-39: A colour deleted in the theme JSON draws the theme's own
+
+Covers: FR-071
+Paths: `packages/ui/src/main/config-watcher.ts`, `packages/core/src/config/shipped-defaults.ts`
+
+### Steps
+1. Open Preferences → Themes on English Garden, with a project whose File Explorer shows a `.ts` file.
+2. Switch the tab to JSON, delete the `"fileIconCode": "…"` line from `colours`, and switch back.
+3. The `.ts` icon keeps English Garden's dark blue, and the Code File Icons row shows the same colour.
+4. Delete `"appBg"` the same way: the window background stays English Garden's pale green, not dark.
+5. Select Snake, then English Garden again: both colours are still English Garden's.
