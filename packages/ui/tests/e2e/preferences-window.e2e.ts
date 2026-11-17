@@ -169,6 +169,7 @@ test.describe('the preferences window itself', () => {
   });
 
   test('Preferences window is non-minimizable at the OS level', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
+    test.skip(process.platform === 'linux', 'Electron does not implement minimizable on Linux');
     // Distinct from the renderer assertion above: the BrowserWindow itself forbids minimise.
     expect(await lastWindowMinimizable(shared.app)).toBe(false);
   });

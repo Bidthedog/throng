@@ -94,6 +94,7 @@ test('a second launch opens no window, exits, and brings the running window forw
 });
 
 test('a launch of a different copy shows the notice naming the running copy', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+  test.skip(process.platform !== 'win32', 'connects to the running copy over a Windows named pipe');
   const runningRoot = dirname(await h.app.evaluate(() => process.execPath));
   const launchedExe = join(tmpdir(), 'another-throng-copy', 'throng.exe');
 

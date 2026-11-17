@@ -123,6 +123,7 @@ test('the mark keeps its own plate and tiles whatever the theme paints', { tag: 
 // renders TitleBar.
 
 test('Electron can decode the bundled .ico the windows are given', { tag: ['@extended', '@window', '@reserve:native'] }, async () => {
+  test.skip(process.platform !== 'win32', 'only Windows windows are given the .ico');
   // The .ico is hand-packed (scripts/build-app-icons.mjs, no image dependency), so
   // the thing worth proving is that Chromium's decoder actually accepts it and finds
   // the sizes inside — a malformed container fails silently as a blank taskbar icon.

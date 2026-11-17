@@ -67,6 +67,8 @@ async function addTerminal(win: Page, root: string, existingPanelId: string): Pr
   await makeCmdTerminal(win, pid, basename(root));
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('switching to a tab of four terminals never blocks the main thread', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(180_000);
   // The only assertion is the SC-012 ceiling, which is not adjudicated on a contended or
