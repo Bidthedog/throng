@@ -407,7 +407,7 @@ describe('SETTINGS_METADATA new-project + verb changes (011)', () => {
  * its own timeout) are separated, and a setting appears in both only if it genuinely governs both.
  * None does: the settle interval was deliberately NOT made a second use of the find bar's debounce
  * (FR-043b), and
- * `settings-inertness-043.test.ts` is what stops that decision being quietly undone.
+ * `no-inert-settings.test.ts` (071) fails if either key is left with no reader.
  */
 describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/075/076)', () => {
   const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));

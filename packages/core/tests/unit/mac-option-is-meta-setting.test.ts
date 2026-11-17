@@ -1,7 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join, sep } from 'node:path';
 import { DEFAULT_APP_SETTINGS, parseAppSettings } from '../../src/config/app-settings.js';
 import { SETTINGS_METADATA, descriptorsForThisPlatform } from '../../src/config/settings-metadata.js';
 import { linuxHostTraits, macosHostTraits } from '../../src/platform/host-traits.js';
@@ -10,39 +7,16 @@ import { withHostTraits } from '../../src/testing/with-host-traits.js';
 /**
  * 070 — the one setting this spec adds, `terminals.macOptionIsMeta` (FR-031, research R22): a descriptor, a default
  * that lets Option type the layout's characters, a parse that keeps a boolean and nothing else, offered on macOS
- * only, and a production reader (Principle X: nothing inert). `settings-inertness-068.test.ts` is the pattern.
+ * only.
  *
- * Layer: unit — the model plus a source scan, no app.
+ * This file used to be `settings-inertness-070.test.ts` and also checked, by matching source text, that production
+ * code reads the key. That reader guarantee now belongs to `no-inert-settings.test.ts` (spec 071, FR-014), which
+ * proves it for every descriptor through the type checker.
+ *
+ * Layer: unit — the settings model, no app.
  */
 
 const KEY = 'terminals.macOptionIsMeta';
-const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
-const CONFIG_LAYER = ['packages', 'core', 'src', 'config'].join(sep);
-
-function productionSources(): { file: string; text: string }[] {
-  const out: { file: string; text: string }[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      const p = join(dir, entry);
-      if (p.includes(CONFIG_LAYER)) continue;
-      if (statSync(p).isDirectory()) {
-        if (entry !== 'node_modules' && entry !== 'dist') walk(p);
-      } else if (/\.(ts|tsx)$/.test(entry)) {
-        out.push({ file: p, text: readFileSync(p, 'utf8') });
-      }
-    }
-  };
-  for (const pkg of readdirSync(join(REPO_ROOT, 'packages'))) {
-    const src = join(REPO_ROOT, 'packages', pkg, 'src');
-    try {
-      if (!statSync(src).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    walk(src);
-  }
-  return out;
-}
 
 const keysShown = (): string[] => descriptorsForThisPlatform(SETTINGS_METADATA).map((d) => d.key);
 
@@ -71,10 +45,5 @@ describe('terminals.macOptionIsMeta (070 FR-031)', () => {
     expect(keysShown()).not.toContain(KEY);
     withHostTraits(linuxHostTraits('/run/x'), () => expect(keysShown()).not.toContain(KEY));
     withHostTraits(macosHostTraits('/tmp/throng', []), () => expect(keysShown()).toContain(KEY));
-  });
-
-  it('is read by production code: it decides whether Option sends Meta to a terminal', () => {
-    const readers = productionSources().filter((s) => /\.macOptionIsMeta\b/.test(s.text) && /macOptionIsMeta:/.test(s.text));
-    expect(readers.map((r) => r.file), `${KEY} is declared and parsed but nothing reads it`).not.toEqual([]);
   });
 });

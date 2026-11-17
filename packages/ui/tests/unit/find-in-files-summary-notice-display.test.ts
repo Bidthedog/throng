@@ -25,8 +25,8 @@
  * `commitReplace` takes `notify` as an argument precisely so a caller at this tier can read the
  * notice it raises. Nothing here needs a DOM: the claim is about which fields the raise carries.
  * Whether the provider then honours the field is `notice-display-override.test.ts`'s claim at the
- * component tier, and whether the panel reads the right settings keys is
- * `settings-inertness-043.test.ts`'s.
+ * component tier, and whether each settings key has a production reader at all is
+ * `no-inert-settings.test.ts`'s (071).
  *
  * ══ ANTI-VACUITY ══
  *
