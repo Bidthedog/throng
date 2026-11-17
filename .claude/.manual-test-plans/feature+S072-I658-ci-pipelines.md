@@ -4,8 +4,8 @@ Spec: `specs/072-ci-pipelines/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | A pull request's checks on GitHub | untested | | | |
-| MT-02 | The README badges | untested | | | |
+| MT-01 | A pull request's checks on GitHub | signed off | 94cacf4c0fa8 | 2026-11-17 | |
+| MT-02 | The README badges | signed off | 94cacf4c0fa8 | 2026-11-17 | |
 
 ## MT-01: A pull request's checks on GitHub
 
