@@ -240,16 +240,22 @@ test('cog opens the single shared preferences window on the matching tab; non-mo
         mainEnabled: main.isEnabled(),
         prefsMovable: prefsWin.isMovable(),
         prefsAlwaysOnTop: prefsWin.isAlwaysOnTop(),
+        throngHasFocus: BrowserWindow.getFocusedWindow() !== null,
         prefsParentIsMain: prefsWin.getParentWindow()?.id === main.id,
       };
     });
     expect(modal.windowCount).toBe(2);
     expect(modal.mainEnabled).toBe(true); // 021: non-modal — the main window stays interactive
     expect(modal.prefsMovable).toBe(true);
-    // Held while THRONG has focus, which it does here — that is what keeps Preferences above a
-    // sub-workspace, which parenting cannot reach. Dropped the moment throng is not focused, which
-    // is what keeps FR-013's real promise: above throng's windows, never above other applications.
-    expect(modal.prefsAlwaysOnTop).toBe(true);
+    // Held while THRONG has focus — that is what keeps Preferences above a sub-workspace, which parenting
+    // cannot reach. Dropped the moment throng is not focused, which is what keeps FR-013's real promise: above
+    // throng's windows, never above other applications. Whether the OS has given throng focus is the window
+    // manager's call (a hosted Linux runner sometimes does not, a desktop session may refuse focus stealing),
+    // so the flag is checked against the focus measured in the same read. floating-window-layering.test.ts
+    // covers both branches deterministically.
+    expect(modal.prefsAlwaysOnTop, `always-on-top must follow throng's focus (${modal.throngHasFocus})`).toBe(
+      modal.throngHasFocus,
+    );
     expect(modal.prefsParentIsMain).toBe(true); // FR-013: parented to the main window (floats above it)
 
     // Re-invoking focuses the SAME window and switches its tab (FR-010/011). The main
