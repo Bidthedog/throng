@@ -40,6 +40,8 @@ test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
 let dataDir: string;
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test.beforeAll(async () => {
   dataDir = mkdtempSync(join(tmpdir(), 'throng-launch-data-'));
   shared = await openApp({ dataDir });

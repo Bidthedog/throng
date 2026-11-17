@@ -12,6 +12,8 @@ import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, TYPE_DELAY, cleanupTemp
 // program, so the host declaration applies to all of them rather than one. Applied per test
 // rather than per file because this suite is describe.serial: a single failure skips the rest,
 // which is how the same limitation looked like six different problems across three runs.
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test.beforeEach(() => skipIfHostCannotDeliverReencodedKeys());
 
 /*

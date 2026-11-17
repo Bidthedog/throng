@@ -122,6 +122,8 @@ async function interruptUntil(win: Page, term: Locator, pid: string, pattern: Re
     .toBe(true);
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 test('every shell names its running command, shell and directory, and drops the command when it stops (FR-001, FR-002, FR-009, SC-001)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(480_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-titles-'));

@@ -109,7 +109,7 @@ async function expectEditorLinkSurfaces(win: Page, pid: string): Promise<void> {
   // A path in the project: named absolutely in the status bar, and the file rows in the menu.
   const fileAt = await charPoint(line(win, pid, 'lines.txt too'), './lines.txt', 4);
   await win.mouse.move(fileAt.x, fileAt.y);
-  await expect(readout).toHaveText(/^[A-Za-z]:\\.*\\lines\.txt$/);
+  await expect(readout).toHaveText(process.platform === 'win32' ? /^[A-Za-z]:\\.*\\lines\.txt$/ : /^\/.*\/lines\.txt$/);
   await win.mouse.click(fileAt.x, fileAt.y, { button: 'right' });
   await expect(menu).toHaveCount(1);
   await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();

@@ -39,6 +39,8 @@ async function flavourAvailable(
   return values.includes(flavour);
 }
 
+test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+
 for (const flavour of FLAVOURS) {
   test(`[${flavour}] a startup command runs and leaves a live prompt (FR-004/FR-005)`, { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(120_000);
