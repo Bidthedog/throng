@@ -93,6 +93,17 @@ async function settle(): Promise<void> {
   }
 }
 
+/**
+ * `settle()` until `done` holds, for up to `ms` of real time. A fallback to disk takes 5-7 of `settle()`'s turns on an
+ * idle machine and more than all 20 on a loaded hosted Mac (the 1.0.0-alpha17 release gate), so where a test waits
+ * for that read it waits for its outcome rather than a turn count.
+ */
+async function settleUntil(done: () => boolean, ms = 5000): Promise<void> {
+  const deadline = Date.now() + ms;
+  do await settle();
+  while (!done() && Date.now() < deadline);
+}
+
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'throng-preview-parented-'));
   await mkdir(join(root, 'dest'));
@@ -212,7 +223,7 @@ describe('parented is derived from the editor registry (FR-013)', () => {
     expect(watcher.watched).toEqual([]);
 
     coord.destroy('ed1');
-    await settle();
+    await settleUntil(() => watcher.watched.length > 0);
     expect(watcher.watched).toEqual([root]);
 
     previews.destroyed('v1');
@@ -258,7 +269,7 @@ describe('parented is derived from the editor registry (FR-013)', () => {
     push.clear();
 
     coord.destroy('ed1');
-    await settle();
+    await settleUntil(() => lastFor('v1')?.parent === null);
 
     expect(lastFor('v1')).toMatchObject({
       filePath: a,

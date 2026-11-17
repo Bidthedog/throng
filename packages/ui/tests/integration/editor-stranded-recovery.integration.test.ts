@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DEFAULT_APP_SETTINGS } from '@throng/core';
+import { watchStarted } from '@throng/core/testing';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
 import { EditorService } from '../../src/main/editor-service.js';
@@ -86,6 +87,8 @@ describe('a stranded editor recovers when its path comes back (027 / #161)', () 
     const file = join(dir, 'code.txt');
     coord.register(meta('p1', file), '', { unloadable: true });
     expect(coord.getContent('p1')).toMatchObject({ unloadable: true, text: '' });
+    // The register opened the watch; on macOS a change in the instant after that is never reported.
+    await watchStarted();
 
     // The user puts the folder back — with the file having moved on while it was away, so
     // "it recovered" cannot be satisfied by whatever was already in the buffer.
@@ -109,6 +112,7 @@ describe('a stranded editor recovers when its path comes back (027 / #161)', () 
     const file = join(root, 'doc.txt');
     await writeFile(file, 'ON-DISK-V1\n');
     await coord.load({ ...meta('p1', file) });
+    await watchStarted();
     editDocument(coord, meta('p1', file), 'MY-UNSAVED-WORK\n');
     expect(coord.getContent('p1')).toMatchObject({ dirty: true });
 
