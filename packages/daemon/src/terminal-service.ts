@@ -890,6 +890,10 @@ export class TerminalService {
          * The scrollback is not discarded, only withheld from this view: leaving the alt screen
          * makes it worth replaying again, and any later attach gets it.
          */
+        // The joining view may be a reloaded window whose cwd store is empty, and the poll publishes only a change:
+        // forget the last one so the next poll names the directory to it. On Linux, where bash reports no cwd of
+        // its own, nothing else ever would.
+        this.lastCwd.delete(panelId);
         // Whatever is waiting to be delivered is in the snapshot too, so no delivery can straddle replayEnd (061 R4).
         this.events.flush(panelId);
         const replay = existing.altScreen ? '' : existing.retained.snapshot();
