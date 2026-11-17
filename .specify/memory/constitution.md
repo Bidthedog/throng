@@ -15,14 +15,14 @@ Audit (2026-11-17): every theme value — colours, fonts, sizes, typography, the
                 maintainer saw it: 069 added `fileIconOther` to every shipped theme after version 34 was on disk, so
                 no install at 34 received it and each theme drew none of its own. Fixed in the same change (version
                 35, 069 FR-070), with `packages/core/tests/unit/theme-leaves-version.test.ts` failing the build for a
-                theme leaf added or removed under an unchanged version. One known gap stays open: a theme file
-                missing a token (deleted in the Themes JSON tab) draws throng's value, because `toCssVariables`
-                merges every theme over `THRONG_THEME`. Its issue is listed under Deferred.
+                theme leaf added or removed under an unchanged version. A second, found while writing the rule: a
+                theme file missing a token (the Themes JSON tab can delete one) drew throng's value, because main
+                read every theme over `THRONG_THEME`. Fixed in the same change (#643, 069 FR-071): the read takes
+                a missing token from the theme's own record (`completeTheme`), the same source the upgrade uses.
 Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
            ✅ .specify/extensions.yml — no constitution hooks registered.
            ✅ .claude/skills/throng-config-preferences/SKILL.md — its theme-token checklist gains the version step.
-Deferred: the JSON-tab gap above — a tracked issue is to be filed (the filing was refused in the session that made
-          this amendment; the body is ready).
+Deferred: none.
 -->
 <!--
 SYNC IMPACT REPORT
@@ -3018,8 +3018,9 @@ look changes with it.
   additive upgrade that `SHIPPED_DEFAULTS_VERSION` gates, so the version moves in the same change.
   `theme-leaves-version.test.ts` fails the build for a theme leaf added or removed under an
   unchanged version.
-- Known gap: a theme file missing a token, which the Themes JSON tab can produce, draws throng's
-  value for it, because `toCssVariables` merges every theme over the default theme. Do not add to it.
+- A token missing from a theme's file — the Themes JSON tab can delete one — MUST be drawn from
+  that theme's own record (a built-in's shipped value; for a custom theme, the base theme it fills
+  from at upgrade), never from whichever theme was active before or from a global default.
 
 Rationale: Externalised, injected configuration keeps the codebase portable
 across machines and future operating systems, makes behaviour testable by

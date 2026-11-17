@@ -1197,6 +1197,24 @@ function fillMissing(user: unknown, source: unknown): unknown {
   return result;
 }
 
+/**
+ * The theme a missing token is taken from: a built-in's own shipped record, and for a custom theme (no
+ * shipped counterpart) the base `throng` theme. One rule for the upgrade that writes the token and for the
+ * read that paints it (constitution X, *Every theme setting belongs to its theme*; #643).
+ */
+export function themeFillSource(name: string, shipped: ShippedDefaults, throngBase: Theme = shipped.themes.throng!): Theme {
+  return isReservedThemeName(name, shipped) ? shipped.themes[name]! : throngBase;
+}
+
+/**
+ * The theme `name` as every window paints it: its file, with any token the file lacks taken from
+ * {@link themeFillSource} — never from another theme. A token the Themes JSON tab deleted draws the
+ * theme's own value until an edit writes the theme back whole (#643, 069 FR-071).
+ */
+export function completeTheme(name: string, theme: Theme, shipped: ShippedDefaults = buildShippedDefaults()): Theme {
+  return fillMissingThemeProps(theme, themeFillSource(name, shipped));
+}
+
 export interface ThemeUpgradePlan {
   /** Reserved (built-in) themes absent from the user's config — to be created. */
   addThemes: Array<{ name: string; theme: Theme }>;
@@ -1222,8 +1240,7 @@ export function planThemeUpgrade(args: {
   }
   const fillThemes: ThemeUpgradePlan['fillThemes'] = [];
   for (const [name, theme] of Object.entries(present)) {
-    const source = isReservedThemeName(name, shipped) ? shipped.themes[name] : throngBase;
-    const filled = fillMissingThemeProps(theme, source);
+    const filled = fillMissingThemeProps(theme, themeFillSource(name, shipped, throngBase));
     if (JSON.stringify(filled) !== JSON.stringify(theme)) fillThemes.push({ name, theme: filled });
   }
   return { addThemes, fillThemes };

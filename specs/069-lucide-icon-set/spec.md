@@ -508,6 +508,9 @@ icon sets folder in a plain text editor and follow it to override one icon.
   (constitution 6.9.0, Principle X). In particular every file icon colour, Other File Icons (FR-064) included,
   MUST reach every theme file already on disk, so `SHIPPED_DEFAULTS_VERSION` moves to 35 for it; switching
   between two themes that ship different file icon colours MUST change them.
+- **FR-071**: A theme whose file lacks a token MUST draw that theme's own value for it: a built-in's shipped
+  value, and for a custom theme the base theme the upgrade fills it from — never another theme's (#643).
+  The value the file does hold MUST stand.
 
 **Upgrade**
 
@@ -682,6 +685,8 @@ icon sets folder in a plain text editor and follow it to override one icon.
   cursor (maintainer, 2026-11-17; FR-069).
 - Q: Switching theme leaves the file icon colours as they were. → A: Every theme setting is saved and restored
   with its theme, and that is a constitution statement (maintainer, 2026-11-17; FR-070, constitution 6.9.0).
+- Q: Should #643 (a theme missing a token draws throng's value) be fixed here? → A: Yes, in this branch
+  (maintainer, 2026-11-17; FR-071).
 - Q: Does this feature cover macOS, which spec 070 made a supported target while it was in review? → A:
   Yes, at 070's level: everything here ships on macOS too and is proved there by CI alone, with no hand
   test on a Mac (constitution 6.6.0, Principle II; maintainer, 2026-11-16). Preferences on macOS keeps the

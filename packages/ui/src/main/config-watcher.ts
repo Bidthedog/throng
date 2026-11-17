@@ -6,6 +6,8 @@
  */
 import { existsSync } from 'node:fs';
 import {
+  buildShippedDefaults,
+  completeTheme,
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   isValidThemeName,
@@ -100,6 +102,9 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** The shipped record a theme file's missing tokens are taken from (#643). */
+const SHIPPED = buildShippedDefaults();
+
 /** Read the active settings + the theme they select + keybindings + icon sets, merged over defaults. */
 export async function readConfigPayload(
   store: IConfigStore,
@@ -171,7 +176,12 @@ export async function readConfigOnce(
   const theme = await store.read(
     { kind: 'theme', name: activeThemeName },
     THRONG_THEME,
-    (raw) => (raw && typeof raw === 'object' ? { ...THRONG_THEME, ...(raw as Partial<Theme>) } : THRONG_THEME),
+    // #643: a token the file lacks (the Themes JSON tab can delete one) is taken from THIS theme's own record,
+    // never from THRONG_THEME — a theme draws only its own values (constitution X).
+    (raw) =>
+      raw && typeof raw === 'object'
+        ? { ...THRONG_THEME, ...completeTheme(activeThemeName, raw as Theme, SHIPPED) }
+        : THRONG_THEME,
     { create: false }, // a settings-named theme that doesn't exist falls back to defaults, no stray file (#6)
   );
   const keybindings = await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
