@@ -21,6 +21,15 @@ Nothing is superseded. 020 FR-041 stands: throng itself still makes no update ch
 - Q: How do prereleases stay apart? → A: Two channels, `stable` and `prerelease`, each its own index, and the user's source names one.
 - Q: Does the website ship with the repositories? → A: No. The maintainer reviewed the first version of the page, said it is not right, and asked to set it aside and deliver the repositories first. User Story 1 and FR-001 to FR-003 are deferred, and #554 stays open for them. Until then the site root serves nothing, and `/apt`, `/rpm` and the key are all that is on the site.
 
+### Session 2026-11-17
+
+- Q: The website resumes (#554, #445). May it embed YouTube video? → A: Yes. The maintainer's decision: the intro video, and later videos, are hosted on YouTube and embedded in the page. FR-002's ban on third-party requests is lifted for the embedded player alone; it is loaded from `youtube-nocookie.com`.
+- Q: How does the install section pick the visitor's system? → A: In the browser, from script. GitHub Pages is static and never sees request headers, so the page reads the browser's platform and opens that system's tab. Without script every system's instructions show.
+- Q: Which features does the page lead with? → A: Four, in this order: projects and workspaces, panels, persistent terminals, and the editor with Markdown previews.
+- Q: Is the "30 second throng" video series on the page? → A: Not in this version; the series has not started.
+- Q: Does the site wait for the intro video (#445)? → A: No. The maintainer's decision: the site goes live without it. The video section is left in the page as a comment, and returns with #445.
+- Q: Does the page show build status? → A: Yes. The maintainer's decision: the README's live badges (latest release, CI, nightly gate, release pipeline) appear under the hero, loaded as images from `github.com` and `img.shields.io`. A badge rendered at deploy time would be stale between deployments, and the footer says which hosts the page contacts.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Learn what throng is and how to get it (Priority: P1, deferred)
@@ -96,7 +105,7 @@ A maintainer changes a static file and deploys the site, and the repositories st
 **The website** (deferred, see Clarifications)
 
 - **FR-001**: The site MUST serve a website at its root on `https://throng-ide.com`, saying what throng is, what it does and how to install it on each supported system, in text that matches the README's claims.
-- **FR-002**: The website MUST work with a keyboard, at phone width, with reduced motion, and without third-party requests.
+- **FR-002**: The website MUST work with a keyboard, at phone width and with reduced motion. It MUST make no third-party request except the embedded YouTube player, served from `youtube-nocookie.com`, and the build-status badge images from `github.com` and `img.shields.io` (Clarifications, 2026-11-17).
 - **FR-003**: A maintainer MUST be able to preview the assembled site locally with one command, publishing nothing.
 
 **The repositories**
