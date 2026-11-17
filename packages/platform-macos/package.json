@@ -1,6 +1,6 @@
 {
   "name": "@throng/platform-macos",
-  "version": "1.0.0-alpha17",
+  "version": "1.0.0-beta1",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
