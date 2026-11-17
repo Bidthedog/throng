@@ -56,10 +56,8 @@ const runApp = (
 /**
  * The throng application icon (#72). Two deliverables, one mark:
  *
- *  - the TITLE BAR mark — the simplified small-size artwork, inlined as SVG so it
- *    can be drawn in the theme's own colours (the artwork is a light frame around
- *    a body the colour of the app background; hardcoding #fff/#000 would make it
- *    vanish on the bundled Light theme);
+ *  - the TITLE BAR mark — the app icon inlined as SVG (the renderer CSP forbids a
+ *    data: URI), on its own black plate so it reads on every theme;
  *  - the OS WINDOW icon — a multi-size .ico handed to every BrowserWindow, which
  *    is what the taskbar and Alt-Tab show.
  */
@@ -84,10 +82,9 @@ test('the title bar carries the throng mark, left of the identity', { tag: ['@ex
   });
 });
 
-// The mark must re-colour with the active theme, not ship as fixed black-on-white:
-// `Light` (a bundled theme) has a near-white background, where the artwork's white
-// frame would disappear entirely. The frame + T take the identity text colour; the
-// window body takes the app background, exactly as the artwork was drawn.
+// The mark must never vanish into the bar: whatever the theme paints behind it, the
+// mark keeps its own black plate and coloured tiles (the app icon, icon/icon_small.svg),
+// so a theme whose app background is the mark's own colour still cannot erase it.
 const cfgRoots: string[] = [];
 function seedThemeColours(textMuted: string, appBg: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-icon-'));
@@ -105,29 +102,17 @@ test.afterAll(() => {
     cleanupTemp(dir);
 });
 
-test('the mark is drawn in the active theme’s colours, not hardcoded black and white', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  // Distinctive colours, unlike any bundled theme and unlike each other.
-  const cfgRoot = seedThemeColours('#ff00aa', '#00cc55');
-  const TEXT_MUTED = 'rgb(255, 0, 170)';
-  const APP_BG = 'rgb(0, 204, 85)';
+test('the mark keeps its own plate and tiles whatever the theme paints', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+  // A theme whose text and background are both the mark's black: a themed mark would disappear.
+  const cfgRoot = seedThemeColours('#000000', '#000000');
   await runOwnApp(
     async (_app, win) => {
       const mark = win.getByTestId('throng-mark');
       await expect(mark).toBeVisible();
-
-      // The frame and the "T" are currentColor → the identity text colour.
-      await expect
-        .poll(() => mark.locator('.throng-mark__frame').evaluate((el) => getComputedStyle(el).fill))
-        .toBe(TEXT_MUTED);
-      await expect
-        .poll(() => mark.locator('.throng-mark__glyph').evaluate((el) => getComputedStyle(el).fill))
-        .toBe(TEXT_MUTED);
-
-      // The window body is the app background — the artwork reads as a frame, and
-      // never as a black hole punched in a light title bar.
-      await expect
-        .poll(() => mark.locator('.throng-mark__body').evaluate((el) => getComputedStyle(el).fill))
-        .toBe(APP_BG);
+      const fills = await mark.locator('rect').evaluateAll((els) => els.map((el) => getComputedStyle(el).fill));
+      expect(fills[0], 'the plate').toBe('rgb(0, 0, 0)');
+      expect(fills.length, 'the plate and the twelve tiles of the t').toBe(13);
+      expect(new Set(fills.slice(1)).has('rgb(0, 0, 0)'), 'no tile takes the plate colour').toBe(false);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
