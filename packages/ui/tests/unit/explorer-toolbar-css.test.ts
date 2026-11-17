@@ -34,7 +34,7 @@ import { describe, expect, it } from 'vitest';
  * carries a hover title naming its action, its colours come from theme tokens — and this control
  * passes all three, as the tests above assert. What is hardcoded is a METRIC. `sizes.iconPx` is a
  * shipped setting, and a control whose box ignores it is a setting that governs less than it claims,
- * which is the class the `settings-inertness` guards exist for.
+ * which is the class `no-inert-settings.test.ts` (071) guards against.
  *
  * ══ ONE HONEST DIFFERENCE FROM `.fif-btn` ══
  *
