@@ -1,36 +1,33 @@
 name: CI
 
-# Quality gates for throng (see the constitution, "Static analysis & linting"
-# and Principle V). Lint + type-check + the vitest layers + the Playwright-Electron
-# E2E suite all run on every non-draft pull request to master (see `on:` below).
+# PR CI (072): a verdict on a pull request in minutes. It runs on every pull request to master, draft or ready, on Linux
+# only, and it runs no end-to-end test. The slow proof (every test of every layer on every platform, every artifact built
+# and verified) is pipeline.yml's, nightly and on demand, and again inside every release run.
 #
-# Windows jobs run on Windows, where the ConPTY terminal stack and the de-elevation path are real. The
-# Windows runner has a virtual desktop, which the E2E layer requires (the app has no headless mode — inline
-# xterm.js terminals only paint in a visible window; see docs/testing.md). The `linux-*` jobs at the end run
-# the same layers on Ubuntu (spec 062), with a real X display and window manager for E2E. The `macos-*` jobs after
-# them run them on hosted Apple silicon, once for each supported macOS release (spec 070).
+# It runs on nothing else: no push, no dispatch, no schedule. A merge to master is not re-tested, because the pull
+# request's run on its head commit already tested that tree and the merge needs that run green.
 #
-# Runner is pinned to `windows-2022` (not `windows-latest`): `windows-latest` now maps
-# to Windows Server 2025 shipping Visual Studio 2026, which the node-gyp bundled with
-# Node 20's npm does not recognise ("unknown version ... at ...\Visual Studio\18") — so
-# the node-pty native build fails at `npm ci`. windows-2022 ships
-# VS 2022, which node-gyp detects. Revisit when node-gyp/npm gain VS 2026 support.
+# NO JOB FAILS FAST (FR-002). A failing job never cancels the others, so one run shows every red there is. The one required
+# check on master is `CI verdict` (FR-004): jobs can be renamed or split without touching branch protection again.
+#
+# This repository is PUBLIC and a pull request may come from a fork. These jobs read no secret, write nothing and run on
+# GitHub-hosted runners only; that is what makes a `pull_request` trigger safe here, and it must stay true of every job
+# added to this file.
+#
+# packages/ui/tests/unit/ci-workflow.test.ts holds the shape above.
 
-# When it runs: a pull request to master that is NOT a draft, and an explicit dispatch. Nothing else.
-# A push to a branch or a draft PR starts nothing; marking the PR ready is what starts a run, and a
-# push to a ready PR re-runs it. The merge to master is not re-tested — the PR's run on its head
-# commit already tested that tree, and the merge needs that run green. Every job carries the draft
-# guard: `github.event.pull_request.draft` is empty on workflow_dispatch, so `!= true` lets it through.
 on:
   pull_request:
     branches: [master]
     types: [opened, synchronize, reopened, ready_for_review]
-  workflow_dispatch:
 
-# A newer push to the same PR cancels an in-flight run to save runner time.
+# A newer push to the same pull request cancels its older run.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   # node-gyp builds (node-pty) are noisy; keep logs terse.
@@ -39,9 +36,8 @@ env:
 jobs:
   lint:
     name: Lint & type-check
-    if: github.event.pull_request.draft != true
-    runs-on: windows-2022
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -55,207 +51,56 @@ jobs:
       - name: TypeScript type-check
         run: npm run typecheck
 
-  # The vitest layers run as two jobs in parallel: unit + component need no build and no OS
-  # processes, integration + contract need the daemon built and run serially. One job ran all four
-  # back to back, so the PR waited for their sum. Tests tagged `regression` (soaks, sweeps,
-  # performance budgets) are left to `gate.yml` and the release lane.
-  test-fast:
-    name: Unit / component
-    if: github.event.pull_request.draft != true
-    runs-on: windows-2022
-    timeout-minutes: 30
+  # Ubuntu 24.04 restricts the user namespaces Electron's sandbox needs, as a developer's machine does, and
+  # ci-linux-setup.sh takes the same one step a developer takes. The sandbox stays on throughout (062 FR-003).
+  unit:
+    name: Unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
-      - name: Use an alias-free temp dir
-        shell: pwsh
-        run: |
-          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
       - name: Install dependencies
         run: npm ci
       - name: Install Electron's binary
         uses: ./.github/actions/install-electron
       - name: Unit tests
-        run: npm run test:unit -- --tags-filter='!regression'
+        run: npm run test:unit
+
+  component:
+    name: Component (${{ matrix.shard }}/2)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      # Each shard's result is wanted even when the other fails.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Component tests
-        run: npm run test:component -- --tags-filter='!regression'
+        run: npm run test:component -- --shard=${{ matrix.shard }}/2
 
-  test:
-    name: Integration / contract
-    if: github.event.pull_request.draft != true
-    runs-on: windows-2022
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      # Point TEMP/TMP at an alias-free path. The default %TEMP%
-      # (C:\Users\RUNNER~1\...) carries an 8.3 short-name because the runner username
-      # forces one. Some file specs realpath a target (expanding RUNNER~1 to its long
-      # form) then compare it against the raw short-name root, breaking in-tree /
-      # watcher-path matching — only where 8.3 names appear. RUNNER_TEMP (D:\a\_temp)
-      # has no aliased components. (runner.temp isn't usable in a job-level `env`.)
-      - name: Use an alias-free temp dir
-        shell: pwsh
-        run: |
-          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Electron's binary
-        uses: ./.github/actions/install-electron
-      # Integration & contract spawn the REAL daemon (`node packages/daemon/dist/main.js`) and
-      # read its `dist/BUILD_ID`, so the daemon must be built first — on a clean checkout there is
-      # no `dist/`. `npm run build` produces the daemon dist and stamps BUILD_ID.
-      - name: Build (daemon dist + BUILD_ID for the daemon-spawning layers)
-        run: npm run build
-      # Integration & contract spawn real OS processes and are single-file-serial by
-      # design (see docs/testing.md) — run each layer as its own step so a failure names it.
-      - name: Integration tests
-        run: npm run test:integration -- --tags-filter='!regression'
-      - name: Contract tests
-        run: npm run test:contract -- --tags-filter='!regression'
-
-  e2e:
-    name: E2E (@core)
-    if: github.event.pull_request.draft != true
-    runs-on: windows-2022
-    # ONE JOB, the critical lane only (034 FR-056).
-    #
-    # This was a three-way matrix, and the matrix was not there for balance — it was the only
-    # parallelism available, because raising THRONG_E2E_WORKERS on one runner reintroduces the CPU
-    # and focus contention that `failOnFlakyTests` turns into red runs. It bought ~12 minutes down
-    # to ~4-5, at THREE TIMES the runner-minutes, plus a fixed ~3-4 minute `npm ci` + build toll per
-    # shard before a single test ran (#103).
-    #
-    # At the critical lane's size that trade inverts: three shards would spend ~12 runner-minutes of
-    # pure toll to save two or three minutes of wall-clock on the critical path. The rest of the
-    # suite is not dropped — it runs in full at release (release.yml), where wall-clock is on
-    # nobody's critical path.
-    #
-    # 45 minutes is kept as a hang detector rather than a budget. The lane is expected in single
-    # digits; if it approaches this, something is wrong that a larger number would only hide.
-    timeout-minutes: 45
-    env:
-      # SINGLE WORKER — the invariant the whole approach rests on. Each worker is a full Electron
-      # app + detached daemon + real shells; per .claude/skills/throng-testing/references/
-      # tiers-and-workers.md (the worker benchmark) failures RISE with worker count on
-      # this constrained runner. A smaller suite is not a reason to reopen a question that was
-      # measured shut.
-      THRONG_E2E_WORKERS: 1
-      # Retries kept for DIAGNOSTIC value only — they capture the first failure's assertion and
-      # trace. They no longer absorb anything: `failOnFlakyTests` (playwright.config.ts) fails a
-      # test that only passes on retry (017, FR-014). Green means every test passed FIRST attempt.
-      THRONG_E2E_RETRIES: 3
-      # Where the JSON report lands. ci-e2e-run.ps1 reads its `stats` to tell a genuine test
-      # flake/failure (stays red) apart from a pure infra fault (retried once) — Principle V.
-      THRONG_E2E_JSON_OUT: e2e-report.json
-      # Lets the retry step comment on the tracking issue when an infra fault is auto-retried.
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      # Alias-free temp dir — see the note on the `test` job (avoids 8.3 short-name
-      # path mismatches from the C:\Users\RUNNER~1\... default %TEMP%).
-      - name: Use an alias-free temp dir
-        shell: pwsh
-        run: |
-          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Electron's binary
-        uses: ./.github/actions/install-electron
-      # The runner's virtual desktop defaults to 1024x768 — too small for the window
-      # geometry some specs assert (e.g. restoring a 1100px-wide window clamps to 1024)
-      # and cramped for drag-and-drop. Bump it before the app opens real windows.
-      # The runner's virtual desktop boots at 1024x768, which is too small for throng's window;
-      # several specs assert layout that only holds at a realistic size. Extracted to a script so
-      # release.yml's full-suite job can call the same thing (034 FR-056).
-      - name: Set screen resolution to 1920x1080
-        shell: pwsh
-        run: ./scripts/ci-set-resolution.ps1
-      # `pretest:e2e` builds the app first. The runner is elevated (GitHub Windows runners run as
-      # administrator), so @admin specs remain excluded by default (playwright.config.ts grepInvert)
-      # and get their own job below.
-      #
-      # This job runs ELEVATED and there is no way around it: dropping admin rights on a hosted
-      # runner was attempted and measured impossible (UAC is disabled, so `schtasks /RL LIMITED` has
-      # no filtered token to fall back to — run 30947653266). What made the guarded specs run here
-      # was narrowing the guard itself, from 85 spec files to 22, leaving 25 genuinely
-      # integrity-dependent tests that still self-skip. See
-      # .claude/skills/throng-testing/references/elevation.md.
-      #
-      # NOT `--shard=i/N` — that splits by test COUNT in file order, which let the alphabet put every
-      # terminal-* spec in one third (measured 3.7 / 8.3 / 36 min, the last killed by the timeout).
-      # `--grep @core` selects the critical lane (034 FR-056). Playwright splits by FILE
-      # (fullyParallel is false), so a describe.serial file stays whole.
-      #
-      # Run under the flake policy: a genuine test flake/failure (report shows
-      # flaky>0 or unexpected>0) stays RED — the strict gate (failOnFlakyTests, Principle V) is
-      # untouched. Only a PURE INFRA fault (non-zero exit with 0 flaky AND 0 unexpected — a worker/
-      # global-teardown crash no test owns, which no retry absorbs) is retried once. The classifier
-      # cannot turn a real test flake green; see scripts/ci-e2e-run.ps1 and the constitution.
-      # This lane runs ELEVATED, like every hosted Windows runner, and that is not a choice — it is
-      # a measured limit. This comment used to claim the opposite ("Run at NORMAL INTEGRITY … via a
-      # Limited scheduled task"), and it was describing something the workflow does not do: the step
-      # below invokes `ci-e2e-run.ps1` directly, with no de-elevation wrapper anywhere in the job.
-      #
-      # Both ways of dropping admin rights were measured FAILING here (run 30947653266): with UAC
-      # off there is no filtered token, so a Limited scheduled task still came up admin=True, and
-      # `runas /trustlevel` produced nothing at all. `scripts/run-deelevated.ps1` is kept only for a
-      # self-hosted runner with UAC on. See the long note at `scripts/ci-e2e-run.ps1:82`.
-      #
-      # What actually closed the old gap was NARROWING the guard — 85 files to 22 — so the specs
-      # that never depended on the process tree run elevated instead of self-skipping. The ones that
-      # remain are guarded because their SUBJECT is the process tree, and they stay skipped here.
-      # That count is printed live on every run, because the danger was always silence, not size.
-      #
-      # Left uncorrected this comment costs a whole investigation: #316 was diagnosed against it,
-      # and "make the release lane de-elevate too" looked like the obvious fix right up until the
-      # measurement above turned up.
-      #
-      # The @admin job below is deliberately NOT de-elevated: it is the elevated path's own coverage.
-      - name: Run E2E critical lane (flake-policy aware)
-        shell: pwsh
-        run: ./scripts/ci-e2e-run.ps1 -Grep '@core'
-      - name: Upload traces
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
-        with:
-          name: test-results-e2e-core
-          path: test-results/
-          retention-days: 14
-          if-no-files-found: ignore
-
-  # 019 (FR-013a / SC-008) — RUN THE @admin SUBSET, on the runner that can actually run it.
-  #
-  # Until this job existed, @admin specs were excluded from the ONLY runner capable of executing
-  # them. GitHub's windows-2022 runners are ELEVATED, which is the precondition #94 needs — and
-  # playwright.config.ts grepInverts @admin unless THRONG_E2E_INCLUDE_ADMIN is set, which nothing
-  # here set. Meanwhile skipIfElevated() specs self-skip here. So the elevated path had ZERO
-  # coverage while docs/testing.md claimed CI ran non-elevated. That is how the hole read as
-  # covered.
-  #
-  # This is its OWN job rather than a step inside `e2e`, and the reason has CHANGED (034 FR-057).
-  # It used to be that the shards split the suite by file, so an @admin step would have run three
-  # times or — if no @admin file landed on that shard — not at all. There is one E2E job now, so
-  # that argument is spent. What keeps it separate is stronger and is not going away: `e2e` runs
-  # DE-ELEVATED and this runs ELEVATED, which cannot be two steps of one job. One job, one run, one
-  # signal — and both are now REQUIRED checks on master, so neither can be quietly absent.
-  e2e-admin:
-    name: E2E (@admin, elevated)
-    if: github.event.pull_request.draft != true
-    runs-on: windows-2022
+  # Contract tests spawn the REAL daemon (`node packages/daemon/dist/main.js`) and read its dist/BUILD_ID, so the daemon is
+  # built first: on a clean checkout there is no dist/.
+  contract:
+    name: Contract
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -263,240 +108,67 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Electron's binary
-        uses: ./.github/actions/install-electron
-      - name: Build
-        run: npm run build
-      - name: Run @admin E2E suite (this runner is elevated)
-        shell: pwsh
-        run: ./scripts/ci-run-admin-e2e.ps1
-      - name: Upload @admin traces
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
-        with:
-          name: test-results-admin
-          path: test-results/
-          retention-days: 14
-          if-no-files-found: ignore
-
-  # ── Linux (spec 062 FR-046) ─────────────────────────────────────────────────────────────────────
-  # Ubuntu 24.04 restricts the user namespaces Electron's sandbox needs, as a developer's machine does, and
-  # ci-linux-setup.sh takes the same one step a developer takes. The sandbox stays on throughout (FR-003).
-  linux-fast:
-    name: 'Linux: unit / component'
-    if: github.event.pull_request.draft != true
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
       - name: Prepare the runner
         run: sudo scripts/ci-linux-setup.sh
       - name: Install dependencies
         run: npm ci
       - name: Install Electron's binary
         uses: ./.github/actions/install-electron
-      - name: Unit tests
-        run: npm run test:unit -- --tags-filter='!regression'
-      - name: Component tests
-        run: npm run test:component -- --tags-filter='!regression'
-
-  linux-test:
-    name: 'Linux: integration / contract'
-    if: github.event.pull_request.draft != true
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      - name: Prepare the runner
-        run: sudo scripts/ci-linux-setup.sh
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Electron's binary
-        uses: ./.github/actions/install-electron
-      - name: Build
+      - name: Build (daemon dist + BUILD_ID)
         run: npm run build
-      - name: Integration tests
-        run: npm run test:integration -- --tags-filter='!regression'
       - name: Contract tests
-        run: npm run test:contract -- --tags-filter='!regression'
+        run: npm run test:contract
 
-  linux-e2e:
-    name: 'Linux: E2E (@core + @linux)'
-    if: github.event.pull_request.draft != true
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    env:
-      THRONG_E2E_WORKERS: 1
-      THRONG_E2E_RETRIES: 3
-      THRONG_E2E_TRACE: 1
-      # The list reporter prints how many were skipped; this report, uploaded below, says why each one was (SC-008).
-      THRONG_E2E_JSON_OUT: test-results/e2e-report.json
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      - name: Prepare the runner
-        run: sudo scripts/ci-linux-setup.sh
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Electron's binary
-        uses: ./.github/actions/install-electron
-      - name: Build
-        run: npm run build
-      - name: Run E2E
-        run: scripts/ci-linux-display.sh npx playwright test --grep '@core|@linux'
-      - name: Upload traces
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
-        with:
-          name: test-results-linux-e2e
-          path: test-results/
-          retention-days: 14
-          if-no-files-found: ignore
-
-  # ── macOS (spec 070 FR-036, FR-046) ─────────────────────────────────────────────────────────────────────
-  # Hosted Apple silicon, one machine for each supported macOS release: the current and the previous (FR-003a). The
-  # runner labels are written in one place, .github/macos-runners.json, and every job below takes its machine from
-  # `macos-runners` (FR-037), so moving the range forward is an edit to that file and nothing here.
-  # packages/ui/tests/unit/macos-runners.test.ts fails on a label written anywhere else.
+  # The critical-path subset only (FR-008): the integration files tagged `critical-path`, at most fifteen, one per
+  # subsystem. The rest of integration runs in pipeline.yml. No build: every tagged file imports from source and none
+  # spawns the built daemon (research R6).
   #
-  # Each job ends by clearing what it left behind (FR-047): the daemon outlives its window by design (Principle III).
-  macos-runners:
-    name: 'macOS: read the runner list'
-    if: github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
+  # The files are named on the command line, because `--tags-filter` alone makes vitest import all of integration's files to
+  # read their tags, which costs about a minute and a half. A tag that matches nothing leaves an empty list, and the step
+  # fails on that instead of falling back to every file.
+  integration:
+    name: Integration (critical path)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
+      - name: Integration tests (critical path)
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(grep -rlE "tags: \[[^]]*'critical-path'" packages/*/tests/integration)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::no integration file is tagged critical-path"
+            exit 1
+          fi
+          npx vitest run --project integration --tags-filter=critical-path "${files[@]}"
+
+  # THE ONE REQUIRED CHECK (FR-004). It runs whatever the others did, and passes only when every one of them succeeded: a
+  # failed, a cancelled or a skipped job all fail it.
+  verdict:
+    name: CI verdict
+    needs: [lint, unit, component, contract, integration]
+    if: always()
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
-    outputs:
-      labels: ${{ steps.list.outputs.labels }}
     steps:
-      - uses: actions/checkout@v5
-        with:
-          sparse-checkout: |
-            .github/macos-runners.json
-            scripts/macos-runners.mjs
-          sparse-checkout-cone-mode: false
-      # No dependencies: the script reads one JSON file, and fails the run on one that is not the expected shape.
-      - id: list
-        name: Read .github/macos-runners.json
-        run: node scripts/macos-runners.mjs >> "$GITHUB_OUTPUT"
-
-  macos-fast:
-    name: 'macOS ${{ matrix.runner }}: unit / component'
-    needs: macos-runners
-    if: github.event.pull_request.draft != true
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
-    strategy:
-      # Each release's result is wanted even when the other's fails: a red one names the release.
-      fail-fast: false
-      matrix:
-        runner: ${{ fromJSON(needs.macos-runners.outputs.labels) }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Electron's binary
-        uses: ./.github/actions/install-electron
-      # The skip-reasons reporter lists every skip by its platform guard's reason, and fails one that gives none (FR-038).
-      - name: Unit tests
-        run: npm run test:unit -- --tags-filter='!regression' --reporter=default --reporter=./packages/platform/tests/support/skip-reasons.reporter.ts
-      - name: Component tests
-        run: npm run test:component -- --tags-filter='!regression' --reporter=default --reporter=./packages/platform/tests/support/skip-reasons.reporter.ts
-      - name: Clear what the run left behind
-        if: always()
-        run: node scripts/clear-dev-state.mjs
-
-  macos-test:
-    name: 'macOS ${{ matrix.runner }}: integration / contract'
-    needs: macos-runners
-    if: github.event.pull_request.draft != true
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: ${{ fromJSON(needs.macos-runners.outputs.labels) }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      # These layers start real shells, and zsh on a fresh account stops at its new-user wizard.
-      - name: Prepare the runner
-        run: scripts/ci-macos-setup.sh
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Electron's binary
-        uses: ./.github/actions/install-electron
-      - name: Build
-        run: npm run build
-      # The skip reporter lists every skip by its platform guard's reason, and fails a skip that states none (FR-038).
-      - name: Integration tests
-        run: npm run test:integration -- --tags-filter='!regression' --reporter=default --reporter=./packages/platform/tests/support/skip-reasons.reporter.ts
-      - name: Contract tests
-        run: npm run test:contract -- --tags-filter='!regression' --reporter=default --reporter=./packages/platform/tests/support/skip-reasons.reporter.ts
-      - name: Clear what the run left behind
-        if: always()
-        run: node scripts/clear-dev-state.mjs
-
-  # E2E against the app as built on this machine. A hosted Mac has a logged-in desktop, so no display server is started.
-  macos-e2e:
-    name: 'macOS ${{ matrix.runner }}: E2E (@core + @macos)'
-    needs: macos-runners
-    if: github.event.pull_request.draft != true
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: ${{ fromJSON(needs.macos-runners.outputs.labels) }}
-    env:
-      THRONG_E2E_WORKERS: 1
-      THRONG_E2E_RETRIES: 3
-      THRONG_E2E_TRACE: 1
-      # The list reporter prints how many were skipped; this report, uploaded below, says why each one was.
-      THRONG_E2E_JSON_OUT: test-results/e2e-report.json
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      - name: Prepare the runner
-        run: scripts/ci-macos-setup.sh
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Electron's binary
-        uses: ./.github/actions/install-electron
-      - name: Build
-        run: npm run build
-      - name: Run E2E
-        run: npx playwright test --grep '@core|@macos'
-      - name: Upload traces
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
-        with:
-          name: test-results-macos-e2e-${{ matrix.runner }}
-          path: test-results/
-          retention-days: 14
-          if-no-files-found: ignore
-      - name: Clear what the run left behind
-        if: always()
-        run: node scripts/clear-dev-state.mjs
+      - name: Every job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          bad=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' <<<"$NEEDS")
+          if [ -n "$bad" ]; then
+            echo "::error::not green: $bad"
+            exit 1
+          fi
+          echo "Every job succeeded."

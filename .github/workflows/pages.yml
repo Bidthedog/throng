@@ -5,16 +5,11 @@ name: Pages
 # signing key (FR-006, FR-008). A bundle that cannot be fetched fails the job, and Pages keeps serving what it had.
 #
 # Runs on master only: the github-pages Environment accepts the default branch. A published release dispatches it from
-# release.yml's deploy-repositories job, with --ref master.
+# release.yml's deploy-repositories job, with --ref master; a site change is dispatched by hand the same way.
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'site/**'
-      - 'scripts/site.mjs'
-      - 'scripts/package-repo.mjs'
-      - '.github/workflows/pages.yml'
+  # Dispatch only (072 FR-010): a merge to master starts nothing. A site change goes live when someone dispatches this
+  # workflow (`gh workflow run pages.yml --ref master`) and with every release.
   workflow_dispatch:
 
 # One at a time, and never cancel one mid-flight: a queued deployment already reads the newest state.

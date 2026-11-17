@@ -1,5 +1,6 @@
-# Run the @admin E2E subset on a hosted runner, which is elevated. ci.yml runs it on every ready PR
-# and gate.yml on the nightly; the reason it is its own job is at ci.yml's `e2e-admin`.
+# Run the @admin E2E subset on a hosted runner, which is elevated. pipeline.yml runs it in its
+# `admin` job (nightly, on dispatch and in every release run); PR CI runs no E2E. It is its own job because the other
+# E2E jobs run the same hosted elevated runner but exclude @admin by default.
 #
 # `npx playwright test` DIRECTLY, never `npm run test:e2e:admin`: that script exists to hop UAC from
 # a non-elevated shell (Start-Process -Verb RunAs) and is pointless, and interactive (-NoExit), where
