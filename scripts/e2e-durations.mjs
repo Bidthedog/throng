@@ -25,7 +25,7 @@
  * run you were doing anyway — no instrumentation, no second run, no reporter to install:
  *
  *   THRONG_E2E_JSON_OUT=e2e-report.json npm run test:e2e
- *   node scripts/e2e-durations.mjs e2e-report.json
+ *   node scripts/e2e-durations.mjs e2e-report.parallel.json   (and e2e-report.serial.json: one report per tier)
  *
  * Durations are summed across every test in a file INCLUDING retries, because a file that passes
  * only on its second attempt genuinely costs the suite both attempts. That is the number the tier
