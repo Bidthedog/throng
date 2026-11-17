@@ -17,7 +17,7 @@
   "dependencies": {
     "@throng/core": "*",
     "@throng/platform-node": "*",
-    "koffi": "^3.3.7",
+    "koffi": "^3.3.8",
     "node-pty": "^1.1.0"
   }
 }
