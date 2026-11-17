@@ -29,6 +29,22 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-beta1 — 2026-11-17
+
+### Added
+
+- **The throng website** at [throng-ide.com](https://throng-ide.com): what throng does, with screenshots, and install steps for Windows, Linux and macOS. ([#554](https://github.com/Bidthedog/throng/issues/554))
+
+### Changed
+
+- **A new app icon**: a lowercase *t* built from project-coloured tiles, drawn sharp at every size. The title-bar mark keeps its own plate in every theme. ([#554](https://github.com/Bidthedog/throng/issues/554))
+
+### Fixed
+
+- **A terminal link's hover popup** now shows every time the pointer rests on the link, and leaves with the pointer. ([#656](https://github.com/Bidthedog/throng/issues/656))
+- **Upgrading keeps Panel ticked** for Information, Success and Attention notifications, so those notices stay in the Notifications panel. ([#657](https://github.com/Bidthedog/throng/issues/657))
+- **An exclusion glob made of repeated extglobs** no longer hangs the File Explorer or search. Extglob forms such as `+(…)` and `@(…)` now match as plain text in exclusion globs; braces and `**` work as before. ([#661](https://github.com/Bidthedog/throng/issues/661))
+
 ## 1.0.0-alpha17 — 2026-11-17
 
 ### Added
