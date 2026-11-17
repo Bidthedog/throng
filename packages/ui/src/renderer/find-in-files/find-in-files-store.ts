@@ -282,7 +282,7 @@ export interface FindInFilesPanelState {
    * It held the scope the LISTED results came from, and it existed for one reason: FR-030's clause
    * requiring the panel to SHOW that. FR-072 withdraws the clause by name, so the state that
    * served it goes with it rather than lingering as a field nothing reads — which is #95's
-   * `explorer.openMode` exactly, and what `settings-inertness-043.test.ts` exists to catch.
+   * `explorer.openMode` exactly.
    */
   /**
    * The ONE thing the scope control has to say about itself, or nothing (FR-030a, FR-070).

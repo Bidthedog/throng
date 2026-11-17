@@ -275,8 +275,7 @@ export function FindInFilesPanel({
   } as CSSProperties;
 
   /*
-   * The grouping preference, read by NAME here rather than by handing the whole section down
-   * (043 T064, FR-033a) — `settings-inertness-043.test.ts` needs the leaf and `inFiles` in one file.
+   * The grouping preference (043 T064, FR-033a).
    *
    * 060 FR-046 — the panel and the preference are one setting: choosing a grouping writes it, and
    * a change to it (from here, another panel or Preferences) regroups this panel.
@@ -397,8 +396,8 @@ export function FindInFilesPanel({
   const settleMs = prefs.settleMs;
   const asYouType = prefs.trigger === 'asYouType';
   /*
-   * 060 FR-032 — the global list and the project's list are part of the query. They are read by NAME
-   * here (`settings-inertness-043`) and folded into the key the settle effect compares, so a change to
+   * 060 FR-032 — the global list and the project's list are part of the query. They are read here
+   * and folded into the key the settle effect compares, so a change to
    * either re-runs under as-you-type exactly as a term edit does.
    *
    * The project is THIS panel's (`projectId`), never "whichever is active": a panel never crosses
@@ -586,7 +585,7 @@ export function FindInFilesPanel({
    * in the same render that sees the scan stop.
    */
   if (cancelHot && results?.status !== 'running') setCancelHot(false);
-  // Read by NAME (`settings-inertness-043`): the explorer's order is what Folder structure mirrors.
+  // The explorer's order is what Folder structure mirrors.
   const explorerSortOrder = useAppSettings().explorer.sortOrder;
 
   /*

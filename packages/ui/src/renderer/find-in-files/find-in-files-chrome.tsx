@@ -37,13 +37,8 @@ export function FindInFilesChrome(): ReactElement | null {
   const ws = useWorkspace();
   const { projects, activeProject } = useProjects();
   /*
-   * FR-021 / FR-033a / FR-033b — read by NAME, and the section is named in this file too.
-   *
-   * `settings-inertness-043.test.ts` requires both: a reader must read the leaf AND mention
-   * `inFiles`, because `openTarget` is already a leaf of `editor` and leaf-only matching would
-   * report this preference as live before a line of the feature existed. Pulling the section out
-   * first is the idiom that guard accepts, and it is also the honest one — these three belong to
-   * the same section and are read at the same moment.
+   * FR-021 / FR-033a / FR-033b — these three belong to the same section and are read at the same
+   * moment, so the section is pulled out once.
    */
   const inFiles = useAppSettings().search.inFiles;
   const openTarget = inFiles.openTarget;
