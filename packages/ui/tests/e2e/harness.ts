@@ -1081,6 +1081,19 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
   ]);
 
   if (!settledGracefully && pid !== undefined) {
+    // Name what kept the close waiting before it is killed: `app.close()` settles on the process's `close`, which needs
+    // the main process gone AND every holder of its stdio closed. The gate's Linux lane has twice waited out the whole
+    // grace on its first launch (1.0.0-alpha17), with nothing in the logs to say which.
+    if (process.platform !== 'win32') {
+      try {
+        const group = execFileSync('ps', ['-eo', 'pid=,pgid=,ppid=,stat=,args=', '-ww'], { encoding: 'utf8', timeout: 5000 })
+          .split('\n')
+          .filter((line) => line.trim().split(/\s+/)[1] === String(pid));
+        console.warn(`[teardown] the app (pid ${pid}) did not close within ${SHUTDOWN_GRACE_MS}ms; its process group:\n${group.join('\n') || '(empty: the main process and its children have exited)'}`);
+      } catch {
+        /* best-effort: the force-kill below still runs */
+      }
+    }
     forceKillProcessTree(pid);
     // The process is gone now, so this resolves immediately and lets Playwright observe the exit
     // rather than waiting on its own internal kill timeout.

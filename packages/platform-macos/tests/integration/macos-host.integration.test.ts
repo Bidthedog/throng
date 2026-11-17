@@ -26,9 +26,20 @@ describe.skipIf(skipUnlessMacos('pathconf(_PC_CASE_SENSITIVE) and hdiutil exist 
       execFileSync('hdiutil', ['attach', image, '-nobrowse']);
     }, 60_000);
 
-    afterAll(() => {
+    afterAll(async () => {
       try {
-        execFileSync('hdiutil', ['detach', MOUNT, '-force']);
+        // A fresh volume is briefly held by the system's own indexers, so a detach straight after the tests can answer
+        // "Resource busy" (hosted macOS, 1.0.0-alpha17's CI). Try again for a few seconds; the last refusal still fails.
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            execFileSync('hdiutil', ['detach', MOUNT, '-force'], { stdio: 'pipe' });
+            break;
+          } catch (error) {
+            if (attempt >= 10) throw error;
+            // sleep-justified: the holder is outside this process and announces nothing; half a second between tries.
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        }
       } finally {
         rmSync(scratch, { recursive: true, force: true });
       }
