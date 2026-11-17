@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * The local E2E run: two passes, arranged for the shortest wall-clock on ONE machine.
  *
@@ -35,6 +34,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { cpus } from 'node:os';
+import { isMain } from './is-main.mjs';
 
 /** Leave a couple of cores for the OS and the daemons each app spawns. */
 const WORKERS = process.env.THRONG_E2E_WORKERS ?? String(Math.max(2, Math.min(6, cpus().length - 2)));
@@ -50,49 +50,83 @@ function play(args, extraEnv = {}) {
   return r.status ?? 1;
 }
 
-const forwarded = process.argv.slice(2);
-if (forwarded.length > 0) {
-  process.exit(play(forwarded));
+/**
+ * The Playwright arguments one tier gets (072 FR-015, FR-019).
+ *
+ * `shard` (`i/N`, from THRONG_E2E_SHARD) splits EACH tier's files across N runners, so a runner takes its share of the
+ * parallel tier and then its share of the serial tier. A runner is its own machine, so the serial tier stays one worker
+ * inside it; sharding never merges the tiers. `failFast` stops the tier at its first failing test.
+ */
+export function e2eTierArgs({ workers, shard, failFast = false }) {
+  const args = [`--workers=${workers}`];
+  if (shard !== undefined) {
+    const m = /^(\d+)\/(\d+)$/.exec(shard);
+    const [i, n] = m ? [Number(m[1]), Number(m[2])] : [0, 0];
+    if (!m || n < 1 || i < 1 || i > n) throw new Error(`THRONG_E2E_SHARD must be i/N with 1 <= i <= N, got "${shard}"`);
+    args.push(`--shard=${i}/${n}`);
+  }
+  if (failFast) args.push('--max-failures=1');
+  return args;
+}
+
+/**
+ * Where one tier writes its Playwright JSON report. Each tier is its own Playwright process, so a shared
+ * THRONG_E2E_JSON_OUT would keep only the serial tier's report: `e2e-report.json` becomes `e2e-report.parallel.json` and
+ * `e2e-report.serial.json`. Keep the path outside Playwright's `test-results/`, which every run empties first.
+ */
+export function tierJsonOut(requested, tier) {
+  if (!requested) return undefined;
+  return requested.endsWith('.json') ? `${requested.slice(0, -5)}.${tier}.json` : `${requested}.${tier}.json`;
 }
 
 /*
- * FAIL-FAST, opt-in via THRONG_E2E_FAIL_FAST (set by `npm run gate`).
+ * FAIL-FAST, opt-in via THRONG_E2E_FAIL_FAST (set by `npm run gate` and by every agent-started pipeline run).
  *
- * The default is unchanged — a bare `npm run test:e2e` runs both tiers to completion,
- * because a developer asking for the whole suite wants the whole failure set, not the
- * first item of it.
+ * The default is unchanged — a bare `npm run test:e2e` runs both tiers to completion, because a developer asking for
+ * the whole suite wants the whole failure set, not the first item of it. The nightly pipeline wants the same.
  *
- * The gate wants the opposite, and for a reason worth naming: this stage is ~40 minutes
- * (measured 2026-08-16 at 235 spec files),
- * and a run that already has one confirmed failure cannot come back green. Every test
- * after that failure is wall-clock spent to learn nothing. So the gate stops the tier at
- * its first failing test (`--max-failures=1`) and does not start the next tier at all.
+ * An agent-started run wants the opposite: a run that already has one confirmed failure cannot come back green, and
+ * every test after it is wall-clock spent to learn nothing. So it stops the tier at its first failing test and does not
+ * start the next tier at all.
  */
-const failFast = process.env.THRONG_E2E_FAIL_FAST === '1';
+function main() {
+  const forwarded = process.argv.slice(2);
+  if (forwarded.length > 0) process.exit(play(forwarded));
 
-const started = Date.now();
-const passes = [
-  ['parallel', WORKERS],
-  ['serial', '1'],
-];
-const results = [];
-for (const [tier, workers] of passes) {
-  console.log(`\n[e2e] ${tier} tier — ${workers} worker(s)${failFast ? ' — fail-fast' : ''}\n`);
-  const args = [`--workers=${workers}`];
-  if (failFast) args.push('--max-failures=1');
-  // The first tier warmed Electron off disk on CI (playwright-global-setup.mjs); one warm-up is enough.
-  const code = play(args, { THRONG_E2E_TIER: tier, ...(results.length > 0 ? { THRONG_E2E_WARM: '1' } : {}) });
-  results.push([tier, code]);
-  if (failFast && code !== 0) {
-    console.error(`\n[e2e] ${tier} tier failed — skipping the remaining tier(s) (fail-fast)\n`);
-    break;
+  const failFast = process.env.THRONG_E2E_FAIL_FAST === '1';
+  const shard = process.env.THRONG_E2E_SHARD || undefined;
+  const started = Date.now();
+  const passes = [
+    ['parallel', WORKERS],
+    ['serial', '1'],
+  ];
+  const results = [];
+  for (const [tier, workers] of passes) {
+    console.log(`\n[e2e] ${tier} tier — ${workers} worker(s)${shard ? ` — shard ${shard}` : ''}${failFast ? ' — fail-fast' : ''}\n`);
+    const args = e2eTierArgs({ workers, shard, failFast });
+    // The first tier warmed Electron off disk on CI (playwright-global-setup.mjs); one warm-up is enough.
+    const jsonOut = tierJsonOut(process.env.THRONG_E2E_JSON_OUT, tier);
+    const code = play(args, {
+      THRONG_E2E_TIER: tier,
+      ...(jsonOut ? { THRONG_E2E_JSON_OUT: jsonOut } : {}),
+      ...(results.length > 0 ? { THRONG_E2E_WARM: '1' } : {}),
+    });
+    results.push([tier, code]);
+    if (failFast && code !== 0) {
+      console.error(`\n[e2e] ${tier} tier failed — skipping the remaining tier(s) (fail-fast)\n`);
+      break;
+    }
   }
+
+  const mins = ((Date.now() - started) / 60000).toFixed(1);
+  const failed = results.filter(([, code]) => code !== 0);
+  if (failed.length > 0) {
+    console.error(`\n[e2e] FAILED after ${mins} min — tier(s): ${failed.map(([t]) => t).join(', ')}\n`);
+    process.exit(failed[0][1]);
+  }
+  console.log(`\n[e2e] both tiers green in ${mins} min\n`);
 }
 
-const mins = ((Date.now() - started) / 60000).toFixed(1);
-const failed = results.filter(([, code]) => code !== 0);
-if (failed.length > 0) {
-  console.error(`\n[e2e] FAILED after ${mins} min — tier(s): ${failed.map(([t]) => t).join(', ')}\n`);
-  process.exit(failed[0][1]);
-}
-console.log(`\n[e2e] both tiers green in ${mins} min\n`);
+// Run only when executed, never on import: a unit test imports this module for e2eTierArgs, and an import that started
+// both E2E tiers would run the whole suite on the workstation.
+if (isMain(import.meta.url)) main();
