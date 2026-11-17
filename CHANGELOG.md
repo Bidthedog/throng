@@ -29,16 +29,55 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha17 — 2026-11-17
+
+### Added
+
+- **throng runs on macOS** (Apple silicon), as an ad-hoc-signed `.dmg` and `.zip`. Terminals start as login shells, Cmd takes Ctrl's place in application shortcuts while terminals keep Ctrl, closing the window keeps throng in the Dock, and the Resource Monitor shows CPU, memory and disk. `terminals.macOptionIsMeta` makes Option act as Meta in terminals. See [throng on macOS](https://github.com/Bidthedog/throng/blob/master/docs/macos.md). ([#22](https://github.com/Bidthedog/throng/issues/22), [#551](https://github.com/Bidthedog/throng/issues/551))
+- **A Notifications panel** at the bottom of the right pane keeps notices after their toast has gone. Its entries survive restarts, can be sorted, name the project, tab and panel they are about, and go there on a click; a count of the ones not yet dismissed shows beside its title. Each notification type chooses **Toast**, **Panel** and **OS Notify** separately. New settings: `notifications.toastDurationMs`, `notifications.toastWidthPx`, `notifications.panelLimit`, `notifications.confirmDismissAll` and `notifications.hoverDelayMs`. ([#618](https://github.com/Bidthedog/throng/issues/618))
+- **Claude Code sessions resume.** A terminal panel set to remember its last running command resumes the Claude Code session that was running in it. ([#189](https://github.com/Bidthedog/throng/issues/189))
+- **Obsidian-style image embeds** in Markdown previews: `![[image.png]]`, with `|200` or `|200x100` to size it. ([#615](https://github.com/Bidthedog/throng/issues/615))
+- **One default icon set.** Every icon in throng is now simple line art from [Lucide](https://lucide.dev), built into the app and the same in every theme unless a theme picks an icon set of your own. ([#127](https://github.com/Bidthedog/throng/issues/127))
+- **Your own icon sets.** In Preferences › Themes › Icons, make a new icon set from any set, press **Override this icon** on the icons you want to change, open the set's folder and replace each `<key>.svg` with your own file, then press **Reload this set**. Icons you have not overridden keep the default art, including icons added in later versions. ([#127](https://github.com/Bidthedog/throng/issues/127))
+- **File icons by kind.** The File Explorer draws an icon for each kind of file and for each language, and eight new theme colours (Themes › File Explorer › File Icons) colour them by kind: code, markup, data, documents, media, archives, scripts and a neutral grey for anything else. ([#127](https://github.com/Bidthedog/throng/issues/127))
+- **A row popover in the File Explorer**: rest the pointer on a row to see its icon at twice the size beside its full path (`explorer.popoverDelayMs`). ([#127](https://github.com/Bidthedog/throng/issues/127))
+- **New theme colours**: **Title Bar Background**, so a window's title bar stands apart from it; **Icon Button Background**; and **Popup Background**, **Popup Text** and **Popup Border** for every tooltip and popup. ([#127](https://github.com/Bidthedog/throng/issues/127), [#639](https://github.com/Bidthedog/throng/issues/639))
+- **The Markdown preview's status bar** shows the document's lines, characters and words, and the selection's count and lines while text is selected. ([#637](https://github.com/Bidthedog/throng/issues/637))
+
 ### Changed
 
-- **throng now runs on Electron 45** (Chromium 156) ([#519](https://github.com/Bidthedog/throng/issues/519)).
-- **throng's database library moves to better-sqlite3 13**, which carries its own prebuilt binaries, so building throng from source on Windows no longer risks needing a C++ toolchain for it ([#520](https://github.com/Bidthedog/throng/issues/520)).
-- **One default icon set.** Every icon in throng is now simple line art from [Lucide](https://lucide.dev), built into the app and the same in every theme unless a theme picks an icon set of your own ([#127](https://github.com/Bidthedog/throng/issues/127)).
-- **Your own icon sets.** In Preferences › Themes › Icons, make a new icon set from any set, press **Override this icon** on the icons you want to change, open the set's folder and replace each `<key>.svg` with your own file, then press **Reload this set**. Icons you have not overridden keep the default art, including icons added in later versions ([#127](https://github.com/Bidthedog/throng/issues/127)).
+- **throng now runs on Electron 45** (Chromium 156). ([#519](https://github.com/Bidthedog/throng/issues/519))
+- **throng's database library moves to better-sqlite3 13**, which carries its own prebuilt binaries, so building throng from source on Windows no longer risks needing a C++ toolchain for it. ([#520](https://github.com/Bidthedog/throng/issues/520))
+- **Toasts are short-lived**: each leaves after the toast duration (3 s by default), pauses while you point at it, and has a close button. A notice's own buttons sit beside Copy and Dismiss at its top right. ([#618](https://github.com/Bidthedog/throng/issues/618))
+- **Focus Mode collapses both side panes** and restores them when you leave it, without saving the collapse as the project's layout. A Markdown diagram's **Maximise** is now **Focus Mode** too. ([#635](https://github.com/Bidthedog/throng/issues/635), [#127](https://github.com/Bidthedog/throng/issues/127))
+- **Every tooltip, hint and popup shares one look**, and the OS's own tooltip no longer appears. ([#637](https://github.com/Bidthedog/throng/issues/637))
+- **About, Preferences, the project settings dialog and the Resource Monitor share one look**: the same icon buttons, headings, fields and buttons, from the theme. ([#639](https://github.com/Bidthedog/throng/issues/639))
+- **The project settings dialog is tidier**, and its links open Preferences at the setting they name. ([#638](https://github.com/Bidthedog/throng/issues/638))
+- **Preferences › Settings is regrouped**: **General** holds Appearance, Window, Projects, Behaviour, Attention and File Manager; every editor setting is under **Editor** and every search setting under **Search**, each with a sub-heading per section. No setting's key or default changed.
+- **"Show editor status bar" is now "Show panel status bar"**, and also shows or hides the Markdown preview's bar. ([#637](https://github.com/Bidthedog/throng/issues/637))
+- **Every theme setting belongs to its theme**: switching theme restores all of it, including the file icon colours. ([#643](https://github.com/Bidthedog/throng/issues/643))
+- **The panel type icon comes first** in every panel header, before Back and Forward.
+- **The File Explorer's Delete** is a rubbish bin, apart from the ✕ that closes things.
+- **Themes calls it the status bar**, as Settings does. ([#320](https://github.com/Bidthedog/throng/issues/320))
+- **Diagnostic logs are anonymised**: paths, names and other identifying text are replaced with stable tokens, and a project is named by its id. ([#623](https://github.com/Bidthedog/throng/issues/623))
 
 ### Removed
 
-- **The old icon packs, glyph maps and per-theme icon overrides.** throng converted none of them. On the first start after the upgrade, each folder in your `icon-packs` folder that holds anything you made or changed is renamed with a `.bak` suffix and hidden from throng, the two packs throng shipped are deleted if you never changed them, and a notice appears at every start until the backups are gone. To keep a custom icon, make a new icon set, press **Override this icon** on that key, and copy your file over the one it creates; then delete the `.bak` folders or move them out of `icon-packs`. `README.txt` in the `icon-packs` folder has the steps ([#127](https://github.com/Bidthedog/throng/issues/127)).
+- **The old icon packs, glyph maps and per-theme icon overrides.** throng converted none of them. On the first start after the upgrade, each folder in your `icon-packs` folder that holds anything you made or changed is renamed with a `.bak` suffix and hidden from throng, the two packs throng shipped are deleted if you never changed them, and a notice appears at every start until the backups are gone. To keep a custom icon, make a new icon set, press **Override this icon** on that key, and copy your file over the one it creates; then delete the `.bak` folders or move them out of `icon-packs`. `README.txt` in the `icon-packs` folder has the steps. ([#127](https://github.com/Bidthedog/throng/issues/127))
+- `search.inFiles.summaryNoticeTimeoutMs`: the Find in Files summary now leaves after the toast duration like every other toast. ([#618](https://github.com/Bidthedog/throng/issues/618))
+
+### Fixed
+
+- **Wikilinks to vault-root paths** resolve, from the note's folder first and then the project root, and their hover shows a readable path. ([#616](https://github.com/Bidthedog/throng/issues/616))
+- **Closing Preferences right after a JSON edit** no longer loses the edit.
+- **A theme colour deleted in the Themes JSON tab** takes that theme's own colour again, not the default theme's. ([#643](https://github.com/Bidthedog/throng/issues/643))
+- **On Linux, Preferences maximises** under XWayland and restores to its size.
+
+### Known issues
+
+- On macOS, throng is ad-hoc signed, so the first launch needs **Open Anyway** in System Settings › Privacy & Security. See [throng on macOS](https://github.com/Bidthedog/throng/blob/master/docs/macos.md).
+- On Linux under XWayland (the default), dragging a file out of the File Explorer into GNOME Files does nothing; Copy and Paste work. Turn on `window.nativeWayland` to drag out.
+- On Linux under native Wayland, Preferences and About can go behind the main window when you click it.
 
 ## 1.0.0-alpha16 — 2026-11-13
 
