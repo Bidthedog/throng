@@ -71,15 +71,6 @@
   pointer-events: none;
 }
 
-.throng-mark__frame,
-.throng-mark__glyph {
-  fill: currentColor;
-}
-
-.throng-mark__body {
-  fill: var(--throng-colour-appBg, var(--bg, #10131a));
-}
-
 .title-bar__dot {
   flex: 0 0 auto;
   width: 9px;

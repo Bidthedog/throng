@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
  * source) and `dist/main` (electron, running the build output) — so the same path
  * holds in either and the assets need no build-time copy step.
  *
- * The `.ico` holds SEVEN sizes, drawn from the two source SVGs: the simplified
- * `icon_small.svg` at <=32px and the detailed `icon_large.svg` above it. Windows
- * picks whichever entry matches the size it is about to draw, so the small artwork
- * is what actually appears in the taskbar. Regenerate with
+ * The `.ico` holds SEVEN sizes, drawn from the two source SVGs: `icon_small.svg` at
+ * <=32px and `icon_large.svg` above it (today both carry the same "crowd" t; the split
+ * lets a simplified small drawing return without a pipeline change). Windows picks
+ * whichever entry matches the size it is about to draw. Regenerate with
  * `node scripts/build-app-icons.mjs` after changing the artwork.
  */
 const assets = (file: string): string => fileURLToPath(new URL(`../../assets/${file}`, import.meta.url));
