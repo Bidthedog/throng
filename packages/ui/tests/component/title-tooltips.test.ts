@@ -155,3 +155,104 @@ describe('a titled element under the resting pointer', () => {
     expect(inner).toHaveAttribute('title', 'Inner');
   });
 });
+
+/*
+ * Reported 2026-11-17: a terminal link's hover popup showed reliably only while throng was in the background, and once
+ * shown it stayed up after the pointer left the link. The terminal has no element per link: it writes the hovered
+ * link's target into its host's `title` and blanks it (`''`) when the pointer leaves the link, all under a pointer that
+ * never leaves the host. These drive that exact pattern (`link-marks.ts`, "THE HOVER TITLE").
+ */
+describe('a title its owner changes under a resting pointer — the terminal host', () => {
+  let host: HTMLDivElement;
+  const flush = async (): Promise<void> => {
+    await act(async () => {
+      await Promise.resolve(); // the MutationObserver's microtask
+    });
+  };
+  const hoverLink = async (target: string): Promise<void> => {
+    host.title = target;
+    await flush();
+  };
+  const leaveLink = async (): Promise<void> => {
+    host.title = '';
+    await flush();
+  };
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    host.title = '';
+    document.body.append(host);
+    fireEvent.pointerOver(host, { clientX: 40, clientY: 40 });
+  });
+
+  afterEach(() => {
+    host.remove();
+  });
+
+  it('shows the link’s target after the delay without another pointer move', async () => {
+    await hoverLink('https://example.com/a');
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    expect(tooltip()).toHaveTextContent('https://example.com/a');
+    expect(nativeTitleAt(host), 'the OS would draw this title').toBe('');
+  });
+
+  it('hides at once when the pointer leaves the link, though it never left the host', async () => {
+    await hoverLink('https://example.com/a');
+    fireEvent.pointerMove(host, { clientX: 41, clientY: 40 });
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    expect(tooltip()).toHaveTextContent('https://example.com/a');
+    await leaveLink();
+    expect(tooltip()).toBeNull();
+    // And a pending one never arrives late.
+    await hoverLink('https://example.com/b');
+    await leaveLink();
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    expect(tooltip()).toBeNull();
+  });
+
+  it('shows the next link after leaving one, each after its own delay', async () => {
+    await hoverLink('https://example.com/a');
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    await leaveLink();
+    await hoverLink('https://example.com/b');
+    expect(tooltip()).toBeNull();
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    expect(tooltip()).toHaveTextContent('https://example.com/b');
+  });
+
+  it('a click — the one that focuses the window — silences only the link it landed on', async () => {
+    await hoverLink('https://example.com/a');
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    fireEvent.pointerDown(host);
+    expect(tooltip()).toBeNull();
+    // xterm restates the same link on every repaint: still the pressed one, still quiet.
+    await hoverLink('https://example.com/a');
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    expect(tooltip()).toBeNull();
+    // Off the link and onto another, with the pointer still inside the host.
+    await leaveLink();
+    fireEvent.pointerMove(host, { clientX: 60, clientY: 40 });
+    await hoverLink('https://example.com/b');
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    expect(tooltip()).toHaveTextContent('https://example.com/b');
+  });
+
+  it('typing hides it, and the next link still shows', async () => {
+    await hoverLink('https://example.com/a');
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    fireEvent.keyDown(host, { key: 'a' });
+    expect(tooltip()).toBeNull();
+    await leaveLink();
+    await hoverLink('https://example.com/b');
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    expect(tooltip()).toHaveTextContent('https://example.com/b');
+  });
+
+  it('leaving the host gives back the owner’s blank, not a removed attribute', async () => {
+    await hoverLink('https://example.com/a');
+    await leaveLink();
+    fireEvent.pointerOut(host, { relatedTarget: other });
+    expect(host).toHaveAttribute('title', '');
+    expect(host).not.toHaveAttribute(MOVED_TITLE);
+  });
+});
