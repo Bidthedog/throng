@@ -114,10 +114,11 @@ launches.
 | `THRONG_E2E_WORKERS` | Playwright worker count. See [tiers and workers](../.claude/skills/throng-testing/references/tiers-and-workers.md). | `6` (2 on an elevated runner, 1 on CI); `npm run test:e2e` picks cores − 2, between 2 and 6 |
 | `THRONG_E2E_WARM` | `1` skips the Electron warm-up on CI. `npm run test:e2e` sets it for its second tier. | unset |
 | `THRONG_E2E_RETRIES` | Retries per failing test; `0` shows raw first-attempt results. | `2` |
-| `THRONG_GATE_E2E_GREP` | Narrows the E2E stage of `npm run gate` to a tag expression. The Linux gate job sets it to `@core\|@linux`. | unset (the whole suite) |
-| `THRONG_E2E_FAIL_FAST` | `1` stops the E2E stage at its first failing test. `npm run gate` sets it. | unset |
-| `THRONG_E2E_JSON_OUT` | Writes a JSON report to this path beside the list output. See [measuring durations](../.claude/skills/throng-testing/references/measuring-durations.md). | unset |
-| `THRONG_E2E_TRACE` | Records a Playwright trace, kept only for a failing test. The release lane sets it. | unset |
+| `THRONG_GATE_E2E_GREP` | Narrows the E2E stage of `npm run gate` to a tag expression. | unset (the whole suite) |
+| `THRONG_E2E_FAIL_FAST` | `1` stops each E2E tier at its first failing test and skips the next tier. `npm run gate` and every agent-started `pipeline.yml` run set it; the nightly does not. | unset |
+| `THRONG_E2E_SHARD` | `i/N`: this runner takes its share of each tier's spec files, one of N. `pipeline.yml`'s E2E jobs set it. | unset (every file) |
+| `THRONG_E2E_JSON_OUT` | Writes a JSON report to this path beside the list output; `npm run test:e2e` writes one per tier, as `<name>.parallel.json` and `<name>.serial.json`. See [measuring durations](../.claude/skills/throng-testing/references/measuring-durations.md). | unset |
+| `THRONG_E2E_TRACE` | Records a Playwright trace, kept only for a failing test. A `pipeline.yml` dispatch with `trace` sets it. | unset |
 | `THRONG_E2E_INCLUDE_ADMIN` | Opts the `@admin` specs back in; `npm run test:e2e:admin` sets it. See [elevation](../.claude/skills/throng-testing/references/elevation.md). | unset |
 | `THRONG_E2E_INCLUDE_QUARANTINE` | Opts the `@quarantine` specs back in. See [quarantine](../.claude/skills/throng-testing/references/quarantine.md). | unset |
 | `THRONG_E2E_IGNORE_ELEVATION_GUARD` | `1` runs the specs that normally skip on an elevated host. See [elevation](../.claude/skills/throng-testing/references/elevation.md). | unset |
@@ -126,7 +127,7 @@ launches.
 | `THRONG_MEASURE_ECHOES` | How many typed characters it times. | `200` |
 | `THRONG_MEASURE_VISIBLE_BUSY` | `1` runs a fast printer in the visible terminal instead of timing typing. | unset |
 | `THRONG_MEASURE_REPLAY` | `1` also times returning to a terminal that kept 10,000 lines. | unset |
-| `THRONG_MEASURE_ASSERT_P95_MS` | Fails the measurement when the 95th-percentile typing echo is slower than this many milliseconds. The macOS gate sets `100`; the figures print either way. | unset |
+| `THRONG_MEASURE_ASSERT_P95_MS` | Fails the measurement when the 95th-percentile typing echo is slower than this many milliseconds. `pipeline.yml`'s macOS typing-latency job sets `100`; the figures print either way. | unset |
 | `THRONG_TEST_EXEC_PATH` | macOS: the path throng treats as its own when checking whether macOS moved it to a temporary read-only copy. The macOS package check sets a translocated path to prove throng then starts nothing; the refusal is logged instead of shown. | unset |
 | `THRONG_E2E_STEP_MS` | Pauses between the steps of a spec that opts in, so a run can be watched. | `0` |
 | `THRONG_E2E_CLIPBOARD` | `memory` gives each app an in-memory clipboard; the harness sets it, and it also marks a run as a test run. See [global OS resources](../.claude/skills/throng-testing/references/global-os-resources.md). | unset |
@@ -143,7 +144,7 @@ launches.
 | `THRONG_NON_REFERENCE_HARDWARE` | Marks a machine whose timings are not representative, so wall-clock SLA ceilings are recorded rather than asserted. See [performance SLAs](../.claude/skills/throng-testing/references/performance-sla.md). | unset |
 | `THRONG_NO_REENCODED_KEY_DELIVERY` | Declares the host cannot deliver CSI-u key sequences into a program, so those specs skip. | unset |
 | `THRONG_CALIBRATE` | Which parts of the Resource Monitor's memory-estimate calibration spec run. Unset, it runs the gate: editors and previews at 1 and 10 MB and terminals filled to their scrollback limit, each within 10% of live heap, then the three benchmark runs, each ranking its panels at a Spearman ρ of at least 0.85 with each panel kind's share of the total within 5 points; shapes the estimates are known to miss are logged, not asserted. `full` runs the whole sweep, 50 MB included, and the benchmarks. A comma list of `editor`, `preview` and `terminal` runs those sections' full case lists alone; `bench-a`, `bench-b` or `bench-c` runs that benchmark alone. `none` runs nothing; the gate sets it on a dispatched run, so SC-009 is asserted by the nightly gate. | unset (the nightly gate) |
-| `THRONG_CALIBRATE_LOG_ONLY` | `1` makes that calibration spec measure and log every case without asserting any. The release lane sets it; the gate asserts. | unset |
+| `THRONG_CALIBRATE_LOG_ONLY` | `1` makes that calibration spec measure and log every case without asserting any. No workflow sets it: every full pipeline run asserts. | unset |
 | `THRONG_CLAUDE_E2E` | `1` runs the specs that drive the real `claude` binary. Never on CI. | unset |
 | `THRONG_CLAUDE_E2E_ROOT` | An existing project, with real Claude sessions, for those specs to use. | a temp folder |
 | `THRONG_CLAUDE_PROJECT` | The project whose Claude session history the resume spec reads. | this repository |
@@ -154,7 +155,7 @@ launches.
 
 ## Release and CI
 
-Inputs to `scripts/publish-gates.mjs` and the release scripts, set by `release.yml`. The detail is in
+Inputs to `scripts/publish-gates.mjs` and the release scripts, set by `release.yml` and the pipeline it calls. The detail is in
 the `throng-release` skill's [publishing reference](../.claude/skills/throng-release/references/publishing.md).
 
 | Variable | What it controls | Default |
@@ -166,6 +167,6 @@ the `throng-release` skill's [publishing reference](../.claude/skills/throng-rel
 | `THRONG_RELEASE_TAG` | The tag the artifacts are matched against. | `GITHUB_REF_NAME`, then `v<version>` |
 | `GITHUB_REF_NAME` / `GITHUB_SHA` | Fallbacks for the release tag and the commit the release notes name. | set by GitHub Actions |
 
-`scripts/verify-installer.mjs` also sets `THRONG_PIPE_NAME` for the app it probes, and `release.yml`
-sets `THRONG_E2E_WORKERS`, `THRONG_E2E_RETRIES`, `THRONG_E2E_JSON_OUT` and `THRONG_E2E_TRACE` for
-the full E2E lane.
+`scripts/verify-installer.mjs` also sets `THRONG_PIPE_NAME` for the app it probes, and `pipeline.yml`
+sets `THRONG_E2E_SHARD`, `THRONG_E2E_FAIL_FAST`, `THRONG_E2E_WORKERS`, `THRONG_E2E_RETRIES`,
+`THRONG_E2E_JSON_OUT` and `THRONG_E2E_TRACE` for its E2E jobs.

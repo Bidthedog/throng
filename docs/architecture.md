@@ -941,8 +941,8 @@ NSIS templates from `packaging/nsis/`, and the MSI's WiX project is rewritten by
 - **`publish: null`.** electron-builder never publishes. Publishing is a separate, gated job. How a
   release is cut is covered in [releasing.md](releasing.md).
 
-CI (`.github/workflows/ci.yml`, `gate.yml`, `release.yml`) and the test layers are described in
-[testing.md](testing.md).
+CI (`.github/workflows/ci.yml`, `pipeline.yml`, `release.yml`) and the test layers are described in
+[testing.md](testing.md#the-three-pipelines).
 
 Binds: [Technology & Architecture Constraints](../.specify/memory/constitution.md#technology--architecture-constraints),
 [Development Workflow & Quality Gates](../.specify/memory/constitution.md#development-workflow--quality-gates).

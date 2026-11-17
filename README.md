@@ -2,8 +2,8 @@
 
 **Every project, every terminal, one window.**
 
-[![CI](https://github.com/Bidthedog/throng/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Bidthedog/throng/actions/workflows/ci.yml?query=branch%3Amaster)
-[![Nightly gate](https://github.com/Bidthedog/throng/actions/workflows/gate.yml/badge.svg?branch=master&event=schedule)](https://github.com/Bidthedog/throng/actions/workflows/gate.yml?query=event%3Aschedule)
+[![CI](https://github.com/Bidthedog/throng/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/Bidthedog/throng/actions/workflows/ci.yml?query=event%3Apull_request)
+[![Nightly pipeline](https://github.com/Bidthedog/throng/actions/workflows/pipeline.yml/badge.svg?branch=master&event=schedule)](https://github.com/Bidthedog/throng/actions/workflows/pipeline.yml?query=event%3Aschedule)
 [![Release](https://github.com/Bidthedog/throng/actions/workflows/release.yml/badge.svg)](https://github.com/Bidthedog/throng/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/Bidthedog/throng?include_prereleases&sort=date&label=release&color=blue)](https://github.com/Bidthedog/throng/releases)
 [![v1.0.0 progress](https://img.shields.io/github/milestones/progress-percent/Bidthedog/throng/1?label=v1.0.0)](https://github.com/Bidthedog/throng/milestone/1)

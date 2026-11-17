@@ -24,9 +24,9 @@ its own module registry; `vitest.config.ts` finds those files by reading them, s
 by hand. Every other unit file shares its worker's registry with the files before it, so a unit test
 must leave module state and globals as it found them.
 
-Tests tagged `regression` — soaks, repeated rounds and performance budgets — are skipped on pull
-requests and run in `gate.yml` and the release lane. Tag one with `{ tags: ['regression'] }` on the
-`it` or `describe`.
+Tests tagged `regression` mark soaks, repeated rounds and performance budgets; tag one with
+`{ tags: ['regression'] }` on the `it` or `describe`. Integration files tagged `critical-path` are the
+subset pull-request CI runs (at most 15, guarded by `integration-subset.test.ts`).
 
 The integration and contract layers spawn real OS processes (node-pty shells, directory-lock
 holders) and **can only run one file at a time** — concurrent spawning hits the Windows
@@ -61,8 +61,8 @@ While iterating, run the tests under your cursor — one file, one project:
 npm run test:unit -- packages/core/tests/unit/<the-one>.test.ts
 ```
 
-**E2E runs on CI**: the `@core` lane on a ready pull request, `@extended` in `gate.yml` and
-`release.yml`. Do not run the E2E suite, a tier or a batch of specs locally before pushing. At most,
+**E2E runs on CI, in the full pipeline** (`pipeline.yml`): nightly, on dispatch, and inside every release.
+No E2E runs on a pull request. Do not run the E2E suite, a tier or a batch of specs locally before pushing. At most,
 run the one spec covering your change, at one worker, when a lower layer cannot show the failure:
 
 ```bash
@@ -83,60 +83,74 @@ allowed to happen, and the loop that goes with it, is *Where a test is allowed t
 The environment variables that tune a run (tier, workers, retries, opt-in suites) are listed in
 [`environment.md`](environment.md).
 
-## `npm run gate` — the one command that says the work is done
+## The three pipelines
 
-`npm run gate` runs eight stages in CI's order, **fail-fast**: **lint → typecheck → build → unit →
-component → integration → contract → e2e**. The cheap stages run first so the expensive one is only
-reached by code that has already earned it. It also clears the app, daemon, pty-agent and Playwright
-processes a run leaves behind.
+| Workflow | Runs on | What it runs | Fails fast |
+| --- | --- | --- | --- |
+| `ci.yml` | every push to a pull request, drafts included | lint and type-check, unit, component, contract and the `critical-path` integration subset, on Linux, in parallel; one `CI verdict` check | no: every job runs to completion |
+| `pipeline.yml` | nightly on master, and on dispatch | every layer on Windows, Linux and macOS, every E2E test sharded per platform, `@admin`, calibration, and every artifact built and verified; publishes nothing | dispatch: yes; nightly: no, it reports every failure on one issue |
+| `release.yml` | a pushed `v*` tag only | the full pipeline, then signing, publishing and the package repositories | yes |
 
-It runs on a GitHub-hosted runner, dispatched against a ref:
+Nothing runs on a push to master. A change that is Windows- or macOS-specific gets a `pipeline.yml`
+dispatch for that platform before it merges, because pull-request CI cannot see it.
+
+## The full pipeline — what says the work is done
+
+A green full `pipeline.yml` run on the commit is what establishes done-ness. Dispatch it against a
+pushed ref:
 
 ```bash
-gh workflow run gate.yml --ref <branch>
+gh workflow run pipeline.yml --ref <branch>
 gh run watch <run-id> --exit-status       # one blocking watch
 gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
-Take the verdict from `gh run view`, not from the watch's exit code. A green gate is evidence about
-the commit it ran against: quote the run URL and the SHA when reporting done, and re-run if anything
-changed after it. `-f only=<stage>` re-runs a single stage while fixing one. The stage order's
-reasoning and what the gate clears are in
-[the gate in detail](../.claude/skills/throng-testing/references/gate.md).
+Take the verdict from `gh run view`, not from the watch's exit code, and quote the run URL and the SHA
+when reporting done. A failed dispatch concludes `cancelled`, because its first failing job cancels the
+rest; the failed job is the one whose own conclusion is `failure`. Its inputs select what runs — `stages`, `platforms`, `e2e_filter`,
+`test_filter`, `shards`, and `stress_spec` / `stress_grep` / `stress_rounds` to repeat one test with
+retries off — and the run's name says whether it was `pipeline (full)` or partial. The inputs and what
+each guarantees are in [the gate in detail](../.claude/skills/throng-testing/references/gate.md).
+
+`npm run gate` is the same stages in one process, **fail-fast**: **lint → typecheck → build → unit →
+component → integration → contract → e2e**. It pins every core for most of an hour, so it is not run
+on a workstation.
 
 ## On Linux
 
-CI runs every layer on Ubuntu 24.04 too: the `Linux:` jobs in `ci.yml`, and `gate-linux` in `gate.yml`. E2E there runs on a
-real X display with a window manager (`scripts/ci-linux-display.sh`), and its lane is `@core` plus `@linux`, the tag for
-specs about Linux itself. A test asserting one platform's behaviour says so with `skipUnlessWindows(reason)` or
-`skipUnlessLinux(reason)` from `@throng/core/testing`, and the reason is required.
+The full pipeline runs every layer on Ubuntu 24.04 too. E2E there runs on a real X display with a
+window manager (`scripts/ci-linux-display.sh`). A test asserting one platform's behaviour says so
+with `skipUnlessWindows(reason)` or `skipUnlessLinux(reason)` from `@throng/core/testing`, and the
+reason is required. Pull-request CI runs on Linux.
 
 ## On macOS
 
-CI runs every layer on hosted Apple silicon runners too, on the current and the previous macOS release named in
-`.github/macos-runners.json`: the `macos-` jobs in `ci.yml`, and `gate-macos` in `gate.yml`. Its E2E lane is `@core` plus
-`@macos`, and `skipUnlessMacos(reason)` marks a test about macOS itself. These runs are the whole of throng's macOS
-testing; no step needs a Mac by hand ([macOS](macos.md#not-checked-by-the-automated-tests) lists what they cannot show).
-Typing latency is the one SLA asserted on CI, on macOS only: `gate-macos` runs the terminal load measurement with
-`THRONG_MEASURE_ASSERT_P95_MS=100`.
+The full pipeline runs every layer on hosted Apple silicon runners too, on the current and the
+previous macOS release named in `.github/macos-runners.json`, and `skipUnlessMacos(reason)` marks a
+test about macOS itself. These runs are the whole of throng's macOS testing; no step needs a Mac by
+hand ([macOS](macos.md#not-checked-by-the-automated-tests) lists what they cannot show). Typing latency
+is the one SLA asserted on CI, on macOS only: the pipeline's typing-latency job runs the terminal load
+measurement with `THRONG_MEASURE_ASSERT_P95_MS=100`.
 
-## Two lanes: `@core` and `@extended`
+## Significance: `@core` and `@extended`
 
 Every E2E test carries exactly one significance tag and at least one category tag, and
 `packages/ui/tests/unit/e2e-tags.test.ts` fails the build for one that carries neither.
 
-| Tag | Where it runs | Cap |
-| --- | --- | --- |
-| `@core` | every CI run of a non-draft pull request (`ci.yml`, one job, one worker) | **50** — a hard ceiling, guarded |
-| `@extended` | the gate (`gate.yml`), and the release lane (`release.yml`) before an installer is built unless a full gate already passed on the same tree | none |
+| Tag | Means |
+| --- | --- |
+| `@core` | a critical journey: `e2e_filter=@core` on a dispatch runs these alone |
+| `@extended` | a regression check |
+
+Both run in every full pipeline run; neither runs on a pull request.
 
 Category tags — `@boot @terminal @editor @explorer @prefs @window @persistence @failure` — say what a
 test is about, so a failure names an area before anyone opens the file. `@admin` (needs elevation)
 and `@quarantine` (excluded, coverage lost) are environment tags and orthogonal to both. Selection is
-by `--grep` composed with `grepInvert` in `playwright.config.ts`, so an untagged test would run in
-neither lane — which is why the guard exists.
+by `--grep` composed with `grepInvert` in `playwright.config.ts`; the guard keeps every test
+classified.
 
-`npm run test:e2e` — the gate's E2E stage — runs the suite in two tiers: a parallel tier, then a
+`npm run test:e2e` — the E2E stage of the gate and of each pipeline shard — runs the suite in two tiers: a parallel tier, then a
 serial tier at one worker for specs that steal focus, drive real shells or assert wall-clock
 ceilings. A spec in that class is registered in `packages/ui/tests/e2e/parallel-plan.json`, and
 `tier-plan.test.ts` fails the build if it is not. The tiers and worker counts are in

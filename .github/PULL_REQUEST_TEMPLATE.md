@@ -35,10 +35,10 @@ Closes #
 - [ ] `npm run test:unit` — green
 - [ ] `npm run test:integration` — green
 - [ ] `npm run test:contract` — green
-- [ ] `npm run test:e2e` — green, **or** run on CI rather than here — link the run: `________`
+- [ ] E2E — green in a `pipeline.yml` dispatch on this branch (pull-request CI runs none) — link the run: `________`
 - [ ] Any user-facing UI change ships **passing E2E coverage** (constitution Principle V).
 - [ ] New OS-abstraction seams have **contract tests**.
-- [ ] `@admin` / elevation-dependent behaviour verified under an elevated run (`npm run test:e2e:admin`), **or** N/A — only CI can run these, so link its run: `________`
+- [ ] `@admin` / elevation-dependent behaviour verified by the `admin` job of a `pipeline.yml` dispatch, **or** N/A — link its run: `________`
 
 <details>
 <summary>Test output</summary>
