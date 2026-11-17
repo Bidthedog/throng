@@ -8,41 +8,52 @@ at specs/046-side-panes-and-project-list/plan.md
 
 ## Verifying done-ness
 
-**`npm run gate` is the only thing that establishes work is done.** A green unit run, a passing spec
-or "the tests I changed pass" is progress, not done-ness.
+**A green full `pipeline.yml` run is the only thing that establishes work is done.** A green unit
+run, a passing spec, green PR CI or "the tests I changed pass" is progress, not done-ness.
 
-It runs the gating stages in CI's order, fail-fast: **lint → typecheck → build → unit → component →
-integration → contract → e2e**, and clears the app/daemon/pty-agent/Playwright processes a run
-leaves behind. Component sits right after unit because it is the second-cheapest layer (jsdom, no
-app, no daemon, no shell).
+Three workflows, nothing else (spec 072; *The three pipelines* in `docs/testing.md`):
 
-**It runs on a GitHub-hosted runner, not here.** Dispatch it against a pushed ref:
+- **`ci.yml`** — every push to a PR, drafts included: lint, typecheck, unit, component, contract and
+  the `critical-path` integration subset, on Linux, no E2E, every job to completion. One required
+  check, `CI verdict`. Target 5 minutes.
+- **`pipeline.yml`** — nightly on master and on dispatch: every layer on Windows, Linux and macOS,
+  every E2E test sharded, `@admin`, calibration, every artifact built and verified. Never publishes.
+  A dispatch fails fast; the nightly runs to completion and reports on one issue.
+- **`release.yml`** — a pushed `v*` tag only: the full pipeline in the same run, then publish.
+- **Nothing runs on a push to master.**
+
+Dispatch the pipeline against a pushed ref, narrowed while iterating:
 
 ```bash
-gh workflow run gate.yml --ref <branch>
+gh workflow run pipeline.yml --ref <branch>                                  # full
+gh workflow run pipeline.yml --ref <branch> -f stages=unit -f platforms=windows
 gh run watch <run-id> --exit-status
 gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
 - **Take the verdict from `run view`, not `run watch`.** `gh run watch` detaches early and its exit
   code lies both ways. If `status` is not `completed`, the run is still going.
-- **Never run the gate locally.** It pins every core for the better part of an hour and exhausts the
-  interactive desktop heap.
-- **Linux has its own lanes**: `Linux:` jobs in `ci.yml` and `gate-linux` in `gate.yml`. See *On Linux* in `docs/testing.md`.
+- **A failed dispatch concludes `cancelled`, not `failure`**: its first failing job cancels the run.
+  Name the failure with `gh run view <id> --json jobs --jq '.jobs[]|select(.conclusion=="failure")|.name'`.
+- **Never run `npm run gate` locally.** It is the same stages in one process, and it pins every core
+  for the better part of an hour and exhausts the interactive desktop heap.
+- **A Windows- or macOS-specific change** gets a `pipeline.yml` dispatch for that platform before
+  merge; PR CI cannot see it.
 - Hosted runners are administrators with UAC disabled, so the `skipIfElevated()` specs cannot run
   there; `admin-reminder.reporter.ts` prints how many were skipped.
 
 Rules for using it:
 
 - **Fail-fast means stop, fix, re-run.** Fix the failing stage first — **running-tests** to re-run
-  only what failed, **throng-testing** when it is an E2E flake rather than a defect.
-- **Never bypass the E2E stage** to make the gate finish sooner.
-- **A green gate is evidence about a commit's tree.** Quote the run URL and SHA when reporting done;
+  only what failed (`-f stages=…`), **throng-testing** when it is an E2E flake rather than a defect
+  (`-f stress_spec=… -f stress_rounds=…`).
+- **Never narrow away the E2E stage** to make a done-ness run finish sooner.
+- **A green run is evidence about a commit's tree.** Quote the run URL and SHA when reporting done;
   re-run if anything changed after it.
-- **A rewrite that changes no content needs no new gate.** After a rebase, squash or reworded
+- **A rewrite that changes no content needs no new run.** After a rebase, squash or reworded
   message, prove the tree is unchanged — `git diff --stat <green-sha> HEAD` empty — and cite the
   original run. GitHub's required checks still re-run on the new head SHA; this rule only stops you
-  dispatching `gate.yml` yourself.
+  dispatching `pipeline.yml` yourself.
 
 ## Running tests locally
 
@@ -53,7 +64,7 @@ for the inner loop; `td audit` and `td rank` read the recorded telemetry.
 
 - **Unit and component tests run locally freely.** They are the inner loop.
 - **E2E does not run locally as a batch.** At most the one spec covering the change, at one worker,
-  when a lower layer cannot show the failure. Push and let CI run the E2E lanes — never run the
+  when a lower layer cannot show the failure. Push and dispatch `pipeline.yml` — never run the
   full suite or a tier on the workstation before pushing.
 - **Integration and contract** run locally only for the files the change touches.
 - **Never run `npm run build` in a worktree while its throng is open.** It replaces the hashed renderer
@@ -66,18 +77,14 @@ for the inner loop; `td audit` and `td rank` read the recorded telemetry.
 
 ## E2E on CI
 
-CI runs on a non-draft pull request to master and on dispatch, never on a bare push. It runs the
-**`@core` lane** (capped at 50 tests, one job, one worker). The `@extended` lane runs in the gate and
-the release pipeline. See *Two lanes* in `docs/testing.md`.
-
-**Testing something only CI can answer** (anything that depends on administrator rights): push, then
-`gh pr ready`. Every job runs on a ready PR and re-runs on each push; a draft or a bare branch push
-starts nothing.
+**No E2E runs on a pull request.** E2E runs in `pipeline.yml` only — nightly, on dispatch and inside
+every release — on all three platforms. Narrow a dispatch with `-f stages=e2e -f e2e_filter=<grep, spec
+path or @category>`. `@admin` runs in the pipeline's elevated `admin` job.
 
 - **Every E2E test carries two tags**: a significance tag (`@core` or `@extended`) and a category tag
   (`@boot @terminal @editor @explorer @prefs @window @persistence @failure`).
-  `packages/ui/tests/unit/e2e-tags.test.ts` fails the build for a test missing either — an untagged
-  test runs in neither lane.
+  `packages/ui/tests/unit/e2e-tags.test.ts` fails the build for a test missing either. Significance
+  classifies a test; it selects no PR lane, and `@core` has no cap.
 - **`packages/ui/tests/e2e/e2e-budget.json` is a ratchet and fails both ways.** Re-seed it in the
   same commit that adds or removes a test.
 - **A spec that opens the preferences window, drives a context menu or runs a long-lived real shell

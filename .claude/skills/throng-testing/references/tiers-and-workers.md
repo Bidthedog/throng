@@ -44,15 +44,18 @@ test flaking because its menu closed.
 
 ### Why CI is arranged differently
 
-CI runs **one worker, one job, no shards** — see *Two lanes* in `docs/testing.md` for what that job
-actually runs, and `gate.yml`'s `THRONG_E2E_WORKERS` comment for why the gate pins one worker too.
+CI runs **one worker per runner, sharded across runners** — `pipeline.yml`'s E2E jobs (Windows 4
+shards, Linux 2, macOS 2 per release by default) each run both tiers on their share of the files,
+through `THRONG_E2E_SHARD=i/N`; its `THRONG_E2E_WORKERS` comment says why each pins one worker.
 Focus contention is per-desktop, so workers are the lever within a machine; raising them on a
 runner reintroduces RPC-budget timeouts, launch-SLA misses and EPERM teardown races (see `ci.yml`),
 which is the CPU mechanism above, not the focus one.
 
-**Sharding is gone (spec 034).** Three shards pay the fixed `npm ci` + build toll three times, which
-only pays when the work being split is large. The gating lane is capped at 50 tests, so the plan
-file, the matrix, the blob reporter and the merge-report job were deleted together.
+**Sharding is back (spec 072), across runners and per tier.** Spec 034 removed it when the gating
+lane was a 50-test `@core` run that could not pay a shard's fixed `npm ci` + build toll. The full
+suite on one Windows runner took 46 minutes, which does. Each shard runs the parallel tier and then
+the serial tier on its share, so focus-stealing specs still never share a desktop; each tier writes
+its own JSON report (`<name>.parallel.json`, `<name>.serial.json`).
 
 ## `THRONG_E2E_WORKERS` — parallel workers
 

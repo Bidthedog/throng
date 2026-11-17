@@ -12,8 +12,8 @@ workstation, use it only for the one `@admin` spec covering a change. The normal
 **excludes** `@admin` specs (config `grepInvert`), so an elevated dev machine doesn't
 run them here; a runner sets `THRONG_E2E_INCLUDE_ADMIN` to opt back in.
 
-**CI runs the `@admin` suite** in its own job (`E2E (@admin, elevated)` on a ready PR, `Nightly @admin
-E2E` in `gate.yml`), through `scripts/ci-run-admin-e2e.ps1`, which sets
+**CI runs the `@admin` suite** in `pipeline.yml`'s `admin` job — nightly, on dispatch
+(`-f stages=admin`) and in every release — never on a pull request, through `scripts/ci-run-admin-e2e.ps1`, which sets
 `THRONG_E2E_INCLUDE_ADMIN=1` and calls `npx playwright test` directly — never
 `npm run test:e2e:admin`, which exists to hop UAC from a non-elevated shell and is
 both pointless and interactive where the process is already elevated. It is a job

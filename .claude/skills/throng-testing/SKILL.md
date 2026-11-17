@@ -29,8 +29,8 @@ runs.
 
 | Never run locally | Run this instead |
 |---|---|
-| `npm run gate` | `gh workflow run gate.yml --ref <branch>` |
-| `npm run test:e2e`, a tier (`THRONG_E2E_TIER`), or any batch of specs | push and let CI run it — `@core` on a ready PR, `@extended` in `gate.yml` and `release.yml` |
+| `npm run gate` | `gh workflow run pipeline.yml --ref <branch>` |
+| `npm run test:e2e`, a tier (`THRONG_E2E_TIER`), or any batch of specs | push and dispatch `pipeline.yml` with `-f stages=e2e` (and `-f e2e_filter=…` to narrow it); no E2E runs on a pull request |
 | `npm run test:e2e:raw`, `npm run test:e2e:admin` | as above |
 | Any `vitest run --project <p>` with **no path** | the same command with the file under the cursor |
 
@@ -73,8 +73,8 @@ So:
   right place for that opinion; the run is not its to start.
 - **A script counts too.** A `verify.sh` ending in `npm run test:e2e` is the same violation with a
   file in front of it.
-- The replacement proof is always the same: land the work, dispatch `gate.yml`, quote the run URL and
-  the SHA.
+- The replacement proof is always the same: land the work, dispatch `pipeline.yml`, quote the run URL
+  and the SHA.
 
 ### The loop
 
@@ -87,18 +87,18 @@ npx vitest run --project unit packages/core/tests/unit/<the-one>.test.ts
 
 # 2. Push, then ask the runner for the verdict.
 git push
-gh workflow run gate.yml --ref "$(git branch --show-current)"
+gh workflow run pipeline.yml --ref "$(git branch --show-current)"
 
 # 3. Wait on it. ONE blocking watch, never a poll loop of short turns.
 sleep 10
-RUN=$(gh run list --workflow=gate.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+RUN=$(gh run list --workflow=pipeline.yml --limit 1 --json databaseId --jq '.[0].databaseId')
 gh run watch "$RUN" --exit-status
 
 # 4. ALWAYS re-query the conclusion. Never trust the watch's exit code alone — see below.
 gh run view "$RUN" --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
-Say in one line what you are waiting on before starting the watch: *"Waiting on gate run `<id>`."*
+Say in one line what you are waiting on before starting the watch: *"Waiting on pipeline run `<id>`."*
 
 **`gh run watch --exit-status` detaches early, and its exit code then lies in both directions.**
 Observed twice on this repo's runner in one afternoon:
@@ -119,15 +119,17 @@ failure that has not happened yet.
 
 ### When one stage is red, run one stage
 
-The gate is fail-fast, so re-running it to reach the stage that failed re-proves every green stage
-before it.
+A dispatched run is fail-fast: the first failing job cancels the rest. Re-run only what failed:
 
 ```bash
-gh workflow run gate.yml --ref "$(git branch --show-current)" -f only=test:contract
+gh workflow run pipeline.yml --ref "$(git branch --show-current)" -f stages=contract -f platforms=windows
 ```
 
-`only` takes `full gate`, `lint`, `typecheck`, `build`, or any `test:*` stage. Use it while fixing;
-take the full gate once at the end, because that is the run that says done.
+`stages` takes any of `lint`, `typecheck`, `unit`, `component`, `integration`, `contract`, `e2e`, `admin`,
+`calibration`, `package`, `verify`; `platforms` any of `windows`, `linux`, `macos`; `e2e_filter` and
+`test_filter` narrow further, and `stress_spec` / `stress_grep` / `stress_rounds` repeat one E2E test
+with retries off. Use them while fixing; take one full run (`pipeline (full)`) at the end, because
+that is the run that says done.
 
 ### What a green run does and does not prove
 
@@ -146,9 +148,10 @@ entire reason the runner exists.
 
 | lane | machine | when |
 |---|---|---|
-| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every non-draft PR to master, and dispatch |
-| `gate.yml` dispatch — the full gate | GitHub-hosted | On demand, the loop above |
-| `gate.yml` nightly | GitHub-hosted | 01:00 UTC, master only |
+| `ci.yml` — lint, typecheck, unit, component, contract, critical-path integration; Linux; no E2E | GitHub-hosted | Every push to a PR, drafts included |
+| `pipeline.yml` dispatch — everything, every platform | GitHub-hosted | On demand, the loop above; fails fast |
+| `pipeline.yml` nightly | GitHub-hosted | 01:00 UTC, master only; runs to completion, reports on one issue |
+| `release.yml` — the full pipeline, then publish | GitHub-hosted | A pushed `v*` tag only |
 
 Why all three are hosted — and why the self-hosted VM that once ran the dispatch lane was retired —
 is in [references/gate.md](references/gate.md), with the stage order's reasoning. The nightly in
@@ -358,7 +361,8 @@ tells that you already are: the test drives the UI only to reach a value it then
 move inside one component (that is component).
 
 **Every E2E test carries exactly one significance tag — `@core` or `@extended` — and at least one
-category tag.** `@core` gates CI and is capped; `@extended` runs in the gate and at release. The build fails on a
+category tag.** `@core` is a critical journey, `@extended` a regression check; both run in every full
+pipeline run and neither on a pull request. The build fails on a
 test that carries neither, and on a suite that exceeds its declared budget. Adding an E2E therefore
 means deciding, out loud, whether breaking it would make the product unusable.
 

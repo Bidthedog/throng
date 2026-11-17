@@ -1,15 +1,16 @@
 # `npm run gate` in detail
 
-Read when you need the reasoning behind the gate — its stage order, why it runs hosted, why the self-hosted VM was retired, and what it clears. The dispatch-and-watch loop itself is in SKILL.md.
+Read when you need the reasoning behind the gate — its stage order, why it runs hosted, why the self-hosted VM was retired, and what it clears. On CI the gate is `pipeline.yml` (spec 072): the same stages, one job per stage and platform. The dispatch-and-watch loop itself is in SKILL.md.
 
 Part of the `throng-testing` skill; the contributor overview is [`docs/testing.md`](../../../../docs/testing.md).
 
 ## `npm run gate` — the one command that says the work is done
 
-**It runs on the gate runner, not on a workstation.** Dispatch it against a ref and wait:
+**It runs on GitHub-hosted runners, not on a workstation.** Dispatch the full pipeline against a ref
+and wait:
 
 ```bash
-gh workflow run gate.yml --ref <branch>
+gh workflow run pipeline.yml --ref <branch>
 gh run watch <run-id> --exit-status        # one blocking watch
 ```
 
@@ -18,42 +19,42 @@ project layer. The full gate locally pins every core for the better part of an h
 throughout, and eventually exhausts the interactive desktop heap, at which point Windows refuses to
 start processes at all. It is not a faster route to the same answer.
 
-**While fixing one red stage, run one stage.** The gate is fail-fast, so re-running it to reach the
-stage that failed re-proves every green stage before it:
+**While fixing one red stage, run one stage.** A dispatch is fail-fast — the first failing job cancels
+the run — so re-run only what failed:
 
 ```bash
-gh workflow run gate.yml --ref <branch> -f only=test:contract
+gh workflow run pipeline.yml --ref <branch> -f stages=contract -f platforms=windows
 ```
 
-`only` takes `full gate`, `lint`, `typecheck`, `build`, or any `test:*` stage. The full gate is what
-says done; `only` is for getting there.
+The inputs (`stages`, `platforms`, `e2e_filter`, `test_filter`, `shards`, `stress_*`, `hand_tests`,
+`trace`) are in `specs/072-ci-pipelines/contracts/pipeline-dispatch.md`. A run with every stage and
+platform and no filter is named `pipeline (full)`, and only that run says done.
 
-**Dispatch one gate per branch at a time.** A newer dispatch on the same branch cancels the one before
-it, whatever its inputs, so two dispatched together leave one run. Only `stress_spec` runs sit outside
-this. To sample a gate repeatedly, wait for each verdict before dispatching the next.
+**Dispatch one pipeline per branch at a time.** A newer dispatch on the same branch cancels the one
+before it, whatever its inputs, so two dispatched together leave one run. Only `stress_spec` runs sit
+outside this. To sample repeatedly, wait for each verdict before dispatching the next.
 
-**Three lanes, two kinds of machine:**
+**Three workflows, all hosted:**
 
-| lane | machine | when |
-|---|---|---|
-| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every non-draft PR to master, and dispatch |
-| `gate.yml` dispatch — the full gate | GitHub-hosted | On demand |
-| `gate.yml` nightly | GitHub-hosted | 01:00 UTC, master only |
+| workflow | when |
+|---|---|
+| `ci.yml` — lint, typecheck, unit, component, contract, critical-path integration; Linux; no E2E | Every push to a PR, drafts included |
+| `pipeline.yml` — everything, every platform; dispatch fails fast, the nightly runs to completion | On demand, and 01:00 UTC on master |
+| `release.yml` — the full pipeline, then publish | A pushed `v*` tag only |
 
 **A self-hosted Windows VM was tried for the dispatch lane and retired.** Its single-threaded stages
 ran markedly slower than hosted, and some runs died mid-job leaving no log. The one thing it could do
 that a hosted runner cannot is run the `skipIfElevated()` sites, because a hosted `windows-2022`
 runner is an administrator with **UAC disabled** — there is no filtered token to drop to, so
 `schtasks /RL LIMITED` has nothing to fall back on and `runas /trustlevel` produces nothing. That
-capability did not pay for the rest; `gate.yml` carries the reasoning.
+capability did not pay for the rest.
 
 Because the workflow is dispatched against a **ref**, a green run is evidence about that *commit* and
 not about a working tree that has moved on since — so quote the run URL and the SHA when reporting
 done.
 
-The runner is reached only by `workflow_dispatch` and `schedule`, neither of which a fork can trigger
-— see `.github/workflows/gate.yml`, which explains why that exclusion is structural rather than a
-condition someone could weaken.
+The full pipeline is reached only by `workflow_dispatch`, `schedule` and a tag's release call, none of
+which a fork can trigger, and it never reads the signing key on any of them.
 
 What the command itself does, wherever it runs:
 
