@@ -1,4 +1,4 @@
-# throng
+# <img src="icon/icon-transparent.svg" width="23" height="32" alt="t">hrong
 
 **Every project, every terminal, one window.**
 
@@ -13,7 +13,7 @@
 [![apt and dnf](https://img.shields.io/badge/packages-apt%20%7C%20dnf-A81D33)](docs/install-linux.md#the-package-repository)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-throng is a desktop workspace for people who live in the command line. Give each project its own
+throng is a themeable desktop workspace for people who live in the command line. Give each project its own
 folder and colour, then build it a home: tabs and split panels holding real PowerShell, Git Bash
 and CMD terminals beside a code editor, a live file tree and rendered previews, arranged the way you
 think and restored exactly as you left it. Terminals run in a background service, so closing the
