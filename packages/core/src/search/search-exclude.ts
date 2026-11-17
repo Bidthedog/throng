@@ -55,7 +55,7 @@ export const DEFAULT_SEARCH_EXCLUDE_GLOBS: readonly string[] = Object.freeze([
 /** True when `glob` compiles. Unbalanced brackets and the like are refused, not guessed at. */
 function isValidGlob(glob: string): boolean {
   try {
-    picomatch.makeRe(glob, { strictBrackets: true });
+    picomatch.makeRe(glob, { strictBrackets: true, noextglob: true });
     return true;
   } catch (error) {
     logExpected('search-exclude: compile glob', 'a glob typed into the exclude box may not compile; it is refused, not guessed at', error);

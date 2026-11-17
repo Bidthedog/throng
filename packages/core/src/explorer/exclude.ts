@@ -43,7 +43,7 @@ export const DEFAULT_EXCLUDE_GLOBS: readonly string[] = [
  */
 export function compileExcluder(globs: readonly string[]): (relPath: string) => boolean {
   if (globs.length === 0) return () => false;
-  const isMatch = picomatch(globs as string[], { dot: true });
+  const isMatch = picomatch(globs as string[], { dot: true, noextglob: true });
   // The root itself has no relative path, and the project is never excluded from itself.
   return (relPath: string) => relPath.length > 0 && isMatch(relPath);
 }
