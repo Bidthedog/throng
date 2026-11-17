@@ -227,7 +227,7 @@ recovery.
 - [x] T034 [P] Update the `throng-testing` skill (`.claude/skills/throng-testing/SKILL.md`, `references/gate.md`, `references/e2e-harness.md`, `references/tiers-and-workers.md`, `references/elevation.md`): which lane runs where, dispatching `pipeline.yml` with `stages`/`e2e_filter`/`stress_*`, the cap removal, `@admin` in the pipeline only, and dispatching for a platform-specific change before merge.
 - [x] T035 Re-read the amended constitution (T004a) against the final workflows; any drift is corrected through `/speckit-constitution`, not by hand.
 - [ ] T036 Run the short gates on the final tree: `npm run lint`, `npm run typecheck`, `npx vitest run --project unit --maxWorkers=50%` and `npx vitest run --project component --maxWorkers=50%`. Then dispatch a full `pipeline.yml` on the final head and record the green run URL and SHA (`CLAUDE.md` *Verifying done-ness*).
-- [ ] T037 After `CI verdict` has reported on PR #659 and the maintainer approves, read master's required status checks back, then set them to exactly `["CI verdict"]` with `gh api -X PATCH repos/Bidthedog/throng/branches/master/protection/required_status_checks -F strict=true -f 'contexts[]=CI verdict'` (FR-004; `strict` keeps the existing up-to-date rule as it is today). Read the result back.
+- [x] T037 After `CI verdict` has reported on PR #659 and the maintainer approves, read master's required status checks back, then set them to exactly `["CI verdict"]` with `gh api -X PATCH repos/Bidthedog/throng/branches/master/protection/required_status_checks -F strict=true -f 'contexts[]=CI verdict'` (FR-004; `strict` keeps the existing up-to-date rule as it is today). Read the result back.
 - [ ] T038 At merge, message the website session (named by the maintainer) with the final workflow names and the three badge URLs from T029, so the site's badges follow. Then record the post-merge checks in the PR: no run started by the merge (SC-004, quickstart §7); the first scheduled nightly's result; the next release as the tag-only workflow's first run (FR-030, SC-003; no task builds anything for FR-030).
 
 ---
@@ -248,6 +248,10 @@ recovery.
 - T029–T034 together (different documents).
 
 ## Implementation Strategy
+
+**Proved after merge (maintainer, 2026-11-17).** GitHub dispatches only a workflow that exists on the default branch,
+so T015, T016, T019 and T036's full dispatch run against master right after #659 merges, and their fixes land through
+follow-up PRs. Release preflight refuses a release until a full run on master is green, so no release ships unproven.
 
 1. **MVP = US1** after Phase 2: fast PR CI is the most-used loop.
 2. US2 + US3 (`pipeline.yml` complete and proven by dispatch, first full-run triage).
