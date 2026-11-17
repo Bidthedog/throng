@@ -124,7 +124,9 @@ const packageManager = {
       return sh('apt-get', ['update']);
     },
     install: () => sh('apt-get', ['install', '-y', '--no-install-recommends', 'throng']),
-    upgrade: () => sh('apt-get', ['upgrade', '-y']),
+    // Only throng: a whole-system upgrade drags in whatever the runner image has pending (Firefox's snap move
+    // waited 30 minutes for the Snap Store and failed the run). dnf below names the package the same way.
+    upgrade: () => sh('apt-get', ['install', '-y', '--only-upgrade', 'throng']),
     remove: () => sh('apt-get', ['remove', '-y', 'throng']),
     // `apt remove` leaves the package known, with its version, in the config-files state.
     installed: async () => {
