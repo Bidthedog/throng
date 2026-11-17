@@ -22,7 +22,9 @@ other file mentions it in a clause and links there. The rules below are the main
 | `docs/key-bindings.md` | Every default key binding, by group, with its action id, chord(s), scope and one-line description; the tier convention; multi-key chords; non-US layouts; rebinding | Settings detail |
 | `docs/preferences.md` | Every preference by group, with its key, default, allowed values and what it does; themes, icon packs, config file locations | Key bindings |
 | `docs/environment.md` | Every environment variable, by audience (running the app, development, testing). A variable that overrides an app setting is *listed* and linked to its preferences.md entry, never described again | Setting descriptions |
+| `docs/install-macos.md` | Installing on macOS: a quick start first, then the first-launch step, downloads, the `throng` command, upgrade and removal | Feature or settings detail |
 | `docs/linux.md` | The one list of what differs on Linux | How to set it up (install-linux.md), or the bindings themselves beyond the ones that differ |
+| `docs/macos.md` | The one list of what differs on macOS, and what the automated tests cannot check there | How to set it up (install-macos.md), or the bindings themselves beyond the ones that differ |
 | `docs/architecture.md` | All architecture, per domain, with mermaid component and topology diagrams | User instructions |
 | `docs/testing.md` | High level: the layers, the commands, the gate, the two E2E lanes; points at the `throng-testing` skill and its references | The detail the skill's references hold |
 | `docs/releasing.md` | High level: what a release is; points at the `throng-release` skill and its references | The procedure |
