@@ -810,7 +810,10 @@ The daemon reads the one value it needs (the command-observation interval) from 
 startup. It corrects that value in memory but never writes the file, because two processes writing
 one config file is how a config file gets truncated. Every key has a descriptor in its metadata
 registry, so the preferences editors can show every setting, binding and theme token, and
-completeness tests fail the build on a key without one.
+completeness tests fail the build on a key without one. The reverse holds too:
+`packages/core/tests/unit/no-inert-settings.test.ts` fails the build on a Settings descriptor that
+nothing outside the configuration layer reads, resolving reads through the TypeScript type checker
+so a setting read through an aliased section object still counts.
 
 ```mermaid
 flowchart LR
