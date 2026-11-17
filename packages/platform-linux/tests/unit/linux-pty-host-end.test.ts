@@ -26,8 +26,11 @@ vi.mock('../../src/proc-table.js', () => ({
 
 const { LinuxPtyHost } = await import('../../src/linux-pty-host.js');
 
-const SHELL = 4000;
-const CHILD = 4001;
+// Above any pid a real process can have (Linux caps pids at 4,194,304, macOS at 99,999). The host never signals its
+// own process (`escalationTargets` skips `process.pid`), so a fake pid the test runner's worker happened to hold was
+// silently dropped from the tree: 4001 was a fresh macOS runner's worker pid in the 1.0.0-alpha17 release gate.
+const SHELL = 9_000_000;
+const CHILD = 9_000_001;
 const STARTED = 1_000_000;
 
 const row = (pid: number, ppid: number): ProcRow => ({
