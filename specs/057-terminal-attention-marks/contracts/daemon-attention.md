@@ -12,7 +12,8 @@ Added to `packages/ipc-contract/src/terminal.ts`. JSON-RPC over the existing dae
   `failed` is sticky.
 - Never emitted while `AttentionProducerConfig.enabled` is false, or for a signal switched off.
 - `processExited` only when the exit is `unexpected` (R7). `terminal.exit` is unchanged.
-- `commandFinished` only on a command→null transition (FR-065), with `startup` per R8.
+- `commandFinished` only on a command→null transition confirmed by a second consecutive observation of null
+  (FR-065, amended 2026-11-18), with `startup` per R8. `terminal.command` still publishes null at the first.
 - Never emitted while no sink is attached. The signal goes to the ledger with `whileDetached: true`
   instead (FR-066).
 

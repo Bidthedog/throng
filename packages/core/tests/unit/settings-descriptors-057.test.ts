@@ -64,4 +64,9 @@ describe('057 describes every setting it adds (T049)', () => {
   it('describes every new key', () => {
     for (const { key } of NEW_KEYS) expect(declared, `${key} has no descriptor`).toContain(key);
   });
+
+  it('Command finished states how late it can be: two observations of nothing (FR-061, FR-065 amended 2026-11-18)', () => {
+    const d = SETTINGS_METADATA.find((s) => s.key === 'terminals.attention.signals.commandFinished');
+    expect(d?.description).toContain('up to two Command tracking intervals late');
+  });
 });

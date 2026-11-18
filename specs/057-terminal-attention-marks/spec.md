@@ -83,7 +83,7 @@ panel itself. The link is the reason the toast exists.
 | Signal | Raised when | Kind of mark | Accuracy | Default |
 |---|---|---|---|---|
 | **Process exited** | The terminal's process ends, by a path the user did not cause (FR-064) | Attention for exit code 0, Failed otherwise | Exact | On |
-| **Command finished** | The foreground command ends and nothing replaces it, as observed by 025's shared command observation (FR-019, FR-022) | Attention | Exact, up to one observation interval late | On |
+| **Command finished** | The foreground command ends and nothing replaces it, as observed by 025's shared command observation (FR-019, FR-022) | Attention | Exact, up to two observation intervals late (FR-065, amended 2026-11-18) | On |
 | **Bell** | The program rings the terminal bell | Attention | Exact, as a request | On |
 | **Notification** | The program sends a terminal desktop notification in any of the three widely used forms (the iTerm2, rxvt and kitty conventions). It carries a message | Attention | Exact, as a request | On |
 | **Progress ended** | The program reports that progress it was showing completed, or failed (the ConEmu / Windows Terminal progress convention) | Attention when completed, Failed on error | Exact, as a request | On |
@@ -621,7 +621,8 @@ covers them, and it works in every shell flavour because it needs no cooperation
 FR-022).
 
 **Independent Test**: Run a ten-second sleep in a terminal, switch tabs, and check that the tab is marked
-within two seconds of the command ending.
+within three seconds of the command ending *(two before FR-065's amendment of 2026-11-18, which adds one
+observation interval; SC-002)*.
 
 **Acceptance Scenarios**:
 
@@ -633,6 +634,10 @@ within two seconds of the command ending.
    description says so.
 3. **Given** a command that starts a background process and exits, **When** the command ends, **Then**
    the panel is marked. Under 025 FR-022a an orphaned grandchild does not count as running.
+4. **Given** a shell loop that runs one short command after another (`while [ ! -e flag ]; do sleep 1;
+   done`) in a terminal that is not focused, **When** one observation falls between two of its commands,
+   **Then** the panel is not marked: one observation of nothing is not a finish (FR-065, as amended
+   2026-11-18).
 
 ---
 
@@ -1079,6 +1084,20 @@ lands on a marked panel and clears it.
   close.
 - **FR-065**: Command finished MUST be raised when the observed foreground command changes from a command
   to nothing. A change from one command to another MUST NOT raise it.
+  *Amended 2026-11-18 (maintainer): "nothing" MUST be observed on **two consecutive observations** before
+  Command finished is raised, naming the command the observation before them saw. An observation of a
+  command between them cancels it. Why: the foreground command is derived from process snapshots alone (025
+  FR-022, FR-022a), so a snapshot taken between two iterations of a shell loop (`while [ ! -e flag ]; do
+  sleep 1; done`) sees the shell itself and raised a spurious "Command finished 'sleep 1'". Only the signal
+  waits: the observed value is still published at the first observation, so the running-command display,
+  025 FR-019g's final observation when a shell exits, and every other reader of the observation are
+  unchanged, and a shell that exits is Process exited (FR-064), never a pending Command finished. A failed
+  observation (025 FR-019e) is not an observation of nothing. Cost: up to one more observation interval of
+  latency (SC-002 amended with it). A command finishing returns the prompt, whose output keeps the terminal
+  observed every interval (025 FR-019i), so with the default one-second interval the second observation is
+  one second later; a finish in a terminal gone quiet with no output at all waits for the next one-in-ten
+  pass. The loop above is not made exact, only far rarer: two consecutive snapshots must both fall in the
+  gap between its commands.*
 - **FR-065a**: A command throng ran as one of the terminal's startup commands (025) MUST be treated like
   any other command. Its finish raises Command finished if the panel is unattended at that moment
   (FR-004), and nothing otherwise.
@@ -1143,8 +1162,8 @@ lands on a marked panel and clears it.
 - **SC-001**: A user can tell which of their open projects needs them from the project list alone,
   without switching project, for every exact signal that is enabled.
 - **SC-002**: A mark, and its notification, appear within 1 second of a bell, notification, progress end
-  or process exit. They appear within 1 second plus one command-observation interval of a command
-  finishing.
+  or process exit. They appear within 1 second plus two command-observation intervals of a command
+  finishing *(one interval before FR-065's amendment of 2026-11-18, which waits for a second observation)*.
 - **SC-003**: With default settings, an hour of ordinary interactive use of a shell the user is focused
   on raises zero marks.
 - **SC-004**: A program ringing the bell 1,000 times a second for 10 seconds produces the same terminal

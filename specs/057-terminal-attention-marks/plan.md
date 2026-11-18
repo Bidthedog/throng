@@ -43,7 +43,7 @@ The approach, from [research.md](./research.md):
 
 **Performance Goals**:
 - SC-002: mark and notification within 1 s of a bell, notification, progress end or exit; within
-  1 s plus one observation interval of a command finishing.
+  1 s plus two observation intervals of a command finishing (one before FR-065's amendment of 2026-11-18).
 - SC-004: a 1,000/s bell storm for 10 s changes terminal output timing by no more than measurement
   noise, and raises one mark and one notification.
 - Holder updates re-render only the holders whose derived state changed. Selectors compare by value
