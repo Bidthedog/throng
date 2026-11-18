@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu, TEST_SHELL, requestAppClose } from './harness.js';
+import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu, TEST_SHELL, requestAppClose, HOST_OS } from './harness.js';
 // The drain budget itself, so the validity-bound below tracks the production constant instead of
 // restating a number that was true when it was written. `ui-settings` is a pure reader with no
 // OS or native imports — it says so in its own docblock — so importing it here costs nothing.
@@ -148,10 +148,17 @@ async function ordinaryClose(app: ElectronApplication): Promise<void> {
 }
 
 /**
- * Prepare an ordinary close addressed at a SPECIFIC window rather than at `getAllWindows()[0]`,
- * and hand back the trigger.
+ * Prepare the user's way to END the app on this platform, and hand back the trigger. The trigger
+ * only REQUESTS the end; the caller waits on whatever it is measuring.
  *
- * TWO separate reasons, and the split into prepare-then-fire is the second of them:
+ * Windows and Linux: close the MAIN window, addressed by its own handle rather than
+ * `getAllWindows()[0]`. macOS: closing the main window only HIDES it (070 FR-028) and the app
+ * never ends, so the trigger is the QUIT, which runs the same shutdown — the same drain — through
+ * the main window's close flow. The claim each test makes is about the app ending, and this is how
+ * a macOS user ends it.
+ *
+ * TWO separate reasons for the Windows/Linux handle, and the split into prepare-then-fire is the
+ * second of them:
  *
  *  - `[0]` is only the main window while there is ONE window. Measured with a sub-workspace
  *    window open, `[0]` was the CHILD — closing it left the main window alive, the app never
@@ -162,15 +169,34 @@ async function ordinaryClose(app: ElectronApplication): Promise<void> {
  *    nothing, which is the anti-pattern this file already calls out for the Themes case.
  *    Resolving the handle up front leaves ONE `evaluate` between the decision and the close,
  *    which is the race the user is actually in.
+ *
+ * Either way the channel is WARMED here: the first `evaluate` pays connection setup that later
+ * ones do not, and that cost belongs outside the race, not inside it. The quit needs no handle —
+ * it is one `app.evaluate` — so warming that channel is all macOS has to prefetch.
  */
+async function armAppEnd(app: ElectronApplication, main: Page): Promise<() => Promise<void>> {
+  if (HOST_OS === 'macos') {
+    await app.evaluate(() => true);
+    return async () => {
+      await app.evaluate(({ app: electronApp }) => electronApp.quit());
+    };
+  }
+  const handle = await app.browserWindow(main);
+  await handle.evaluate(() => true);
+  return async () => {
+    await handle.evaluate((w) => w.close());
+  };
+}
+
+/** {@link armAppEnd}, and wait for the app to be gone — what "survives closing the main window" waits on. */
 async function armMainWindowClose(
   app: ElectronApplication,
   main: Page,
 ): Promise<() => Promise<void>> {
-  const handle = await app.browserWindow(main);
+  const end = await armAppEnd(app, main);
   return async () => {
     const closed = app.waitForEvent('close', { timeout: 20_000 });
-    await handle.evaluate((w) => w.close());
+    await end();
     await closed;
   };
 }
@@ -486,7 +512,7 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', {
         armedAt = Date.now();
         await expect(child.locator('.panel-box')).toHaveCount(2);
 
-        // …and the user closes the MAIN window, which takes the group down with it
+        // …and the user closes the MAIN window (quits, on macOS), which takes the group down with it
         // (`WindowManager.closeChildren`). The child never gets a close of its own to react to.
         await closeMain();
       },
@@ -595,31 +621,24 @@ test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing th
           .not.toBe(null);
         expect(readThemeAccent(cfgRoot, 'throng')).not.toBe('#123456');
 
-        // Resolve the main window's handle BEFORE the edit. `app.browserWindow()` is a CDP
-        // round-trip, and MEASURED it costs more than the 150ms debounce all by itself — so
-        // paying for it after the edit lets the timer fire while the harness is still looking
-        // the window up, and the test passes without the drain doing anything. Prefetching it
-        // leaves one `evaluate` between the edit and the close, which is the race the user is
-        // actually in.
-        const mainHandle = await app.browserWindow(win);
+        // Resolve the main window's handle (Windows/Linux) BEFORE the edit, and WARM THE CHANNEL
+        // (`armAppEnd`). `app.browserWindow()` is a CDP round-trip, and MEASURED it costs more than
+        // the 150ms debounce all by itself — so paying for it after the edit lets the timer fire
+        // while the harness is still looking the window up, and the test passes without the drain
+        // doing anything. The first `evaluate` on a channel also pays connection setup that later
+        // ones do not, and on a slow machine that setup alone can outlast the debounce, so the test
+        // would report a defect when it had merely failed to stage its own scenario. Both costs move
+        // outside the race; neither weakens the bound, which still requires the end to be REQUESTED
+        // inside 150ms. On macOS the end is the quit (070 FR-028), one `app.evaluate` with no
+        // handle to look up.
+        const endApp = await armAppEnd(app, win);
 
-        // WARM THE CHANNEL, for the same reason the handle is prefetched above and one step
-        // further. The first `evaluate` on a handle pays connection setup that later ones do not,
-        // and the whole budget below is 150ms — so on a slow machine that setup alone can outlast
-        // the debounce, the timer fires first, and the test reports a defect when what actually
-        // happened is that it could not stage its own scenario.
-        //
-        // A no-op evaluate here moves that cost outside the race. It does not weaken the bound:
-        // the assertion still requires the close to land inside 150ms, it just stops measuring
-        // CDP warm-up as if it were the user's reaction time.
-        await mainHandle.evaluate(() => true);
-
-        // THE DECISION: a colour edit, then the user closes at once — inside the 150ms debounce.
+        // THE DECISION: a colour edit, then the user ends the app at once — inside the 150ms debounce.
         const closed = app.waitForEvent('close', { timeout: 20_000 });
         await prefs.getByTestId('control-colours.accent-hex').fill('#123456');
         // The debounce is armed by the edit, so the race starts HERE.
         const armedAt = Date.now();
-        await mainHandle.evaluate((w) => w.close());
+        await endApp();
         const closeRequestedAfterMs = Date.now() - armedAt;
         // validity-bound: 150 is the settings-write debounce, a production constant, and this is
         // not a performance claim. The test is about what happens when a close races an armed
@@ -763,7 +782,8 @@ test('#86 C19: an un-applied JSON-tab edit survives closing the MAIN window (032
         // The baseline must NOT already be the value under test, or a pass proves nothing.
         expect(readSettingsTheme(cfgRoot)).not.toBe('Matrix');
 
-        const mainHandle = await app.browserWindow(win);
+        // The main window's close on Windows/Linux, the quit on macOS (070 FR-028): see `armAppEnd`.
+        const endApp = await armAppEnd(app, win);
 
         // THE DECISION: a valid edit that has NOT been applied — the user has not left the editor,
         // and under FR-017 nothing else will write it.
@@ -780,7 +800,9 @@ test('#86 C19: an un-applied JSON-tab edit survives closing the MAIN window (032
           'FR-017: nothing may write the buffer while the user is still in the editor',
         ).not.toBe('Matrix');
 
-        await mainHandle.evaluate((w) => w.close());
+        // The quit's `mainWindow.show()` on macOS cannot apply the buffer: FR-017's apply triggers
+        // are leaving the JSON view, switching tab and closing Preferences, never a focus change.
+        await endApp();
         await closed;
       },
       { dataDir, userDataDir, env: { THRONG_CONFIG_ROOT: cfgRoot } },
@@ -864,9 +886,11 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
         // sleep-justified: storedPanels() flattens the split tree and drops position/order, so a drag-triggered reorder is invisible to it — no exposed read changes value only once this write lands.
         await win.waitForTimeout(1500);
 
-        // Prefetch the handle — `app.browserWindow()` is a CDP round-trip and must not be
-        // counted as time the CLOSE took.
-        const mainHandle = await app.browserWindow(win);
+        // Prefetch the handle and warm the channel (`armAppEnd`) — neither may be counted as time
+        // the CLOSE took. On macOS the ordinary close is the quit (070 FR-028): closing the window
+        // only hides it, and the quit runs the same drain through the window's close flow, so the
+        // ghost is asked (or not) exactly as it is elsewhere.
+        const endApp = await armAppEnd(app, win);
         // Measured on the WINDOW, not on the app's exit: "Closing throng…" is an overlay on
         // this window, and the user's complaint is that it sits there. (The app's PROCESS
         // outliving it is a separate, pre-existing defect — the hidden ghost keeps
@@ -879,7 +903,7 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
         const proc = app.process();
         const exited = new Promise<boolean>((resolve) => proc.once('exit', () => resolve(true)));
         const requestedAt = Date.now();
-        await mainHandle.evaluate((w) => w.close());
+        await endApp();
         await gone;
         const closeTookMs = Date.now() - requestedAt;
 
