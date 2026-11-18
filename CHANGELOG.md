@@ -45,7 +45,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **Upgrading keeps Panel ticked** for Information, Success and Attention notifications, so those notices stay in the Notifications panel. ([#657](https://github.com/Bidthedog/throng/issues/657))
 - **An exclusion glob made of repeated extglobs** no longer hangs the File Explorer or search. Extglob forms such as `+(…)` and `@(…)` now match as plain text in exclusion globs; braces and `**` work as before. ([#661](https://github.com/Bidthedog/throng/issues/661))
 - **A terminal killed on Linux or macOS** now says it ended, as it does on Windows, instead of disappearing with no notice — whether it was ended from throng or killed from outside.
-- **On macOS, Cmd+click follows a link in a preview** and its hint names Cmd; **Cmd+middle-click resets a diagram**; and a menu's shortcuts read Cmd and Option rather than Meta and Alt.
+- **On macOS, Cmd+click follows a link in a preview** and its hint names Cmd; **Cmd+middle-click resets a diagram**; and a menu's shortcuts read Cmd and Option rather than Meta and Alt. **A menu's advertised shortcut now runs from the keyboard on macOS** — Cmd+C on an open File Explorer menu copies and closes it, as Ctrl+C does elsewhere.
 
 ## 1.0.0-alpha17 — 2026-11-17
 

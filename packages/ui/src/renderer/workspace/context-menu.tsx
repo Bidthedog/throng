@@ -15,13 +15,24 @@ import { withDividers } from './menu-dividers.js';
 import { resolveKeydown } from '../config/chord-key.js';
 import { endSplitMode } from './split-mode.js';
 
-/** Match a keydown against an item's advertised shortcut (e.g. "Ctrl+C"), for in-menu shortcuts. */
-export function chordMatchesShortcut(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'shiftKey' | 'altKey'>, shortcut: string): boolean {
-  const wanted = normalizeToken(shortcut);
+/**
+ * Match a keydown against an item's advertised shortcut (e.g. "Ctrl+C"), for in-menu shortcuts.
+ *
+ * Both sides are compared as the platform READS them (`chordLabel`, the identity off macOS), because a row's shortcut
+ * comes from `firstBinding`, which on macOS is already the label — `Cmd+C`, never the token `Meta+C` — and a
+ * token-to-label comparison there matched nothing (070 FR-029).
+ */
+export function chordMatchesShortcut(
+  e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'shiftKey' | 'altKey'> & { metaKey?: boolean },
+  shortcut: string,
+): boolean {
+  // The label's macOS names back to token names first, so `chordLabel` orders every modifier the same way on both sides.
+  const asToken = shortcut.replace(/\bCmd\+/g, 'Meta+').replace(/\bOption\+/g, 'Alt+');
+  const wanted = chordLabel(normalizeToken(asToken));
   return (
     resolveKeydown(e, (ev) => {
       const token = eventToToken(ev);
-      return token !== null && normalizeToken(token) === wanted ? true : null;
+      return token !== null && chordLabel(normalizeToken(token)) === wanted ? true : null;
     }) === true
   );
 }

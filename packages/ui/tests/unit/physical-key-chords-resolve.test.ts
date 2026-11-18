@@ -5,10 +5,15 @@
  * keyboard events (the window listener, `editor-chrome.tsx`, the terminal reservation) and the two
  * preview-scope resolutions, because `resolveScoped` reads `document.activeElement` for a preview.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_KEYBINDINGS,
+  WINDOWS_HOST_TRAITS,
+  configureHostTraits,
+  firstBinding,
+  macosHostTraits,
   resolveAction,
+  shippedBindingsFor,
   type Keybindings,
   type WorkspaceLayout,
 } from '@throng/core';
@@ -31,6 +36,34 @@ describe('an in-menu shortcut on a digit fires from the physical key (FR-026)', 
 
   it('and a produced-character shortcut still matches as before', () => {
     expect(chordMatchesShortcut({ key: 'c', code: 'KeyC', ctrlKey: true, shiftKey: false, altKey: false }, 'Ctrl+C')).toBe(true);
+  });
+});
+
+describe('on macOS an in-menu shortcut fires from its Cmd chord (070 FR-029)', () => {
+  // Menus take their shortcut from `firstBinding`, which on macOS is the LABEL (`Cmd+C`), not the token (`Meta+C`).
+  // Measured on a hosted macOS runner: the explorer menu advertised Cmd+C, got Cmd+C, and stayed open.
+  const CMD_C = { key: 'c', code: 'KeyC', ctrlKey: false, shiftKey: false, altKey: false, metaKey: true };
+  const CMD_OPTION_SHIFT_V = { key: '◊', code: 'KeyV', ctrlKey: false, shiftKey: true, altKey: true, metaKey: true };
+
+  afterEach(() => configureHostTraits(WINDOWS_HOST_TRAITS));
+
+  it('matches the shortcut a menu row actually carries', () => {
+    configureHostTraits(macosHostTraits('/tmp/throng-ipc', []));
+    const shortcut = firstBinding(shippedBindingsFor('macos'), 'file.copy');
+    expect(shortcut).toBe('Cmd+C');
+    expect(chordMatchesShortcut(CMD_C, shortcut!)).toBe(true);
+  });
+
+  it('matches a labelled shortcut with Option in it, and the raw token as well', () => {
+    configureHostTraits(macosHostTraits('/tmp/throng-ipc', []));
+    expect(chordMatchesShortcut(CMD_OPTION_SHIFT_V, 'Option+Shift+Cmd+V')).toBe(true);
+    expect(chordMatchesShortcut(CMD_C, 'Meta+C')).toBe(true);
+  });
+
+  it('does not match a different key or a missing Cmd', () => {
+    configureHostTraits(macosHostTraits('/tmp/throng-ipc', []));
+    expect(chordMatchesShortcut({ ...CMD_C, key: 'x', code: 'KeyX' }, 'Cmd+C')).toBe(false);
+    expect(chordMatchesShortcut({ ...CMD_C, metaKey: false }, 'Cmd+C')).toBe(false);
   });
 });
 
