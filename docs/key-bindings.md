@@ -142,6 +142,7 @@ four splits are on every panel's **+** button and in its **Split** menu.
 | Forward | `navigate.forward` | `Alt+ArrowRight` | Editor · Preview | Show the next file in the focused editor or preview's history, after going Back. |
 | Open Link | `preview.followLink` | `Ctrl+Enter` | Editor · Preview | Open the link under the caret in an editor, or the focused link in a preview, exactly as Ctrl+click does. In an editor with no link under the caret it keeps the editor's own meaning. |
 | Go to Heading | `preview.goToHeading` | `Ctrl+G` | Preview | Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. |
+| Print… | `preview.print` | `Ctrl+P` | Preview | Open Print Preview for the active preview: choose a printer, paper, orientation, margins, scale, pages and copies, see the pages as they will print, then print. It never prints without showing Print Preview first. |
 
 The mouse's own back and forward buttons do the same as **Back** and **Forward** over an editor or
 preview panel; they are not a rebindable chord.

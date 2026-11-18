@@ -190,6 +190,208 @@ can keep browsing or press **F2** to rename the file.
   enter Focus Mode with it. Embed a diagram file in a Markdown document with
   `![[flow.mmd]]` or `![Flow](flow.mmd)`; a plain link to it stays a link. Give an inline diagram a
   fixed height with ```` ```mermaid height=300 ```` or `![[flow.mmd|300]]`.
+- **Callouts**: a blockquote that opens with `[!note]`, `[!tip]`, `[!warning]` or another Obsidian type
+  draws as a coloured box with its icon and title. `[!type]-` starts it folded and `[!type]+` makes it
+  foldable: click its title, or Tab to it and press Enter. Their colours are the theme's
+  ([Markdown preview › Callouts](preferences.md#themes-and-icon-sets)).
+- **Maths**: `$…[throng](../README.md) › [Docs](README.md) › Quick start
+
+# Quick start
+
+A whistle-stop tour of throng, from first launch to a working project. Ten minutes, and you will
+know your way around. Every chord mentioned is rebindable; the full list is in
+[key bindings](key-bindings.md), and every setting in [preferences](preferences.md).
+
+## Before you start
+
+Install throng on [Windows](install-windows.md), [Linux](install-linux.md) or [macOS](install-macos.md) (best
+endeavours: checked by automated tests only, so please [report](https://github.com/Bidthedog/throng/issues) anything
+that looks wrong on a Mac), or
+[run it from a clone](installation.md#running-from-source).
+
+## First launch
+
+throng opens as one window with three panes:
+
+| Pane | What it holds |
+|---|---|
+| **Left** — Projects | Your projects, their categories, and any torn-off windows |
+| **Centre** — Workspace | Tabs of panels: terminals, editors, previews, searches |
+| **Right** — File Explorer | The active project's file tree |
+
+Collapse either side pane to a rail with the arrow button at its edge, or **Ctrl+Shift+Alt+J** (left) and
+**Ctrl+Shift+Alt+K** (right). Jump focus between them, left to right, with **Ctrl+Shift+Alt+B**,
+**N** and **M**. Whichever pane has focus wears the outline.
+
+Everything is empty until you create a project.
+
+## 1. Create a project
+
+A project is **one root folder, one colour, one workspace**. Click **+** in the Projects header,
+pick a folder, and accept or change the suggested name and colour. Projects cannot overlap or nest.
+
+- **Switch** by clicking a project, or with **Ctrl+Shift+Alt+PageDown** / **PageUp** from anywhere.
+  Choosing from the list keeps focus in the list, so the arrow keys and **Enter** carry on there.
+- **Right-click a project** (or **Shift+F10**) for Edit, Rename, Remove, **Move to Category ▸** and
+  **Unload**, which closes its tabs without forgetting them — its terminals keep running, or end,
+  as the row says.
+- **Categories** group projects; every project starts in **In Progress**. Create one from Move to
+  Category ▸ **New Category…**, then rename, minimise, reorder or delete it from its header's menu.
+  A minimised category still lists the projects you have loaded, so open work stays one click away.
+  Drag a project by its row to move it.
+
+Removing a project from throng never deletes anything on disk.
+
+You can also open a folder as a project from your file manager, or with `throng <path>` in a terminal. A folder inside an
+existing project selects that project.
+
+## 2. Lay out the workspace
+
+The centre pane is a dock of **tabs**, each holding **panels**.
+
+- **New tab** with **+** on the tab strip, or drop a file from the File Explorer on **+** to open it in a
+  new tab.
+- **Split a panel** with the **+** in its header: choose **Split Down**, **Up**, **Right** or
+  **Left** and a new empty panel appears on that side. The same four are under **Split** in the
+  panel's right-click menus, and from the keyboard press
+  [Ctrl+Shift+Alt+End](key-bindings.md#focus--zoom), then an arrow.
+- **Rearrange** by dragging a panel's header onto another panel's edge; drop on its centre to stack
+  it. Drag it to the very edge of the panel area instead and it runs the **whole** length of that
+  side — a full-height column or a full-width row, a third of the area. Where two edges meet, the
+  left or right edge wins. **Esc** during a drag cancels it.
+- **Crowded strip?** It scrolls, with arrows either side, and **▾** or **Ctrl+Shift+Alt+T** opens a
+  picker that finds any tab by name.
+- A new panel starts **untyped**: choose what it is from its **Panel Type** drop-down and press
+  **Confirm**.
+- Panels name themselves after what they show; an empty one is a **Blank Panel** until you give it something.
+- Rest the pointer on any control to read what it does.
+- **Focus Mode**: let a panel fill its tab with the **⤢** in its header, **Enter Focus Mode** in its menu,
+  or [Shift+Alt+Enter](key-bindings.md#focus--zoom); the same again (**Exit Focus Mode**), or **Esc**, puts it
+  back. While Focus Mode is on the panel's status bar says so, the tab's other panels are hidden, both side panes
+  fold away (each pane's own button still opens it, and leaving Focus Mode puts each back as it was),
+  nothing can be added to that tab, and the panel cannot be split, moved or destroyed. It lasts across tab and
+  project switches, but not a restart.
+
+Move between panels with **Ctrl+Shift+Alt+Arrows** — the caret goes with you, into whatever you land
+on. Your whole layout, splits, sizes and zoom included, is saved per project and restored next time.
+
+## 3. Run a terminal
+
+Make a panel a **Terminal** and choose its **flavour** — Windows PowerShell, PowerShell 7, Command
+Prompt, Git Bash, or one of your own — with optional shell arguments and a startup command such as
+`npm run dev`. Confirm, and you have a live shell at the project root.
+
+- **The form remembers what you typed** before, per terminal type: click into Startup Command or
+  Shell Arguments to see it, type to narrow it, **Delete** to forget the highlighted value, and the clear button beside
+  the field to forget them all ([settings](preferences.md#terminal)).
+- **A terminal's name says what it is running**, its shell and its folder —
+  `ping localhost -t | Git Bash (D:\git\throng)` — and you can reshape it with the
+  [terminal title template](preferences.md#terminal-title-templates).
+- **Terminals outlive the window.** A background service owns them, so closing throng leaves them
+  running; reopen it and they reattach with their scrollback. Closing asks what to do with any still
+  busy.
+- **Remember the last running command** on a terminal panel to run it again when the terminal next
+  starts. For Claude Code it remembers the command that resumes the exact session that was running,
+  keeping your other options, so the conversation picks up where it left off.
+- **Paths and links are clickable.** A compiler's `src/foo.ts:42:7`, Claude Code's
+  `src/foo.ts:42-50`, a URL, a hyperlink a program prints — **Ctrl+click** follows it (a project file opens in throng at that line; a web address in
+  your browser), and **right-click** offers every other place it could open. Nothing is ever run by
+  a click.
+- **A terminal can ask for you.** When a command finishes, a program exits, or something rings
+  the bell, the panel gets an **attention mark** — a blinking circle; so do its tab, its project (in
+  place of its colour dot) and, if folded away, its category, and throng can also raise a notification
+  and a count on the taskbar icon. The circle on a tab, project or category shows how many panels are
+  waiting beneath it; hover a project's or category's mark to see which they are, and what failed.
+  Click a notification to go straight to its panel. Click into the panel and, a moment later, the mark
+  goes, or press **Ctrl+Shift+Alt+G** to jump to the next marked panel in any project. To remind
+  yourself to come back to any panel, right-click it and choose **Flag**: it is marked the same way,
+  with no notification, until you have left it and come back. To
+  have a program such as Claude Code ring the bell or send a notification when it needs you, see
+  [its own documentation](https://code.claude.com/docs). Claude Code sends its "waiting for your input"
+  notification only after a minute idle; for one as soon as it finishes, lower its
+  `messageIdleNotifThresholdMs` setting (in milliseconds). What raises a mark is in
+  [Preferences](preferences.md#terminal), and how it is announced under
+  [Notifications](preferences.md#notifications).
+- **Find in the scrollback** with **Ctrl+F**; it searches read-only and never types at the shell.
+- **Something wrong?** A terminal that cannot start says why on the panel and offers **Try again**;
+  if the background service stops, a **↻** in the status bar restarts it.
+- **Notices** appear as toasts that leave after a few seconds unless the pointer or focus is on them.
+  Each also stays in the **Notifications panel** at the bottom of the right pane until you dismiss it,
+  naming the project, tab and panel it is about; click it to go there. A count beside the panel's title,
+  and below **File Explorer & Notifications** when the right pane is collapsed, shows how many are waiting, and both side
+  panels can be minimised. Which notices go where is under [Notifications](preferences.md#notifications).
+
+## 4. Edit files
+
+Click a file in the **File Explorer** to open it in the last active editor, or drag one in from
+Windows Explorer. The panel it opens in flashes briefly, and the keyboard stays in the tree, so you
+can keep browsing or press **F2** to rename the file.
+
+- **Move and copy files between projects** with [Cut, Copy and Paste](key-bindings.md#file-explorer)
+  in the tree: cut or copy in one project, switch, and paste in another. The Paste menu item names
+  what will land and which project it came from. Items picked from different folders keep their
+  folder structure where they land. An editor or preview left open on a file you moved to another
+  project stays where it was, read-only, saying where the file went; **Save As** keeps any unsaved
+  text by saving it into that project.
+- **A name that is already taken** asks first — **Replace**, **Skip** or **Keep both** — and a
+  replaced item goes to the Recycle Bin unless [When Paste replaces an item](preferences.md#file-explorer)
+  says otherwise.
+- **A large paste** (over 5 MB) that takes more than a moment shows a progress bar with a cancel button; cancelling asks whether to keep what has
+  landed or roll the whole paste back. **Ctrl+Z** undoes a move between projects from either one.
+
+- **Save** with **Ctrl+S**, **Save All** with **Ctrl+Shift+S**, **Save As** with **Ctrl+Alt+S**.
+- **55 languages** are highlighted; the language picker in the status bar corrects a wrong guess.
+  A file is recognised by its name as well as its extension — `Dockerfile`, `.env`, `.gitignore`,
+  and `tsconfig.json` as JSON with comments. The language comes from, first to last: the picker's
+  choice for that file, a name throng recognises, your
+  [Language by file extension](preferences.md#languages) table, then the extension. The **✕**
+  beside a language you picked, or **Reset Language** in the editor's right-click menu, hands the file
+  back to detection.
+- The status bar shows the caret's position, the selection and the document's size.
+- UTF-16 files and the Windows code pages (1250–1258) open and save in their own encoding; a file that is
+  not Unicode is read in the [fallback encoding](preferences.md#editor). The status bar's encoding and
+  line-ending indicators change a document's encoding or reopen it in another, and
+  [switch its line endings](key-bindings.md#editor) between LF, CR and CRLF — each an edit you can undo.
+  A reopen lasts for that editor session only: to fix a misread file, change its encoding and save. A
+  notice above the editor says so, and also flags a file that looks misread when it opens, suggesting the
+  code page it is probably in. After a reopen it offers **Convert to UTF-8**, or for a code page names the
+  [fallback encoding](preferences.md#editor) to set, so the file opens that way every time. A byte a code page leaves undefined
+  is kept as a placeholder character and saved back unchanged.
+  **View Whitespace** in the status bar shows every space, tab, line break and invisible character.
+- **Column select** with **Alt+drag** or **Shift+Alt+Arrow**; **Ctrl+X** with nothing selected cuts
+  the whole line.
+- **Word wrap** is the held chord **Ctrl+E,W** — hold Ctrl, press E, then W.
+- The same file open in two places is **one document**, with one undo history, and unsaved edits
+  survive a crash.
+- **Preview** a Markdown file beside its editor from the status bar's preview button; it follows your
+  typing and scrolls with the editor. With **Default open action** set to Preview, clicking notes in
+  the tree reuses the preview you already have ([Open previews in](preferences.md#previews)), and you
+  can drop a `.md` file onto a preview to show it there — or onto an empty panel, which opens it the
+  way **Default open action** says. Right-click a note — in the tree or in Find in Files' results — and
+  choose **Open In › Last Preview Panel** to show it in the preview named beside the item, or **New
+  Preview Panel** for a fresh one; once the note has its preview open, **Current Preview** goes to it.
+  A preview's status bar counts the document's lines, characters and words, and while you select text it
+  shows how much and which source lines.
+- **Fold** a Markdown document's sections from the gutter beside each heading, the right-click menu's
+  **Outlining** submenu, or **Ctrl+M** chords ([Markdown bindings](key-bindings.md#markdown)); an editor
+  and its preview fold together. **Collapse All Inside This Section** folds just one branch.
+- **Tick a task** (`- [ ]`) by clicking its checkbox in a preview: the file changes, and an open editor
+  shows it at once and can undo it.
+- **Diagrams**: a `mermaid` code block in a preview draws as its diagram, and a `.mmd` or `.mermaid`
+  file previews as one, filling its panel. The buttons at a diagram's top left fit it, zoom it in or
+  out, show it at 100%, or **Enter Focus Mode**: it fills the whole middle section of the tab and the side panes
+  close, as with a panel's Focus Mode (**Exit Focus Mode**, or Esc, puts it and them back); drag with the middle mouse button to pan. With a diagram focused, the panel zoom
+  keys zoom just that diagram, and Ctrl+wheel zooms it about the pointer. Each zoom step, here or on an editor
+  or preview panel, briefly shows the new zoom percentage in that box's top-right corner. Right-click a diagram to **Copy Diagram as Image** or
+  enter Focus Mode with it. Embed a diagram file in a Markdown document with
+  `![[flow.mmd]]` or `![Flow](flow.mmd)`; a plain link to it stays a link. Give an inline diagram a
+  fixed height with ```` ```mermaid height=300 ```` or `![[flow.mmd|300]]`.
+ inline, `$…$` on its own lines, or a `math` code block typesets as an equation, by
+  GitHub's rules — `$5 and $10` stays prose. A malformed expression shows its source, with the error in its
+  hover. **Typeset math** in [Settings](preferences.md) turns it off.
+- **Print…** (**Ctrl+P** in a preview, or either of its menus) opens **Print Preview**: pick the printer,
+  paper, orientation, margins, scale, pages and copies, see the pages as they will print, then **Print**.
+  Folded sections and callouts print open, in fixed print colours whatever the theme.
 - In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and
   Obsidian-style `[[wikilinks]]` follow like any other link, including vault-root ones such as
   `[[Docs/Guide]]`; hover one to see its target. Images embed with `![[diagram.png]]`, with

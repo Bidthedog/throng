@@ -722,6 +722,24 @@ target's candidates, from the document's folder then the project root, come from
 context menu and readout, and an `![[image.png]]` embed's source. A candidate that leaves the project is
 never probed.
 
+**Printing.** A provider whose descriptor declares `print` (`document` or `pages`) supplies `printable`
+on its view; Markdown and Mermaid share `renderer/preview/print/printable.ts`, which clones the body,
+opens every fold, strips throng's controls and writes a self-contained document in the fixed print
+palette (`core/src/preview/print-palette.ts`). Main's `print-controller.ts` owns the one job: it loads
+that document into a hidden host with JavaScript off (`electron-print-engine.ts`, behind core's
+`IPrintEngine`), shows `printToPDF` pages in the modal Print Preview window (`print-preview-window.ts`),
+and prints the same host silently with the same settings. Settings persist in `print-settings.json`.
+
+```mermaid
+flowchart LR
+  P["Preview body"] -->|printable| R["throng.print.open"]
+  R --> C["print-controller"]
+  C --> E["IPrintEngine: hidden host"]
+  E -->|printToPDF| W["Print Preview window"]
+  W -->|Print| C
+  C -->|print, silent| E
+```
+
 ### Adding a preview provider
 
 A preview provider is two files and two registration lines. Nothing else in the codebase names a
