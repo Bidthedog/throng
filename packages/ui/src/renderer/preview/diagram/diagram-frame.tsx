@@ -76,6 +76,7 @@ import {
 } from './diagram-zoom.js';
 import './diagram.css';
 import { logCaught } from '@throng/core';
+import { primaryModifierHeld } from '../../config/host-modifiers.js';
 
 export const DIAGRAM_MIN_SCALE = 0.1;
 /** B5 — how long a resize must pause before a diagram re-fits (the tables' `TABLE_RESIZE_DEBOUNCE_MS`). */
@@ -268,10 +269,10 @@ export function DiagramFrame({
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>): void => {
       if (e.button !== 1) return;
-      // Ctrl+middle-click is the zoom-reset gesture, not a pan (2026-10-13). Preventing this press would make
+      // Ctrl+middle-click (Cmd on macOS, 070 FR-030) is the zoom-reset gesture, not a pan (2026-10-13). Preventing this press would make
       // Chromium drop the compatibility `mousedown` the gesture is bound to (`mouse-zoom.ts`), so it is left
       // alone; the press focuses the diagram, so the reset that follows lands on it (Zoom 100%).
-      if (e.ctrlKey) {
+      if (primaryModifierHeld(e)) {
         e.currentTarget.focus({ preventScroll: true });
         return;
       }

@@ -14,7 +14,7 @@
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PreviewNavigateResponse } from '@throng/core';
+import { WINDOWS_HOST_TRAITS, configureHostTraits, macosHostTraits, type PreviewNavigateResponse } from '@throng/core';
 import { captureScrollAnchor } from '../../src/renderer/preview/providers/markdown/scroll-anchor.js';
 import { headingRevealTarget } from '../../src/renderer/editor/reveal-range.js';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
@@ -77,6 +77,23 @@ afterEach(() => {
   vi.restoreAllMocks();
   window.getSelection()?.removeAllRanges();
   document.body.replaceChildren();
+});
+
+describe('on macOS a link follows on Cmd+click (045 FR-040, 070 FR-030)', () => {
+  beforeEach(() => configureHostTraits(macosHostTraits('/tmp/throng-ipc', [])));
+  afterEach(() => configureHostTraits(WINDOWS_HOST_TRAITS));
+
+  it('Cmd+click follows the link', async () => {
+    await mountDoc();
+    fireEvent.click(screen.getByText('Site'), { metaKey: true });
+    expect(panel().openExternal).toHaveBeenCalledWith('https://example.com/');
+  });
+
+  it('Ctrl+click does not, because macOS reads Ctrl+click as a right-click', async () => {
+    await mountDoc();
+    fireEvent.click(screen.getByText('Site'), { ctrlKey: true });
+    expect(panel().openExternal).not.toHaveBeenCalled();
+  });
 });
 
 describe('external links (FR-091)', () => {
