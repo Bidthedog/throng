@@ -187,7 +187,9 @@ test('two clicks reach and change the language, it re-highlights at once, and it
 
         // Let the debounced workspace-layout write reach the store, so session 2 restores the
         // panel rather than opening on an empty workspace.
-        await expectLayoutSaved(dataDir, projectName, (json) => json.includes('editor'));
+        // The panel's FILE, not merely "an editor": the empty editor panel is saved before the file opens in it,
+        // and on hosted macOS session 2 then restored an editor with nothing in it.
+        await expectLayoutSaved(dataDir, projectName, (json) => json.includes('scriptfile'));
       },
       { dataDir, userDataDir },
     );

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, type OpenApp, panelGrip, splitPanelViaMenu, TEST_SHELL } from './harness.js';
+import { openApp, createProject, firstPanelId, type OpenApp, panelGrip, splitPanelViaMenu, runTypedCommand, TEST_SHELL } from './harness.js';
 
 // Batch 3 (2026-07-01):
 //  • FR-028 — a Panel created INSIDE a sub-workspace (owned; no project) can open a
@@ -116,7 +116,11 @@ test('a sub-workspace-owned Panel can open a terminal (launches at home, no proj
     await child.getByTestId(`panel-type-confirm-${owned}`).click();
 
     // The inline terminal launches (rooted at home, not blocked by "no project").
-    await expect(child.getByTestId(`terminal-${owned}`)).toBeVisible({ timeout: 15000 });
+    const term = child.getByTestId(`terminal-${owned}`);
+    await expect(term).toBeVisible({ timeout: 15000 });
+    // The shell answers — the session is live, so the kill below has one to end. Killed while the view had only just
+    // drawn, the session was not yet there to end in 2 of 5 Linux stress rounds, and the Panel never reverted.
+    await runTypedCommand(child, term, 'echo OWNED_LIVE', { echoed: 'echo OWNED_LIVE', output: 'OWNED_LIVE' });
 
     /*
      * Terminate the session before teardown so the app-close warning can't block it. The kill IPC
@@ -153,6 +157,24 @@ test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warni
     const box = await handle.boundingBox();
     if (!box) throw new Error('owned handle has no box');
     const size = await child.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+    /*
+     * Diagnostics, reported only if the warning never shows. This spec failed on the Linux
+     * pipeline (Xvfb + xfwm4) while passing on Windows and on a local X11 session, and the bare
+     * `Received: false` could not say which link broke: no pointer events beyond the edge, a drag
+     * dnd-kit cancelled (it cancels on window `resize` and `visibilitychange`), or a ghost with no
+     * hint. The probe records exactly those, so the next red run answers it.
+     */
+    await child.evaluate(() => {
+      const log: unknown[] = [];
+      (window as unknown as { __fr030: unknown[] }).__fr030 = log;
+      const add = (e: Event): void => {
+        const p = e as PointerEvent;
+        if (log.length < 60) log.push([e.type, Math.round(p.clientX ?? -1), Math.round(p.clientY ?? -1), p.buttons, Math.round(e.timeStamp)]);
+      };
+      for (const t of ['pointermove', 'pointerup', 'pointercancel', 'lostpointercapture']) window.addEventListener(t, add, true);
+      for (const t of ['resize', 'blur', 'focus']) window.addEventListener(t, add);
+      document.addEventListener('visibilitychange', add);
+    });
     await child.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await child.mouse.down();
     await child.mouse.move(box.x + box.width / 2 + 8, box.y + box.height / 2 + 8, { steps: 3 });
@@ -190,18 +212,42 @@ test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warni
     // Asserted, not annotated: an annotated `= null` narrows `hint` to null, and the closure that assigns it
     // leaves it `never` after the poll.
     let hint = null as { text: string; warn: boolean; show: boolean } | null;
-    await expect
-      .poll(
-        async () => {
-          await child.mouse.move(size.w + 130 + (hint ? 20 : 0), Math.floor(size.h / 2) + 6, {
-            steps: 2,
-          });
-          hint = await readHint();
-          return hint?.warn === true && hint?.show === true;
-        },
-        { timeout: 5000, message: 'the ghost hint never showed the invalid-drop warning' },
-      )
-      .toBe(true);
+    try {
+      await expect
+        .poll(
+          async () => {
+            const to = { x: size.w + 130 + (hint ? 20 : 0), y: Math.floor(size.h / 2) + 6 };
+            await child.mouse.move(to.x, to.y, { steps: 2 });
+            if (process.platform === 'linux') {
+              // Under Xvfb, Playwright's synthetic pointer stops at the window's edge: measured, the last move the
+              // page saw was x=869 of a 900px window, and none beyond it arrived. The drag itself started through
+              // real input above; the move past the edge is delivered to the same window-level listener throng's
+              // drag uses (tab-group.tsx), so throng's own handler, IPC and ghost still decide the warning.
+              await child.evaluate(
+                ({ x, y }) =>
+                  window.dispatchEvent(
+                    new PointerEvent('pointermove', { clientX: x, clientY: y, buttons: 1, pointerType: 'mouse', bubbles: true }),
+                  ),
+                to,
+              );
+            }
+            hint = await readHint();
+            return hint?.warn === true && hint?.show === true;
+          },
+          { timeout: 5000, message: 'the ghost hint never showed the invalid-drop warning' },
+        )
+        .toBe(true);
+    } catch (error) {
+      const events = await child.evaluate(() => (window as unknown as { __fr030?: unknown[] }).__fr030 ?? []);
+      const windows = await app.evaluate(({ BrowserWindow, screen }) => ({
+        cursor: screen.getCursorScreenPoint(),
+        workArea: screen.getPrimaryDisplay().workArea,
+        windows: BrowserWindow.getAllWindows().map((w) => ({ id: w.id, visible: w.isVisible(), bounds: w.getBounds(), url: w.webContents.getURL().slice(0, 24) })),
+      }));
+      const diag = JSON.stringify({ size, box, hint, events, ...windows });
+      await test.info().attach('fr030-diagnostics', { body: diag, contentType: 'application/json' });
+      throw new Error(`${(error as Error).message}\n\nFR-030 diagnostics: ${diag}`, { cause: error });
+    }
     await child.mouse.up();
 
     expect(hint?.warn).toBe(true);

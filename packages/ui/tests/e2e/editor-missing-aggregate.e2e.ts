@@ -21,14 +21,17 @@ async function expectLayoutSaved(dataDir: string, projectName: string): Promise<
                 WHERE p.name = ?`,
             )
             .get(projectName) as { json?: string } | undefined;
-          return row?.json?.includes('editor') ?? false;
+          // BOTH editors' files, not merely "an editor": the teardown destroys the window without the close drain,
+          // so only what is saved here comes back. On hosted macOS the first editor's save satisfied an "editor"
+          // check before the second editor's landed, and the relaunch restored one panel.
+          return (row?.json?.includes('alpha.txt') && row.json.includes('beta.txt')) ?? false;
         } catch {
           return false;
         } finally {
           db?.close();
         }
       },
-      { timeout: 30_000, message: 'the editor layout never reached the database' },
+      { timeout: 30_000, message: 'the layout with both editors never reached the database' },
     )
     .toBe(true);
 }
@@ -312,7 +315,18 @@ test('the file tree got there first, and ONE notice still stands (030 FR-029/FR-
          * alongside the panels (the trap `project-missing-root-wedge.e2e.ts` measured).
          */
         const banners = '[data-testid^="panel-failure-"]:not([data-testid^="panel-failure-notice"])';
-        await expect(win.locator(banners)).toHaveCount(2, { timeout: 30_000 });
+        try {
+          await expect(win.locator(banners)).toHaveCount(2, { timeout: 30_000 });
+        } catch (error) {
+          // Failed on hosted macOS only, with no page snapshot to say why: name what the restored workspace held.
+          const seen = await win.evaluate(() => ({
+            editors: Array.from(document.querySelectorAll('.editor-panel')).map((el) => (el as HTMLElement).innerText.slice(0, 120)),
+            failures: Array.from(document.querySelectorAll('[data-testid^="panel-failure-"]')).map((el) => el.getAttribute('data-testid')),
+            notices: Array.from(document.querySelectorAll('[data-testid^="notice-"], .notification')).map((el) => (el as HTMLElement).innerText.slice(0, 160)),
+            panels: Array.from(document.querySelectorAll('.panel-box')).map((el) => (el as HTMLElement).dataset.panelKind ?? el.className),
+          }));
+          throw new Error(`${(error as Error).message}\n\nrestored workspace: ${JSON.stringify(seen)}`, { cause: error });
+        }
 
         /*
          * Now provoke the scan. It runs ONCE per tab activation, 300 ms in, and on a cold open that

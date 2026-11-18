@@ -1666,12 +1666,31 @@ export async function narrowTerminalWindow(
       (x) => /index\.html/.test(x.webContents.getURL()) && !/[?&](sw|prefs|about|monitor)=/.test(x.webContents.getURL()),
     )!;
     const maximized = bw.isMaximized();
-    // A maximized window ignores a resize, and the output would then not wrap at all.
+    const fullScreen = bw.isFullScreen();
+    // A maximized or full-screen window ignores a resize, and the output would then not wrap at all.
+    if (fullScreen) bw.setFullScreen(false);
     if (maximized) bw.unmaximize();
     const size = bw.getContentSize();
     bw.setContentSize(w, size[1]);
-    return { maximized, size };
+    return { maximized, fullScreen, size };
   }, width);
+  // macOS animates an unmaximise, and a size set while it runs is overwritten when it ends: apply the width again
+  // until the window reports it (or the minimum it allows, which is never wider than asked for here).
+  await expect
+    .poll(
+      () =>
+        app.evaluate(({ BrowserWindow }, w) => {
+          const bw = BrowserWindow.getAllWindows().find(
+              (x) => /index\.html/.test(x.webContents.getURL()) && !/[?&](sw|prefs|about|monitor)=/.test(x.webContents.getURL()),
+            )!;
+          if (bw.isMaximized() || bw.isFullScreen()) return Number.POSITIVE_INFINITY;
+          const [cw, ch] = bw.getContentSize();
+          if (cw > w) bw.setContentSize(w, ch);
+          return cw;
+        }, width),
+      { timeout: TERMINAL_OUTPUT_TIMEOUT_MS, message: `the main window never took a ${width}px width` },
+    )
+    .toBeLessThanOrEqual(width);
   const restore = async (): Promise<void> => {
     await app.evaluate(({ BrowserWindow }, o) => {
       const bw = BrowserWindow.getAllWindows().find(
@@ -1684,15 +1703,29 @@ export async function narrowTerminalWindow(
   try {
     // A window already at most `width` wide (a small display's, such as a hosted macOS runner's) is the narrow
     // window this asks for: nothing shrinks, and the typed command below still proves the pty conformed.
-    if (original.maximized || original.size[0] > width) {
+    if (original.maximized || original.fullScreen || original.size[0] > width) {
       await withTerminalEvidence(
         win,
         term,
-        `the terminal never conformed to a ${width}px window (was ${original.size.join('x')}, maximized ${original.maximized})`,
-        () =>
-          expect
-            .poll(async () => (await screen.boundingBox())?.width ?? before, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS })
-            .toBeLessThan(before),
+        `the terminal never conformed to a ${width}px window (was ${original.size.join('x')}, maximized ${original.maximized}, ` +
+          `full screen ${original.fullScreen}; the renderer is ${await win.evaluate(() => `${innerWidth}x${innerHeight}`)})`,
+        () => {
+          // Narrower, or — where the layout hands a narrower window's space back to the terminal, as a small screen's
+          // collapsing side panes do on a hosted macOS runner — the renderer at the width and the terminal's own
+          // width settled across two reads. Either way the typed command below proves the pty took the size.
+          let last = Number.NaN;
+          return expect
+            .poll(
+              async () => {
+                const now = (await screen.boundingBox())?.width ?? before;
+                const settled = now === last && (await win.evaluate(() => innerWidth)) <= width;
+                last = now;
+                return now < before || settled;
+              },
+              { timeout: TERMINAL_OUTPUT_TIMEOUT_MS, intervals: [250] },
+            )
+            .toBe(true);
+        },
       );
     }
     const half = Math.ceil(token.length / 2);

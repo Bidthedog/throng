@@ -43,6 +43,35 @@ export async function openProjectsList(monitor: Page): Promise<void> {
 }
 
 /**
+ * Double-click into the first row whose id starts `from` (FR-096) and wait for the first row starting `to` below it.
+ *
+ * A row opens only once it has children (`breakdown.tsx`: no children, no double-click), and a project's terminal is
+ * under it only after a sample has found it — so a double-click straight after the list appears can land on a row
+ * with nothing under it yet, and does nothing — on the Linux runner the tab row never came after a project row's
+ * double-click. So the double-click is repeated, while the level below is not yet there.
+ */
+export async function drillInto(monitor: Page, from: string, to: string, fromText?: string): Promise<void> {
+  const rows = (prefix: string) => monitor.locator(`[role="treeitem"][data-testid^="breakdown-row-${prefix}"]`);
+  // `fromText` names the row to open where more than one may be listed: rows are ordered by their figures, so
+  // `.first()` is whichever is heaviest at that moment, not the spec's own.
+  const source = (fromText === undefined ? rows(from) : rows(from).filter({ hasText: fromText })).first();
+  try {
+    await expect(async () => {
+      if (await rows(to).first().isVisible()) return; // an earlier double-click already opened it
+      await source.dblclick({ timeout: 2_000 });
+      await expect(rows(to).first()).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+  } catch (error) {
+    const shown = await monitor
+      .locator('[role="treeitem"]')
+      .evaluateAll((els) => els.map((el) => `${el.getAttribute('data-testid')} "${(el.textContent ?? '').slice(0, 40)}"`));
+    throw new Error(`no ${to} row under ${from}${fromText ? ` "${fromText}"` : ''}; the rows shown: ${shown.join(' | ')}`, {
+      cause: error,
+    });
+  }
+}
+
+/**
  * Set Hide ended (FR-105) — on by default, so a spec that asserts an ended row greyed in place turns it
  * off first. Reads the toggle's state rather than clicking blind: the view is held between openings.
  */

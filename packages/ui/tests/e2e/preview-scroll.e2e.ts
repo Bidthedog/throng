@@ -364,7 +364,12 @@ test('a mouse drag selects preview text across paragraphs, and a Ctrl+drag on a 
 
     // (2) Ctrl held, a drag that starts and ends on the link.
     const link = preview.getByText('the target link', { exact: true });
-    const box = await link.boundingBox();
+    // Its FIRST line's box, not the whole element's: in a narrow preview (a hosted macOS runner's small window) the
+    // link wraps, and a drag across the middle of a two-line box runs through the paragraph's other text.
+    const box = await link.evaluate((el) => {
+      const r = el.getClientRects()[0];
+      return r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
+    });
     expect(box, 'the link is laid out').not.toBeNull();
     await win.mouse.move(box!.x + 2, box!.y + box!.height / 2);
     await win.keyboard.down(process.platform === 'darwin' ? 'Meta' : 'Control');

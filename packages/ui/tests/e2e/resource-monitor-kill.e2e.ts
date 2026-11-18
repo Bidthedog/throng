@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { cleanupTemp, createProject, firstPanelId, runApp, runTypedCommand, TEST_SHELL } from './harness.js';
-import { MONITOR_CHORD, closeMonitorWindow, openMonitorWindow, openProjectsList, setHideEnded } from './helpers/monitor-window.js';
+import { MONITOR_CHORD, closeMonitorWindow, openMonitorWindow, openProjectsList, setHideEnded, drillInto } from './helpers/monitor-window.js';
 import { processesMatching, processTable } from './helpers/processes.js';
 
 /**
@@ -78,9 +78,9 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       await setHideEnded(mon, false);
       // The top level is the components only (FR-103): the projects are inside Projects.
       await openProjectsList(mon);
-      await mon.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
-      await mon.locator('[role="treeitem"][data-testid^="breakdown-row-t:"]').first().dblclick();
-      await mon.locator('[role="treeitem"][data-testid^="breakdown-row-n:"]').first().dblclick();
+      await drillInto(mon, 'p:', 't:', 'KillTree');
+      await drillInto(mon, 't:', 'n:');
+      await drillInto(mon, 'n:', 'x:');
 
       const nodes = rowOf(mon, 'x:', 'Node'); // the friendly name a process row shows (FR-020)
       await expect(nodes).toHaveCount(3, { timeout: 20_000 });
@@ -114,8 +114,8 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       mon = await openMonitorWindow(app, () => win.keyboard.press(MONITOR_CHORD));
       // The view is held between openings (FR-087): back to the top, then into Projects again.
       await openProjectsList(mon);
-      await mon.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
-      await mon.locator('[role="treeitem"][data-testid^="breakdown-row-t:"]').first().dblclick();
+      await drillInto(mon, 'p:', 't:', 'KillTree');
+      await drillInto(mon, 't:', 'n:');
       await rowOf(mon, 'n:').first().click({ button: 'right' });
       await mon.getByTestId('menu-item-Kill All Below').click();
       await acceptKill(mon);

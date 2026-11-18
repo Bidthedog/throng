@@ -183,12 +183,12 @@ test('a copied notice carries everything it renders, plus the system error it mu
       // Copy rather than deleted (029 FR-018).
       const visible = await notice.innerText();
       expect(visible, 'the notice renders a raw system error (FR-034)').not.toMatch(
-        /Cannot lock|ENOENT|EPERM|EBUSY|EACCES/i,
+        /Cannot lock|Cannot use|ENOENT|EPERM|EBUSY|EACCES/i,
       );
       expect(
         copied,
         'the copied text carries no system error at all — the one thing a user cannot retype',
-      ).toMatch(/Cannot lock|ENOENT|EPERM|EBUSY|EACCES|throng-e2e-missing/i);
+      ).toMatch(/Cannot lock|Cannot use|ENOENT|EPERM|EBUSY|EACCES|throng-e2e-missing/i);
 
       // ═══ T066 (the scrolled half) — the copied list is COMPLETE however far it is scrolled. ═══
       //
@@ -320,11 +320,11 @@ test('the banner copies its message, subject, path and system error with no noti
         // The path it could not use, and the system error nobody could have retyped.
         expect(copied).toContain('throng-e2e-missing');
         expect(copied, 'the banner copied no system error').toMatch(
-          /Cannot lock|ENOENT|EPERM|EBUSY|EACCES/i,
+          /Cannot lock|Cannot use|ENOENT|EPERM|EBUSY|EACCES/i,
         );
         // …and that error is genuinely NOT on the screen it was copied from (FR-034).
         expect(await banner(win, pid).innerText()).not.toMatch(
-          /Cannot lock|ENOENT|EPERM|EBUSY|EACCES/i,
+          /Cannot lock|Cannot use|ENOENT|EPERM|EBUSY|EACCES/i,
         );
       },
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },

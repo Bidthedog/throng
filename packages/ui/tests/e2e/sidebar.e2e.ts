@@ -104,12 +104,15 @@ test('pane headers are fixed-size and the Sub-workspaces panel has a min height'
 test('Sub-workspaces is pinned to the bottom of the sidebar body', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     await expect(win.locator('.sidebar-panel--subworkspaces')).toBeVisible();
-    const gap = await win.evaluate(() => {
-      const body = (document.querySelector('.pane-sidebar__body') as HTMLElement).getBoundingClientRect();
-      const sub = (document.querySelector('.sidebar-panel--subworkspaces') as HTMLElement).getBoundingClientRect();
-      return Math.abs(body.bottom - sub.bottom);
-    });
-    expect(gap).toBeLessThanOrEqual(2); // its bottom edge sits at the pane's bottom
+    // Polled: a layout property of the settled window. On a hosted macOS runner, where the window opens maximised, a
+    // single reading straight after launch measured a 99px gap that the retry did not.
+    const gap = (): Promise<number> =>
+      win.evaluate(() => {
+        const body = (document.querySelector('.pane-sidebar__body') as HTMLElement).getBoundingClientRect();
+        const sub = (document.querySelector('.sidebar-panel--subworkspaces') as HTMLElement).getBoundingClientRect();
+        return Math.abs(body.bottom - sub.bottom);
+      });
+    await expect.poll(gap, { message: "its bottom edge sits at the pane's bottom" }).toBeLessThanOrEqual(2);
   });
 });
 

@@ -238,8 +238,17 @@ test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@
   // owns more than one BrowserWindow (the drag ghost among them), and resizing whichever happened to
   // be first silently resized something the strip has never heard of.
   const browserWindow = await shared.app.browserWindow(shared.win);
-  const original = await browserWindow.evaluate((w) => w.getSize());
   const trackWidthBefore = (await stripState(shared.win)).viewportWidth;
+  // A maximised window (a hosted macOS runner opens one) is put back the way it was found, not merely to its size:
+  // there, sizing it back after growing it left the track at the grown width. Unmaximised first, and settled —
+  // macOS animates the change — so the size grown from is the one restored.
+  const wasMaximized = await browserWindow.evaluate((w) => w.isMaximized());
+  if (wasMaximized) {
+    await browserWindow.evaluate((w) => w.unmaximize());
+    await expect.poll(() => browserWindow.evaluate((w) => w.isMaximized())).toBe(false);
+  }
+  const original = await browserWindow.evaluate((w) => w.getSize());
+  const trackWidthUnmaximized = (await stripState(shared.win)).viewportWidth;
   try {
     await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), [
       original[0]! + 360,
@@ -249,11 +258,12 @@ test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@
       .poll(async () => (await stripState(shared.win)).viewportWidth, {
         message: 'the track never widened with the window',
       })
-      .toBeGreaterThan(trackWidthBefore);
+      .toBeGreaterThan(trackWidthUnmaximized);
     const widened = await expectCountsInSync(shared.win);
     expect(widened.total).toBe(before.total);
   } finally {
     await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), original);
+    if (wasMaximized) await browserWindow.evaluate((w) => w.maximize());
     await expect
       .poll(async () => (await stripState(shared.win)).viewportWidth, {
         message: 'the track never returned to its original width',
@@ -310,12 +320,19 @@ test('step-left is available as soon as a reveal has moved the strip off its sta
    * narrower than a seeded one. So the window is WIDENED until the right-hand tab is cut off by
    * CUT px — less than the first tab — rather than trusting the default window size to land there.
    */
+  const browserWindow = await shared.app.browserWindow(shared.win);
+  const trackWidthAsFound = (await stripState(shared.win)).viewportWidth;
+  // Unmaximised first and put back after, as in T045 above: a maximised window does not size back.
+  const wasMaximized = await browserWindow.evaluate((w) => w.isMaximized());
+  if (wasMaximized) {
+    await browserWindow.evaluate((w) => w.unmaximize());
+    await expect.poll(() => browserWindow.evaluate((w) => w.isMaximized())).toBe(false);
+  }
   const CUT = 20;
   const start = await stripState(shared.win);
   const cutAtStart = partlyVisibleChips(start).at(-1);
   expect(cutAtStart, 'a tab is cut off at the right-hand edge').toBeTruthy();
   const widenBy = Math.max(0, Math.round(cutAtStart!.right - (start.scrollLeft + start.viewportWidth)) - CUT);
-  const browserWindow = await shared.app.browserWindow(shared.win);
   const original = await browserWindow.evaluate((w) => w.getSize());
   try {
     await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), [
@@ -357,11 +374,12 @@ test('step-left is available as soon as a reveal has moved the strip off its sta
     expect((await stripState(shared.win)).scrollLeft).toBeLessThanOrEqual(1);
   } finally {
     await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), original);
+    if (wasMaximized) await browserWindow.evaluate((w) => w.maximize());
     await expect
       .poll(async () => (await stripState(shared.win)).viewportWidth, {
         message: 'the track never returned to its original width',
       })
-      .toBe(start.viewportWidth);
+      .toBe(trackWidthAsFound);
   }
 });
 

@@ -279,7 +279,7 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         // built by pasting each casualty's own error together is the obvious way to undo that.
         const visible = await notice.innerText();
         expect(visible, 'the notice renders a raw system error').not.toMatch(
-          /ENOENT|EPERM|EBUSY|EACCES|Cannot lock|Internal error/i,
+          /ENOENT|EPERM|EBUSY|EACCES|Cannot lock|Cannot use|Internal error/i,
         );
         // …and not the absolute path the errno carries, either.
         expect(visible).not.toMatch(process.platform === 'win32' ? /[A-Za-z]:\\/ : /(?:^|\s)\/[^\s/]+\//);

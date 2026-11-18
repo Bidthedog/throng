@@ -94,10 +94,53 @@ function control(win: Page, panelId: string, name: string): Locator {
  * go out to the daemon and back, and every caller needs the same wait before it acts.
  */
 async function inFailureState(win: Page, panelId: string, kind: 'editor' | 'terminal'): Promise<void> {
-  await expect(
-    win.locator(`[data-testid="panel-failure-${panelId}"]`),
-    `panel ${panelId} never reached its ${kind} failure state`,
-  ).toHaveCount(1, { timeout: 90_000 });
+  try {
+    await expect(
+      win.locator(`[data-testid="panel-failure-${panelId}"]`),
+      `panel ${panelId} never reached its ${kind} failure state`,
+    ).toHaveCount(1, { timeout: 90_000 });
+  } catch (error) {
+    // Linux, the first launches on a fresh runner only, and the page snapshot did not survive the later rounds: name
+    // which state the panel was left in instead — still the type form, a terminal whose attach never answered (the
+    // skeleton), one still starting, a shell that RAN, or a form the panel reverted to with an exit notice.
+    const seen = await win
+      .evaluate((pid) => {
+        const byId = (id: string): HTMLElement | null => document.querySelector(`[data-testid="${id}"]`);
+        const text = (el: Element | null, n = 200): string | null => (el ? (el as HTMLElement).innerText.slice(0, n) : null);
+        const box = document.querySelector<HTMLElement>(`.panel-box[data-panel-id="${pid}"]`);
+        const select = (id: string): string | null => (byId(id) as HTMLSelectElement | null)?.value ?? null;
+        const active = document.activeElement as HTMLElement | null;
+        const diagnostics = (window as { __throngTerminalDiagnostics?: () => Record<string, unknown> })
+          .__throngTerminalDiagnostics?.();
+        return {
+          panel: box ? box.className : null,
+          form: byId(`panel-type-form-${pid}`)
+            ? {
+                type: select(`panel-type-select-${pid}`),
+                flavour: select('terminal-flavour'),
+                confirmDisabled: (byId(`panel-type-confirm-${pid}`) as HTMLButtonElement | null)?.disabled ?? null,
+              }
+            : null,
+          terminal: byId(`terminal-${pid}`)
+            ? {
+                skeleton: byId(`terminal-skeleton-${pid}`) !== null,
+                stillStarting: byId(`terminal-starting-${pid}`) !== null,
+                cwdFallback: text(byId(`terminal-cwd-fallback-${pid}`)),
+                screen: text(byId(`terminal-${pid}`)?.querySelector('.xterm-rows') ?? null, 400),
+              }
+            : null,
+          failures: Array.from(document.querySelectorAll('[data-testid^="panel-failure-"]')).map((el) =>
+            el.getAttribute('data-testid'),
+          ),
+          notices: Array.from(document.querySelectorAll('.notices > .notice')).map((el) => text(el, 240)),
+          focus: active ? `${active.tagName}#${active.dataset.testid ?? active.className}` : null,
+          diagnostics: diagnostics?.[pid] ?? null,
+          timeline: (window as { __pfbTimeline?: unknown }).__pfbTimeline ?? null,
+        };
+      }, panelId)
+      .catch((probe: unknown) => `(could not read the page: ${String(probe)})`);
+    throw new Error(`${(error as Error).message}\n\npanel ${panelId} was left as: ${JSON.stringify(seen)}`, { cause: error });
+  }
 }
 
 /** A real project root holding `src/code.txt`. */
@@ -212,9 +255,48 @@ async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
    * notice and hide the very interception this file now has to work with.
    */
   const confirm = win.getByTestId(`panel-type-confirm-${panelId}`);
+  // Enabled first: Enter on a disabled Confirm does nothing, and the panel would stay a form with no banner to wait
+  // for — 1 in 8 Linux stress rounds, always the first launch on a cold runner.
+  await expect(confirm).toBeEnabled({ timeout: 20_000 });
   await confirm.focus();
+  await recordTimeline(win, panelId);
   await confirm.press('Enter');
   await inFailureState(win, panelId, 'terminal');
+}
+
+/**
+ * DIAGNOSTIC ONLY — when each state of the panel first appeared after Confirm, and the longest the renderer's main
+ * thread went without running a timer.
+ *
+ * On a cold Linux runner the banner has been found present right AFTER a 90 s wait that saw none. Two readings fit:
+ * the refusal reached the panel late, or the renderer was too busy for the wait to look. These times split them, and
+ * the wall clock lines them up with main's and the daemon's logs, which the stress job keeps for a failing round.
+ */
+async function recordTimeline(win: Page, panelId: string): Promise<void> {
+  await win.evaluate((pid) => {
+    const start = Date.now();
+    const seen: Record<string, number> = {};
+    const timeline = { confirmedAt: new Date(start).toISOString(), msAfterConfirm: seen, longestStallMs: 0 };
+    (window as { __pfbTimeline?: unknown }).__pfbTimeline = timeline;
+    const ids = [`terminal-${pid}`, `terminal-skeleton-${pid}`, `terminal-starting-${pid}`, `panel-failure-${pid}`];
+    const look = (): void => {
+      for (const id of ids) {
+        if (seen[id] === undefined && document.querySelector(`[data-testid="${id}"]`)) seen[id] = Date.now() - start;
+      }
+    };
+    const observer = new MutationObserver(look);
+    observer.observe(document.body, { childList: true, subtree: true });
+    let last = Date.now();
+    const beat = setInterval(() => {
+      const now = Date.now();
+      timeline.longestStallMs = Math.max(timeline.longestStallMs, now - last);
+      last = now;
+      if (now - start > 120_000) {
+        clearInterval(beat);
+        observer.disconnect();
+      }
+    }, 250);
+  }, panelId);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════════════════════════

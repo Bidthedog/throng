@@ -266,7 +266,7 @@ test('entering a project whose folder is gone reports it and does not split the 
         expect(prose, 'the notice does not say the folder is missing')
           .toMatch(/no longer exists|could not be found|missing|moved or deleted/i);
         expect(prose, 'the notice hands the user a raw internal error')
-          .not.toMatch(/ENOENT|Internal error|Cannot lock/i);
+          .not.toMatch(/ENOENT|Internal error|Cannot lock|Cannot use/i);
 
         /**
          * FR-019 / FR-019a — ONE notice for one missing folder, and the panels still say what broke.

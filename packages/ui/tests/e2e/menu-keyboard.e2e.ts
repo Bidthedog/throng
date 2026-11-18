@@ -164,8 +164,42 @@ test('a menu item shows its shortcut in brackets, and the advertised shortcut ru
       // ...and an item whose action has no keybinding (New File) renders no shortcut element (FR-004).
       await expect(win.getByTestId('menu-item-New File')).toBeVisible();
       await expect(win.getByTestId('menu-shortcut-New File')).toHaveCount(0);
+      // Recorded for the failure message: on hosted macOS the menu stayed open after Cmd+C, with nothing to say
+      // whether the keydown reached the page, where focus was, or what handled it.
+      // Where it travels: window capture, the menu itself, document bubble (after React's root), with
+      // defaultPrevented at each — and any page error or console error while it is handled.
+      const pageErrors: string[] = [];
+      const onPageError = (err: Error): void => void pageErrors.push(`pageerror: ${err.message}`);
+      const onConsole = (msg: { type(): string; text(): string }): void => {
+        if (msg.type() === 'error' || msg.type() === 'warning') pageErrors.push(`${msg.type()}: ${msg.text()}`);
+      };
+      win.on('pageerror', onPageError);
+      win.on('console', onConsole);
+      await win.evaluate(() => {
+        const seen: string[] = [];
+        (window as unknown as { __menuKeys: string[] }).__menuKeys = seen;
+        const at = (where: string) => (e: KeyboardEvent): void => {
+          const t = e.target as HTMLElement | null;
+          seen.push(`${where}: ${e.key}/${e.code} meta=${e.metaKey} prevented=${e.defaultPrevented} on ${t?.tagName}#${t?.getAttribute('data-testid') ?? ''}`);
+        };
+        window.addEventListener('keydown', at('window-capture'), true);
+        document.querySelector<HTMLElement>('[data-testid="context-menu"]')?.addEventListener('keydown', at('menu'));
+        document.addEventListener('keydown', at('document-bubble'));
+      });
       await pressAction(win, 'file.copy');
-      await expect(win.getByTestId('context-menu')).toHaveCount(0);
+      try {
+        await expect(win.getByTestId('context-menu')).toHaveCount(0);
+      } catch (error) {
+        const seen = await win.evaluate(() => ({
+          keys: (window as unknown as { __menuKeys?: string[] }).__menuKeys ?? [],
+          focus: `${document.activeElement?.tagName}#${document.activeElement?.getAttribute('data-testid') ?? ''}`,
+        }));
+        Object.assign(seen, { pageErrors });
+        throw new Error(`${(error as Error).message}\n\nkeydowns the page saw: ${JSON.stringify(seen)}`, { cause: error });
+      } finally {
+        win.off('pageerror', onPageError);
+        win.off('console', onConsole);
+      }
       // Paste at the root → a de-duplicated copy proves Ctrl+C actually copied. The row names what
       // will land (050 FR-025a), which is also the first proof the copy reached the clipboard.
       await tree.locator('.tree-row--root').click({ button: 'right' });
