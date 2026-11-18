@@ -1,15 +1,17 @@
 name: Fail fast, cancel the run
-description: Cancel the whole workflow run, because a job of a fail-fast run failed, timed out or was cancelled (072 FR-019).
+description: Ask fail-fast.yml to cancel the whole workflow run, because a job of a fail-fast run failed, timed out or was cancelled (072 FR-019).
 
 # GitHub Actions has no cross-job fail-fast, so every pipeline job ends with a step that uses this action, gated on
 # `(failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'`. The `cancelled()` half is what catches a job that
 # hit its timeout-minutes: such a job is cancelled, not failed, and a step gated on failure() alone never runs in it.
 #
+# It never cancels the run itself. A job that cancels its own run is cancelled with it, so the job that FAILED would end
+# `cancelled` like every bystander and only the verdict would read `failure`. Instead it dispatches fail-fast.yml, which
+# waits until every job with a failed step has finished, then cancels: the failing job keeps its own `failure`.
+#
 # `gh` is preferred; the Fedora containers the verification jobs use have none, so the step falls back to the REST call it
 # wraps. In a called workflow GITHUB_RUN_ID is the CALLER's run, so a release run is cancelled whole and nothing publishes.
-#
-# Cancelling a run that is already being cancelled is not an error worth failing a job for: a job cancelled BECAUSE the run
-# was cancelled reaches this step too, so a refusal here is only a warning.
+# fail-fast.yml is dispatched from master, the only ref GitHub dispatches a workflow from that it does not already hold.
 
 inputs:
   token:
@@ -19,11 +21,13 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Cancel the run
+    - name: Ask fail-fast.yml to cancel the run
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
       run: |
-        gh run cancel "$GITHUB_RUN_ID" ||
-          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel" ||
-          echo "::warning::could not cancel run $GITHUB_RUN_ID (already cancelling, or no permission)"
+        gh workflow run fail-fast.yml --repo "$GITHUB_REPOSITORY" --ref master -f run_id="$GITHUB_RUN_ID" ||
+          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/fail-fast.yml/dispatches" \
+            -d "{\"ref\":\"master\",\"inputs\":{\"run_id\":\"$GITHUB_RUN_ID\"}}" ||
+          echo "::warning::could not ask fail-fast.yml to cancel run $GITHUB_RUN_ID"

@@ -1,0 +1,51 @@
+name: Fail fast
+run-name: fail fast (run ${{ inputs.run_id }})
+
+# The cancelling half of 072 FR-019's fail-fast, dispatched by .github/actions/fail-fast-cancel from a failing job of a
+# pipeline or release run. It is not a pipeline: it runs no test and builds nothing.
+#
+# It waits until every job with a failed step has FINISHED before cancelling, so each keeps its own `failure` conclusion.
+# Cancelling from inside the failing job, as before, relabelled that job `cancelled`, and the run's job list then named
+# only the verdict. Several failing jobs may each dispatch it; the concurrency group lets one cancel and the rest find
+# the run already cancelling, which is a warning, not an error.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The run to cancel.
+        required: true
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: fail-fast-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  cancel:
+    name: Cancel run ${{ inputs.run_id }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for the failing jobs to finish, then cancel the run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          deadline=$((SECONDS + 300))
+          while :; do
+            pending=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" --paginate \
+              --jq '[.jobs[] | select(.status != "completed" and any(.steps[]?; .conclusion == "failure"))] | length' |
+              awk '{ s += $1 } END { print s + 0 }')
+            [ "$pending" = 0 ] && break
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::warning::$pending failing job(s) still running after 5 minutes; cancelling anyway"
+              break
+            fi
+            sleep 5
+          done
+          gh run cancel "$RUN_ID" --repo "$GITHUB_REPOSITORY" ||
+            echo "::warning::could not cancel run $RUN_ID (already finished or already cancelling)"
