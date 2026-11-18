@@ -113,10 +113,26 @@ describe('fail fast (FR-019, FR-020, Guarantee 2)', () => {
     expect(needsOf(pipeline.jobs[id] as Job), `${id} must need plan to read its output`).toContain('plan');
   });
 
-  it('the fail-fast action cancels the run, falling back to the REST call where gh is absent', () => {
+  it('the fail-fast action never cancels its own run: it asks fail-fast.yml to, falling back to REST where gh is absent', () => {
+    // A job that cancels its own run is cancelled with it, so the job that FAILED would read `cancelled` and only the
+    // verdict would read `failure`. Handing the cancel to another workflow lets the failing job finish as `failure`.
     const action = readFileSync(join(ROOT, '.github', 'actions', 'fail-fast-cancel', 'action.yml'), 'utf8');
-    expect(action).toContain('gh run cancel');
-    expect(action).toContain('actions/runs/$GITHUB_RUN_ID/cancel');
+    expect(action).not.toContain('gh run cancel');
+    expect(action).not.toContain('actions/runs/$GITHUB_RUN_ID/cancel');
+    expect(action).toMatch(/gh workflow run fail-fast\.yml\b[^\n]*-f run_id="\$GITHUB_RUN_ID"/);
+    expect(action).toContain('actions/workflows/fail-fast.yml/dispatches');
+  });
+
+  it('fail-fast.yml cancels the run only once every job with a failed step has finished', () => {
+    const text = readFileSync(join(ROOT, '.github', 'workflows', 'fail-fast.yml'), 'utf8');
+    const wf = parse(text) as { on: Record<string, { inputs?: Record<string, unknown> }>; permissions: Record<string, string> };
+    expect(Object.keys(wf.on)).toEqual(['workflow_dispatch']);
+    expect(wf.on.workflow_dispatch?.inputs).toHaveProperty('run_id');
+    expect(wf.permissions.actions).toBe('write');
+    const wait = text.indexOf('select(.status != "completed" and any(.steps[]?; .conclusion == "failure"))');
+    const cancel = text.indexOf('gh run cancel');
+    expect(wait, 'waits on the failing jobs').toBeGreaterThan(-1);
+    expect(cancel, 'cancels after waiting').toBeGreaterThan(wait);
   });
 
   it('plan, verdict and report carry no cancel step', () => {
