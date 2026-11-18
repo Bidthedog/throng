@@ -55,7 +55,8 @@ function failOnOversizedChunks(): Plugin {
  * The Markdown preview pipeline's libraries (R21): loaded by dynamic import on the first preview mount.
  * `chunkFor` routes them to the `preview` chunk and `failOnEagerPreview` proves that chunk stays lazy.
  */
-const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//;
+// 075 — `markdown-it-obsidian-callouts`, the callout parser, rides with markdown-it.
+const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|markdown-it-obsidian-callouts|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//;
 
 /**
  * The Mermaid diagram renderer and the packages it pulls in (054 R5, FR-047): imported only by
@@ -181,6 +182,9 @@ function chunkFor(rawId: string): string | null {
   // Its own chunk keeps the app chunk under 500 kB (047 took it to 525 kB).
   // The Markdown provider's body sits behind `view.ts`'s dynamic imports (R21), so it gets a chunk of
   // its own: in `app-preview`, which the app loads eagerly, those imports would load nothing new.
+  // 075 FR-046 — the maths typesetter imports KaTeX and its stylesheet; the body reaches it by `import()` only when
+  // a document holds maths, so it is a chunk of its own, never part of the Markdown body's.
+  if (/\/src\/renderer\/preview\/providers\/markdown\/math-typeset\.ts$/.test(id)) return 'app-preview-math';
   if (/\/src\/renderer\/preview\/providers\/markdown\/(?!view\.ts$)/.test(id)) return 'app-preview-markdown';
   // 054 FR-042 — the Mermaid provider's body, behind its view's dynamic import for the same reason.
   if (/\/src\/renderer\/preview\/providers\/mermaid\/(?!view\.ts$)/.test(id)) return 'app-preview-mermaid';
