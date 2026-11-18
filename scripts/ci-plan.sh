@@ -179,7 +179,10 @@ if [ -n "$test_filter" ] && [ "${#layers[@]}" -gt 0 ]; then
 fi
 
 # Shards per platform (R4). A filtered run is a handful of tests, and an empty shard fails its job, so it gets one.
-declare -A shard_n=([windows]=4 [linux]=2 [macos]=2)
+# One variable per platform, not an associative array: a macOS runner's /bin/bash is 3.2, which has none, and the
+# unit tests run this script there. Every key is checked against the three platform names before it is used.
+shard_n_windows=4 shard_n_linux=2 shard_n_macos=2
+shard_count() { eval "printf '%s' \"\$shard_n_$1\""; }
 if [ -n "$shards_in" ]; then
   IFS=',' read -r -a pairs <<<"$shards_in"
   for pair in "${pairs[@]}"; do
@@ -187,11 +190,11 @@ if [ -n "$shards_in" ]; then
     val="${pair#*=}"
     [ "$key" != "$pair" ] && contains "$key" windows linux macos || fail "shards entry '$pair' is not windows=N, linux=N or macos=N"
     [[ "$val" =~ ^[0-9]$ ]] && [ "$val" -ge 1 ] || fail "shards entry '$pair' needs a count from 1 to 9"
-    shard_n[$key]="$val"
+    eval "shard_n_$key=\$val"
   done
 fi
-if [ -n "$e2e_filter" ]; then shard_n=([windows]=1 [linux]=1 [macos]=1); fi
-shard_list() { seq 1 "${shard_n[$1]}" | tr '\n' ' '; }
+if [ -n "$e2e_filter" ]; then shard_n_windows=1 shard_n_linux=1 shard_n_macos=1; fi
+shard_list() { seq 1 "$(shard_count "$1")" | tr '\n' ' '; }
 
 # Something has to run: a selection that no platform can host would pass as an empty run.
 runs_something=false
@@ -236,5 +239,5 @@ if [ "${#layers[@]}" -gt 0 ]; then emit layers "$(json_array "${layers[@]}")"; e
 for platform in windows linux macos; do
   # shellcheck disable=SC2046
   emit "shards_$platform" "$(json_array $(shard_list "$platform"))"
-  emit "shard_n_$platform" "${shard_n[$platform]}"
+  emit "shard_n_$platform" "$(shard_count "$platform")"
 done

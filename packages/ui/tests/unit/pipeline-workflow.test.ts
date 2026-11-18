@@ -400,8 +400,9 @@ describe('the plan (scripts/ci-plan.sh, FR-018)', () => {
   };
 
   it('is full, nightly and not fail-fast on a schedule', () => {
-    const { out } = plan({ EVENT: 'schedule' });
-    expect(out).toMatchObject({ mode: 'nightly', fail_fast: 'false', full: 'true', stage_e2e: 'true', p_windows: 'true', p_linux: 'true', p_macos: 'true' });
+    const { out, code, stderr } = plan({ EVENT: 'schedule' });
+    // The script's own word when it refuses: on a hosted macOS runner this once came back empty, with nothing to say why.
+    expect(out, `ci-plan.sh exited ${code}: ${stderr}`).toMatchObject({ mode: 'nightly', fail_fast: 'false', full: 'true', stage_e2e: 'true', p_windows: 'true', p_linux: 'true', p_macos: 'true' });
   });
 
   it('is full and fail-fast on a call, whatever inputs reach it', () => {

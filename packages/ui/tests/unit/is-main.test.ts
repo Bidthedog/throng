@@ -35,6 +35,11 @@ describe('isMain', () => {
     expect(isMain(url, link)).toBe(true);
   });
 
+  // macOS's temp folder is a symlink (/var → /private/var): Node gives import.meta.url resolved, argv[1] as typed.
+  it.skipIf(!linked)('is true when the module and its entry reach one file by different routes', () => {
+    expect(isMain(pathToFileURL(link).href, real)).toBe(true);
+  });
+
   it('is false on import, from another entry point, or with no entry point', () => {
     expect(isMain(url, join(dir, 'other.mjs'))).toBe(false);
     expect(isMain(url, undefined)).toBe(false);
