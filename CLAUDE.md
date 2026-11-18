@@ -33,8 +33,8 @@ gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 
 - **Take the verdict from `run view`, not `run watch`.** `gh run watch` detaches early and its exit
   code lies both ways. If `status` is not `completed`, the run is still going.
-- **A failed dispatch concludes `cancelled`, not `failure`**: its first failing job cancels the run.
-  Name the failure with `gh run view <id> --json jobs --jq '.jobs[]|select(.conclusion=="failure")|.name'`.
+- **A failed dispatch concludes `cancelled`, not `failure`**: its first failing job has `fail-fast.yml`
+  cancel the run once that job has finished, so the failing job keeps its own `failure`. Name it with `gh run view <id> --json jobs --jq '.jobs[]|select(.conclusion=="failure")|.name'`.
 - **Never run `npm run gate` locally.** It is the same stages in one process, and it pins every core
   for the better part of an hour and exhausts the interactive desktop heap.
 - **A Windows- or macOS-specific change** gets a `pipeline.yml` dispatch for that platform before
