@@ -138,6 +138,7 @@ import {
 // the panel chrome's `preview.css`, which never mentions a provider (FR-070).
 import './markdown.css';
 import { logCaught, logExpected } from '@throng/core';
+import { primaryModifierHeld, primaryModifierLabel } from '../../../config/host-modifiers.js';
 
 let renderer: Promise<MarkdownRenderer> | null = null;
 
@@ -1114,14 +1115,14 @@ export function MarkdownBody({
         requestToggle(box);
         return;
       }
-      if (!e.ctrlKey) {
+      if (!primaryModifierHeld(e)) {
         // 045 FR-165, FR-166 (round four; S6) — the shared link hint SUPERSEDES 044 FR-094's own
         // plain-click remedy as far as the plain click goes (FR-094's HOVER tooltip stands unchanged).
         // Additive: nothing here is prevented, so whatever a plain click already does — placing the
         // caret, starting a selection — is untouched.
         const link = linkOf(e.target);
         if (link !== null && selectionIsEmpty(e.currentTarget.ownerDocument)) {
-          const text = previewLinkHoverText(link, 'Ctrl', linkWordingRef.current ?? {});
+          const text = previewLinkHoverText(link, primaryModifierLabel(), linkWordingRef.current ?? {});
           if (text.length > 0) {
             // Maintainer correction (FR-165b, FR-165c): the LINK's own last row's bottom-right corner
             // — `getClientRects()`'s LAST rect, for an anchor text that wraps across lines — not the

@@ -11,6 +11,7 @@
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
+import { WINDOWS_HOST_TRAITS, configureHostTraits, macosHostTraits } from '@throng/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   DIAGRAM_MAX_SCALE,
@@ -313,6 +314,21 @@ describe('Zoom 100%', () => {
     expect(notPrevented).toBe(true);
     expect(viewport().classList.contains('preview-diagram-frame__viewport--panning')).toBe(false);
     expect(document.activeElement).toBe(viewport());
+  });
+
+  // On macOS the gesture is Cmd+middle-click (070 FR-030: mouse-zoom reads the platform's primary modifier), so the
+  // press it begins with must be left alone there too — a pan would prevent it and the reset would never fire.
+  it('on macOS a Cmd+middle press starts no pan, is left unprevented and focuses the diagram', () => {
+    configureHostTraits(macosHostTraits('/tmp/throng-ipc', []));
+    try {
+      const { viewport } = mount(800, 300);
+      const notPrevented = fireEvent.pointerDown(viewport(), { button: 1, buttons: 4, metaKey: true, clientX: 100, clientY: 100, pointerId: 1 });
+      expect(notPrevented).toBe(true);
+      expect(viewport().classList.contains('preview-diagram-frame__viewport--panning')).toBe(false);
+      expect(document.activeElement).toBe(viewport());
+    } finally {
+      configureHostTraits(WINDOWS_HOST_TRAITS);
+    }
   });
 
   it('shows the move cursor for exactly as long as a middle-button pan lasts', () => {
