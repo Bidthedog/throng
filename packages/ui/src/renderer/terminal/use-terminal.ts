@@ -65,7 +65,7 @@ import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
 import { parseOsc52 } from './osc52.js';
 import { reportTerminalCwd } from './cwd-store.js';
 import { setTerminalTitle, clearTerminalTitle } from './title-store.js';
-import { reportTerminalCommand } from './command-store.js';
+import { adoptTerminalSession, reportTerminalCommand } from './command-store.js';
 import { TerminalOutputGate } from './output-gate.js';
 import { consumeExplicitRetype } from './explicit-retype.js';
 import { clearKeyboardMode, peekKeyboardMode, saveKeyboardMode } from './keyboard-mode-store.js';
@@ -1653,6 +1653,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
           return;
         }
         attachedSession = res.sessionId;
+        // 053 FR-003 — a title learned from an earlier session of this panel, whose exit no view heard, is not this one's.
+        if (res.sessionId !== undefined) adoptTerminalSession(panelId, res.sessionId);
         onAttachedRef.current?.(res.cwdFallback); // a successful attach clears any "still starting" state
         // 053 — the window title the running program last set, kept by the daemon: the replayed tail is
         // bounded and withheld on the alternate screen, so the sequence that set it may not be in it.
