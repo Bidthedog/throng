@@ -200,9 +200,28 @@ async function runCommand(
   waitMs: number = TERMINAL_OUTPUT_TIMEOUT_MS,
 ): Promise<void> {
   await win.getByTestId(`terminal-${pid}`).click();
+  await typeAtCleanPrompt(win, cmd);
+  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(marker, { timeout: waitMs });
+}
+
+/**
+ * Type a command line and submit it, discarding whatever an earlier scroll chord left on the line.
+ *
+ * While the fixture's push is in force the scroll chords are NOT reserved — the test asserts exactly
+ * that — so they reach bash, which is what is actually reading. On macOS they are Cmd+Home/Cmd+End,
+ * which xterm encodes as `CSI 1;9H` / `CSI 1;9F`; readline does not recognise modifier 9 and leaves
+ * the final byte on the line. Measured against bash 5.3: the two chords then `echo RAN_OK` ran as
+ * `HFecho` ("command not found"). On the runner `node drop.js` became `HFnode drop.js`, the fixture
+ * never started, and the test reported that its delayed pop never landed. Ctrl+Home's `CSI 1;5H`
+ * is discarded whole, which is why Linux never saw it.
+ *
+ * Ctrl+U (readline's unix-line-discard, a reserved chord that always reaches the shell) clears the
+ * line first. Not on Windows: cmd has no such binding, and its line never collected anything.
+ */
+async function typeAtCleanPrompt(win: Page, cmd: string): Promise<void> {
+  if (process.platform !== 'win32') await win.keyboard.press('Control+U');
   await win.keyboard.type(cmd, { delay: 10 });
   await win.keyboard.press('Enter');
-  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(marker, { timeout: waitMs });
 }
 
 // One line, deliberately: `e2e-budget.test.ts` and `e2e-tags.test.ts` match the declaration with a
@@ -255,8 +274,7 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
 
     // ── Start the drop, then leave the tab so the pop lands with the panel unmounted.
     await term.click();
-    await win.keyboard.type('node drop.js', { delay: 10 });
-    await win.keyboard.press('Enter');
+    await typeAtCleanPrompt(win, 'node drop.js');
 
     await win.getByTestId('tab-add').click();
     const chips = win.getByTestId('tab-strip').locator('.tab-chip');

@@ -114,9 +114,20 @@ async function run(win: Page, pid: string, cmd: string, marker: string): Promise
    */
   const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const inCommand = (cmd.match(new RegExp(escaped, 'g')) ?? []).length;
+  /*
+   * Counted with the ROW BREAKS removed, because a wrapped command line is split across two rows.
+   *
+   * `innerText` puts a newline between xterm's rows, so a soft-wrapped line reads as two lines. On
+   * the hosted macOS runner the terminal is ~60 columns and the prompt (`host:dir user$ `) is long,
+   * so `echo FIND_PHASE_BEGIN` wrapped as `FIND_PHASE_` / `BEGIN`: the typed command no longer held
+   * the marker, its output held it once, and the count of 1 read as "the shell never ran it" while
+   * the output sat on screen. Joining the rows counts what the shell actually shows.
+   */
+  const occurrences = async (): Promise<number> =>
+    ((await term.innerText()).replace(/\n/g, '').match(new RegExp(escaped, 'g')) ?? []).length;
   try {
     await expect
-      .poll(async () => ((await term.innerText()).match(new RegExp(escaped, 'g')) ?? []).length, {
+      .poll(occurrences, {
         timeout: 20000,
       })
       .toBeGreaterThanOrEqual(inCommand + 1);
