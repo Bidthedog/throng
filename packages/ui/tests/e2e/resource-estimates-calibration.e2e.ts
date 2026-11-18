@@ -647,7 +647,11 @@ async function closePreview(win: Page, previewId: string): Promise<void> {
 async function openPreview(win: Page, last: string, parent: string): Promise<{ previewId: string; ms: number }> {
   const existing = await previewIds(win);
   const t0 = Date.now();
-  await win.getByTestId(`editor-preview-${parent}`).click();
+  // Dispatched, not clicked: a calibration file is large enough that the renderer is still drawing its preview when
+  // click() goes on to wait for the page to answer, and that wait has its own 30 s cap. The waits below are the bounds.
+  const button = win.getByTestId(`editor-preview-${parent}`);
+  await expect(button).toBeEnabled();
+  await button.dispatchEvent('click');
   await expect.poll(async () => (await previewIds(win)).some((id) => !existing.includes(id)), { timeout: 300_000 }).toBe(true);
   const previewId = (await previewIds(win)).find((id) => !existing.includes(id)) as string;
   await expect(win.getByTestId(`preview-body-${previewId}`)).toContainText(last, { timeout: 600_000 });
