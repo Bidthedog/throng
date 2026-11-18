@@ -351,6 +351,24 @@ export class FileLinkResolver {
   }
 
   /**
+   * Whether an EXISTING `path` is inside the project, by its spelling first and, failing that, by the real paths of
+   * both (045 FR-170 row 2). The project root and the shell can name one folder two ways: on macOS the temp
+   * directory is `/var/folders/…`, a symlink to `/private/var/folders/…`, and a shell reports the latter — so the
+   * spelling alone put a file in the project outside it, and the Link menu dropped Open In.
+   */
+  private async inProject(path: string, projectRoot: string | null): Promise<boolean> {
+    if (isLinkInProject(path, projectRoot)) return true;
+    if (projectRoot === null || projectRoot.length === 0) return false;
+    try {
+      const [realPath, realRoot] = await Promise.all([this.deps.fs.realpath(path), this.deps.fs.realpath(projectRoot)]);
+      return isLinkInProject(realPath, realRoot);
+    } catch (error) {
+      logCaught('file-link-resolver: real paths for in-project', error);
+      return false;
+    }
+  }
+
+  /**
    * The first reading that EXISTS, wherever it lies (FR-160's note), under ONE deadline for the whole
    * request (FR-161, T226, T227): every reading and every root shares `existenceCheckTimeoutMs`, so a
    * follow over several hanging readings still ends within it. Walking the readings in order is what
@@ -370,7 +388,7 @@ export class FileLinkResolver {
       return {
         path,
         kind,
-        inProject: isLinkInProject(path, plan.projectRoot),
+        inProject: await this.inProject(path, plan.projectRoot),
         // A folder is never executable, whatever it is named (FR-039a).
         executable: kind === 'file' && this.deps.executables.isExecutable(path),
         preview: kind === 'file' ? this.previewStateOf(path) : 'none',
