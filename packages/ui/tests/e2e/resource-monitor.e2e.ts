@@ -383,9 +383,28 @@ test('the monitor is a window beside throng: the terminal takes typing while it 
   // Reopened at the bounds it was left at (FR-087) — and shown, loading state and all, within a second
   // of the click (SC-002 as amended for the window). Bringing an open one forward is a synchronous
   // `focus()` in main (`resource-monitor-window.test.ts`), so only the cold open is timed here.
-  const clickedAt = Date.now();
+  //
+  // Timed by the app's own clocks, not the test's: from the click event in throng's window to the monitor page's
+  // first contentful paint. The test-side gap also counted Playwright's click round trip, its wait for the new
+  // window and its visibility polling — 1140 ms on a hosted macOS runner for a window the user saw sooner.
+  await win.evaluate(() => {
+    document.addEventListener(
+      'click',
+      (e) => {
+        (window as unknown as { __monitorClickAt?: number }).__monitorClickAt = performance.timeOrigin + e.timeStamp;
+      },
+      { capture: true, once: true },
+    );
+  });
   const reopenedPage = await openMonitorWindow(app, () => win.getByTestId('status-resources').click(), { ready: false });
-  expect(Date.now() - clickedAt, 'SC-002: the monitor window was not shown within 1 s of the click').toBeLessThanOrEqual(1_000);
+  const clickAt = await win.evaluate(() => (window as unknown as { __monitorClickAt?: number }).__monitorClickAt);
+  const shownAt = await reopenedPage.evaluate(() => {
+    const paint =
+      performance.getEntriesByName('first-contentful-paint')[0] ?? performance.getEntriesByType('paint')[0];
+    return performance.timeOrigin + (paint?.startTime ?? performance.now());
+  });
+  expect(clickAt, 'the click on the status-bar resources reached throng’s window').toBeDefined();
+  expect(shownAt - clickAt!, 'SC-002: the monitor window was not shown within 1 s of the click').toBeLessThanOrEqual(1_000);
   await expect(reopenedPage.getByTestId('monitor-window')).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
   const reopened = await monitorOsState(app);
   expect(reopened?.bounds).toEqual(moved);
