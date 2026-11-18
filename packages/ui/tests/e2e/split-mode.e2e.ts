@@ -131,10 +131,14 @@ test('neither stroke of a split chord reaches a real shell, completed or cancell
       } else {
         // bash names the word it could not run as a whole line of its own (`-bash: ` from a login shell), read
         // line by line because the view's text runs the echoed sentinel straight into that line.
-        const notFound = new RegExp(`^(?:-?bash: )?${SENTINEL}: command not found$`);
-        await expect
-          .poll(async () => (await terminalLines(win, term)).some((line) => notFound.test(line.trim())), { timeout: 15_000 })
-          .toBe(true);
+        // Compared with whitespace removed: each row's trailing spaces are trimmed, so a wrap at a space loses it.
+        const notFound = new RegExp(`^(?:-?bash:)?${SENTINEL}:commandnotfound$`);
+        // The reader gives screen ROWS: after two splits on a small screen (a hosted macOS runner's) the panel is narrow
+        // enough for that line to wrap, so up to three consecutive rows are read as one — a wrapped row is full width,
+        // so joining them restores the line exactly.
+        const reported = (rows: string[]): boolean =>
+          rows.some((_, i) => [1, 2, 3].some((n) => notFound.test(rows.slice(i, i + n).join('').replace(/\s+/g, ''))));
+        await expect.poll(async () => reported(await terminalLines(win, term)), { timeout: 15_000 }).toBe(true);
       }
     });
   } finally {

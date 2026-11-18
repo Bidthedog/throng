@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readlinkSync } from 'node:fs';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from '@playwright/test';
@@ -41,9 +42,22 @@ function linuxProcessTable(): Proc[] {
   const rows: Proc[] = [];
   for (const line of out.split('\n')) {
     const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
-    if (m) rows.push({ pid: Number(m[1]), parent: Number(m[2]), name: m[3] ?? '', cmd: m[4] ?? '' });
+    if (m) rows.push({ pid: Number(m[1]), parent: Number(m[2]), name: linuxImage(Number(m[1]), m[3] ?? ''), cmd: m[4] ?? '' });
   }
   return rows;
+}
+
+/**
+ * A Linux process's executable name. `comm` is the main THREAD's name, which a process may set: Node names its own
+ * `node-MainThread`, so a table by `comm` finds no `node` at all. The executable (`/proc/<pid>/exe`) is what the
+ * Windows and macOS tables name; `comm` stands in only where that link cannot be read (another user's process).
+ */
+function linuxImage(pid: number, comm: string): string {
+  try {
+    return basename(readlinkSync(`/proc/${pid}/exe`)).replace(/ \(deleted\)$/, '');
+  } catch {
+    return comm;
+  }
 }
 
 /**

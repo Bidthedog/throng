@@ -217,7 +217,7 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
         // be told.
         expect(shown, 'the banner does not name the folder that is missing').toContain(basename(root));
         const prose = shown.replace(ABSOLUTE_PATH, '<path>');
-        expect(prose).not.toMatch(/ENOENT|Cannot lock|Internal error/i);
+        expect(prose).not.toMatch(/ENOENT|Cannot lock|Cannot use|Internal error/i);
 
         /**
          * FR-004b / 030 FR-042b — both controls are ICONS with hover titles (Constitution VI).

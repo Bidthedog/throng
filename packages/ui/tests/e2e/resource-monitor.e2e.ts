@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { cleanupTemp, createProject, firstPanelId, NATIVE_WINDOW_CONTROLS, openApp, runTypedCommand, TERMINAL_OUTPUT_TIMEOUT_MS } from './harness.js';
 import type { OpenApp } from './harness.js';
-import { MONITOR_CHORD, closeMonitorWindow, monitorWindowPage, openMonitorWindow, openProjectsList, pressEscapeToClose } from './helpers/monitor-window.js';
+import { MONITOR_CHORD, closeMonitorWindow, monitorWindowPage, openMonitorWindow, openProjectsList, pressEscapeToClose, drillInto } from './helpers/monitor-window.js';
 import { expectWithinSla, noteSlaNotMeasured, slaMeasurable } from './helpers/sla.js';
 
 /**
@@ -151,9 +151,9 @@ test('Ctrl+Shift+Alt+Y opens the monitor window on the components alone; Project
   // Clicks 2 to 5 (double-clicks, FR-096 — a row has no drill-down button): Projects, the project, its
   // tab, its panel. FR-103 put the projects one level down, so this is one more than SC-005's four.
   await mon.getByTestId('breakdown-row-c:projects').dblclick();
-  await mon.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
-  await mon.locator('[role="treeitem"][data-testid^="breakdown-row-t:"]').first().dblclick();
-  await mon.locator('[role="treeitem"][data-testid^="breakdown-row-n:"]').first().dblclick();
+  await drillInto(mon, 'p:', 't:', 'Monitor');
+  await drillInto(mon, 't:', 'n:');
+  await drillInto(mon, 'n:', 'x:');
 
   // Five clicks in, the panel's processes are listed: the shell and the node under it.
   // A process row shows its friendly name (FR-020): node.exe reads "Node".
@@ -414,7 +414,7 @@ test('Activate on a panel in another tab brings its window forward with that pan
   // The view is held between openings (FR-087): an earlier test left text in the filter.
   await mon.getByTestId('monitor-filter').fill('');
   await openProjectsList(mon);
-  await mon.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
+  await drillInto(mon, 'p:', 't:', 'Monitor');
   await mon.getByTestId(`breakdown-row-t:${terminalTab}`).dblclick();
   await mon.getByTestId(`breakdown-row-n:${panelId}`).click();
   await expect(mon.getByTestId('detail-action-activate')).toHaveAttribute('title', 'Go to panel');

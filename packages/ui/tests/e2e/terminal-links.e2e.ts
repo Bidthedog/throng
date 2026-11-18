@@ -75,10 +75,12 @@ import { osc8HalfRuns } from './admin.js';
  * width, same pointer, same provider pass — and the only difference between them is whether the
  * file exists, which round four makes no difference to the drawing (FR-155).
  */
-const MARKER = 'MARKROW';
+// Kept short: the row must fit one line of the terminal, and a hosted macOS runner's small window wraps at ~52
+// columns. Wrapped links are T186's subject below, not this row's.
+const MARKER = 'LKROW';
 const REAL_PATH = './target.ts';
 const LOOK_ALIKE = './nothere.ts';
-const WEB_URL = 'https://example.com/hoverme';
+const WEB_URL = 'https://a.test/hv';
 const ROW_TEXT = `${MARKER} ${REAL_PATH} ${LOOK_ALIKE} ${WEB_URL}`;
 
 /**

@@ -301,6 +301,12 @@ test('a printing terminal and a typing terminal keep flowing while ten terminals
       await typerTerm.click();
       const slowestEcho = await typeTimingEchoes(win, typer, `echo ${dropped('hel', 'lo42')}`);
       await expectPingCount(ENDING, 0);
+      // Watch for at least two ping intervals, as the starts below do: on Linux the ten end inside one, and a window
+      // shorter than the printer's own one-second interval cannot tell a stall from silence (it read 1 change there).
+      await expect.poll(() => win.evaluate(() => {
+        const w = window as unknown as { __outWatch?: { changes: number[] } };
+        return w.__outWatch?.changes.length ?? 0;
+      }), { timeout: 10_000 }).toBeGreaterThan(2);
       const ending = await stopOutputWatch(win);
       console.log(`[051 MT-02] while ten ended: ${ending.changes} output changes, longest gap ${ending.longestGapMs} ms, slowest echo ${slowestEcho} ms`);
       expect(ending.changes, 'the printing terminal stopped printing while terminals ended').toBeGreaterThan(1);
