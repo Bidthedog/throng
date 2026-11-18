@@ -138,6 +138,12 @@ test('confirming a Panel type in one window types the clone in the other', { tag
     ]);
     child = opened;
     await child.waitForLoadState('domcontentloaded');
+    // The clone is SHOWING before the main window confirms — as test 1 waits, and as a person sees the new
+    // window before acting in the other one. `domcontentloaded` is not that: the child renders nothing until
+    // `PanelStateGate` has claimed its panels' state, and its `PanelStateSync` listener mounts with that
+    // content. The confirm's mirror is a one-shot broadcast (`throng:panel:typed`), so a confirm sent before
+    // then reached no listener and the clone stayed a form for good (seen on hosted macOS, 2 of 3 runs).
+    await expect(child.getByTestId(`panel-type-form-${a}`)).toBeVisible({ timeout: 15000 });
 
     // Choose Terminal + a known flavour, then confirm in the MAIN window.
     await win.getByTestId(`panel-type-select-${a}`).selectOption('terminal');
