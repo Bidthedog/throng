@@ -582,6 +582,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
       fontSize: opts.fontSize,
       // 070 FR-031: off lets Option type the layout's characters; on makes it Meta (xterm reads it on macOS only).
       macOptionIsMeta: opts.macOptionIsMeta === true,
+      // 045 FR-169 / FR-171: a right-click never selects. xterm's default is on for macOS, where the press selected the
+      // word under the pointer before `contextmenu`, so it read as the user's selection and a right-click on a link
+      // opened the ordinary menu instead of the Link menu — and left the word selected for the next right-click.
+      rightClickSelectsWord: false,
       theme: themeRef.current,
       // The search addon paints match highlights through xterm's decorations API, which
       // is still flagged "proposed" — without this it throws rather than highlighting (013).
