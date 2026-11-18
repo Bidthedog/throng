@@ -745,7 +745,15 @@ test('scrolling either side of a parented preview moves the other, a caret move 
     const codeLine = Number(await preview.locator('pre', { hasText: 'code line 001' }).first().getAttribute('data-source-line'));
     expect(jumped.editorTop, 'Go to Line 300 left the editor inside the tall code block').toBeGreaterThan(codeLine);
     expect(jumped.editorBlock).toBe(codeLine);
-    expect(jumped.previewTop, `the preview's top block after Go to Line (editor top line ${jumped.editorTop})`).toBe(codeLine);
+    // Polled, not read once: "settled" is two equal readings 100-250 ms apart, which the EDITOR's jump satisfies before
+    // the preview's follow has landed on a hosted macOS runner (top block 81 read, the follow still to come). A preview
+    // that never follows still fails here.
+    await expect
+      .poll(async () => (await settledSync(win, editorId, previewId)).previewTop, {
+        timeout: 10_000,
+        message: `the preview's top block after Go to Line (editor top line ${jumped.editorTop})`,
+      })
+      .toBe(codeLine);
     await expectNoOscillation(win, editorId, previewId, 'Go to Line');
 
     // …and Ctrl+End: the preview follows to the block of the editor's new top line, or as near as its own

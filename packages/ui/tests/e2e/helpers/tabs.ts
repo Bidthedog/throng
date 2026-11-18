@@ -251,6 +251,23 @@ export function isFullyVisible(s: StripState, chip: Chip): boolean {
   return chip.left >= view.left - EPS && chip.right <= view.right + EPS;
 }
 
+/**
+ * Whether a reveal brought `chip` into view: entirely inside the clear view, or — for a chip WIDER than the clear view,
+ * which nothing can show whole — with its start at the clear view's left edge. On a small screen (a hosted macOS
+ * runner's 290 px track, fades on both sides) a seeded tab of 366 px meets a clear view of 242 px.
+ */
+export function isBroughtIntoView(s: StripState, chip: Chip): boolean {
+  const view = clearView(s);
+  if (chip.right - chip.left > view.right - view.left + EPS) return Math.abs(chip.left - view.left) <= EPS;
+  return isFullyVisible(s, chip);
+}
+
+/** Where `chip` sits against the clear view, for a failure message. */
+export function describeReveal(s: StripState, chip: Chip): string {
+  const view = clearView(s);
+  return `tab ${Math.round(chip.left)}-${Math.round(chip.right)} (${Math.round(chip.right - chip.left)} px), clear view ${Math.round(view.left)}-${Math.round(view.right)}, scrollLeft ${s.scrollLeft}, track ${s.viewportWidth}, fades ${JSON.stringify(s.fades)}`;
+}
+
 /** Every chip entirely inside the viewport, in strip order. */
 export function fullyVisibleChips(s: StripState): Chip[] {
   return s.chips.filter((chip) => isFullyVisible(s, chip));

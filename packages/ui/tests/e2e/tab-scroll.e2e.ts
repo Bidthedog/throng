@@ -36,6 +36,8 @@ import {
   expectCountsInSync,
   intermediateSamples,
   isFullyVisible,
+  isBroughtIntoView,
+  describeReveal,
   isMonotonic,
   seedOverflowingTabs,
   setScrollLeft,
@@ -196,7 +198,7 @@ test.describe('an eased strip', () => {
     const after = await stripState(shared.win);
     const now = after.chips.find((c) => c.testId === chip.testId)!;
     expect(now.active, 'clicking a tab makes it active').toBe(true);
-    expect(isFullyVisible(after, now), 'the clicked tab is brought fully into view').toBe(true);
+    expect(isBroughtIntoView(after, now), `the clicked tab is brought into view: ${describeReveal(after, now)}`).toBe(true);
   });
 
   test('T048 — the picker chord brings a hidden tab into view (A1: chord, picker)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
@@ -220,7 +222,7 @@ test.describe('an eased strip', () => {
     const after = await stripState(shared.win);
     const now = after.chips.find((c) => c.testId === target.testId)!;
     expect(now.active).toBe(true);
-    expect(isFullyVisible(after, now), 'the chosen tab is scrolled into view').toBe(true);
+    expect(isBroughtIntoView(after, now), `the chosen tab is scrolled into view: ${describeReveal(after, now)}`).toBe(true);
   });
 
   test('T055 — choosing an entry scrolls the strip to that tab AND makes it active (K2)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
