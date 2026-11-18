@@ -283,7 +283,7 @@ export interface UseTerminalOptions {
    * the shell. xterm would otherwise handle these itself and write them to the pty;
    * reserving them is what keeps them out of the running program (FR-010 / FR-014).
    */
-  reserveKey?: (e: KeyboardEvent, programOwnsKeyboard: boolean) => boolean;
+  reserveKey?: (e: KeyboardEvent, programOwnsKeyboard: boolean, kittyNegotiated: boolean) => boolean;
   /**
    * Whether this terminal is the ACTIVE panel of the active tab, read at focus time (issue 144).
    *
@@ -841,7 +841,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
        * throng's and so are the chords that move it.
        */
       const programOwnsKeyboard = kittyKeyboardActive(kitty) || altBuffer;
-      const reserved = reserveKeyRef.current?.(e, programOwnsKeyboard) === true;
+      // The kitty half is passed on its own as well: on macOS, the Cmd scroll chords stay throng's under it (070 FR-031a).
+      const reserved = reserveKeyRef.current?.(e, programOwnsKeyboard, kittyKeyboardActive(kitty)) === true;
       // Always on, bounded, and read only by diagnostics: what throng believed when the key was
       // pressed. Three stand-in programs failed to reproduce a defect a user reproduces every time,
       // so the decision inputs are recorded where it actually happens.

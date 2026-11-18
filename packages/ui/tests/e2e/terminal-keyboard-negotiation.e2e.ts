@@ -116,6 +116,8 @@ const POP = "process.stdout.write('\\x1b[<u');";
 
 function writeFixtures(root: string): void {
   writeFileSync(join(root, 'push.js'), `${PUSH}\nprocess.stdout.write('KITTY_PUSHED\\r\\n');\n`, 'utf8');
+  // Prints a marker its own command line does not contain, so it proves the line ran as typed.
+  writeFileSync(join(root, 'clean.js'), "process.stdout.write('LINE_WAS_' + 'CLEAN\\r\\n');\n", 'utf8');
   /*
    * Phase 2 gets its OWN markers, and that is not tidiness. `toContainText` is satisfied by
    * anything already on screen, so re-using phase 1's `KITTY_PUSHED` made the wait return
@@ -200,26 +202,21 @@ async function runCommand(
   waitMs: number = TERMINAL_OUTPUT_TIMEOUT_MS,
 ): Promise<void> {
   await win.getByTestId(`terminal-${pid}`).click();
-  await typeAtCleanPrompt(win, cmd);
+  await typeCommand(win, cmd);
   await expect(win.getByTestId(`terminal-${pid}`)).toContainText(marker, { timeout: waitMs });
 }
 
 /**
- * Type a command line and submit it, discarding whatever an earlier scroll chord left on the line.
+ * Type a command line and submit it — as typed, with nothing cleared first.
  *
- * While the fixture's push is in force the scroll chords are NOT reserved — the test asserts exactly
- * that — so they reach bash, which is what is actually reading. On macOS they are Cmd+Home/Cmd+End,
- * which xterm encodes as `CSI 1;9H` / `CSI 1;9F`; readline does not recognise modifier 9 and leaves
- * the final byte on the line. Measured against bash 5.3: the two chords then `echo RAN_OK` ran as
- * `HFecho` ("command not found"). On the runner `node drop.js` became `HFnode drop.js`, the fixture
- * never started, and the test reported that its delayed pop never landed. Ctrl+Home's `CSI 1;5H`
- * is discarded whole, which is why Linux never saw it.
- *
- * Ctrl+U (readline's unix-line-discard, a reserved chord that always reaches the shell) clears the
- * line first. Not on Windows: cmd has no such binding, and its line never collected anything.
+ * This used to press Ctrl+U before every command, to discard the `HF` that Cmd+Home / Cmd+End left on
+ * bash's line on macOS while the fixture's push was in force (`CSI 1;9H` / `CSI 1;9F`, which readline
+ * cannot decode). 070 FR-031a now keeps those two chords for throng under the kitty protocol, so they
+ * reach nothing at the shell; Ctrl+Home / Ctrl+End elsewhere send `CSI 1;5H` / `CSI 1;5F`, which
+ * readline discards whole. A line that still collected junk is now a defect, and `node clean.js`
+ * below fails on it rather than this helper hiding it.
  */
-async function typeAtCleanPrompt(win: Page, cmd: string): Promise<void> {
-  if (process.platform !== 'win32') await win.keyboard.press('Control+U');
+async function typeCommand(win: Page, cmd: string): Promise<void> {
   await win.keyboard.type(cmd, { delay: 10 });
   await win.keyboard.press('Enter');
 }
@@ -269,12 +266,41 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
       true,
     );
     expect(armed.programOwnsKeyboard).toBe(true);
-    expect(armed.reserved, 'a program that owns the keyboard must RECEIVE Ctrl+Home').toBe(false);
-    await win.keyboard.press(SCROLL_TO_BOTTOM);
+    if (process.platform === 'darwin') {
+      /*
+       * 070 FR-031a — on macOS Cmd+Home / Cmd+End stay throng's under the kitty protocol: forwarded, they
+       * reached bash as `CSI 1;9H` / `CSI 1;9F`, which readline left on the line as `HF`. So throng scrolls.
+       */
+      expect(armed.reserved, 'Cmd+Home reached a program that negotiated kitty (070 FR-031a)').toBe(true);
+      await expect(term, 'Cmd+Home did not scroll to the top under kitty (070 FR-031a)').toContainText(
+        'TOP_OF_HISTORY',
+      );
+      await expect(term).not.toContainText('KITTY_PUSHED');
+      await win.keyboard.press(SCROLL_TO_BOTTOM);
+      expect((await lastKeyDecision(win, pid)).reserved, 'Cmd+End reached a program that negotiated kitty').toBe(
+        true,
+      );
+      await expect(term, 'Cmd+End did not return to the live bottom under kitty (070 FR-031a)').toContainText(
+        'KITTY_PUSHED',
+      );
+    } else {
+      expect(armed.reserved, 'a program that owns the keyboard must RECEIVE Ctrl+Home').toBe(false);
+      await win.keyboard.press(SCROLL_TO_BOTTOM);
+      expect((await lastKeyDecision(win, pid)).reserved, 'a program that owns the keyboard must RECEIVE Ctrl+End').toBe(
+        false,
+      );
+    }
+
+    /*
+     * Whichever way the two chords went, they left nothing at the shell: a command typed straight after them
+     * runs as typed. Its marker is printed by the program, never typed, so the echo of the command line
+     * cannot satisfy it — `HFnode clean.js` would print "command not found" instead.
+     */
+    await runCommand(win, pid, 'node clean.js', 'LINE_WAS_CLEAN');
 
     // ── Start the drop, then leave the tab so the pop lands with the panel unmounted.
     await term.click();
-    await typeAtCleanPrompt(win, 'node drop.js');
+    await typeCommand(win, 'node drop.js');
 
     await win.getByTestId('tab-add').click();
     const chips = win.getByTestId('tab-strip').locator('.tab-chip');

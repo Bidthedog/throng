@@ -8,8 +8,10 @@
  * a find session to take it for.
  */
 import { describe, expect, it } from 'vitest';
-import { COMMAND_SCOPES, type ActionId } from '@throng/core';
-import { reservedByTerminal } from '../../src/renderer/search/search-actions.js';
+import { COMMAND_SCOPES, DEFAULT_KEYBINDINGS, type ActionId, type OsName } from '@throng/core';
+import { withHostTraits } from '@throng/core/testing';
+import type { ChordEventLike } from '../../src/renderer/config/chord-key.js';
+import { reservedByTerminal, terminalReservesKeydown } from '../../src/renderer/search/search-actions.js';
 
 describe('reservedByTerminal', () => {
   it('always takes the find chord and the scrollback keys', () => {
@@ -85,5 +87,83 @@ describe('reservedByTerminal', () => {
     expect(COMMAND_SCOPES['search.close']).toContain('terminal');
     expect(reservedByTerminal('search.close', false)).toBe(false);
     expect(reservedByTerminal('search.close', true)).toBe(true);
+  });
+});
+
+/**
+ * 070 FR-031a (2026-11-18, maintainer decision) — on macOS, every scroll chord that carries Cmd stays throng's while a
+ * program has negotiated the kitty keyboard protocol.
+ *
+ * xterm.js has no kitty encoder, so a negotiated program is sent the legacy `CSI 1;9H` / `CSI 1;9F` (modifier 9,
+ * Meta). bash's readline cannot decode modifier 9 and leaves the final byte on the line: measured against bash 5.3
+ * through node-pty, the two chords then `echo RAN_OK` ran as `HFecho` ("command not found"). Every other platform's
+ * chords, and the alternate-screen case on macOS, are unchanged.
+ */
+describe('the Cmd scroll chords under the kitty keyboard protocol (070 FR-031a)', () => {
+  const key = (code: string, mods: Partial<ChordEventLike>): ChordEventLike => ({
+    code,
+    key: code,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    metaKey: false,
+    ...mods,
+  });
+  const reserves = (os: OsName, e: ChordEventLike, programOwnsKeyboard: boolean, kitty: boolean): boolean =>
+    withHostTraits(os, () => terminalReservesKeydown(DEFAULT_KEYBINDINGS, e, false, programOwnsKeyboard, kitty));
+
+  it('keeps Cmd+Home and Cmd+End for throng on macOS while a program has negotiated kitty', () => {
+    expect(reserves('macos', key('Home', { metaKey: true }), true, true), 'Cmd+Home reached a kitty program').toBe(true);
+    expect(reserves('macos', key('End', { metaKey: true }), true, true), 'Cmd+End reached a kitty program').toBe(true);
+  });
+
+  it('still hands them to a program painting the alternate screen without kitty on macOS', () => {
+    expect(reserves('macos', key('Home', { metaKey: true }), true, false)).toBe(false);
+    expect(reserves('macos', key('End', { metaKey: true }), true, false)).toBe(false);
+  });
+
+  it('reserves them as before when no program owns the keyboard on macOS', () => {
+    expect(reserves('macos', key('Home', { metaKey: true }), false, false)).toBe(true);
+    expect(reserves('macos', key('End', { metaKey: true }), false, false)).toBe(true);
+  });
+
+  /*
+   * The rule is every scroll chord that carries Cmd, because xterm.js cannot hand Cmd to the program in any form it
+   * reads (measured against bash 5.3 through node-pty, each sequence then `echo RAN_OK`): an Arrow with Cmd held is
+   * sent as NOTHING (xterm's encoder drops it), Home/End and Ctrl+PageUp/PageDown carry a modifier of 9 or more
+   * (`CSI 1;10H`, `CSI 5;13~`), which readline leaves on the line (`0Hecho`, `13~echo`), and PageUp/PageDown without
+   * Ctrl lose the Cmd and arrive as a plain PageUp/PageDown.
+   */
+  it('keeps Shift+Cmd+Up and Shift+Cmd+Down (line scroll) for throng on macOS while a program has negotiated kitty', () => {
+    expect(reserves('macos', key('ArrowUp', { metaKey: true, shiftKey: true }), true, true), 'Shift+Cmd+Up').toBe(true);
+    expect(reserves('macos', key('ArrowDown', { metaKey: true, shiftKey: true }), true, true), 'Shift+Cmd+Down').toBe(
+      true,
+    );
+  });
+
+  it('keeps a scroll command the user rebound to a Cmd chord on macOS under kitty', () => {
+    const rebound = withHostTraits('macos', () => ({
+      version: 1,
+      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'terminal.scrollPageUp': ['Meta+PageUp'] },
+    }));
+    const kept = withHostTraits('macos', () =>
+      terminalReservesKeydown(rebound, key('PageUp', { metaKey: true }), false, true, true),
+    );
+    expect(kept, 'Cmd+PageUp bound to scrollPageUp reached a kitty program').toBe(true);
+  });
+
+  it('leaves a scroll chord without Cmd to a kitty program on macOS', () => {
+    expect(reserves('macos', key('PageUp', { shiftKey: true }), true, true)).toBe(false);
+  });
+
+  it('still hands Shift+Cmd+Up to a program painting the alternate screen without kitty on macOS', () => {
+    expect(reserves('macos', key('ArrowUp', { metaKey: true, shiftKey: true }), true, false)).toBe(false);
+  });
+
+  it('still hands Ctrl+Home / Ctrl+End to a kitty program on Windows and Linux', () => {
+    for (const os of ['windows', 'linux'] as const) {
+      expect(reserves(os, key('Home', { ctrlKey: true }), true, true), `${os} Ctrl+Home`).toBe(false);
+      expect(reserves(os, key('End', { ctrlKey: true }), true, true), `${os} Ctrl+End`).toBe(false);
+    }
   });
 });

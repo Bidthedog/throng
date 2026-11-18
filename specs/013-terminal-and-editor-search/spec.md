@@ -146,6 +146,7 @@ A developer wants to change every occurrence of a string in the open file — re
 #### Scrollback navigation
 
 - **FR-014**: A user MUST be able to navigate a terminal's scrollback from the keyboard: page up/down, line up/down, jump to top, and jump to the live bottom. These navigation commands MUST NOT be delivered as keystrokes to the running program.
+  *(Amended 2026-11-18 — recording the exception the 028 follow-up shipped without writing down: while the running program owns the keyboard, because it negotiated the kitty keyboard protocol or is painting the alternate screen, the navigation chords ARE delivered to it and throng does not scroll (`search-actions.ts`, `reservedByTerminal`). Reported from Claude Code, where Ctrl+End "doesn't register at all" while throng took it. On macOS, every scroll chord that carries Cmd is excluded from this exception under kitty by 070 FR-031a.)*
 - **FR-015**: A user MUST be able to jump to the next / previous **search match** in the scrollback while find is active, consistent with FR-011. This is the **same command** as find-next / find-previous (FR-006/FR-011) acting in the terminal-scrollback context — **not** a distinct action-id.
 - **FR-016**: When the terminal is at its live bottom and the user is typing to the program, navigation MUST NOT intercept ordinary input; input MUST reach the program normally.
 

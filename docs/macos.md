@@ -37,6 +37,10 @@ Option types the characters your keyboard layout puts on it. To make it the Meta
   opened from the Dock.
 - A terminal's folder is read from the system, so no shell integration is needed for it.
 - Terminals have no elevated (run as administrator) mode; `sudo` inside a terminal works as usual.
+- The [scroll chords](key-bindings.md#terminal) that use Cmd (Cmd+Home, Cmd+End, Shift+Cmd+Up and Shift+Cmd+Down,
+  and any Cmd chord you bind to a scroll command) scroll the terminal even while a program such as Claude Code has
+  asked for enhanced key reporting. On Windows and Linux, the scroll chords go to that program instead. A full-screen
+  program that has not asked for enhanced key reporting still receives them.
 
 ## Files
 
