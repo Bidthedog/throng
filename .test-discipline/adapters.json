@@ -141,7 +141,7 @@
       "tag": {
         "include": "--grep @{tag}",
         "exclude": "--grep-invert @{tag}",
-        "list": "npx playwright test --list --grep @{tag}",
+        "list": "node scripts/td-e2e-tag-list.mjs {tag}",
         "names": { "critical-path": "core", "regression": "extended" }
       },
       "benched": { "env": "TD_BENCHED", "annotate": "test.describe('benched: name', { tag: '@benched' }, () => { test.skip(process.env.TD_BENCHED !== '1', 'benched'); … })" },
