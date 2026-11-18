@@ -200,24 +200,70 @@ test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', 
   );
 });
 
+/*
+ * Put the main window in a known, NOT maximised state, smaller than its display's work area.
+ *
+ * A window is not guaranteed to start that way: on a hosted macOS runner the first-run size is clamped to a small
+ * screen, the window fills the work area, and macOS reports a window at its work area as zoomed — so it opened
+ * "maximised" (1004×657), the first Maximise press un-zoomed it, and the wait for `maximized === true` timed out.
+ * `unmaximize()` alone is not enough there either: a window zoomed by its size rather than by a zoom has no
+ * smaller frame to go back to. So it is also sized inside the work area (above the main window's 600×560 minimum).
+ * Both calls animate on macOS, so the result is polled.
+ */
+async function startRestored(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ BrowserWindow, screen }) => {
+    const main = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id)[0];
+    if (main.isMaximized()) main.unmaximize();
+    const wa = screen.getDisplayMatching(main.getBounds()).workArea;
+    const [minW, minH] = main.getMinimumSize();
+    const width = Math.max(minW, wa.width - 200);
+    const height = Math.max(minH, wa.height - 80);
+    main.setBounds({ x: wa.x + Math.floor((wa.width - width) / 2), y: wa.y + Math.floor((wa.height - height) / 2), width, height });
+  });
+  await expect
+    .poll(async () => (await mainWindowState(app)).maximized, {
+      message: 'the main window could not be brought to a non-maximised size inside its work area',
+    })
+    .toBe(false);
+}
+
 test('window controls maximise/restore (button + double-click) and minimise', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
-    // Maximise then restore via the control.
+    await startRestored(app);
+
+    // Maximise then restore via the control — on macOS the green light, which is the window's own zoom.
     await pressWindowControl(app, win, 'max');
     await expect.poll(async () => (await mainWindowState(app)).maximized).toBe(true);
     await pressWindowControl(app, win, 'max');
     await expect.poll(async () => (await mainWindowState(app)).maximized).toBe(false);
 
-    // Double-clicking the drag region toggles maximise (FR-004).
-    await win.getByTestId('title-bar-identity').dblclick();
-    await expect.poll(async () => (await mainWindowState(app)).maximized).toBe(true);
-    // Restore for the following steps.
-    await app.evaluate(({ BrowserWindow }) => {
-      const main = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id)[0];
-      if (main.isMaximized()) main.unmaximize();
-    });
+    // The identity sits in the bar's drag region, which is what hands a double-click on it to the OS title bar.
+    await expect
+      .poll(() =>
+        win.getByTestId('title-bar-identity').evaluate((el) => getComputedStyle(el).getPropertyValue('-webkit-app-region')),
+      )
+      .toBe('drag');
 
-    // Minimise, then restore in the main process so the run can continue.
+    if (!NATIVE_WINDOW_CONTROLS) {
+      // Double-clicking the drag region toggles maximise (FR-004).
+      await win.getByTestId('title-bar-identity').dblclick();
+      await expect.poll(async () => (await mainWindowState(app)).maximized).toBe(true);
+      // Restore for the following steps.
+      await app.evaluate(({ BrowserWindow }) => {
+        const main = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id)[0];
+        if (main.isMaximized()) main.unmaximize();
+      });
+      await expect.poll(async () => (await mainWindowState(app)).maximized).toBe(false);
+    }
+    /*
+     * On macOS a double-click on the title bar is the system's, not throng's (070 FR-026): it zooms or minimises as
+     * "Double-click a window's title bar to" says, and the drag region asserted above is what routes it there. A
+     * synthetic Playwright double-click is delivered to the page, never to the window's title bar, so it could only
+     * exercise throng's renderer handler — a path a real double-click on a drag region does not take — and would
+     * claim a zoom the system setting may not give. Zoom and restore are proved above through the green light.
+     */
+
+    // Minimise (on macOS the yellow light), then restore in the main process so the run can continue.
     await pressWindowControl(app, win, 'min');
     await expect.poll(async () => (await mainWindowState(app)).minimized).toBe(true);
     await app.evaluate(({ BrowserWindow }) => {
