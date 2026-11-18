@@ -246,7 +246,30 @@ export function closePreferences(): void {
  * window, a renderer that never answers, a second close arriving while the first is in flight — is
  * resolved towards closing.
  */
-function wireCloseGate(win: BrowserWindow): () => void {
+/**
+ * Set once the app's shutdown has drained and is past its point of no return (070 FR-028, #86).
+ *
+ * On macOS that shutdown finishes with `app.quit()`, which closes every window and is ABORTED by any
+ * window that prevents its `close` — and the gate below prevents the first one to ask its renderer.
+ * So a Cmd+Q with Preferences open drained the edit and then never quit. On Windows and Linux the main
+ * window's close destroys this parented window natively and the gate never ran; standing the gate
+ * aside here makes macOS end the same way. Nothing is lost: the drain has already committed a valid
+ * JSON buffer (032 FR-020), and an invalid one is what every other platform's close discards too.
+ */
+let shutdownCommitted = false;
+
+/** The shutdown has drained and will now end the app: the close gate stops asking. */
+export function releasePreferencesForShutdown(): void {
+  shutdownCommitted = true;
+}
+
+/** Unit tests only: the flag is process-wide, and each test starts with no shutdown under way. */
+export function resetPreferencesShutdownForTest(): void {
+  shutdownCommitted = false;
+}
+
+/** Exported for its unit test; {@link openPreferences} is the only production caller. */
+export function wireCloseGate(win: BrowserWindow): () => void {
   /*
    * Set once the renderer has agreed (or has failed to answer), so the `close()` we then call is
    * not intercepted again. Without it the second close asks a second time and the window can never
@@ -272,7 +295,7 @@ function wireCloseGate(win: BrowserWindow): () => void {
   win.webContents.ipc.on(PREFERENCES_CLOSE_REPLY_CHANNEL, onCloseReply);
 
   win.on('close', (event) => {
-    if (allowed) return;
+    if (allowed || shutdownCommitted) return;
     event.preventDefault();
     if (asking) return; // a question is already outstanding; do not stack them
 
