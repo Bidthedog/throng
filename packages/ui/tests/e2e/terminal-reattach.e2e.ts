@@ -10,7 +10,7 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { resolveIpcAddress } from '@throng/core';
 import { skipIfElevated } from './admin.js';
-import { APP_CLOSE_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, TEST_SHELL } from './harness.js';
+import { APP_CLOSE_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, TEST_SHELL, requestAppClose } from './harness.js';
 
 /**
  * Poll the persisted layout for `needle` rather than sleeping and hoping the autosave landed
@@ -65,9 +65,6 @@ function daemonSessionCount(pipe: string): Promise<number> {
     s.on('error', () => { clearTimeout(t); done(-3); });
   });
 }
-
-const requestClose = (app: ElectronApplication): Promise<void> =>
-  app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
 
 /*
  * A terminal VIEW, not everything whose test id happens to start with "terminal-".
@@ -124,7 +121,7 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
     await expectLayoutContains(dataDir, 'Persist', `"flavourId":"${TEST_SHELL}"`);
     expect(await daemonSessionCount(pipe)).toBe(1);
 
-    await requestClose(app1);
+    await requestAppClose(app1);
     await expect(win1.getByTestId('app-close-dialog')).toBeVisible({ timeout: 8000 });
     // The dialog must NOT auto-dismiss (regression: an autofocused button used to
     // self-activate the instant it appeared) — it is still up after a beat.
@@ -150,7 +147,7 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
 
     // Closing again MUST warn about the pre-existing terminal — and the reattached
     // session must still carry its display labels (project / flavour) in the details.
-    await requestClose(app2);
+    await requestAppClose(app2);
     await expect(win2.getByTestId('app-close-dialog')).toBeVisible({ timeout: 8000 });
     await win2.getByTestId('app-close-details').locator('summary').click();
     await expect(win2.getByTestId('app-close-details')).toContainText('Persist');

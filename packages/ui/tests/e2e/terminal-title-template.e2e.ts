@@ -16,7 +16,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { test, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   runApp,
   createProject,
@@ -28,6 +28,7 @@ import {
   APP_CLOSE_TIMEOUT_MS,
   TERMINAL_OUTPUT_TIMEOUT_MS,
   TEST_SHELL,
+  requestAppClose,
 } from './harness.js';
 import Database from 'better-sqlite3';
 import { expectPingCount } from './helpers/processes.js';
@@ -272,10 +273,6 @@ async function expectObservedSaved(dataDir: string, project: string, needle: str
     .toBe(true);
 }
 
-async function requestClose(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
-}
-
 test('a program that titles itself is named `app: title`, across a project switch, an unload and a restart (FR-003, FR-010, FR-011)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(300_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-titles-app-'));
@@ -321,7 +318,7 @@ test('a program that titles itself is named `app: title`, across a project switc
       // Close throng, terminating everything — once the running program has been saved as observed, which is what
       // the next launch recovers it from.
       await expectObservedSaved(dataDir, 'TitleApp', 'titler.js');
-      await requestClose(app);
+      await requestAppClose(app);
       await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10_000 });
       const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
       await win.getByTestId('app-close-terminate').click();

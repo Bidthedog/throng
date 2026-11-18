@@ -108,6 +108,14 @@ async function drawnFrame(win: Page, id: string): Promise<Locator> {
  * a centre click presses Fit instead of focusing the diagram. Right of the toolbar where there is room, else below it.
  */
 async function clickDiagram(frame: Locator): Promise<void> {
+  const { position } = await diagramClearPoint(frame);
+  await frame.locator('.preview-diagram-frame__viewport').click({ position });
+}
+
+/** Where {@link clickDiagram} clicks: relative to the viewport (`position`) and on the page (`page`). */
+async function diagramClearPoint(
+  frame: Locator,
+): Promise<{ position: { x: number; y: number }; page: { x: number; y: number } }> {
   const viewport = frame.locator('.preview-diagram-frame__viewport');
   const v = await viewport.boundingBox();
   const t = await frame.locator('.preview-diagram-frame__toolbar').boundingBox();
@@ -121,7 +129,7 @@ async function clickDiagram(frame: Locator): Promise<void> {
         ? { x: v.width / 2, y: t.y + t.height - v.y + below / 2 }
         : null;
   if (!position) throw new Error(`no part of the diagram is clear of its toolbar: viewport ${JSON.stringify(v)}, toolbar ${JSON.stringify(t)}`);
-  await viewport.click({ position });
+  return { position, page: { x: v.x + position.x, y: v.y + position.y } };
 }
 
 interface Box {
@@ -473,13 +481,14 @@ test('B9: Ctrl+middle-click on a diagram resets it to Fit and never starts a pan
   for (const open of [() => previewFromTree(win, 'flow.mmd'), () => previewFromEditor(win, 'diagram.md', 'Diagram doc')]) {
     const frame = await drawnFrame(win, await open());
     const viewport = frame.locator('.preview-diagram-frame__viewport');
-    await viewport.click();
+    await clickDiagram(frame);
     await byTitle(frame, 'Zoom in').click();
     await byTitle(frame, 'Zoom in').click();
     await expect(frame).toHaveAttribute('data-mode', 'zoom');
-    const v = await viewport.boundingBox();
+    // On the diagram, clear of its toolbar — a short viewport puts the toolbar over the centre (clickDiagram).
+    const at = (await diagramClearPoint(frame)).page;
     await win.keyboard.down(process.platform === 'darwin' ? 'Meta' : 'Control');
-    await win.mouse.move(v!.x + v!.width / 2, v!.y + v!.height / 2);
+    await win.mouse.move(at.x, at.y);
     await win.mouse.down({ button: 'middle' });
     await expect(viewport, 'no pan starts: no move cursor').not.toHaveClass(/preview-diagram-frame__viewport--panning/);
     await win.mouse.up({ button: 'middle' });

@@ -3,17 +3,12 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import type { ElectronApplication } from '@playwright/test';
-import { APP_CLOSE_TIMEOUT_MS, LONG_RUNNING_COMMAND, TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, firstPanelId, panelIds, runApp, splitPanelViaMenu } from './harness.js';
+import { APP_CLOSE_TIMEOUT_MS, LONG_RUNNING_COMMAND, TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, firstPanelId, panelIds, runApp, splitPanelViaMenu, requestAppClose } from './harness.js';
 // T068 (US3 / FR-015): closing the app while terminals are running must warn with
 // a three-choice prompt (leave running / terminate all / cancel) instead of
 // silently killing them. Cancel keeps the app open.
 
 /** Ask the main process to close the primary window (fires the close handshake). */
-async function requestClose(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
-}
-
 // MERGED: "closing with a running terminal shows the three-choice warning; Cancel keeps it open" now lives
 // in the multi-terminal test below (Cancel step before Terminate), and "Terminate all closes the app" is
 // the tail of that same test.
@@ -50,7 +45,7 @@ test('warns with the right count when several terminals run (incl. a busy one); 
 
       // Closing must warn — with BOTH terminals counted (the busy one must not make
       // the count query time out and silently skip the prompt).
-      await requestClose(app);
+      await requestAppClose(app);
       await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10000 });
       await expect(win.getByTestId('app-close-message')).toContainText('2 terminals');
 
@@ -70,7 +65,7 @@ test('warns with the right count when several terminals run (incl. a busy one); 
       await expect(win.getByTestId(`terminal-${a}`)).toBeVisible();
 
       // Ask again → the warning returns.
-      await requestClose(app);
+      await requestAppClose(app);
       await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10000 });
 
       // Terminate all → the app quits (clean teardown, no lingering terminals).
@@ -90,7 +85,7 @@ test('closing with no running terminals shows a brief closing overlay, then quit
 
     // No terminals → no warning; a brief blocking "closing" overlay, then quit.
     const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
-    await requestClose(app);
+    await requestAppClose(app);
     await expect(win.getByTestId('app-closing-message')).toContainText('Closing throng');
     await closed;
   });

@@ -85,7 +85,10 @@ async function previewFromTree(win: Page, file: string): Promise<string> {
   await win.getByTestId('file-explorer-tree').getByText(file, { exact: true }).click();
   const title = `${file} - Preview`; // 054 FR-005a: the full file name
   const heading = win.locator('[data-testid^="panel-title-"]').filter({ hasText: new RegExp(`^${title.replace(/\./g, '\\.')}$`) }).first();
-  await expect(heading).toBeVisible({ timeout: 8000 });
+  // Attached, not visible: this only finds the panel's id. A panel squeezed beside an earlier preview in a small
+  // window (a hosted macOS runner's) draws its title too narrow to count as visible; the callers assert what the
+  // preview shows.
+  await expect(heading).toBeAttached({ timeout: 8000 });
   const testId = await heading.getAttribute('data-testid');
   if (!testId) throw new Error(`previewFromTree(${file}): no preview panel titled ${title}`);
   return testId.replace('panel-title-', '');
