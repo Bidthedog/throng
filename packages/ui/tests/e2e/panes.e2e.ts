@@ -233,8 +233,17 @@ test('Focus Mode collapses both side panes and restores each to its entry state 
   await expect(win.getByTestId('pane-hide-left')).toBeVisible();
   await win.getByTestId('pane-hide-right').click();
   await expect(win.getByTestId('pane-rail-right')).toBeVisible();
+  /*
+   * The rail is drawn the moment the pane collapses, but the shell's columns then slide for 180ms
+   * (`.throng-shell` transition), carrying the panel header's controls right with the widening workspace.
+   * A click taken while they slide can press the button and release beside it — `click` then fires on their
+   * common ancestor and Focus Mode never starts (hosted macOS, run 44403035965: `data-maximised` stayed
+   * null for 15s). So each click on this button waits for it to stop moving, as `geom()` defines that.
+   */
+  const maximise = win.getByTestId(`panel-maximise-${panel}`);
   try {
-    await win.getByTestId(`panel-maximise-${panel}`).click();
+    await geom(maximise);
+    await maximise.click();
     await expect(win.getByTestId('tab-body')).toHaveAttribute('data-maximised', panel);
     await expect(win.getByTestId('pane-rail-left')).toBeVisible();
     await expect(win.getByTestId('pane-rail-right')).toBeVisible();
@@ -243,7 +252,9 @@ test('Focus Mode collapses both side panes and restores each to its entry state 
     await win.getByTestId('pane-show-right').click();
     await expect(win.getByTestId('pane-rail-right')).toHaveCount(0);
 
-    await win.getByTestId(`panel-maximise-${panel}`).click();
+    // The pane's expansion slides the shell's columns back, so the button moves again.
+    await geom(maximise);
+    await maximise.click();
     await expect(win.getByTestId('tab-body')).not.toHaveAttribute('data-maximised', /.*/);
     await expect(win.getByTestId('pane-hide-left')).toBeVisible();
     await expect(win.getByTestId('pane-rail-right')).toBeVisible();
