@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { shippedBindingsFor } from '@throng/core';
+import { chordLabel, shippedBindingsFor } from '@throng/core';
 import {
   openApp,
   createProject as newProject,
@@ -149,8 +149,8 @@ test('a menu item shows its shortcut in brackets, and the advertised shortcut ru
       await expect(win.getByTestId('menu-item-Copy')).toBeVisible();
       // Merged from context-menu-shortcuts.e2e.ts (#125): Copy is bound to Ctrl+C in the explorer scope, so its
       // shortcut shows in brackets after the label (FR-003)...
-      // The text is the binding token itself (`firstBinding`, context-menu-items.ts): `Ctrl+C`, and `Meta+C` on macOS (070 FR-029).
-      await expect(win.getByTestId('menu-shortcut-Copy')).toHaveText(`(${shippedBindingsFor(HOST_OS).bindings['file.copy']?.[0]})`);
+      // The text is the binding as the platform reads it (chordLabel): `Ctrl+C`, and `Cmd+C` on macOS (070 FR-029).
+      await expect(win.getByTestId('menu-shortcut-Copy')).toHaveText(`(${chordLabel(shippedBindingsFor(HOST_OS).bindings['file.copy']?.[0] ?? '', HOST_OS)})`);
       // ...visually smaller than the label (FR-005)...
       const sizes = await win.evaluate(() => {
         const sc = document.querySelector('[data-testid="menu-shortcut-Copy"]') as HTMLElement;
