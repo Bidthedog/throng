@@ -14,6 +14,7 @@
 #   SHARDS        windows=4,linux=2,macos=2 (any subset)
 #   STRESS_SPEC / STRESS_GREP / STRESS_ROUNDS
 #   HAND_TESTS / TRACE   'true' on a dispatch only
+#   RUN_TO_COMPLETION    'true' on a dispatch only: fail_fast=false, as the nightly
 #
 # Outputs go to $GITHUB_OUTPUT, one `key=value` per line.
 set -euo pipefail
@@ -100,6 +101,10 @@ mode=agent
 fail_fast=true
 if [ "$event" = schedule ]; then
   mode=nightly
+  fail_fast=false
+fi
+# A dispatch asked to run to completion sweeps for every failure at once, as the nightly does; a release never does.
+if [ "$event" = workflow_dispatch ] && [ "${RUN_TO_COMPLETION:-}" = true ]; then
   fail_fast=false
 fi
 

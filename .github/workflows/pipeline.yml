@@ -70,6 +70,10 @@ on:
         description: 'Capture Playwright traces and terminal diagnostics on failure (perturbs timing).'
         type: boolean
         default: false
+      run_to_completion:
+        description: 'Run every job and test to the end, as the nightly does, to see every failure in one run. Off: stop at the first.'
+        type: boolean
+        default: false
   workflow_call:
     outputs:
       verdict:
@@ -157,6 +161,7 @@ jobs:
           STRESS_ROUNDS: ${{ inputs.stress_rounds }}
           HAND_TESTS: ${{ inputs.hand_tests }}
           TRACE: ${{ inputs.trace }}
+          RUN_TO_COMPLETION: ${{ inputs.run_to_completion }}
         run: bash scripts/ci-plan.sh
 
   # The macOS runner labels are named once, in .github/macos-runners.json, and every macOS job takes its machine from here

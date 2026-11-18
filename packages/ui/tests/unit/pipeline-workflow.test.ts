@@ -70,6 +70,7 @@ describe('triggers (contract: Triggers)', () => {
         'e2e_filter',
         'hand_tests',
         'platforms',
+        'run_to_completion',
         'shards',
         'stages',
         'stress_grep',
@@ -461,6 +462,14 @@ describe('the plan (scripts/ci-plan.sh, FR-018)', () => {
   it('sets hand_tests and trace only on a dispatch', () => {
     expect(plan({ EVENT: 'schedule', HAND_TESTS: 'true', TRACE: 'true' }).out).toMatchObject({ hand_tests: 'false', trace: 'false' });
     expect(plan({ EVENT: 'workflow_dispatch', HAND_TESTS: 'true', TRACE: 'true' }).out).toMatchObject({ hand_tests: 'true', trace: 'true' });
+  });
+
+  it('runs a dispatch to completion only when asked, and never a release', () => {
+    // A sweep for every failure at once (the nightly's behaviour); a dispatch still fails fast by default.
+    expect(plan({ EVENT: 'workflow_dispatch', RUN_TO_COMPLETION: 'true' }).out).toMatchObject({ mode: 'agent', fail_fast: 'false' });
+    expect(plan({ EVENT: 'workflow_dispatch' }).out).toMatchObject({ fail_fast: 'true' });
+    // release.yml's call stops at the first failure whatever is passed: nothing publishes from a red run anyway.
+    expect(plan({ EVENT: 'push', RUN_TO_COMPLETION: 'true' }).out).toMatchObject({ fail_fast: 'true' });
   });
 
   it.each([
