@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { shouldSurfaceExit, type PtyExit } from '@throng/core';
 import { runPtyHostContract, skipUnlessLinux } from '@throng/core/testing';
 import { LinuxPtyHost } from '@throng/platform-linux';
 
@@ -54,6 +55,30 @@ describe.skipIf(skipUnlessLinux('drives a real PTY and reads /proc'))('LinuxPtyH
     expect(alive(child)).toBe(true);
     await host.end(handle, 8000);
     await waitFor(() => !alive(child), 3000, 'the job to end');
+  });
+
+  /*
+   * A shell a signal killed did not end cleanly, and the exit must not say it did. node-pty reports
+   * `exitCode: 0` beside the signal number for a signalled child, and `shouldSurfaceExit` reads 0 as
+   * "ended cleanly, raise nothing" — so a bash that `kill -9`'d itself (or the OOM killer took) vanished
+   * with no notice and no code (Principle III), and a terminal throng hung up on raised none either.
+   */
+  it('a shell killed by a signal does not report a clean exit', { timeout: 30_000 }, async () => {
+    const host = new LinuxPtyHost({ graceMs: 200 });
+    for (const end of [
+      (h: { pid: number }) => host.write(h, 'kill -KILL $$\r'),
+      (h: { pid: number }) => void host.end(h, 8000),
+    ]) {
+      const handle = host.start({ ...shell, cwd: tmpdir(), cols: 80, rows: 24 });
+      let exit: PtyExit | null = null;
+      host.onExit(handle, (e) => (exit = e));
+      await new Promise((r) => setTimeout(r, 300));
+      end(handle);
+      await waitFor(() => exit !== null, 8000, 'the shell to exit');
+      const seen = exit as PtyExit | null;
+      expect(shouldSurfaceExit(seen?.code), `exit reported as ${JSON.stringify(seen)}`).toBe(true);
+      expect(seen?.signal).toBeTruthy();
+    }
   });
 
   it('touches nothing it did not start', { timeout: 30_000 }, async () => {
