@@ -168,6 +168,7 @@ import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { SharedFileWatcher } from './shared-file-watcher.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
+import { reconnectWatcher } from './reconnect-watcher.js';
 import { createAppShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
 import { FileClipboardService } from './file-clipboard.js';
@@ -2448,13 +2449,14 @@ if (isPrimaryInstance)
    * return is the one that could not be established. `IFileWatcher` is the same seam
    * `EditorCoordinator` uses per document for 027 / #161.
    *
-   * It reads through the SAME shared watcher as the tree, the index, editors and previews (#306),
-   * not an instance of its own (039 D-1's deferral). The folder it waits on is usually inside the
-   * project root, so it joins the root's one watch rather than opening another recursive watch over
-   * part of the same tree — two of which over one `node_modules` is half of what #585 measured.
+   * It does NOT read through the shared project watcher (#306), which is recursive: what it watches
+   * is the nearest existing ancestor of a folder that has gone, and for a missing project root that
+   * is the home directory, a mount point or `/` — on Linux a recursive watch walks all of it,
+   * synchronously, here. `reconnectWatcher` watches one directory's entries, which is all a
+   * returning folder needs; `TerminalReconnect` re-targets when an intermediate folder appears.
    */
   const terminalReconnect = new TerminalReconnect({
-    fileWatcher: projectWatcher,
+    fileWatcher: reconnectWatcher(),
     exists: (p) => {
       try {
         return statSync(p).isDirectory();
