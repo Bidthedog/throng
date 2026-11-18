@@ -87,6 +87,12 @@ export interface ResourceMonitorHostDeps {
 
 const RESTART_SPACING_MS = 60_000;
 const KILL_TIMEOUT_MS = 15_000;
+/**
+ * The longest detail collection waits for the main window's workspace context once the monitor opens. The
+ * context normally lands within milliseconds; this only bounds a main window that never answers, and a
+ * context arriving later still reaches the collector the moment it does.
+ */
+export const CONTEXT_WAIT_MS = 1_000;
 
 export const RESOURCES_SUMMARY_CHANNEL = 'throng:resources:summary';
 export const RESOURCES_DETAIL_CHANNEL = 'throng:resources:detail';
@@ -125,6 +131,12 @@ export class ResourceMonitorHost {
   private readonly contexts = new Map<number, WorkspaceContext>();
   private readonly rendererEstimates = new Map<number, readonly PanelEstimate[]>();
   private contextDirty = false;
+  /**
+   * Detail is wanted but not yet turned on in the collector: it waits for the main window's context, so
+   * its first frame names every project (FR-020c, SC-002). See `turnDetailOn`.
+   */
+  private detailWait: ReturnType<typeof setTimeout> | undefined;
+  private detailPending = false;
   private nextKill = 1;
   private readonly kills = new Map<
     number,
@@ -144,6 +156,7 @@ export class ResourceMonitorHost {
   stop(): void {
     this.stopped = true;
     clearTimeout(this.restartTimer);
+    this.cancelDetailWait();
     const c = this.child;
     this.child = null;
     if (c?.connected) {
@@ -197,8 +210,16 @@ export class ResourceMonitorHost {
     const wasOn = this.subscriptions.size > 0;
     this.subscriptions.set(id, windowId);
     if (!wasOn) {
-      this.post({ type: 'detail', on: true });
+      // Every window reports its panels in answer to this; the collector is turned on once the main
+      // window's answer is in, never before it with no context (or the last monitor's stale one).
       this.deps.broadcast(RESOURCES_DETAIL_DEMAND_CHANNEL, true);
+      const main = this.deps.mainWindowId();
+      if (main === null || this.contexts.has(main)) this.turnDetailOn();
+      else {
+        this.detailPending = true;
+        this.detailWait = setTimeout(() => this.turnDetailOn(), CONTEXT_WAIT_MS);
+        this.detailWait.unref?.();
+      }
     }
     return id;
   }
@@ -229,6 +250,7 @@ export class ResourceMonitorHost {
       this.contextDirty = true;
     }
     this.rendererEstimates.set(windowId, estimates);
+    if (this.detailPending && context !== null && windowId === this.deps.mainWindowId()) this.turnDetailOn();
   }
 
   kill(req: KillRequest): Promise<KillResult> {
@@ -258,8 +280,30 @@ export class ResourceMonitorHost {
     this.restart();
   }
 
+  /**
+   * 055 FR-020c, SC-002 — the collector ticks at once on `detail {on}`, and that first frame is what the
+   * monitor shows first; the list then holds still under the pointer (FR-095). So the context goes ahead
+   * of it: built without one, every project row is labelled by its raw id and has no tabs under it.
+   */
+  private turnDetailOn(): void {
+    this.cancelDetailWait();
+    if (this.subscriptions.size === 0) return;
+    if (this.contexts.size > 0) {
+      this.contextDirty = false;
+      this.post({ type: 'context', context: this.mergedContext() });
+    }
+    this.post({ type: 'detail', on: true });
+  }
+
+  private cancelDetailWait(): void {
+    clearTimeout(this.detailWait);
+    this.detailWait = undefined;
+    this.detailPending = false;
+  }
+
   private afterRelease(): void {
     if (this.subscriptions.size === 0) {
+      this.cancelDetailWait();
       this.contexts.clear();
       this.rendererEstimates.clear();
       this.post({ type: 'detail', on: false });
@@ -294,9 +338,11 @@ export class ResourceMonitorHost {
       this.onExit(child);
     });
     this.configure();
-    if (this.subscriptions.size > 0) {
+    // A restarted collector has no context: it gets the one main holds ahead of `detail {on}`. One still
+    // waiting for the main window's answer is turned on when that comes.
+    if (this.subscriptions.size > 0 && !this.detailPending) {
       this.contextDirty = true;
-      this.post({ type: 'detail', on: true });
+      this.turnDetailOn();
     }
   }
 

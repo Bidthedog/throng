@@ -1,8 +1,10 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_APP_SETTINGS, editorMainBytes, previewMainBytes, terminalDaemonBytes, type LogLevel } from '@throng/core';
-import type { CollectorToMain, DaemonRoster, MainToCollector, ResourceSummary } from '@throng/ipc-contract';
-import { COLLECTOR_EXIT_GRACE_MS, ResourceMonitorHost, type CollectorChild, type ResourceMonitorHostDeps } from '../../src/main/resource-monitor-host.js';
+import { DEFAULT_APP_SETTINGS, editorMainBytes, previewMainBytes, terminalDaemonBytes, type LogLevel, type ProcessReading, type ResourceNode } from '@throng/core';
+import { FakeProcessMetrics } from '@throng/core/testing';
+import type { CollectorToMain, DaemonRoster, DetailFrame, MainToCollector, ResourceSummary, WorkspaceContext } from '@throng/ipc-contract';
+import { ResourceCollector } from '../../src/collector/collector.js';
+import { COLLECTOR_EXIT_GRACE_MS, CONTEXT_WAIT_MS, ResourceMonitorHost, type CollectorChild, type ResourceMonitorHostDeps } from '../../src/main/resource-monitor-host.js';
 
 /** 055 T033 — UI main's side of the collector: fork, roster, relays, subscriptions, estimates. */
 
@@ -223,7 +225,13 @@ describe('ResourceMonitorHost (055 T033, R1, R7)', () => {
     s.host.start();
     const a = s.host.subscribe(7);
     const b = s.host.subscribe(8);
-    expect(s.child().sent.filter((m) => m.type === 'detail')).toEqual([{ type: 'detail', on: true }]);
+    expect(s.child().sent.filter((m) => m.type === 'detail'), 'detail waits for the main window’s context').toEqual([]);
+    const context = { projects: [{ id: 'p1', name: 'P', state: 'active' as const, listOrder: 0 }], tabs: [], panels: [] };
+    s.host.reportPanels(1, context, []);
+    expect(s.child().sent.filter((m) => m.type === 'detail' || m.type === 'context')).toEqual([
+      { type: 'context', context },
+      { type: 'detail', on: true },
+    ]);
     const frame = { tick: 1, at: 1, stale: false, hierarchy: {} as never, held: [], machine: summary(1).machine };
     s.child().say({ type: 'detailFrame', frame });
     expect(s.pushes.filter((p) => p.channel === 'throng:resources:detail').map((p) => p.windowId)).toEqual([7, 8]);
@@ -232,6 +240,34 @@ describe('ResourceMonitorHost (055 T033, R1, R7)', () => {
     expect(s.child().last('detail')).toEqual({ type: 'detail', on: false });
     expect(s.pushes.filter((p) => p.channel === 'throng:resources:detail-demand').map((p) => p.payload)).toEqual([true, false]);
     expect(s.host.detailDemand()).toBe(false);
+  });
+
+  it('gives a collector restarted under an open monitor the context ahead of detail, so its first frame names projects', () => {
+    const s = make();
+    s.host.start();
+    s.host.subscribe(7);
+    const context = { projects: [{ id: 'p1', name: 'P', state: 'active' as const, listOrder: 0 }], tabs: [], panels: [] };
+    s.host.reportPanels(1, context, []);
+    s.child().emit('exit', 1);
+    expect(s.forks).toHaveLength(2);
+    expect(s.child().sent.filter((m) => m.type === 'detail' || m.type === 'context')).toEqual([
+      { type: 'context', context },
+      { type: 'detail', on: true },
+    ]);
+  });
+
+  it('turns detail on without a context when the main window never answers, rather than collecting for ever', () => {
+    vi.useFakeTimers();
+    try {
+      const s = make();
+      s.host.start();
+      s.host.subscribe(7);
+      expect(s.child().last('detail')).toBeUndefined();
+      vi.advanceTimersByTime(CONTEXT_WAIT_MS);
+      expect(s.child().last('detail')).toEqual({ type: 'detail', on: true });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('releases a closed window’s subscription', () => {
@@ -433,5 +469,125 @@ describe('a collector that cannot start (#542, 055 FR-044)', () => {
     s.child().say({ type: 'summary', summary: summary(1) });
     s.child().say({ type: 'error', cause: 'readFailed' });
     expect(r.logged.map((l) => l.message.includes('readFailed'))).toEqual([true, true]);
+  });
+});
+
+/**
+ * The monitor's first frame names the projects (055 FR-020c, SC-002 "first complete hierarchy"). Host and
+ * collector run together here over a fake OS, every message crossing an asynchronous hop as it does across
+ * the real pipes. The main window's renderer answers the demand broadcast only after the daemon's roster has
+ * come back — a slower renderer, as on the hosted macOS runner. The monitor holds a list still under the
+ * pointer (FR-095), so a first frame built without the workspace context shows a project by its raw id for
+ * as long as the pointer rests there (`resource-monitor-kill.e2e.ts`, run 44341727127).
+ */
+describe('the first detail frame after the monitor opens', () => {
+  const reading = (pid: number, ppid: number, imageName: string): ProcessReading => ({
+    pid, ppid, createTime: pid, imageName, cpuTime: pid, privateWorkingSet: 100, ioReadBytes: 0, ioWriteBytes: 0,
+  });
+  const CONTEXT: WorkspaceContext = {
+    projects: [{ id: 'p1', name: 'KillTree', state: 'active', listOrder: 0 }],
+    tabs: [{ id: 't1', projectId: 'p1', name: 'Tab 1', subWorkspaceName: null, mounted: true }],
+    panels: [{ id: 'n1', tabId: 't1', projectId: 'p1', name: 'Bash', kind: 'terminal', mounted: true }],
+  };
+  const hop = (fn: () => void) => void setTimeout(fn, 0);
+  const find = (n: ResourceNode, id: string): ResourceNode | undefined =>
+    n.id === id ? n : n.children.map((c) => find(c, id)).find((x) => x !== undefined);
+
+  function wire(opts: { rendererAnswers: boolean }) {
+    const MAIN = 1;
+    const MONITOR = 9;
+    const frames: DetailFrame[] = [];
+    const collectors: ResourceCollector[] = [];
+    let rosterAnswered = false;
+    const deps: ResourceMonitorHostDeps = {
+      collectorEntry: 'collector.js',
+      nodeExe: 'node',
+      fork: () => {
+        const child = new (class extends EventEmitter implements CollectorChild {
+          connected = true;
+          send(msg: MainToCollector): boolean {
+            hop(() => collector.handle(msg));
+            return true;
+          }
+          kill(): boolean {
+            this.connected = false;
+            collector.stop();
+            return true;
+          }
+          disconnect(): void {
+            this.kill();
+          }
+        })();
+        const collector: ResourceCollector = new ResourceCollector({
+          metrics: new FakeProcessMetrics([reading(100, 1, 'throng'), reading(200, 1, 'node'), reading(300, 200, 'bash')]),
+          collectorPid: 999,
+          send: (msg) => hop(() => child.emit('message', msg)),
+        });
+        collectors.push(collector);
+        collector.start();
+        return child;
+      },
+      daemonRoster: async () => {
+        // The renderer's context comes back after the daemon's roster has (`rendererAnswers` below).
+        hop(() => (rosterAnswered = true));
+        return ROSTER;
+      },
+      uiProcesses: () => [{ pid: 100, role: 'main', label: 'Application' }],
+      documentEstimates: () => [],
+      previewEstimates: () => [],
+      settings: () => DEFAULT_APP_SETTINGS,
+      send: (windowId, channel, payload) => {
+        if (windowId === MONITOR && channel === 'throng:resources:detail') frames.push(payload as DetailFrame);
+      },
+      mainWindowId: () => MAIN,
+      log: () => undefined,
+      broadcast: (channel, on) => {
+        if (channel !== 'throng:resources:detail-demand' || on !== true || !opts.rendererAnswers) return;
+        const answer = (): void => {
+          if (rosterAnswered) host.reportPanels(MAIN, CONTEXT, []);
+          else hop(answer);
+        };
+        hop(answer);
+      },
+    };
+    // Declared after `deps`: only `broadcast` reads it, and that runs on a subscribe, long after this line.
+    const host = new ResourceMonitorHost(deps);
+    return { host, frames, collectors, MONITOR };
+  }
+
+  const firstFrame = async (frames: DetailFrame[]): Promise<DetailFrame> => {
+    for (let i = 0; i < 400 && frames.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(frames.length, 'a detail frame reached the monitor window').toBeGreaterThan(0);
+    return frames[0]!;
+  };
+
+  it('names the project the main window reported, even when its context arrives after the roster', async () => {
+    const w = wire({ rendererAnswers: true });
+    w.host.start();
+    try {
+      // Let the collector's own first (summary) tick finish, as it has long before anyone opens the monitor.
+      await new Promise((r) => setTimeout(r, 50));
+      w.host.subscribe(w.MONITOR);
+      const frame = await firstFrame(w.frames);
+      const project = find(frame.hierarchy, 'p:p1');
+      expect(project?.label, 'the project row is labelled by its name, never its id').toBe('KillTree');
+      expect(project?.children.map((c) => c.id)).toEqual(['t:t1']);
+    } finally {
+      w.host.stop();
+      w.collectors.forEach((c) => c.stop());
+    }
+  });
+
+  it('still opens the monitor when no window answers with a context', async () => {
+    const w = wire({ rendererAnswers: false });
+    w.host.start();
+    try {
+      await new Promise((r) => setTimeout(r, 50));
+      w.host.subscribe(w.MONITOR);
+      await firstFrame(w.frames);
+    } finally {
+      w.host.stop();
+      w.collectors.forEach((c) => c.stop());
+    }
   });
 });

@@ -49,6 +49,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **On macOS, right-clicking a link in a terminal opens the Link menu**, as it does elsewhere. A right-click in a terminal no longer selects the word under the pointer, which counted as a selection and opened the ordinary menu instead.
 - **A terminal killed on Linux or macOS** now says it ended, as it does on Windows, instead of disappearing with no notice — whether it was ended from throng or killed from outside.
 - **On macOS, Cmd+click follows a link in a preview** and its hint names Cmd; **Cmd+middle-click resets a diagram**; and a menu's shortcuts read Cmd and Option rather than Meta and Alt. **A menu's advertised shortcut now runs from the keyboard on macOS** — Cmd+C on an open File Explorer menu copies and closes it, as Ctrl+C does elsewhere.
+- **The Resource Monitor's first reading names every project**, with its tabs under it. It could show a project by its internal id with no tabs until the pointer left the list.
 
 ## 1.0.0-alpha17 — 2026-11-17
 
