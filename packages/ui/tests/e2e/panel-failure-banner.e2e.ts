@@ -309,8 +309,63 @@ async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
   await expect(confirm).toBeEnabled({ timeout: 20_000 });
   await confirm.focus();
   await recordTimeline(win, panelId);
+  await recordMainLag();
   await confirm.press('Enter');
-  await inFailureState(win, panelId, 'terminal');
+  try {
+    await inFailureState(win, panelId, 'terminal');
+  } catch (error) {
+    throw new Error(`${(error as Error).message}\n\nmain process: ${await readMainLag()}`, { cause: error });
+  }
+  // On a pass too, so a smaller block that happens EVERY time shows in the passing rounds' logs.
+  console.log(`[pfb] main process: ${await readMainLag()}`);
+}
+
+/**
+ * DIAGNOSTIC ONLY — the longest the Electron MAIN process's event loop went without running a 100 ms timer, from just
+ * before Confirm, and when that stall began.
+ *
+ * Every renderer query Playwright makes travels through the browser process. On a cold Linux runner every sample of
+ * the banner went unanswered for the whole 90 s wait while the renderer's own timers ran, so a blocked main process is
+ * the hypothesis this measures. `readTookMs` is how long the read itself waited to be answered.
+ */
+async function recordMainLag(): Promise<void> {
+  await h.app.evaluate(() => {
+    const g = globalThis as { __pfbLag?: { timer: ReturnType<typeof setInterval> } };
+    if (g.__pfbLag) clearInterval(g.__pfbLag.timer);
+    const lag = { since: Date.now(), last: Date.now(), longestMs: 0, longestStartedAt: '', ticks: 0, timer: undefined as unknown };
+    lag.timer = setInterval(() => {
+      const now = Date.now();
+      const gap = now - lag.last;
+      if (gap > lag.longestMs) {
+        lag.longestMs = gap;
+        lag.longestStartedAt = new Date(lag.last).toISOString();
+      }
+      lag.last = now;
+      lag.ticks += 1;
+      if (now - lag.since > 180_000) clearInterval(lag.timer as ReturnType<typeof setInterval>);
+    }, 100);
+    g.__pfbLag = lag as unknown as { timer: ReturnType<typeof setInterval> };
+  });
+}
+
+async function readMainLag(): Promise<string> {
+  const asked = Date.now();
+  const lag = await h.app
+    .evaluate(() => {
+      const l = (globalThis as { __pfbLag?: { since: number; last: number; longestMs: number; longestStartedAt: string; ticks: number } })
+        .__pfbLag;
+      return l
+        ? {
+            longestMs: l.longestMs,
+            longestStartedAt: l.longestStartedAt,
+            msSinceLastTick: Date.now() - l.last,
+            ticks: l.ticks,
+            sinceConfirmMs: Date.now() - l.since,
+          }
+        : null;
+    })
+    .catch((probe: unknown) => `(threw: ${String(probe)})`);
+  return JSON.stringify({ lag, readTookMs: Date.now() - asked });
 }
 
 /**
@@ -801,9 +856,17 @@ test('retry clears the banner on success, reports failure on failure, and a hidd
 
       // ═══ 4 — and a retry that SUCCEEDS ends the banner, on a condition only it can end. ═══
       //
-      // A second project whose root does not exist yet. The terminal cannot start; the folder is
-      // then created; and nothing in throng is watching for it, so the banner stands until Try again
-      // is pressed. See the header for why this half cannot be done on an editor.
+      // A second project whose root does not exist yet. The terminal cannot start; then the folder is
+      // created. See the header for why this half cannot be done on an editor.
+      //
+      // TWO routes end this banner, and either may win: the user's Try again, and 039 US3's reconnect
+      // watch on the root's parent, which starts the terminal by itself once the root appears
+      // (FR-030). This used to say nothing was watching. On Linux that was true only because the
+      // reconnect watch was itself broken — it walked the whole parent folder recursively until the
+      // inotify limit ran out, and failed — and with it fixed the banner can go before the click lands
+      // (measured: the click then waits on a detached button). So Try again is pressed only while the
+      // banner is still up, and what is asserted is the outcome both routes owe: no banner, and a
+      // terminal really running in the folder.
       await createProject(win, 'Later', laterRoot);
       const laterPid = await firstPanelId(win);
       await failingTerminalOn(win, laterPid);
@@ -811,8 +874,10 @@ test('retry clears the banner on success, reports failure on failure, and a hidd
 
       mkdirSync(laterRoot, { recursive: true });
       const retrySucceeds = control(win, laterPid, 'Try again');
-      await expect(retrySucceeds).toBeVisible();
-      await retrySucceeds.click();
+      await expect(async () => {
+        if ((await banner(win, laterPid).count()) > 0) await retrySucceeds.click({ timeout: 2_000 });
+        await expect(banner(win, laterPid)).toHaveCount(0, { timeout: 2_000 });
+      }).toPass({ timeout: 60_000 });
 
       // The banner goes WITH the condition — and the terminal really did start, so this is a
       // success rather than a banner that gave up.

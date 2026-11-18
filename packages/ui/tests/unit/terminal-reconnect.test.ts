@@ -142,6 +142,37 @@ describe('TerminalReconnect — releasing (039 FR-030/FR-032/FR-033/FR-037)', ()
     expect(h.watchedDirs()).toEqual(['C:/dev']);
   });
 
+  /*
+   * The watch is one directory deep (`reconnect-watcher.ts`): watching `C:/dev` hears `proj` appear but never
+   * `proj/src`. So an intermediate folder appearing moves the wait down, and the old watch goes with its last panel.
+   */
+  it('moves the wait down when an intermediate folder appears, then releases there (FR-030)', () => {
+    const existing = new Set(['C:/dev']);
+    const h = harness(existing);
+    h.reconnect.arm('p1', 'A', 'C:/dev/proj/src');
+
+    existing.add('C:/dev/proj');
+    h.fire('C:/dev');
+    expect(h.notify).not.toHaveBeenCalled();
+    expect(h.watchedDirs()).toEqual(['C:/dev/proj']);
+
+    existing.add('C:/dev/proj/src');
+    h.fire('C:/dev/proj');
+    expect(h.notify.mock.calls).toEqual([[['p1']]]);
+    expect(h.watchedDirs()).toEqual([]);
+  });
+
+  it('releases a panel whose folder was complete by the time the intermediate one was reported', () => {
+    const existing = new Set(['C:/dev']);
+    const h = harness(existing);
+    h.reconnect.arm('p1', 'A', 'C:/dev/proj/src');
+    // `mkdir -p` finished before the event for `proj` was delivered: no later event will name `src`.
+    existing.add('C:/dev/proj');
+    existing.add('C:/dev/proj/src');
+    h.fire('C:/dev');
+    expect(h.notify.mock.calls).toEqual([[['p1']]]);
+  });
+
   it('does not release when the ancestor changed but the target is still missing (FR-035)', () => {
     const h = harness(new Set(['C:/dev']));
     h.reconnect.arm('p1', 'A', 'C:/dev/proj/src');

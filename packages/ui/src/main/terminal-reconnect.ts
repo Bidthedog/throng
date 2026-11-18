@@ -187,14 +187,15 @@ export class TerminalReconnect {
      */
     let released: PendingReconnect[];
     try {
-      const projects = new Set(
-        this.pending.filter((p) => p.watching === watching).map((p) => p.projectId),
-      );
+      // The re-targeted directories are checked in the SAME pass: the folder waited for may have been created between
+      // the intermediate one appearing and the deeper watch being armed, and no event would ever report it.
+      const keys = [watching, ...this.retarget(watching)];
       released = [];
-      for (const projectId of projects) {
-        released.push(
-          ...reconnectsReleasedBy(this.pending, { projectId, path: watching }, this.deps.exists),
-        );
+      for (const key of keys) {
+        const projects = new Set(this.pending.filter((p) => p.watching === key).map((p) => p.projectId));
+        for (const projectId of projects) {
+          released.push(...reconnectsReleasedBy(this.pending, { projectId, path: key }, this.deps.exists));
+        }
       }
     } catch (error) {
       logCaught('terminal-reconnect: re-check pending targets', error);
@@ -219,6 +220,36 @@ export class TerminalReconnect {
       // disarmed, so there is nothing to unwind — and a throw escaping a watcher callback would
       // take down more than this feature.
     }
+  }
+
+  /**
+   * Move every panel waiting under `watching` whose missing folder is now closer — an INTERMEDIATE folder appeared — onto
+   * a watch of the new nearest ancestor. Returns the directories newly waited on.
+   *
+   * The watch is one directory deep (`reconnect-watcher.ts`), so it sees `/a/b` appear but never `/a/b/c`; left on `/a`,
+   * a panel waiting for `/a/b/c` would never come back. A recursive watch saw everything and needed none of this, but
+   * it cost a walk of the whole ancestor on main's event loop.
+   */
+  private retarget(watching: string): string[] {
+    const moved = new Set<string>();
+    for (const entry of this.pending.filter((p) => p.watching === watching)) {
+      if (this.deps.exists(entry.target)) continue; // back already: released on this key below
+      const next = watchTargetFor(entry.target, this.deps.exists, this.deps.parentOf);
+      if (next === null || next === watching) continue;
+      if (!this.watches.has(next)) {
+        try {
+          this.watches.set(next, this.deps.fileWatcher.watch(next, () => this.onChanged(next)));
+        } catch (error) {
+          // It stays waiting where it was: a later event under the old directory asks again, and ↻ Retry remains.
+          logCaught('terminal-reconnect: re-target watch', error);
+          continue;
+        }
+      }
+      this.pending[this.pending.indexOf(entry)] = { ...entry, watching: next };
+      moved.add(next);
+    }
+    if (moved.size > 0) this.releaseWatchIfUnused(watching);
+    return [...moved];
   }
 
   private releaseWatchIfUnused(dir: string): void {
