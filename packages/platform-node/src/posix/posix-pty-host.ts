@@ -230,8 +230,10 @@ export class PosixPtyHost<R extends PosixProcRow> implements IPtyHost {
   onExit(handle: PtyHandle, cb: (e: { code: number | null; signal?: string }) => void): () => void {
     const session = this.sessions.get(handle.pid);
     if (!session) return () => {};
+    // node-pty reports `exitCode: 0` beside the signal for a signalled child. A process a signal killed
+    // has no exit code, and 0 would read as a clean end that raises no notice (Principle III).
     const sub = session.proc.onExit((e) =>
-      cb({ code: e.exitCode, signal: e.signal ? String(e.signal) : undefined }),
+      cb(e.signal ? { code: null, signal: String(e.signal) } : { code: e.exitCode }),
     );
     return () => sub.dispose();
   }
