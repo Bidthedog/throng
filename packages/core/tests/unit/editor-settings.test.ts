@@ -77,6 +77,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
             openTarget: 'lastActive',
             // 054 FR-041 — Markdown's Render Mermaid diagrams, shipped ON.
             renderMermaid: true,
+            // 075 FR-042 — Typeset math, shipped on.
+            typesetMath: true,
             loadRemoteImages: true,
             showFrontMatter: true,
             gutter: true,
@@ -200,6 +202,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       // 054 FR-051 / FR-041 — the per-provider openTarget and Render Mermaid diagrams.
       openTarget: 'lastActive',
       renderMermaid: true,
+      typesetMath: true,
       loadRemoteImages: true,
       showFrontMatter: true,
       gutter: true,
@@ -325,6 +328,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
             openTarget: 'lastActive',
             // 054 FR-041 — Markdown's Render Mermaid diagrams, shipped ON.
             renderMermaid: true,
+            // 075 FR-042 — Typeset math, shipped on.
+            typesetMath: true,
             loadRemoteImages: true,
             showFrontMatter: true,
             gutter: true,

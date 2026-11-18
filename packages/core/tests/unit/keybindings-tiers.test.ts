@@ -102,6 +102,7 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'search.replaceCurrent': 'tier3',
   'navigate.gotoLine': 'tier3',
   'preview.goToHeading': 'tier3', // 047 research R7 — shares Ctrl+G with navigate.gotoLine on a disjoint scope
+  'preview.print': 'tier3', // 075 FR-064 — Ctrl+P is readline's previous-history; {preview} only, never live in a terminal
   'navigate.back': 'tier3',
   'navigate.forward': 'tier3',
   'preview.followLink': 'tier3',
@@ -418,6 +419,8 @@ describe('the FR-101 tier guard', () => {
       'markdown.collapseAllInside': [],
       'markdown.expandAllInside': [],
       'preview.goToHeading': ['Ctrl+G'],
+      // 075 FR-064 — new command, scoped to {preview}.
+      'preview.print': ['Ctrl+P'],
       // 059 FR-041 — unbound.
       'editor.reopenWithEncoding': [],
       'editor.changeEncoding': [],

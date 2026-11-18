@@ -309,6 +309,12 @@ const ALLOWED: readonly Allowed[] = [
     token: 'The colour of the File Explorer and Find in Files icons for plain text, Markdown and diffs. Leave it empty and they take the Icon Colour.',
     reason: 'user-facing copy for the Document File Icons colour, naming Markdown as one of the kinds it colours; it selects nothing',
   },
+  ...allow(
+    `${CORE_SRC}/config/theme-metadata.ts`,
+    'literal',
+    ['Markdown preview', 'Markdown preview · Callouts'],
+    'the Themes-editor area spec 075 FR-021 names (extending 021 FR-003): a heading for the callout colour tokens, it selects no provider',
+  ),
   {
     file: `${CORE_SRC}/icons/default-icon-set.generated.ts`,
     kind: 'literal',

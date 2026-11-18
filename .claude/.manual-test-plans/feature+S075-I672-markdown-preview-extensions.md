@@ -1,0 +1,122 @@
+# Manual test plan: Markdown preview extensions — callouts, maths and printing
+
+Spec: `specs/075-markdown-preview-extensions/spec.md`
+
+| ID | Title | Status | Signed off at | Date | Reason |
+|---|---|---|---|---|---|
+| MT-01 | Callouts draw with their type, icon and title | untested | | | |
+| MT-02 | Folding callouts | untested | | | |
+| MT-03 | Callout colours in the Themes editor | untested | | | |
+| MT-04 | Typeset maths | untested | | | |
+| MT-05 | Print… in a preview's menus and keyboard | untested | | | |
+| MT-06 | Print Preview and printing | untested | | | |
+
+## MT-01: Callouts draw with their type, icon and title
+
+Covers: FR-001, FR-002, FR-003, FR-004, FR-005, FR-011, FR-012, FR-013, FR-016, FR-019a, FR-024, SC-001, SC-002
+Paths: `packages/ui/src/renderer/preview/providers/markdown/callouts.ts`, `packages/ui/src/renderer/preview/providers/markdown/callout-dom.ts`, `packages/ui/src/renderer/preview/providers/markdown/callout-sanitise.ts`, `packages/ui/src/renderer/preview/providers/markdown/markdown.css`, `packages/core/src/preview/callouts.ts`, `packages/core/src/icons/default-set/callout*.svg`
+
+### Steps
+1. Make a file `callouts.md` with one blockquote per type: `> [!note]`, `[!abstract]`, `[!info]`, `[!todo]`, `[!tip]`, `[!success]`, `[!question]`, `[!warning]`, `[!failure]`, `[!danger]`, `[!bug]`, `[!example]`, `[!quote]`, each followed by a line of body text. Open it and press **Open Preview**. Each draws as a tinted box with a coloured left edge, an icon and its type's title (Note, Abstract, …), the body below.
+2. Add `> [!warning] Read this first` and a body line. The title reads "Read this first", with the warning icon.
+3. Add `> [!caution]` and `> [!hint]`. They draw as Warning and Tip: an alias takes its type's colour, icon and title.
+4. Add `> [!nonsense]`. It draws as a Note box titled "Nonsense".
+5. Add a callout whose body holds a list, a code block, a link and a second callout nested inside it. All render inside the box; the link opens like any other.
+6. Switch theme to Light, then back. The callouts recolour with the theme.
+
+### Negative cases
+- A plain `> quote` with no `[!type]` stays an ordinary blockquote.
+- A ```` ```ad-note ```` fence stays a code block.
+- `> [!note]` written inside a code block or a fenced block stays text.
+
+## MT-02: Folding callouts
+
+Covers: FR-006, FR-007, FR-008, FR-009, FR-010, FR-014, SC-003
+Paths: `packages/ui/src/renderer/preview/providers/markdown/callout-dom.ts`, `packages/ui/src/renderer/preview/providers/markdown/markdown-body.tsx`, `packages/ui/src/renderer/preview/node-reveal.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/preview/copy.ts`
+
+### Steps
+1. Write `> [!tip]- Folded` with a body line containing the word `zebra`, and `> [!tip]+ Open` with a body line. The first shows only its title with an expand chevron; the second shows its body with a collapse chevron. A callout with no sign has no chevron.
+2. Click the first callout's title. It opens. Click again. It closes.
+3. Press Tab until the first callout's title has the focus outline. Press Enter, then Space. It opens, then closes. Hover the chevron: "Expand callout" or "Collapse callout".
+4. Open it, then type a character elsewhere in the editor. The preview re-renders and the callout stays open.
+5. Close it. Press **Ctrl+F** in the preview and search `zebra`. The callout opens to show the match.
+6. Use the preview menu's **Outlining › Collapse All**, then **Expand All**. Sections fold; the callouts keep their own state.
+7. Select the whole preview (**Ctrl+A**) and **Copy**. Paste into an editor: no chevron or icon glyph is in the text.
+
+### Negative cases
+- Changing `[!tip]-` to `[!tip]+` in the editor makes that callout start open, whatever it was before.
+- Closing and reopening the preview starts every callout from its sign.
+
+## MT-03: Callout colours in the Themes editor
+
+Covers: FR-018, FR-019, FR-020, FR-021, FR-022, FR-023, SC-004
+Paths: `packages/core/src/config/callout-colours.ts`, `packages/core/src/config/theme-metadata.ts`, `packages/core/src/config/theme-copy.ts`, `packages/core/src/config/default-themes/index.ts`, `packages/core/src/config/shipped-defaults.ts`
+
+### Steps
+1. Open **Themes**. A **Markdown preview › Callouts** area follows Editor, with seven colours (Neutral, Info, Accent, Success, Question, Warning, Danger Callout Accent).
+2. Change **Warning Callout Accent** to a bright red. Warning and caution callouts in an open preview turn red at once; other types do not change.
+3. Restore that colour to the theme's default. The preview returns to the shipped warning colour.
+4. With an install that had a theme file from before this build, start the app. Its callouts show that theme's shipped colours, not blanks.
+
+### Negative cases
+- No callout's title, body or icon is unreadable against its box, in any shipped theme.
+
+## MT-04: Typeset maths
+
+Covers: FR-040, FR-041, FR-042, FR-043, FR-044, FR-045, FR-046, FR-047, FR-048, FR-049, FR-050, SC-005, SC-006, SC-007
+Paths: `packages/ui/src/renderer/preview/providers/markdown/math.ts`, `packages/ui/src/renderer/preview/providers/markdown/math-typeset.ts`, `packages/ui/src/renderer/preview/providers/markdown/math-dom.ts`, `packages/ui/src/renderer/preview/math-host.ts`, `packages/ui/src/renderer/preview/providers/markdown/markdown-body.tsx`, `packages/ui/src/renderer/preview/preview-search-model.ts`, `packages/ui/src/renderer/preview/copy.ts`, `packages/core/src/preview/math-delimiters.ts`, `packages/core/src/preview/providers/markdown.ts`
+
+### Steps
+1. Write `Area is $\pi r^2$.`, a block `$$` / `\frac{a}{b}` / `$$`, a code-span form `` $`x_1`$ `` and a ```` ```math ```` fence holding `E = mc^2`. The preview typesets all four; the block and fence are centred on their own lines.
+2. Write `It costs $5 and $10.` It stays prose, with both dollar signs.
+3. Write `$\frac{a$`. It shows that source in the error colour; hovering it reads "Maths error: …"; the rest of the line renders.
+4. Search **Ctrl+F** for `pi`. Nothing inside the typeset equation matches.
+5. Select the paragraph holding `$\pi r^2$` and **Copy as Plain Text**; paste into an editor. It reads `Area is $\pi r^2$.` **Copy as Rich Text** into a word processor shows the equation.
+6. In Settings, turn off **Markdown: Typeset math**. Every expression shows as its source text; the `math` fence is a code block. Turn it back on.
+7. Open a document of 500 inline expressions. The preview stays responsive while they appear.
+
+### Negative cases
+- `$\href{javascript:alert(1)}{x}$` and `$\url{https://example.com}$` show as errors or text; nothing is clickable and nothing is requested.
+- A document with no maths loads no maths fonts (DevTools › Network shows no KaTeX request).
+- `\$5` stays a literal dollar sign.
+
+## MT-05: Print… in a preview's menus and keyboard
+
+Covers: FR-061, FR-062, FR-063, FR-064, SC-011, SC-012
+Paths: `packages/ui/src/renderer/preview/print/print-command.ts`, `packages/ui/src/renderer/preview/preview-commands.tsx`, `packages/ui/src/renderer/preview/content-menu.ts`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/core/src/config/keybindings.ts`, `packages/core/src/preview/provider.ts`
+
+### Steps
+1. Open a Markdown preview. Its header menu and its right-click menu both have **Print…** with the printer icon and **Ctrl+P**.
+2. Click either. Print Preview opens; nothing is sent to a printer.
+3. Close it. Focus the preview and press **Ctrl+P**. Print Preview opens.
+4. Open a `.mmd` preview. **Print…** is enabled there too.
+5. In **Key Bindings**, find **Print…** under Navigate; rebind it to another chord. The menus show the new chord, and it works.
+
+### Negative cases
+- **Ctrl+P** in an editor or a terminal does not open Print Preview; in a terminal the shell receives it.
+- A preview whose provider cannot print shows **Print…** greyed, with the hover "This preview type cannot be printed."
+
+## MT-06: Print Preview and printing
+
+Covers: FR-066, FR-067, FR-068, FR-069, FR-070, FR-071, FR-072, FR-073, FR-074, FR-075, FR-076, FR-077, FR-078, FR-079, FR-080, FR-081, SC-008, SC-012, SC-013
+Paths: `packages/ui/src/renderer/print-preview/**`, `packages/ui/src/renderer/preview/print/**`, `packages/ui/src/main/print-*.ts`, `packages/ui/src/main/electron-print-engine.ts`, `packages/core/src/preview/print.ts`, `packages/core/src/preview/print-palette.ts`
+
+### Steps
+1. With a dark theme active, open Print Preview on a long Markdown preview holding headings, a code block with a very long line, a table, an image, a folded section, a folded callout, a Mermaid diagram and display maths. The window is modal: the main window cannot be clicked until it closes. The pages show dark text on white, the folded section and callout open, the long code line wrapping, the diagram as wide as the text, no fold chevrons or diagram buttons, and the page count above.
+2. Change paper to Letter, orientation to Landscape, margins to Minimum. Within two seconds of each change the pages lay out again, with "Laying out pages…" meanwhile.
+3. Untick **Fit to page width**, set Scale to 50. The pages shrink. Set Pages to `1` and confirm only page 1 is shown.
+4. Choose a real printer, Copies 2, and press **Print**. The window closes and two copies of page 1 print, landscape, Letter, with no OS print dialog.
+5. Open Print Preview again. Printer, paper, orientation, margins, scale and copies are as last set; Pages is back to All.
+6. Quit and relaunch throng; open Print Preview. The same settings are still there.
+7. Press **Ctrl+P** again in the main window while Print Preview is open. No second window opens; the open one comes to the front.
+8. Open Print Preview on a `.mmd` file. The diagram fills one page.
+9. Press Escape. The window closes and nothing prints.
+10. Type an unsaved line into the editor of a parented preview, then open Print Preview. The pages include the unsaved line.
+11. Tear a preview off into a sub-workspace window and open Print Preview from there. It opens modal to that window and lays out the pages.
+
+### Negative cases
+- With no printer installed, Print Preview reads "No printer is available." and **Print** is greyed; the pages still show.
+- With the printer turned off or unplugged, **Print** shows one inline "Printing failed: …" notice and the window stays open; **Print** again retries.
+- A page break never splits a heading from its first paragraph, a code block, a table row, a callout, the diagram, an image or a display equation.
+- A remote image the preview showed prints; one blocked by **Load remote images** off prints as its alt text, and nothing new is requested.
+- Pages typed as `3-1` show a hint and do not lay out; **Print** stays greyed.

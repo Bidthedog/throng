@@ -173,6 +173,7 @@ describe('what ships (FR-005, FR-041, FR-050)', () => {
       'Markdown: Default open action',
       'Markdown: Open previews in',
       'Markdown: Render Mermaid diagrams',
+      'Markdown: Typeset math',
       'Markdown: Load remote images',
       'Markdown: Show front matter',
       'Markdown: Preview gutter',

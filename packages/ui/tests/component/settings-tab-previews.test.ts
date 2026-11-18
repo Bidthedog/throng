@@ -121,6 +121,8 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
       `setting-${MD}.defaultOpenAction`,
       `setting-${MD}.openTarget`,
       `setting-${MD}.renderMermaid`,
+      // 075 FR-042 — Typeset math.
+      `setting-${MD}.typesetMath`,
       `setting-${MD}.loadRemoteImages`,
       `setting-${MD}.showFrontMatter`,
       `setting-${MD}.gutter`,

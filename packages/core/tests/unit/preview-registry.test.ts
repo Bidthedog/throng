@@ -262,11 +262,13 @@ describe('the shipped registration (FR-065, FR-080)', () => {
     expect(md.sourceMimeTypes).toBeUndefined();
   });
 
-  it('declares exactly its five own settings — 054’s Render Mermaid diagrams, Load remote images, Show front matter, then the 047 gutter and heading-jump leaves — Load remote images and Show front matter shipping on (FR-092, FR-117)', () => {
+  it('declares exactly its six own settings — 054’s Render Mermaid diagrams, 075’s Typeset math, Load remote images, Show front matter, then the 047 gutter and heading-jump leaves — Load remote images and Show front matter shipping on (FR-092, FR-117)', () => {
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
     expect(md.settings?.map((s) => s.leaf)).toEqual([
       // 054 FR-041 — Render Mermaid diagrams is Markdown's first own setting.
       'renderMermaid',
+      // 075 FR-042 — Typeset math, after Render Mermaid diagrams.
+      'typesetMath',
       'loadRemoteImages',
       'showFrontMatter',
       'gutter',
