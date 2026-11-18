@@ -1189,7 +1189,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.commandFinished',
     label: 'Command finished',
     description:
-      'Mark a terminal when its foreground command ends and nothing replaces it. Always the Attention mark: the exit code is not known. Exact, but up to one Command tracking interval late, because throng notices by watching the foreground command; a command that starts and ends between two checks can be missed.',
+      'Mark a terminal when its foreground command ends and nothing replaces it. Always the Attention mark: the exit code is not known. Exact, but up to two Command tracking intervals late, because throng notices by watching the foreground command and waits for a second check that still finds nothing running, so the pause between two commands of a loop is not a finish; a command that starts and ends between two checks can be missed.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',

@@ -222,6 +222,31 @@ describe('terminal.attention producer (057)', () => {
       expect(finished(h)[0]).toMatchObject({ panelId: 'p1', kind: 'attention', detail: 'npm run dev', startup: false });
     });
 
+    it('one observation of nothing between two of a command publishes nothing (FR-065, amended 2026-11-18)', async () => {
+      // `while [ ! -e flag ]; do sleep 1; done`: a snapshot between iterations sees only the shell.
+      const h = await harness();
+      h.host.children = running();
+      h.host.emit('x'); // keep the terminal due every interval (025 FR-019i)
+      await sleep(100);
+      h.host.children = [];
+      await sleep(50); // exactly one observation (commandPollMs 50)
+      h.host.children = running();
+      await sleep(200);
+      expect(finished(h)).toEqual([]);
+    });
+
+    it('the second consecutive observation of nothing publishes it, naming the command that ran', async () => {
+      const h = await harness();
+      h.host.children = running();
+      await sleep(100);
+      promptReturns(h);
+      await sleep(50);
+      expect(finished(h)).toEqual([]);
+      await sleep(50);
+      expect(finished(h)).toHaveLength(1);
+      expect(finished(h)[0]).toMatchObject({ detail: 'npm run dev' });
+    });
+
     it('command → another command publishes nothing', async () => {
       const h = await harness();
       h.host.children = running();

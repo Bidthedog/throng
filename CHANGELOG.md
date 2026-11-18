@@ -53,6 +53,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **The Resource Monitor's first reading names every project**, with its tabs under it. It could show a project by its internal id with no tabs until the pointer left the list.
 - **Unload Project and End Terminals no longer reports "Terminal exited" for the terminals it ends**, and they no longer revert to Blank Panels. Opening the project again gives each of them a fresh shell, as it should (seen on macOS).
 - **On macOS, quitting with Preferences open now quits.** It saved your edits and then left throng running.
+- **A shell loop that runs one short command after another**, such as `while …; do sleep 1; done`, no longer raises a "Command finished" mark while it is still running: throng now waits for a second check that still finds nothing running.
 
 ## 1.0.0-alpha17 — 2026-11-17
 

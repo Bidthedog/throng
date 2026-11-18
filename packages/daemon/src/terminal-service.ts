@@ -261,6 +261,12 @@ interface Session {
    */
   startupPending: boolean;
   /**
+   * 057 FR-065 (amended 2026-11-18) — the command one observation saw finish, awaiting a second observation of
+   * nothing before Command finished is raised. A snapshot taken between two commands of a shell loop sees the
+   * shell alone, so one observation of nothing is not yet a finish. Cleared by any observation of a command.
+   */
+  finishPending: string | null;
+  /**
    * 051 — the in-flight end, resolving to the failure reason or `null`. Non-null ⇔ this is an
    * ENDING terminal: never reattached (FR-004), never probed for busy.
    */
@@ -573,6 +579,14 @@ export class TerminalService {
         'the Claude Code session was not identified; the plain command is kept and no notice is raised',
       );
     }
+    // 057 FR-065 (amended 2026-11-18): Command finished needs TWO consecutive observations of nothing. Only the
+    // signal waits; what is published below stays exactly what this observation saw, for every other consumer.
+    if (command !== null) session.finishPending = null;
+    else if (session.finishPending !== null) {
+      this.attention.raise(session, 'commandFinished', 'attention', session.finishPending, session.startupPending);
+      session.finishPending = null;
+      session.startupPending = false;
+    }
     if (last && last.command === command && last.arch === arch && last.memoryCommand === memoryCommand) {
       if (last.resumeMiss !== resumeMiss) this.lastCommand.set(session.panelId, { ...last, resumeMiss });
       return;
@@ -587,11 +601,9 @@ export class TerminalService {
     if (command !== null) session.lastRanCommand = command;
     else if (session.titleSetAt <= observedAt) session.promptTitle = session.windowTitle.title;
     this.events.publishCommand(session.panelId, command, arch, observedAt, memoryCommand);
-    // 057 FR-065: only a command that FINISHES (command → nothing) is a signal; command → command is not.
-    if (last?.command != null && command === null) {
-      this.attention.raise(session, 'commandFinished', 'attention', last.command, session.startupPending);
-      session.startupPending = false;
-    }
+    // 057 FR-065: only a command that FINISHES (command → nothing) is a signal; command → command is not. This is
+    // the first observation of nothing; the next one, if it still sees nothing, raises it (above).
+    if (last?.command != null && command === null) session.finishPending = last.command;
   }
 
   /**
@@ -1032,6 +1044,7 @@ export class TerminalService {
       userKilled: false,
       startupPending:
         launch.startupCommand === true || (typeof launch.writeOnReady === 'string' && launch.writeOnReady.length > 0),
+      finishPending: null,
       ending: null,
       superseded: false,
       escalate: false,
