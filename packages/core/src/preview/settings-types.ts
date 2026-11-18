@@ -9,8 +9,12 @@
 /** What Copy puts on the clipboard (FR-035b): selection HTML plus text, or text alone. */
 export type PreviewCopyFormat = 'rich' | 'plain';
 
-/** What opening a file of a text provider does by default (FR-050). */
-export type DefaultOpenAction = 'editor' | 'preview';
+/**
+ * What opening a file of a provider does by default — 074 FR-016 ("Open <files> in", superseding 044 FR-050 and
+ * FR-051): a throng editor, the throng preview, or the operating system's default program. A binary provider
+ * offers `preview` and `os` only.
+ */
+export type DefaultOpenAction = 'editor' | 'preview' | 'os';
 
 /**
  * 047 (data-model.md "Settings", research R8/R11, FR-015a) — where a STANDALONE preview opens:
@@ -22,10 +26,10 @@ export type PreviewOpenTarget = 'lastActive' | 'new';
 export interface ProviderSettings {
   /** FR-065: Markdown ships `true`. */
   enabled: boolean;
-  /** Text providers only; ships `'editor'` (FR-050). Absent for a binary provider (FR-051). */
+  /** 074 FR-016 — every provider; ships its descriptor's value, else `'editor'` (text) / `'preview'` (binary). */
   defaultOpenAction?: DefaultOpenAction;
   /**
-   * 054 FR-051, FR-053 — where a standalone preview of this provider's files opens. Text providers only;
+   * 054 FR-051, FR-053 — where a standalone preview of this provider's files opens. Every provider (074);
    * ships `'lastActive'`, or the value of the retired top-level `openTarget` it was migrated from.
    */
   openTarget?: PreviewOpenTarget;

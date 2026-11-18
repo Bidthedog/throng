@@ -213,7 +213,11 @@ toggles never hide.
 
 A preview is a read-only, rendered view of a file beside its editor. throng ships two preview types,
 **Markdown Preview** and **Mermaid Preview**; each has its own subsection below with an **Enabled**
-switch, a **Default open action** and an **Open previews in** choice, plus any settings of its own.
+switch, an **Open <files> in** choice and an **Open previews in** choice, plus any settings of its own.
+**Open <files> in** picks what opening one of its files from File Explorer, Quick Open or a link does:
+**Throng Editor** (`editor`), **Throng Preview** (`preview`) or **Default OS Program** (`os`), which hands
+the file to the program your operating system opens it with and opens no panel. A Find in Files result set
+to Default OS Program opens an editor at the match, and **Open In**'s targets always do what they name.
 Turning a type off closes its open previews and greys its other settings rather than hiding them.
 The settings in this table apply to every preview type.
 
@@ -229,7 +233,7 @@ The settings in this table apply to every preview type.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Markdown: Enabled | `editor.previews.providers.markdown.enabled` | on | on · off | Offer previews of `.md` and `.markdown` files. Off, every such preview closes and the preview commands are shown disabled. |
-| Markdown: Default open action | `editor.previews.providers.markdown.defaultOpenAction` | `editor` | `editor` · `preview` | What opening a Markdown file from File Explorer, Quick Open or a Find in Files result does. **Open In**'s editor targets always open an editor. |
+| Open Markdown files in | `editor.previews.providers.markdown.defaultOpenAction` | `editor` | `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program) | What opening a Markdown file from File Explorer, Quick Open, a link or a Find in Files result does. **Open In**'s targets always do what they name. |
 | Markdown: Open previews in | `editor.previews.providers.markdown.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | Last Active reuses the most recently used Markdown preview in the tab you are looking at, adding to its Back history; otherwise a new preview opens. New opens every preview in a panel of its own. **Open In → Last Preview Panel / New Preview Panel**, in the File Explorer and on Find in Files results, choose explicitly. A value saved under the former single `editor.previews.openTarget` key is carried over to each preview type. |
 | Markdown: Render Mermaid diagrams | `editor.previews.providers.markdown.renderMermaid` | on | on · off | Draw a `mermaid` code block in a Markdown preview as its diagram. Off, the block shows as code. |
 | Markdown: Load remote images | `editor.previews.providers.markdown.loadRemoteImages` | on | on · off | Show images a document links from the web over HTTPS, such as build badges. Off, each shows its alternative text and nothing is requested. |
@@ -243,7 +247,7 @@ The settings in this table apply to every preview type.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Mermaid: Preview .mmd files | `editor.previews.providers.mermaid.enabled` | on | on · off | Offer previews of standalone `.mmd` and `.mermaid` files, drawn as their diagram. Off, every such preview closes. Diagrams inside a Markdown preview are not affected — **Markdown: Render Mermaid diagrams** controls those. |
-| Mermaid: Default open action | `editor.previews.providers.mermaid.defaultOpenAction` | `preview` | `editor` · `preview` | What opening a Mermaid file from File Explorer, Quick Open or a Find in Files result does. Ships as `preview`, so a diagram file opens as its diagram; **Open In**'s editor targets always open an editor. |
+| Open Mermaid files in | `editor.previews.providers.mermaid.defaultOpenAction` | `preview` | `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program) | As **Open Markdown files in**, for Mermaid files. Ships as `preview`, so a diagram file opens as its diagram. |
 | Mermaid: Open previews in | `editor.previews.providers.mermaid.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for Mermaid previews; a Markdown preview is never reused for a Mermaid file, or the reverse. |
 
 ### Links

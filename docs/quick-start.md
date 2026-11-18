@@ -175,10 +175,10 @@ can keep browsing or press **F2** to rename the file.
 - The same file open in two places is **one document**, with one undo history, and unsaved edits
   survive a crash.
 - **Preview** a Markdown file beside its editor from the status bar's preview button; it follows your
-  typing and scrolls with the editor. With **Default open action** set to Preview, clicking notes in
+  typing and scrolls with the editor. With **Open Markdown files in** set to Throng Preview, clicking notes in
   the tree reuses the preview you already have ([Open previews in](preferences.md#previews)), and you
   can drop a `.md` file onto a preview to show it there — or onto an empty panel, which opens it the
-  way **Default open action** says. Right-click a note — in the tree or in Find in Files' results — and
+  way **Open Markdown files in** says. Right-click a note — in the tree or in Find in Files' results — and
   choose **Open In › Last Preview Panel** to show it in the preview named beside the item, or **New
   Preview Panel** for a fresh one; once the note has its preview open, **Current Preview** goes to it.
   A preview's status bar counts the document's lines, characters and words, and while you select text it
@@ -220,7 +220,7 @@ Right-click a file for **Open in OS Default Program**, and any item for
   you are on is filled more strongly.
 - **Ctrl+Shift+F** searches every file in the project as you type; **Ctrl+Shift+H** adds replace,
   one match, one file or everything at once. Right-click a folder in the tree to search just there.
-  A Markdown result opens its preview, scrolled to the match, when **Default open action** is Preview.
+  A Markdown result opens its preview, scrolled to the match, when **Open Markdown files in** is Throng Preview.
 - **Ctrl+Shift+T** is **Quick Open**: type any part of a name or path to jump to a file.
 - **Ctrl+G** goes to a line in the active editor.
 - Right-click a folder in the tree to open a terminal there, or to expand or collapse its children.

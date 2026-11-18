@@ -47,10 +47,21 @@ export interface PreviewProviderDescriptor {
   /** Binary providers only: the MIME types the source route may serve. */
   sourceMimeTypes?: readonly string[];
   /**
-   * Text providers only: the SHIPPED default open action. Absent ships `'editor'` (044 FR-050). The user's
-   * stored choice always wins over it; this is only what a fresh or unset config reads.
+   * The SHIPPED "Open <files> in" value (074 FR-016). Absent ships `'editor'` for a text provider (044 FR-050)
+   * and `'preview'` for a binary one, which offers no editor. The user's stored choice always wins over it;
+   * this is only what a fresh or unset config reads.
    */
   defaultOpenAction?: DefaultOpenAction;
+  /**
+   * 074 FR-017 — the plural the "Open <files> in" label names: `images`, `PDFs`. Absent reads
+   * `"<displayName> files"`.
+   */
+  filesNoun?: string;
+  /**
+   * 074 FR-016 — the label of the `preview` option, where the preview is more than a viewer (spec 073's CSV:
+   * "Throng Preview Editor"). Absent reads "Throng Preview".
+   */
+  previewOptionLabel?: string;
   /**
    * Wording for the generated enabled toggle, when `"<displayName>: Enabled"` and its generic description
    * would mislead — e.g. Mermaid's, which governs standalone files only, not diagrams inside Markdown.

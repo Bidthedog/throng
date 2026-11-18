@@ -1387,6 +1387,8 @@ export {
 export {
   PREVIEW_COPY_FORMATS,
   DEFAULT_OPEN_ACTIONS,
+  // 074 FR-016 — what a provider's Open <files> in offers.
+  offeredOpenActions,
   // 047 (research R8/R11, FR-015a).
   PREVIEW_OPEN_TARGETS,
   previewSettingsDefaults,

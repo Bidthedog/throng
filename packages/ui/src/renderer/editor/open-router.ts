@@ -71,6 +71,12 @@ export interface OpenRoute {
    */
   projectId: string | null | undefined;
   openInEditor: EditorOpenRoute;
+  /**
+   * 074 FR-018 — Open <files> in: Default OS Program. Hands the file to the operating system's default program
+   * through the existing open-in-OS route (067 FR-018), which raises its own one notice on failure. The caller
+   * supplies it, as it supplies the editor route, so this module names no link or OS module.
+   */
+  openInOs(absPath: string): Promise<void>;
 }
 
 /**
@@ -79,8 +85,14 @@ export interface OpenRoute {
  * caller like Quick Open (FR-061) must not treat it as one.
  */
 async function openedAsPreview(absPath: string, route: OpenRoute, keepFocus = false): Promise<boolean> {
+  const action = defaultOpenActionFor(route.registry, route.previews, absPath);
+  // 074 FR-018 — no throng panel at all: the OS default program opens it, and that counts as opened.
+  if (action === 'os') {
+    await route.openInOs(absPath);
+    return true;
+  }
   if (!route.projectId) return false;
-  if (defaultOpenActionFor(route.registry, route.previews, absPath) !== 'preview') return false;
+  if (action !== 'preview') return false;
   // 047 FR-081, FR-083 — from File Explorer: the tree keeps the keyboard, and the preview flashes instead.
   return requestPreviewOpen({ absPath, projectId: route.projectId, ...(keepFocus ? { keepFocus, flash: true } : {}) });
 }

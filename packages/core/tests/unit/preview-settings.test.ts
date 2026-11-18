@@ -125,10 +125,10 @@ describe('previewSettingsDefaults (FR-035b, FR-050, FR-060, FR-060a, FR-065, FR-
     expect(previewSettingsDefaults(TEST_REGISTRY).syncScroll).toBe(true);
   });
 
-  it('gives a binary provider no defaultOpenAction leaf (FR-051)', () => {
+  // 074 FR-016 supersedes FR-051: a binary provider ships Open <files> in at Preview, and Open previews in.
+  it('gives a binary provider a Preview open action and its own openTarget (074 FR-016)', () => {
     const d = previewSettingsDefaults(TEST_REGISTRY);
-    expect(d.providers.image).toEqual({ enabled: true });
-    expect('defaultOpenAction' in d.providers.image).toBe(false);
+    expect(d.providers.image).toEqual({ enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' });
     // 054 FR-051 — a text provider now also carries its own openTarget (a binary one still has none).
     expect(d.providers.notes).toEqual({
       enabled: true,
@@ -291,7 +291,7 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
     // 054 FR-051 — generated per text provider; a binary provider gets none, and no top-level row remains.
     const testKeys = previewSettingsDescriptors(TEST_REGISTRY).map((d) => d.key);
     expect(testKeys).toContain('editor.previews.providers.notes.openTarget');
-    expect(testKeys).not.toContain('editor.previews.providers.image.openTarget');
+    expect(testKeys).toContain('editor.previews.providers.image.openTarget'); // 074 FR-010
     expect(testKeys).not.toContain('editor.previews.openTarget');
   });
 
@@ -308,19 +308,20 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
 
   it('prefixes every provider label with the provider’s display name', () => {
     expect(byKey(descriptors, 'editor.previews.providers.markdown.enabled').label).toBe('Markdown: Enabled');
+    // 074 FR-017 — the one exception: "Open <files> in" names the files instead.
     expect(byKey(descriptors, 'editor.previews.providers.markdown.defaultOpenAction').label).toBe(
-      'Markdown: Default open action',
+      'Open Markdown files in',
     );
     expect(byKey(descriptors, 'editor.previews.providers.markdown.loadRemoteImages').label).toBe(
       'Markdown: Load remote images',
     );
   });
 
-  it('offers Editor and Preview as the default open action', () => {
+  it('offers Throng Editor, Throng Preview and Default OS Program (074 FR-016)', () => {
     const d = byKey(descriptors, 'editor.previews.providers.markdown.defaultOpenAction');
     expect(d.control).toBe('select');
-    expect(d.allowedValues).toEqual(['editor', 'preview']);
-    expect(d.optionLabels).toEqual({ editor: 'Editor', preview: 'Preview' });
+    expect(d.allowedValues).toEqual(['editor', 'preview', 'os']);
+    expect(d.optionLabels).toEqual({ editor: 'Throng Editor', preview: 'Throng Preview', os: 'Default OS Program' });
   });
 
   it('draws the default open action and own settings DISABLED while the provider is off (FR-061)', () => {
@@ -358,10 +359,10 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
     });
   });
 
-  it('declares no defaultOpenAction descriptor for a binary provider (FR-051)', () => {
+  it('declares a defaultOpenAction descriptor for a binary provider too (074 FR-016, superseding FR-051)', () => {
     const keys = previewSettingsDescriptors(TEST_REGISTRY).map((d) => d.key);
     expect(keys).toContain('editor.previews.providers.image.enabled');
-    expect(keys).not.toContain('editor.previews.providers.image.defaultOpenAction');
+    expect(keys).toContain('editor.previews.providers.image.defaultOpenAction');
   });
 
   it('describes a test registry completely — zero missing, zero unknown (FR-071, SC-003 S5)', () => {
@@ -484,12 +485,12 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
     expect(parsed.providers.markdown).toEqual(defaults.providers.markdown);
   });
 
-  it('never gives a binary provider a defaultOpenAction, even one written by hand (FR-051)', () => {
+  it('reads an editor open action written by hand for a binary provider as its shipped Preview (074 FR-016)', () => {
     const parsed = parsePreviewSettings(
       { providers: { image: { enabled: true, defaultOpenAction: 'editor' } } },
       TEST_REGISTRY,
     );
-    expect(parsed.providers.image).toEqual({ enabled: true });
+    expect(parsed.providers.image).toEqual({ enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' });
   });
 });
 

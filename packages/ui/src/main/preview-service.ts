@@ -38,6 +38,7 @@ import {
   createSettleScheduler,
   editorAutoTitle,
   effectiveMaxWaitMs,
+  defaultOpenActionFor,
   enabledProviderFor,
   isUnderPath,
   logCaught,
@@ -773,6 +774,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // 3. No enabled provider: an editor, as from File Explorer.
     const provider = enabledProviderFor(this.deps.registry, this.previewSettings(), target);
     if (!provider) return { kind: 'openedInEditor' };
+    // 074 FR-018 — a target whose type opens in the OS default program goes back the same way: the renderer's
+    // open router hands it to the OS, as from File Explorer.
+    if (defaultOpenActionFor(this.deps.registry, this.previewSettings(), target) === 'os') return { kind: 'openedInEditor' };
 
     // 4. One preview per file (FR-012): focus the one that exists.
     const other = this.runForPath(canon(target));

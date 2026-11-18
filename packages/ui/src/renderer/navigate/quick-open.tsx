@@ -38,6 +38,7 @@ import { useAppSettings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab } from '../editor/editor-open.js';
 import { openFromQuickOpen } from '../editor/open-router.js';
+import { requestOpenInOs } from '../links/use-open-in-os.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
 import { requestPanelFocus } from '../workspace/panel-focus.js';
@@ -176,7 +177,14 @@ export function QuickOpen({
         tabId,
         absPath,
         invokedFrom === null ? openTarget : target.current,
-        { registry, previews: settings.editor.previews, projectId, openInEditor: openFileInTab },
+        {
+          registry,
+          previews: settings.editor.previews,
+          projectId,
+          openInEditor: openFileInTab,
+          // 074 FR-018 — Open <files> in: Default OS Program, performed (and reported) by the window's listener.
+          openInOs: (path) => requestOpenInOs(path, projectId ?? undefined),
+        },
       );
 
       /*

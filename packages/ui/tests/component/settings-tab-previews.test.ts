@@ -136,7 +136,7 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
     // The provider rows carry the provider's display name, and none of them "Open files with" (019 FR-024).
     const section = subsection();
     expect(within(section).getByText('Markdown: Enabled')).toBeInTheDocument();
-    expect(within(section).getByText('Markdown: Default open action')).toBeInTheDocument();
+    expect(within(section).getByText('Open Markdown files in')).toBeInTheDocument();
     expect(within(section).getByText('Markdown: Load remote images')).toBeInTheDocument();
     // `editor.openOnClick`'s label — a different setting, which two rows under one name would merge.
     expect(within(section).queryByText(/open files with/i)).toBeNull();
@@ -232,7 +232,7 @@ describe('the tab reads its descriptors from a metadata context (SC-003 prerequi
 
     const section = subsection();
     expect(within(section).getByText('Test text: Enabled')).toBeInTheDocument();
-    expect(within(section).getByText('Test text: Default open action')).toBeInTheDocument();
+    expect(within(section).getByText('Open Test text files in')).toBeInTheDocument();
     expect(within(section).getByText('Test text: Shout')).toBeInTheDocument();
     // The shipped registry is not what drew this form.
     expect(within(section).queryByText('Markdown: Enabled')).toBeNull();
