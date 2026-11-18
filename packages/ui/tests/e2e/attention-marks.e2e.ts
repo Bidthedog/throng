@@ -101,12 +101,17 @@ test('a delayed bell in project A, seen from project B, marks A’s row and rais
   const flag = join(rootA, 'left-a.flag');
   const bellAtFile = join(rootA, 'bell-at.txt');
   // POSIX: node writes the time and the BEL in one process, so nothing runs between the two (BSD `date` has no ms).
+  // It also does the waiting, and stays running after the bell, so the shell's foreground command is one process
+  // from Enter to the end of the test. A shell loop (`while …; do sleep 0.1; done`) forks a child per iteration,
+  // and Command finished is a process-snapshot signal (057 FR-065, 025 FR-022): a snapshot between two sleeps,
+  // or the line ending a moment after the bell, raises it and replaces the bell's reason (FR-002) — correctly,
+  // and nothing this test is about. PowerShell's loop runs in-process and its command line forks nothing.
   const command = ON_WINDOWS
     ? `while (-not (Test-Path -LiteralPath '${flag}')) { Start-Sleep -Milliseconds 100 }; Set-Content -NoNewline -LiteralPath '${bellAtFile}' ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Write([char]7)`
-    : `while [ ! -e '${flag}' ]; do sleep 0.1; done; node -e 'require("fs").writeFileSync(${JSON.stringify(bellAtFile)}, String(Date.now())); process.stdout.write("\\x07")'`;
+    : `node -e 'const fs = require("fs"); let rang = false; setInterval(() => { if (rang || !fs.existsSync(${JSON.stringify(flag)})) return; rang = true; fs.writeFileSync(${JSON.stringify(bellAtFile)}, String(Date.now())); process.stdout.write("\\x07"); }, 100)'`;
   await termA.click();
   await win.keyboard.type(command, { delay: TYPE_DELAY });
-  await expect(termA).toContainText(ON_WINDOWS ? 'Start-Sleep' : 'while [ ! -e', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+  await expect(termA).toContainText(ON_WINDOWS ? 'Start-Sleep' : 'node -e', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   await win.keyboard.press('Enter');
 
   // ── Leave: project B is now the one on screen, so A's terminal is not attended ─────────────────
@@ -149,4 +154,7 @@ test('a delayed bell in project A, seen from project B, marks A’s row and rais
   await expect(win.getByTestId(`attention-project-${idA}`)).toHaveCount(0);
   await expect(win.getByTestId(`attention-panel-${panelA}`)).toHaveCount(0);
   await expect(win.getByTestId(`attention-toast-${panelA}`)).toHaveCount(0);
+
+  // The POSIX command waits on after its bell; end it from the terminal the toast landed in.
+  if (!ON_WINDOWS) await win.keyboard.press('Control+C');
 });
