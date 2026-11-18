@@ -33,7 +33,7 @@ import { quiesceSampler } from './quiesce-sampler.js';
  * an undefined name here is invisible until it runs.
  */
 import { forceKillProcessTree } from './process-tree.js';
-import { resolveIpcAddress } from '@throng/core';
+import { resolveIpcAddress, shippedBindingsFor } from '@throng/core';
 import { startPlatform } from '@throng/platform';
 
 // 062: this process connects to the daemon as well, so it resolves IPC addresses by the same traits the app does.
@@ -1940,6 +1940,40 @@ export const TEST_SHELL = process.platform === 'win32' ? 'cmd' : 'bash';
 
 /** A command that keeps a terminal busy for about 30 seconds, as a real child process of its shell. */
 export const LONG_RUNNING_COMMAND = process.platform === 'win32' ? 'ping -n 30 127.0.0.1' : 'sleep 30';
+
+/** This machine, as throng names platforms. */
+export const HOST_OS = process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux';
+
+/**
+ * macOS draws its own window buttons (070): the title bar takes `title-bar--traffic-lights` and renders no
+ * `window-min` / `window-max` / `window-close`. A spec about throng's own controls asserts their absence here and
+ * drives minimise and maximise through the BrowserWindow instead.
+ */
+export const NATIVE_WINDOW_CONTROLS = HOST_OS === 'macos';
+
+/**
+ * A throng chord token as the Playwright keys to press, one entry per stroke: `Ctrl+E,W` → `['Control+E', 'W']`,
+ * `Meta+,` → `['Meta+,']`. A comma ends a stroke only when another stroke follows it.
+ */
+export function playwrightStrokes(token: string): string[] {
+  return token.split(/,(?=.)/).map((stroke) => stroke.replace(/\bCtrl\b/g, 'Control'));
+}
+
+/**
+ * The chord throng ships for `action` on this platform — what a user here actually presses, read from the app's own
+ * bindings (`shippedBindingsFor`), so macOS gets its Cmd form and its overrides (070 FR-029) without a spec restating
+ * them. Use Playwright's `ControlOrMeta` for plain text-editing chords (copy, cut, undo) that are not throng actions.
+ */
+export function chordFor(action: string, index = 0): string[] {
+  const chord = shippedBindingsFor(HOST_OS).bindings[action]?.[index];
+  if (!chord) throw new Error(`throng ships no chord ${index} for ${action} on ${HOST_OS}`);
+  return playwrightStrokes(chord);
+}
+
+/** Press throng's shipped chord for `action` on this platform, stroke by stroke. */
+export async function pressAction(page: Page, action: string, index = 0): Promise<void> {
+  for (const stroke of chordFor(action, index)) await page.keyboard.press(stroke);
+}
 
 function probeShellChildren(parentPid: number): ConhostProbe {
   // `-A -o pid=,ppid=,comm=` is the form GNU and BSD ps both take: macOS's has no `--ppid` (070). Its `comm` is the full
