@@ -10,13 +10,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearTerminalViewState } from '../../src/renderer/terminal/terminal-view-state.js';
 import { useTerminal } from '../../src/renderer/terminal/use-terminal.js';
 
-const recorded = vi.hoisted(() => ({ instances: [] as unknown[] }));
+const recorded = vi.hoisted(() => ({ instances: [] as unknown[], options: [] as unknown[] }));
 vi.mock('@xterm/xterm', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@xterm/xterm')>();
   class RecordingTerminal extends mod.Terminal {
     constructor(...args: ConstructorParameters<typeof mod.Terminal>) {
       super(...args);
       recorded.instances.push(this);
+      recorded.options.push(args[0]);
     }
   }
   return { ...mod, Terminal: RecordingTerminal };
@@ -95,6 +96,7 @@ function mountTerminal(macOptionIsMeta: boolean | undefined) {
 beforeEach(() => {
   shims();
   recorded.instances.length = 0;
+  recorded.options.length = 0;
   installBridge();
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -123,5 +125,17 @@ describe('terminals.macOptionIsMeta reaches xterm (070 FR-031)', () => {
     await waitFor(() => expect(xterm().options.macOptionIsMeta).toBe(false));
     expect(recorded.instances.length).toBe(created);
     hook.unmount();
+  });
+});
+
+describe('a right-click never selects a word (045 FR-169, FR-171)', () => {
+  // xterm's own default is on for macOS: the right button's press selected the word under the pointer, which then
+  // read as the user's selection, so a right-click on a terminal link opened the ordinary menu, not the Link menu
+  // (hosted macOS E2E, terminal-clipboard). Asserted on what throng PASSES, because jsdom is not macOS and xterm's
+  // resulting default here would be off whatever throng did.
+  it('is passed off explicitly, on every platform', async () => {
+    mountTerminal(undefined);
+    await waitFor(() => expect(recorded.options.length).toBeGreaterThan(0));
+    expect((recorded.options.at(-1) as { rightClickSelectsWord?: boolean }).rightClickSelectsWord).toBe(false);
   });
 });
