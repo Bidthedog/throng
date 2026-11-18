@@ -223,7 +223,13 @@ test('Unload with End Terminals then an immediate switch succeeds four times run
 
       for (let attempt = 1; attempt <= 4; attempt += 1) {
         await test.step(`attempt ${attempt}`, async () => {
-          if (attempt > 1) await switchProject(win, 'Lifecycle468A');
+          if (attempt > 1) {
+            await switchProject(win, 'Lifecycle468A');
+            // FR-004: A comes back with both panels still terminals. A panel that took the Unload's end for its
+            // shell dying reverts to the type picker and starts nothing — say that, not just "1 ping".
+            await expect(win.locator('.xterm')).toHaveCount(2);
+            await expect(win.locator('[data-testid^="panel-type-select-"]')).toHaveCount(0);
+          }
           await expectPingCount(TARGET, 2);
 
           // Unload A with End Terminals, then click B at once.

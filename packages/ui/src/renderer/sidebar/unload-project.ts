@@ -13,6 +13,7 @@
  * protects typed text rather than confirming the unload (SC-015). FR-086: Keep Terminals Running keeps
  * EVERY terminal, idle shells included — it sends the terminal service nothing.
  */
+import { flushSync } from 'react-dom';
 import { planUnload, projectPanelIdsInSubWorkspaces } from '@throng/core';
 import type { Tab, UnloadTerminalAction } from '@throng/core';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
@@ -112,8 +113,15 @@ export async function unloadProject(
 
   // Step 4 (FR-032, FR-036) — release the project BEFORE touching any terminal, so no view is left
   // showing a session about to be ended (Principle III).
+  //
+  // Synchronously (051 FR-004). The release is a React state update, committed on a later task, and a
+  // terminal view drops its exit subscription later still, in its effect cleanup. A daemon that ends a
+  // shell at once (macOS) published the exit to a view still subscribed, which took throng's own end for
+  // its shell dying: "Terminal exited (code —)", and the panel reverted, so the next load gave it no
+  // fresh shell. `flushSync` commits the release and, being a sync render, runs those cleanups before it
+  // returns (`unload-view-gone-before-end.test.ts`).
   await settleLayoutSaves();
-  collaborators.unloadProject(id);
+  flushSync(() => collaborators.unloadProject(id));
 
   // From here the project is ALREADY released (step 4), so nothing below may stop the rest, and
   // every problem is collected into ONE notice at the end ("one condition, one notice"): the user
