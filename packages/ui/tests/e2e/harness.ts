@@ -1056,7 +1056,17 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
   // windows with a beat between" that avoids the handshake hang — then finalise with app.close().
   // With no child window there is nothing to put a beat between, so most apps skip it: this runs for
   // every launch in the suite, about 300 of them per gate.
+  //
+  // `steps` records how far the graceful path got, so a stall names its side of the quit: stuck in a
+  // destroy, main's event loop was not answering before the quit was asked for; stuck in `app.close()`,
+  // the quit was asked for and the process did not end (hosted macOS, 1.0.0-beta1 run 44412213087).
+  const began = Date.now();
+  const steps: string[] = [];
+  const step = (name: string): void => {
+    steps.push(`${name} +${Date.now() - began}ms`);
+  };
   const graceful = (async () => {
+    step('destroy children');
     const children = await app
       .evaluate(({ BrowserWindow }) => {
         const wins = BrowserWindow.getAllWindows();
@@ -1067,12 +1077,14 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
       })
       .catch(() => 0);
     if (children > 0) await new Promise((r) => setTimeout(r, 200));
+    step('destroy main');
     await app
       .evaluate(({ BrowserWindow }) => {
         for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.destroy();
       })
       .catch(() => {});
     await new Promise((r) => setTimeout(r, 50));
+    step('app.close');
     await app.close().catch(() => {});
   })();
 
@@ -1090,9 +1102,20 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
         const group = execFileSync('ps', ['-eo', 'pid=,pgid=,ppid=,stat=,args=', '-ww'], { encoding: 'utf8', timeout: 5000 })
           .split('\n')
           .filter((line) => line.trim().split(/\s+/)[1] === String(pid));
-        console.warn(`[teardown] the app (pid ${pid}) did not close within ${SHUTDOWN_GRACE_MS}ms; its process group:\n${group.join('\n') || '(empty: the main process and its children have exited)'}`);
+        console.warn(`[teardown] the app (pid ${pid}) did not close within ${SHUTDOWN_GRACE_MS}ms; graceful steps reached: ${steps.join(', ')}; its process group:\n${group.join('\n') || '(empty: the main process and its children have exited)'}`);
       } catch {
         /* best-effort: the force-kill below still runs */
+      }
+      // macOS: the process group alone cannot say what a live main process is doing. `sample` (shipped with macOS,
+      // no privileges for our own child) writes every thread's stack beside the test's other results.
+      if (process.platform === 'darwin') {
+        try {
+          const file = join(test.info().outputDir, `shutdown-stall-${pid}.sample.txt`);
+          execFileSync('/usr/bin/sample', [String(pid), '2', '-mayDie', '-file', file], { stdio: 'ignore', timeout: 5_000 });
+          console.warn(`[teardown] the stalled app's thread stacks: ${file}`);
+        } catch {
+          /* best-effort: outside a test, or the process went while sampling */
+        }
       }
     }
     forceKillProcessTree(pid);
