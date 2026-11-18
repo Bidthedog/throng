@@ -8,7 +8,7 @@ import {
   type ReactElement,
   type Ref,
 } from 'react';
-import { eventToToken, normalizeToken, type IconKey, type MenuSection } from '@throng/core';
+import { chordLabel, eventToToken, normalizeToken, type IconKey, type MenuSection } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { clampToViewport } from '../common/clamp-to-viewport.js';
 import { withDividers } from './menu-dividers.js';
@@ -442,7 +442,7 @@ function MenuLevel({
               // US1 (#125): the command's first binding, in smaller text after the label. Only
               // rendered when present, so an unbound item is byte-identical to before (FR-004).
               <span className="context-menu__shortcut" data-testid={`menu-shortcut-${item.label}`}>
-                ({item.shortcut})
+                ({chordLabel(item.shortcut)})
               </span>
             ) : null}
             {hasSub ? (
