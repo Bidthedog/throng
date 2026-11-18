@@ -111,17 +111,25 @@ const lastLineOf = (megabytes: number): string => {
   return n % 32 === 0 ? `section ${String(n).padStart(8, '0')}` : `line ${String(n).padStart(8, '0')}`;
 };
 
-async function collectGarbage(app: ElectronApplication, win: Page): Promise<void> {
+/** Records the call a sample is waiting on, so a stalled one is named (see `sample`). */
+type Mark = (call: string) => void;
+
+async function collectGarbage(app: ElectronApplication, win: Page, mark: Mark): Promise<void> {
+  mark('renderer: open a CDP session');
   const cdp = await win.context().newCDPSession(win);
   try {
     // Twice, a turn apart, as in main below: Blink's heap is swept after the collection that found its
     // nodes dead, and a single collection left terminal rows from the view before still counted.
+    mark('renderer: HeapProfiler.collectGarbage (first)');
     await cdp.send('HeapProfiler.collectGarbage');
     await new Promise((r) => setTimeout(r, 250)); // sleep-justified: lets the sweepers run between collections.
+    mark('renderer: HeapProfiler.collectGarbage (second)');
     await cdp.send('HeapProfiler.collectGarbage');
   } finally {
+    mark('renderer: detach the CDP session');
     await cdp.detach();
   }
+  mark('main: gc');
   await app.evaluate(async () => {
     // `process.getBuiltinModule`, not `require`: this function is EVAL'd in main, which is ESM.
     const v8 = process.getBuiltinModule('node:v8');
@@ -161,10 +169,14 @@ interface Sample {
 async function liveHeap(
   app: ElectronApplication,
   win: Page,
+  mark: Mark,
 ): Promise<{ main: number; external: number; arrayBuffers: number; renderer: number; embedder: number; backing: number }> {
+  mark('renderer: open a CDP session');
   const cdp = await win.context().newCDPSession(win);
   try {
+    mark('renderer: Runtime.getHeapUsage');
     const usage = (await cdp.send('Runtime.getHeapUsage')) as { usedSize: number; embedderHeapUsedSize?: number; backingStorageSize?: number };
+    mark('main: process.memoryUsage');
     const m = await app.evaluate(() => {
       const u = process.memoryUsage();
       return { heap: u.heapUsed, external: u.external, arrayBuffers: u.arrayBuffers };
@@ -178,6 +190,7 @@ async function liveHeap(
       backing: usage.backingStorageSize ?? 0,
     };
   } finally {
+    mark('renderer: detach the CDP session');
     await cdp.detach();
   }
 }
@@ -274,10 +287,14 @@ async function inspectDaemon(pid: number): Promise<DaemonInspector> {
  */
 const INSPECTOR_STEP_MS = 60_000;
 const SAMPLE_STEP_MS = 120_000;
-async function within<T>(ms: number, step: string, work: Promise<T>): Promise<T> {
+async function within<T>(ms: number, step: string, work: Promise<T>, diagnose?: () => Promise<string>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${step}: no answer in ${ms / 1000} s`)), ms);
+    timer = setTimeout(() => {
+      const fail = (detail: string): void => reject(new Error(`${step}: no answer in ${ms / 1000} s${detail}`));
+      if (diagnose === undefined) fail('');
+      else diagnose().then((d) => fail(`; ${d}`), () => fail(''));
+    }, ms);
   });
   try {
     return await Promise.race([work, deadline]);
@@ -286,18 +303,43 @@ async function within<T>(ms: number, step: string, work: Promise<T>): Promise<T>
   }
 }
 
-/** Private bytes and live heap of main and of the window's renderer, after a collection on both. */
+/** How long a process gets to answer a trivial evaluate once a sample has stalled. */
+const LIVENESS_PROBE_MS = 10_000;
+
+/**
+ * Private bytes and live heap of main and of the window's renderer, after a collection on both.
+ *
+ * A stall names the call it was waiting on and whether each process still answers a trivial evaluate. One sample
+ * stalled for the whole 120 s on a hosted runner (run 44408776306, the wide terminal case's fifth repeat) after nine
+ * repeats of the same case had each taken 18 s in all, three samples included: a stall, not a slow collection, and
+ * the error said nothing about which process had stopped answering.
+ */
 async function sample(app: ElectronApplication, win: Page): Promise<Sample> {
-  return within(SAMPLE_STEP_MS, 'sample the live heap', sampleUnbounded(app, win));
+  let waitingOn = 'nothing yet';
+  const mark: Mark = (call) => {
+    waitingOn = call;
+  };
+  const answers = (work: Promise<unknown>): Promise<string> =>
+    within(LIVENESS_PROBE_MS, 'probe', work).then(
+      () => 'answers',
+      (e: unknown) => `does not answer (${e instanceof Error ? e.message : String(e)})`,
+    );
+  const diagnose = async (): Promise<string> => {
+    const [renderer, main] = await Promise.all([answers(win.evaluate(() => 1)), answers(app.evaluate(() => 1))]);
+    return `waiting on ${waitingOn}; a trivial evaluate: the renderer ${renderer}, main ${main}`;
+  };
+  return within(SAMPLE_STEP_MS, 'sample the live heap', sampleUnbounded(app, win, mark), diagnose);
 }
 
-async function sampleUnbounded(app: ElectronApplication, win: Page): Promise<Sample> {
-  await collectGarbage(app, win);
-  const heap = await liveHeap(app, win);
+async function sampleUnbounded(app: ElectronApplication, win: Page, mark: Mark): Promise<Sample> {
+  await collectGarbage(app, win, mark);
+  const heap = await liveHeap(app, win, mark);
+  mark('main: the renderer pid');
   const pids = await app.evaluate(({ webContents }) => ({
     main: process.pid,
     renderer: webContents.getAllWebContents().find((w) => !w.getURL().startsWith('devtools'))?.getOSProcessId() ?? 0,
   }));
+  mark('main: app.getAppMetrics');
   const metrics = await app.evaluate(({ app: a }) => a.getAppMetrics().map((m) => ({ pid: m.pid, kb: (m.memory as { privateBytes?: number }).privateBytes ?? 0 })));
   const kb = (pid: number): number => (metrics.find((m) => m.pid === pid)?.kb ?? 0) * 1024;
   return {
