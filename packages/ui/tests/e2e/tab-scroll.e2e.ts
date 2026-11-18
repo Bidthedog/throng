@@ -164,7 +164,7 @@ test.describe('an eased strip', () => {
     const created = state.chips[state.chips.length - 1]!;
     expect(created.active, 'a new tab is created active').toBe(true);
     expect(
-      isFullyVisible(state, created),
+      isBroughtIntoView(state, created),
       'the tab that was just created is fully in view, not off the end of the strip',
     ).toBe(true);
 
@@ -251,7 +251,7 @@ test.describe('an eased strip', () => {
         async () => {
           const state = await stripState(shared.win);
           const chip = state.chips.find((c) => c.testId === target.testId);
-          return chip ? chip.active && isFullyVisible(state, chip) : false;
+          return chip ? chip.active && isBroughtIntoView(state, chip) : false;
         },
         { message: 'choosing a tab did not both activate it and scroll it into view' },
       )
@@ -317,7 +317,7 @@ test.describe('an eased strip', () => {
     const after = await stripState(shared.win);
     const successor = activeChip(after);
     expect(successor.testId, 'a different tab is active now').not.toBe(doomed.testId);
-    expect(isFullyVisible(after, successor), 'the new active tab is in view').toBe(true);
+    expect(isBroughtIntoView(after, successor), 'the new active tab is in view').toBe(true);
     // No gap: the strip does not rest beyond the content it now has.
     expect(after.scrollLeft, 'the strip is not resting past the end').toBeLessThanOrEqual(
       after.maxScroll + 1,
@@ -424,7 +424,7 @@ test.describe('an eased strip', () => {
         async () => {
           const state = await stripState(shared.win);
           const chip = state.chips.find((c) => c.testId === wanted);
-          return chip ? isFullyVisible(state, chip) : false;
+          return chip ? isBroughtIntoView(state, chip) : false;
         },
         { message: 'the restored active tab was never brought into view' },
       )
@@ -654,7 +654,7 @@ test.describe('a slow strip', () => {
         .poll(
           async () => {
             const state = await stripState(shared.win);
-            return isFullyVisible(state, activeChip(state));
+            return isBroughtIntoView(state, activeChip(state));
           },
           { timeout: 8000, message: 'the strip never brought its active tab into the new width' },
         )
@@ -701,7 +701,7 @@ test.describe('a slow strip', () => {
       .poll(
         async () => {
           const state = await stripState(shared.win);
-          return isFullyVisible(state, activeChip(state));
+          return isBroughtIntoView(state, activeChip(state));
         },
         { timeout: 8000, message: 'the surviving active tab never came into view' },
       )
@@ -729,7 +729,7 @@ test.describe('a slow strip', () => {
      * it. The reveal now measures from the scroll's PENDING target instead, so it asks whether the
      * active tab will be visible where the strip is GOING, which is the question A9 is about.
      */
-    expect(isFullyVisible(after, activeChip(after)), 'the surviving active tab is in view').toBe(
+    expect(isBroughtIntoView(after, activeChip(after)), 'the surviving active tab is in view').toBe(
       true,
     );
     await expectCountsInSync(shared.win);

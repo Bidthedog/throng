@@ -247,7 +247,8 @@ test('Go To Line is listed in Preferences → Key Bindings, is rebindable, and a
         await win.keyboard.press('Enter');
         await expect(win.getByTestId('gotoline')).toHaveCount(0);
         await expect(win.getByTestId(`editor-${pid}`).locator('.cm-editor.cm-focused')).toBeVisible();
-        expect(await gutterAtCaret(win, pid)).toBe('27');
+        // Polled: the caret's move can land a frame after the dialog closes (read as 1 on a hosted macOS runner).
+        await expect.poll(() => gutterAtCaret(win, pid), { message: 'Go to Line 27 moved the caret to line 27' }).toBe('27');
 
         /* ── …and the OLD one stops. The half a cached resolution would silently fail. ── */
         await pressAction(win, 'navigate.gotoLine'); // the SHIPPED chord, the one just retired
