@@ -1660,8 +1660,11 @@ export async function narrowTerminalWindow(
 ): Promise<() => Promise<void>> {
   const screen = term.locator('.xterm-screen');
   const before = (await screen.boundingBox())?.width ?? 0;
+  // The MAIN window, found by its page: the order of getAllWindows() promises nothing about which is first.
   const original = await app.evaluate(({ BrowserWindow }, w) => {
-    const [bw] = BrowserWindow.getAllWindows();
+    const bw = BrowserWindow.getAllWindows().find(
+      (x) => /index\.html/.test(x.webContents.getURL()) && !/[?&](sw|prefs|about|monitor)=/.test(x.webContents.getURL()),
+    )!;
     const maximized = bw.isMaximized();
     // A maximized window ignores a resize, and the output would then not wrap at all.
     if (maximized) bw.unmaximize();
@@ -1671,17 +1674,27 @@ export async function narrowTerminalWindow(
   }, width);
   const restore = async (): Promise<void> => {
     await app.evaluate(({ BrowserWindow }, o) => {
-      const [bw] = BrowserWindow.getAllWindows();
+      const bw = BrowserWindow.getAllWindows().find(
+        (x) => /index\.html/.test(x.webContents.getURL()) && !/[?&](sw|prefs|about|monitor)=/.test(x.webContents.getURL()),
+      )!;
       bw.setContentSize(o.size[0], o.size[1]);
       if (o.maximized) bw.maximize();
     }, original);
   };
   try {
-    await withTerminalEvidence(win, term, `the terminal never conformed to a ${width}px window`, () =>
-      expect
-        .poll(async () => (await screen.boundingBox())?.width ?? before, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS })
-        .toBeLessThan(before),
-    );
+    // A window already at most `width` wide (a small display's, such as a hosted macOS runner's) is the narrow
+    // window this asks for: nothing shrinks, and the typed command below still proves the pty conformed.
+    if (original.maximized || original.size[0] > width) {
+      await withTerminalEvidence(
+        win,
+        term,
+        `the terminal never conformed to a ${width}px window (was ${original.size.join('x')}, maximized ${original.maximized})`,
+        () =>
+          expect
+            .poll(async () => (await screen.boundingBox())?.width ?? before, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS })
+            .toBeLessThan(before),
+      );
+    }
     const half = Math.ceil(token.length / 2);
     const [a, b] = [token.slice(0, half), token.slice(half)];
     // Windows callers run PowerShell (`echo ('A'+'B')`); a POSIX shell joins adjacent quoted words (`echo A''B`).
@@ -1964,6 +1977,24 @@ export const NATIVE_WINDOW_CONTROLS = HOST_OS === 'macos';
  */
 export function chordFor(action: string): string[] {
   return shippedPresses(action);
+}
+
+/**
+ * Ask throng to close as a user ends it on this platform, which starts the shutdown and its running-terminal warning:
+ * closing the main window on Windows and Linux, quitting on macOS — where closing the window only hides it and the
+ * quit runs the shutdown (070 FR-028).
+ */
+export async function requestAppClose(app: ElectronApplication): Promise<void> {
+  if (HOST_OS === 'macos') {
+    await app.evaluate(({ app: electronApp }) => electronApp.quit());
+    return;
+  }
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()
+      // The main window: the renderer's page, not a sub-workspace, Preferences, About, the monitor or the drag ghost.
+      .find((w) => /index\.html/.test(w.webContents.getURL()) && !/[?&](sw|prefs|about|monitor)=/.test(w.webContents.getURL()))
+      ?.close(),
+  );
 }
 
 /** Press throng's shipped chord for `action` on this platform, holding a two-stroke chord's modifiers throughout. */

@@ -310,7 +310,19 @@ test('entering a project whose folder is gone reports it and does not split the 
          * this failure recurs on its own for as long as the user looks at it. Handled by the same
          * cause key rather than by a second rule: the notice is live, so the cause is spoken for.
          * Waited out rather than triggered, because the recurrence IS the watcher's own timer.
+         *
+         * "While its notice stands" has to be made TRUE for the window, not assumed. Since 068 every
+         * toast leaves after the one global duration (FR-021) — 10 s under this harness
+         * (`THRONG_E2E_TOAST_MS`) — and moves to the Notifications panel; nothing retracts it. The
+         * 8 s settle above plus this 5 s window outlasts that, so the card expired by its own clock
+         * and the count read 0 (measured on the Linux runner and locally). So the toast is HELD the
+         * way a user holds one, with keyboard focus inside it (FR-021/FR-022 — the harness turns
+         * only the pointer hold off). A recurrence that raised a second card would still show here
+         * as 2; one that flashed this card would re-arm nothing while it is held.
          */
+        const standing = notices.first().locator('button').first();
+        await standing.focus();
+        await expect(standing, 'keyboard focus must be inside the notice to hold it open').toBeFocused();
         // sleep-justified: the explorer's re-check runs on its own filesystem-watch timer with no signal exposed to this test, so waiting out at least one of its cycles is the only way to give a recurring failure the chance to raise the second notice this asserts absent.
         await win.waitForTimeout(5000);
         expect(

@@ -68,8 +68,10 @@ function namespaceEnv(): NodeJS.ProcessEnv {
 test('a second launch opens no window, exits, and brings the running window forward', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const exe = await h.app.evaluate(() => process.execPath);
   const windowsBefore = h.app.windows().length;
-  await mainWindow('minimize');
-  await expect.poll(async () => (await mainWindow('state'))?.minimized).toBe(true);
+  // The precondition, not the subject: a minimised window. Asked again until it holds, because on X11 a window
+  // manager that has not yet taken charge of a just-mapped window drops the iconify request (1 in 5 stress rounds
+  // on Linux with this test first after launch).
+  await expect.poll(async () => (await mainWindow('minimize'))?.minimized).toBe(true);
 
   // A DIFFERENT userData: before 058 this alone started a second, independent instance.
   const userData = mkdtempSync(join(tmpdir(), 'throng-ud-'));

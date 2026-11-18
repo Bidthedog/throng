@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { runApp, openApp, createProject, switchProject, firstPanelId, cleanupTemp, TEST_SHELL, type OpenApp } from './harness.js';
+import { runApp, openApp, createProject, switchProject, firstPanelId, cleanupTemp, TEST_SHELL, type OpenApp, requestAppClose } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /*
@@ -50,11 +50,6 @@ const LONG_RUNNING_OUTPUT = WINDOWS ? 'Reply from' : 'bytes from';
 /** A second long-runner, silent, waiting on its standard input — and the name it is observed under. */
 const TAKEOVER = WINDOWS ? 'findstr /R x' : 'grep x';
 const TAKEOVER_SEEN = WINDOWS ? 'findstr' : 'grep';
-
-/** Ask the main process to close the primary window, firing the real close handshake. */
-async function requestClose(app: import('@playwright/test').ElectronApplication): Promise<void> {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
-}
 
 function layoutJson(dataDir: string, project: string): string | undefined {
   let db: InstanceType<typeof Database> | undefined;
@@ -274,7 +269,7 @@ test('a command that takes over REPLACES the startup command the user typed (US2
         await expectLayout(data, 'MemOver', (j) => new RegExp(`"observedCommand":"[^"]*${TAKEOVER_SEEN}`, 'i').test(j), 'the replacement was never observed');
 
         // End it the way a user does with something still running.
-        await requestClose(app);
+        await requestAppClose(app);
         await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10_000 });
         await win.getByTestId('app-close-terminate').click();
       },

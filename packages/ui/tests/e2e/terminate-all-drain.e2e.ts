@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu, TEST_SHELL } from './harness.js';
+import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu, TEST_SHELL, requestAppClose } from './harness.js';
 // The drain budget itself, so the validity-bound below tracks the production constant instead of
 // restating a number that was true when it was written. `ui-settings` is a pure reader with no
 // OS or native imports — it says so in its own docblock — so importing it here costs nothing.
@@ -129,7 +129,7 @@ async function addTerminalPanel(win: Page, hostPid: string, root: string): Promi
  */
 async function terminateAllClose(app: ElectronApplication, win: Page): Promise<void> {
   const closed = app.waitForEvent('close', { timeout: 20_000 });
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  await requestAppClose(app);
   await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 15_000 });
   await win.getByTestId('app-close-terminate').click();
   await closed;
@@ -143,7 +143,7 @@ async function terminateAllClose(app: ElectronApplication, win: Page): Promise<v
  */
 async function ordinaryClose(app: ElectronApplication): Promise<void> {
   const closed = app.waitForEvent('close', { timeout: 20_000 });
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  await requestAppClose(app);
   await closed;
 }
 

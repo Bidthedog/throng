@@ -27,7 +27,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   runApp,
   runTypedCommand,
@@ -42,6 +42,7 @@ import {
   APP_CLOSE_TIMEOUT_MS,
   TERMINAL_OUTPUT_TIMEOUT_MS,
   TEST_SHELL,
+  requestAppClose,
 } from './harness.js';
 import { expectWithinSla } from './helpers/sla.js';
 import { processTable, pings, expectPingCount, type Proc } from './helpers/processes.js';
@@ -342,10 +343,6 @@ test('a printing terminal and a typing terminal keep flowing while ten terminals
 
 // ── MT-03 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-async function requestClose(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
-}
-
 test('Terminate all on close leaves no shell, command or console host behind, and the next launch starts every terminal fresh (SC-004)', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   test.setTimeout(300_000);
   const TARGET = '127.0.0.74';
@@ -393,7 +390,7 @@ test('Terminate all on close leaves no shell, command or console host behind, an
         }).observe(document.body, { subtree: true, childList: true, characterData: true });
       });
 
-      await requestClose(app);
+      await requestAppClose(app);
       await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10_000 });
       const started = Date.now();
       const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
