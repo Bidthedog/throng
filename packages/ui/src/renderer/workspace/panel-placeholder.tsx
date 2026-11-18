@@ -27,6 +27,7 @@ import {
   type Panel,
   type PreviewPanelConfig,
   isFlowingDocument,
+  canPrint,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
 import { PanelErrorBoundary } from './panel-error-boundary.js';
@@ -93,7 +94,7 @@ import { useReportSubjectFailure } from './panel-failure-notice.js';
 import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import { destroyPanelSearch } from '../search/search-store.js';
-import { openPreviewHeadingOutline } from '../preview/preview-panel-handles.js';
+import { openPreviewHeadingOutline, printPreviewFromPanel } from '../preview/preview-panel-handles.js';
 import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js';
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
@@ -711,6 +712,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                       (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
                         previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
                     ),
+                    // 075 FR-062 — Print… is drawn disabled for a provider that cannot print.
+                    printable: canPrint(
+                      (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
+                        previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
+                    ),
                   }
                 : null,
               // 044 FR-002 — an editor's Open Preview, from the same affordance its status-bar button uses.
@@ -885,6 +891,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 // 047 US4 — the same handle `preview.goToHeading`'s chord dispatch uses.
                 goToHeading: () => {
                   openPreviewHeadingOutline(panel.id);
+                },
+                // 075 FR-061 — the same handle `preview.print`'s chord dispatch uses.
+                print: () => {
+                  printPreviewFromPanel(panel.id);
                 },
                 /*
                  * Replace All needs a term and a replacement, and with no bar open there is

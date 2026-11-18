@@ -5,6 +5,7 @@ import { CompositionRoot, SubWorkspaceCompositionRoot } from './composition-root
 import { parseWindowIdentity } from './window-identity.js';
 import { PreferencesApp, isPreferencesTab } from './preferences/preferences-app.js';
 import { AboutApp } from './about/about-app.js';
+import { PrintPreviewApp } from './print-preview/print-preview-app.js';
 import { MonitorApp } from './resources/monitor-app.js';
 import { settleConfigWrites } from './config/write-config.js';
 import { settleLayoutSaves } from './state/layout-saves.js';
@@ -52,6 +53,8 @@ if (!container) throw new Error('Renderer root element #root not found');
 const search = new URLSearchParams(window.location.search);
 const prefsTab = search.get('prefs');
 const aboutParam = search.get('about');
+// 075 — the Print Preview window, for the job main opened it with.
+const printJob = search.get('printPreview');
 const monitorParam = search.has('monitor');
 const identity = parseWindowIdentity(window.location.search);
 
@@ -73,6 +76,8 @@ createRoot(container, rootErrorOptions).render(
       <MonitorApp />
     ) : aboutParam !== null ? (
       <AboutApp />
+    ) : printJob !== null ? (
+      <PrintPreviewApp jobId={printJob} />
     ) : identity.kind === 'subworkspace' ? (
       <SubWorkspaceCompositionRoot id={identity.id} />
     ) : (

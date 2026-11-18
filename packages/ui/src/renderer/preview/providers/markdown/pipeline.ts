@@ -63,6 +63,8 @@ import {
 } from '../../link-dom.js';
 import { decodeWikiHref, installWikilinks, WIKI_HREF_ATTRIBUTE, WIKI_INDEX_ATTRIBUTE } from './wikilinks.js';
 import { installEmbeds } from './embeds.js';
+import { installCallouts } from './callouts.js';
+import { installMath, mathFenceHtml, type MathRuleOptions } from './math.js';
 import { DIAGRAM_HEIGHT_ATTRIBUTE, parseDiagramHeight } from '../../diagram/diagram-host.js';
 import { logExpected } from '@throng/core';
 
@@ -98,6 +100,11 @@ export interface RenderEnvironment {
    * followed as the editor follows it. The body never reads it. Absent: the shipped defaults.
    */
   readonly linkScan?: ScanOptions;
+  /**
+   * 075 FR-042 — the provider's *Typeset math* setting. `true`: maths is recognised and emitted as placeholders
+   * the body typesets (`math.ts`). Absent or `false`: the output is exactly 044 FR-086's literal text.
+   */
+  readonly typesetMath?: boolean;
 }
 
 /** What the pipeline knows about a render that the sanitiser's hooks need. */
@@ -153,6 +160,8 @@ interface RenderState {
   readonly nonce: string;
   /** 067 FR-132 — the editor's link-scan options for the front matter table (see {@link RenderEnvironment.linkScan}). */
   readonly scan: ScanOptions | undefined;
+  /** 075 FR-042 — whether this render recognises maths (see {@link RenderEnvironment.typesetMath}). */
+  readonly math: boolean;
 }
 
 const RENDER_STATE = Symbol('throng.preview.render-state');
@@ -163,7 +172,7 @@ function newNonce(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function renderState(env: Env, lineOffset = 0, scan?: ScanOptions): RenderState {
+function renderState(env: Env, lineOffset = 0, scan?: ScanOptions, math = false): RenderState {
   const existing = env[RENDER_STATE] as RenderState | undefined;
   if (existing) return existing;
   const created: RenderState = {
@@ -174,6 +183,7 @@ function renderState(env: Env, lineOffset = 0, scan?: ScanOptions): RenderState 
     lineOffset,
     nonce: newNonce(),
     scan,
+    math,
   };
   env[RENDER_STATE] = created;
   return created;
@@ -408,7 +418,7 @@ function renderFrontMatter(raw: string, md: MarkdownItInstance, env: Env): strin
 }
 
 /** Self-closing block tokens that still render an element worth anchoring. */
-const ANCHORED_LEAVES = new Set(['hr', 'fence', 'code_block']);
+const ANCHORED_LEAVES = new Set(['hr', 'fence', 'code_block', 'throng_math_block']);
 
 const TASK_MARKER = /^\[([ xX])\](?:\s|$)/;
 
@@ -561,12 +571,18 @@ function blockAttributes(state: StateCore): void {
   }
 }
 
+const MATH_OPTIONS: MathRuleOptions = { enabled: (env) => renderState(env).math };
+
 function createMarkdownIt(): MarkdownItInstance {
   const md = new MarkdownIt({ html: true, linkify: true, typographer: false, breaks: false });
 
   installWikilinks(md);
   // 054 — `![[x.mmd]]` / `![alt](x.mmd)` Mermaid embeds (embeds.ts).
   installEmbeds(md);
+  // 075 — callouts (callouts.ts): the parser package's rule, rewritten into throng's own markup.
+  installCallouts(md, { nonceOf: (env) => renderState(env).nonce });
+  // 075 — maths placeholders (math.ts), only while the render's Typeset math setting is on.
+  installMath(md, MATH_OPTIONS);
   md.core.ruler.push('throng_task_lists', taskLists);
   md.core.ruler.push('throng_block_attributes', blockAttributes);
 
@@ -578,8 +594,11 @@ function createMarkdownIt(): MarkdownItInstance {
     return `<input type="checkbox"${line}${meta?.checked === true ? ' checked' : ''}>`;
   };
 
-  md.renderer.rules.fence = (tokens, idx, _options, _env, renderer) => {
+  md.renderer.rules.fence = (tokens, idx, _options, env, renderer) => {
     const token = tokens[idx];
+    // 075 FR-040 — a `math` fence is display maths while the setting is on, an ordinary code block otherwise.
+    const math = env === undefined ? null : mathFenceHtml(token, env, MATH_OPTIONS, renderer.renderAttrs(token));
+    if (math !== null) return math;
     return `<pre${renderer.renderAttrs(token)}>${renderFence(md.utils.unescapeAll(token.info), token.content)}</pre>\n`;
   };
 
@@ -594,7 +613,7 @@ export function createMarkdownPipeline<R>(sanitise: Sanitiser<R>): MarkdownPipel
       const { source, body, bodyLineOffset } = splitFrontMatter(text);
       const env: Env = {};
       // The body keeps the offset whether or not the block is shown, so its lines stay the document's (FR-117).
-      const state = renderState(env, bodyLineOffset, environment?.linkScan);
+      const state = renderState(env, bodyLineOffset, environment?.linkScan, environment?.typesetMath === true);
       const showBlock = source !== null && environment?.frontMatter !== false;
       const html = (showBlock ? renderFrontMatter(source, md, env) : '') + md.render(body, env);
       const fragment = sanitise(html, {

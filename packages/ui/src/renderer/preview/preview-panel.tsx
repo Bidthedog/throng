@@ -99,6 +99,7 @@ import {
 } from 'react';
 import { diagramActionsAt } from './diagram/diagram-actions.js';
 import {
+  canPrint,
   collapseAll as foldCollapseAll,
   defaultOpenActionFor,
   enabledProviderFor,
@@ -242,12 +243,14 @@ import { usePreviewProviders } from './provider-registry-context.js';
 import { clearPreviewReservation, previewReservationFor } from './preview-reservations.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import type { PreviewBody, PreviewBodyProps } from './provider-view.js';
+import { PRINT_UNAVAILABLE, printPreviewPanel } from './print/print-command.js';
 import {
   TASK_NOTICE_ACTION,
   taskNoticeMessage,
   taskNoticeTestId,
   type TaskToggle,
 } from './task-toggle.js';
+import { revealNodeAt } from './node-reveal.js';
 import './preview.css';
 import './match-frames.css';
 import { logCaught, logExpected } from '@throng/core';
@@ -587,6 +590,9 @@ export function PreviewPanel({
 
   // The body: whatever view the injected registry holds for this run's provider, loaded on first use.
   const view = state ? views[state.providerId] : undefined;
+  /** 075 — read by Print…, which runs from a menu or a chord after this render. */
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const [body, setBody] = useState<{ id: string; Body: PreviewBody } | null>(null);
   /** Bumped to remount the body, so a body whose renderer failed builds it again (retry). */
   const [bodyGeneration, setBodyGeneration] = useState(0);
@@ -1125,6 +1131,17 @@ export function PreviewPanel({
     setHeadingOutlineOpen(true);
   }, [computeCurrentHeadingSlug]);
 
+  /**
+   * 075 FR-061, FR-064 — Print…: the body as drawn now, handed to Print Preview. `false` when this preview's
+   * provider cannot print, or it has not drawn yet.
+   */
+  const printPanel = useCallback((): boolean => {
+    const current = stateRef.current;
+    if (!current || !canPrint(registry.get(current.providerId))) return false;
+    void printPreviewPanel({ view: viewRef.current, body: bodyHostRef.current, filePath: current.filePath });
+    return true;
+  }, [registry]);
+
   const onHeadingOutlineClose = useCallback((): void => {
     setHeadingOutlineOpen(false);
     bodyHostRef.current?.focus({ preventScroll: true });
@@ -1226,6 +1243,9 @@ export function PreviewPanel({
   const pendingReveal = useRef<{ kind: 'heading'; fragment: string; animateMs?: number } | { kind: 'search' } | null>(null);
 
   revealBeforeScrollRef.current = (node: Node): boolean => {
+    // 075 FR-010 — whatever the body folds itself around the node (a collapsed callout) opens first. Synchronous DOM,
+    // through the body's own revealer (node-reveal.ts); a no-op for a body that registers none.
+    revealNodeAt(node);
     if (!isFoldableProvider || !revealRef.current) return false;
     const host = bodyHostRef.current;
     const slug = host ? sectionAtPoint(host, node) : null;
@@ -2173,6 +2193,12 @@ export function PreviewPanel({
         find: { run: () => openFind(panelId, 'preview'), chord: firstBinding(keybindings, 'search.find') },
         // 047 US4 — always offered too, even with no headings (the pop-down itself says so).
         goToHeading: { run: openHeadingOutlineHandler, chord: firstBinding(keybindings, 'preview.goToHeading') },
+        // 075 FR-062, FR-063 — always drawn; disabled, with the reason, for a provider that cannot print.
+        print: {
+          run: () => void printPanel(),
+          chord: firstBinding(keybindings, 'preview.print'),
+          ...(canPrint(stateRef.current ? registry.get(stateRef.current.providerId) : undefined) ? {} : { unavailable: PRINT_UNAVAILABLE }),
+        },
         // 047 US3 (T048, FR-036) — the fold rows, resolved at the point the menu opened.
         fold: buildFoldMenuArgs(target),
         // 048 — the Split submenu, splitting this panel.
@@ -2208,6 +2234,8 @@ export function PreviewPanel({
       panelId,
       openHeadingOutlineHandler,
       buildFoldMenuArgs,
+      printPanel,
+      registry,
     ],
   );
 
@@ -2323,8 +2351,9 @@ export function PreviewPanel({
         },
         navigateHistory: onHistoryStep,
         openHeadingOutline: openHeadingOutlineHandler,
+        print: printPanel,
       }),
-    [panelId, onFollow, revealFragmentIn, onHistoryStep, openHeadingOutlineHandler],
+    [panelId, onFollow, revealFragmentIn, onHistoryStep, openHeadingOutlineHandler, printPanel],
   );
 
   // FR-034 — this panel's own zoom, published for `preview.css` to multiply the body text with.

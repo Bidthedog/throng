@@ -13,6 +13,8 @@ export const markdownProvider: PreviewProviderDescriptor = {
   displayName: 'Markdown',
   extensions: ['.md', '.markdown'],
   kind: 'text',
+  // 075 FR-060 — a flowing document, paginated by throng.
+  print: 'document',
   settings: [
     // 054 FR-041. First of the own settings: the contract places it straight after Open previews in.
     {
@@ -20,6 +22,15 @@ export const markdownProvider: PreviewProviderDescriptor = {
       label: 'Render Mermaid diagrams',
       description:
         'Draw a mermaid code block in a Markdown preview as its diagram. When off, the block shows as code.',
+      control: 'toggle',
+      default: true,
+    },
+    // 075 FR-042 — typeset TeX maths ($…$, $$…$$, ```math). Off renders every expression as its source.
+    {
+      leaf: 'typesetMath',
+      label: 'Typeset math',
+      description:
+        'Draw mathematics written between dollar signs, or in a math code block, as typeset equations. When off, each expression shows as the text it was written in.',
       control: 'toggle',
       default: true,
     },

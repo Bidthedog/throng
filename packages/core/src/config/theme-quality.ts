@@ -247,8 +247,13 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * Re-measured by 069 FR-064, which added `fileIconOther`, the unknown file's grey: 5.88067402240191 →
  * 5.848699684485654. One more token that is grey in every theme, so the mean moves down by construction; no
  * existing colour changed, and the closest pair still clears the untouched 4.3.
+ *
+ * Re-measured by 075 FR-022, which added the seven callout colour roles to every theme: 5.848699684485654 →
+ * 5.53090129134425. Like the file icon colours, each role keeps one hue in every theme and only its lightness
+ * follows the theme's editor background, so seven near-alike tokens pull the mean down by construction; no
+ * existing colour changed. The threshold is untouched at 4.3, with 1.23 of headroom.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.848699684485654;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.53090129134425;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

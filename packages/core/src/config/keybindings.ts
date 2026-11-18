@@ -232,6 +232,8 @@ export type ActionId =
    * #375's, not this spec's.
    */
   | 'preview.goToHeading'
+  /* 075 FR-064 — opens Print Preview for the active preview. `preview`-only; never prints directly. */
+  | 'preview.print'
   /*
    * 070 FR-027, FR-024a — the application commands the macOS app menu carries, each also in the key bindings list
    * (Principle VI): Settings opens Preferences; Install and Uninstall put the `throng` command on the PATH and take it
@@ -322,6 +324,8 @@ const FIND_SURFACES = new Set<DispatchScope>(['editor', 'terminal', 'preview']);
 const MARKDOWN_SURFACES = new Set<DispatchScope>(['editor', 'preview']);
 /** 047 (research R7) — Go to Heading opens the preview's own pop-down; nowhere else. */
 const GO_TO_HEADING_SURFACES = new Set<DispatchScope>(['preview']);
+/** 075 FR-064 — Print… is live in a preview only: never in an editor, a terminal or File Explorer. */
+const PRINT_SURFACES = new Set<DispatchScope>(['preview']);
 /**
  * The scope of every registered command (016, FR-017b0). Declared here, beside the chords, so a
  * new command cannot be added without answering "where is this live?" — the completeness test
@@ -479,6 +483,7 @@ export const COMMAND_SCOPES: CommandScopes = {
   'markdown.expandAllInside': MARKDOWN_SURFACES,
   // 047 (research R7) — the Go to Heading pop-down, preview-only.
   'preview.goToHeading': GO_TO_HEADING_SURFACES,
+  'preview.print': PRINT_SURFACES,
 };
 
 /** The modifier held to drag a rectangular selection. Platform-keyed, like the chords (FR-017e). */
@@ -669,6 +674,11 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      * receiving `^G` in a terminal because neither scope includes it.
      */
     'preview.goToHeading': ['Ctrl+G'],
+    /*
+     * 075 FR-064 — Print…, which opens Print Preview. `Ctrl+P` is readline's previous-history, so it is scoped to
+     * {preview} alone and never live in a terminal; macOS derives `Cmd+P`.
+     */
+    'preview.print': ['Ctrl+P'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],

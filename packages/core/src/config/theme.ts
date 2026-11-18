@@ -5,6 +5,7 @@
  */
 import { readableTextOn } from './colour-math.js';
 import { deriveFileIconColours } from './file-icon-colours.js';
+import { deriveCalloutColours } from './callout-colours.js';
 
 export interface ThemeFonts {
   family: string;
@@ -360,6 +361,8 @@ export const THRONG_THEME: Theme = {
     destroyButtonHoverText: '#ffffff',
     /* 069 FR-061 — the file icon categories, derived to clear 4.5:1 on every background they sit on. */
     ...deriveFileIconColours(THRONG_FILE_ICON_BACKGROUNDS),
+    /* 075 FR-022 — the seven callout roles, derived to clear body-text contrast on their own tint. */
+    ...deriveCalloutColours('#0c0f16', '#d6deea'),
   },
   fonts: {
     family: "'Segoe UI', system-ui, sans-serif",

@@ -59,6 +59,7 @@ import {
   isFlowingDocument,
 } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
+import { PRINT_UNAVAILABLE } from '../preview/print/print-command.js';
 import { splitSubmenu } from './split-menu.js';
 import { isPanelSectionMaximised, isPanelTabMaximised } from './maximise-store.js';
 
@@ -161,6 +162,8 @@ export interface PanelHeaderMenuActions {
   navigateForward: () => void;
   /** 044 FR-028 — a preview's Refresh. */
   refreshPreview: () => void;
+  /** 075 FR-061 — a preview's Print… (`preview.print`). Optional: absent, the row is not drawn. */
+  print?: () => void;
   /** 044 FR-015c — a standalone text preview's route to an editor. */
   openInEditor: () => void;
   /** 044 FR-015d — a parented text preview's route to its editor. */
@@ -179,6 +182,8 @@ export interface PanelHeaderPreviewState {
   parented: boolean;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no Synchronise Scrolling. Absent reads `true`. */
   flowingDocument?: boolean;
+  /** 075 FR-062 — whether its provider prints. Absent reads `false`: Print… is drawn disabled with the reason. */
+  printable?: boolean;
 }
 
 /**
@@ -397,6 +402,20 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       onClick: () => actions.goToHeading(),
     });
     items.push(...historyItems(args.history, keybindings, actions));
+    // 075 FR-061 – FR-063 — Print…, on every preview; disabled, with the reason, when its provider cannot print.
+    if (actions.print !== undefined) {
+      const print = actions.print;
+      const printable = args.preview?.printable === true;
+      items.push({
+        label: 'Print…',
+        icon: 'print' as const,
+        section: 'navigate',
+        group: 'print',
+        shortcut: firstBinding(keybindings, 'preview.print'),
+        ...(printable ? documentCovered : { disabled: true, title: PRINT_UNAVAILABLE }),
+        onClick: () => print(),
+      });
+    }
     items.push({
       label: 'Refresh',
       icon: 'refresh' as const,

@@ -26,6 +26,7 @@
  */
 import { Text as CodeMirrorText } from '@codemirror/state';
 import { editorMatches, type Match, type MatchModes } from '@throng/core';
+import { MATH_TYPESET_ATTRIBUTE } from './math-host.js';
 
 /** DOM's own node-type constants, restated so this file needs no `Node` global (Node-environment tests). */
 const ELEMENT_NODE = 1;
@@ -72,7 +73,9 @@ export function defaultPreviewSearchExclusion(node: TextModelNode): boolean {
     hasClass(node, 'preview-fold-toggle') ||
     hasClass(node, 'preview-fold-gutter') ||
     // 054 FR-032 — a rendered diagram: its labels are drawing, and its toolbar is chrome.
-    hasClass(node, 'preview-diagram-host')
+    hasClass(node, 'preview-diagram-host') ||
+    // 075 FR-049 — a typeset equation is drawing too; with Typeset math off it is plain source text, and found.
+    (node.getAttribute?.(MATH_TYPESET_ATTRIBUTE) ?? null) !== null
   );
 }
 

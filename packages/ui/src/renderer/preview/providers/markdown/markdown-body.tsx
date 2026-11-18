@@ -93,6 +93,7 @@ import {
   splitFrontMatter,
   toggleSection,
   type HeadingRecord,
+  type IconKey,
 } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../../link-dom.js';
@@ -123,6 +124,8 @@ import {
 } from './scroll-anchor.js';
 import { highlightCodeBlocks } from './highlight.js';
 import { applyFoldGutter } from './fold-gutter.js';
+import { createCalloutFolds, revealCalloutsAt, type CalloutFolds } from './callout-dom.js';
+import { hasMath } from './math-dom.js';
 import { applyWikiResolution } from './wikilinks.js';
 import { applyImageEmbedResolution, EMBED_ATTRIBUTE, embedReadRefOf, embedRefOf } from './embeds.js';
 import { embedRefusalText, type PreviewEmbedRead } from '@throng/core';
@@ -281,6 +284,9 @@ function atScrollEnd(scroller: HTMLElement): boolean {
   return scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1;
 }
 
+/** One animation frame, for work that yields between batches (075 maths typesetting). */
+const nextFrame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
 function scrollerOf(body: HTMLElement): HTMLElement {
   return body.closest<HTMLElement>('.preview-panel__body') ?? body;
 }
@@ -393,6 +399,8 @@ export function MarkdownBody({
   linkWordingRef.current = linkWording;
   /** FR-117 — Show front matter. Shipped on, so anything but an explicit `false` shows the block. */
   const frontMatter = providerSettings.showFrontMatter !== false;
+  /** 075 FR-042 — Typeset math. Shipped on, so anything but an explicit `false` typesets. */
+  const typesetMath = providerSettings.typesetMath !== false;
   /** 067 FR-132 — the editor's protocol allowlist and known extensions, for the front matter table's links. */
   const linkScan = linkScanOptions(useAppSettings().editor.links);
   const onFailureRef = useRef(onBodyFailure);
@@ -491,6 +499,17 @@ export function MarkdownBody({
   themeRef.current = theme;
   const setsRef = useRef(sets);
   setsRef.current = sets;
+  /**
+   * 075 FR-006 – FR-010 — callouts' icons and fold state (callout-dom.ts). The state is this body's view state:
+   * it outlives re-renders of the same document, resets for a different file, and never leaves the body.
+   */
+  const calloutFoldsRef = useRef<CalloutFolds | null>(null);
+  calloutFoldsRef.current ??= createCalloutFolds();
+  const calloutIconFor = useCallback((key: IconKey): string => resolveIcon(themeRef.current, setsRef.current, key), []);
+  useEffect(() => {
+    const body = bodyRef.current;
+    return body === null ? undefined : calloutFoldsRef.current?.attach(body);
+  }, []);
   /**
    * Insert/remove the gutter's toggles and hide a collapsed section's blocks over `body`'s CURRENT
    * children — never `replaceChildren`, so calling this from a fold-only update (no new render) never
@@ -846,7 +865,7 @@ export function MarkdownBody({
         const body = bodyRef.current;
         // A newer text, or an unmount, has overtaken this render: drawing it would show stale content.
         if (cancelled || body === null) return;
-        const { fragment, headings, wikiTargets } = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {}, linkScan });
+        const { fragment, headings, wikiTargets } = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {}, linkScan, typesetMath });
         lastHeadingsRef.current = headings;
         // Dressed BEFORE it is inserted, so the place kept or restored below is measured against the layout the
         // reader will see. The front matter class alone makes its table shorter; dressed after the restore, the
@@ -881,6 +900,10 @@ export function MarkdownBody({
         const repointed =
           previous !== null && previous.filePath !== file && navigated !== undefined && previous.navigationSeq === navigated;
         claimDiagrams(fragment, previous !== null && (previous.filePath === file || repointed), previous === null);
+        // 075 — callouts are dressed before insertion, like the front matter, so the place kept below is measured
+        // with collapsed callouts collapsed. A different file starts from its markers' signs (FR-008).
+        if (!(previous !== null && (previous.filePath === file || repointed))) calloutFoldsRef.current?.reset();
+        calloutFoldsRef.current?.decorate(fragment, text, calloutIconFor);
         if (previous !== null && (previous.filePath === file || repointed)) {
           // FR-024 — an UPDATE. Capture, replace and restore in one synchronous turn, so no scroll the
           // user makes can fall between the two and be undone.
@@ -946,6 +969,20 @@ export function MarkdownBody({
         onLinkTargetRef.current?.('focus', active !== null && body.contains(active) ? linkTargetOf(active) : null);
         // Highlighting only rebuilds code elements' children, so it can land after the anchor restore.
         void highlightCodeBlocks(body).catch((error: unknown) => logCaught('markdown-body: highlight code blocks', error));
+        /*
+         * 075 FR-046 — the typesetter is imported only when this draw holds maths, so a document without any never
+         * loads KaTeX or a font. It draws in batches that yield a frame (FR-048, Principle XII), stops when a newer
+         * draw supersedes this one, and the place is re-applied once the equations have their real height.
+         */
+        if (typesetMath && hasMath(body)) {
+          const signal = { get cancelled(): boolean { return cancelled; } };
+          import('./math-typeset.js')
+            .then((m) => m.typesetMath(body, nextFrame, m.MATH_BATCH, signal))
+            .then(() => {
+              if (!cancelled) reanchor(scroller);
+            })
+            .catch((error: unknown) => logCaught('markdown-body: typeset maths', error));
+        }
         // 047 R2 — this render's heading tree, the same moment as onDrawn (data-model §13 amended).
         onHeadingsRef.current?.(buildSymbolTree(headings));
         /*
@@ -1002,7 +1039,7 @@ export function MarkdownBody({
     // it is a re-point (T177) — and links and images resolve against it either way. The project, the panel
     // and the remote-image setting change what they resolve to; the front matter setting changes what is
     // drawn at the top. `navigationSeq` is read, not depended on: it never moves without the file moving.
-  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, linkScan, renderMermaid, embedTick, claimDiagrams, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
+  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, linkScan, typesetMath, renderMermaid, embedTick, claimDiagrams, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor, calloutIconFor]);
 
   /*
    * 047 US3 — the reader (or the chrome) toggled a section, Collapse/Expand All, or the gutter setting
@@ -1018,6 +1055,12 @@ export function MarkdownBody({
     // 048 FR-083 — fold state seeded late (main's answer after the draw) is a settle point too.
     reanchor(scrollerOf(body));
   }, [foldState, gutter, theme, sets, drawFoldGutter, reanchor]);
+
+  // 075 FR-024 — a theme or icon set change redraws the callouts' icons, over the body's current children.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body !== null && shown.current !== null) calloutFoldsRef.current?.refreshIcons(body, calloutIconFor);
+  }, [theme, sets, calloutIconFor]);
 
   /*
    * FR-040 — the chrome's way to expand one section's collapsed ancestors and itself, and bring it to
@@ -1038,7 +1081,10 @@ export function MarkdownBody({
         onFoldChangeRef.current?.(next);
         drawFoldGutter(body, lastHeadingsRef.current);
       }
-      headingElementBySlug(body, slug)?.scrollIntoView({ block: 'start' });
+      const heading = headingElementBySlug(body, slug);
+      // 075 FR-010 — a heading inside a collapsed callout opens it, and every collapsed callout around it.
+      if (heading !== null) revealCalloutsAt(heading);
+      heading?.scrollIntoView({ block: 'start' });
     });
   }, [onRevealSection, drawFoldGutter]);
 

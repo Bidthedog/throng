@@ -1,0 +1,132 @@
+/*
+ * The Print Preview window (075 FR-068, FR-069). Every colour is a theme token; the pages themselves are a PDF
+ * view main lays over `.print-preview__page-view`, so that box draws only the backdrop behind them.
+ */
+.print-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--throng-colour-text);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+  --title-bar-height: var(--pane-header-height, 34px);
+}
+
+.print-preview .title-bar {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.print-preview__main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.print-preview__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 0 0 260px;
+  padding: 14px 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--throng-colour-border);
+  background: var(--throng-colour-sidebarBg);
+}
+
+.print-preview__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.print-preview__field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.print-preview__field select,
+.print-preview__field input[type='number'],
+.print-preview__field input[type='text'] {
+  background: var(--throng-colour-inputSurface);
+  color: var(--throng-colour-text);
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+}
+
+.print-preview__field input[aria-invalid='true'] {
+  border-color: var(--throng-colour-danger);
+}
+
+.print-preview fieldset {
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  padding: 6px 8px 8px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.print-preview__message {
+  color: var(--throng-colour-textMuted);
+}
+
+.print-preview__notice {
+  background: var(--throng-colour-errorSurface);
+  color: var(--throng-colour-errorText);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.print-preview__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.print-preview__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font: inherit;
+  background: var(--throng-colour-cancelButtonBg);
+  color: var(--throng-colour-cancelButtonText);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
+}
+
+.print-preview__actions .print-preview__print {
+  background: var(--throng-colour-confirmButtonBg);
+  color: var(--throng-colour-confirmButtonText);
+  border-color: var(--throng-colour-confirmButtonBorder);
+}
+
+.print-preview__actions button:disabled {
+  opacity: 0.55;
+}
+
+.print-preview__pages-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.print-preview__status {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  color: var(--throng-colour-textMuted);
+  min-height: 1.4em;
+}
+
+.print-preview__page-view {
+  flex: 1;
+  min-height: 0;
+  background: var(--throng-colour-appBg);
+}

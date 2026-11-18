@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname } from 'node:path';
 import * as fsPromises from 'node:fs/promises';
 import { readFile, stat as statAsync } from 'node:fs/promises';
@@ -194,6 +194,12 @@ import { EditorRecovery } from './editor-recovery.js';
 import { EditorCoordinator, type DocumentLifecycleListener } from './editor-coordinator.js';
 import { registerEditorIpc } from './editor-ipc.js';
 import { registerClipboardIpc } from './clipboard-ipc.js';
+import { ElectronPrintEngine } from './electron-print-engine.js';
+import { PrintController } from './print-controller.js';
+import { registerPrintIpc } from './print-ipc.js';
+import { openPrintPreviewWindow } from './print-preview-window.js';
+import { installPagesRequestFilter, PRINT_PAGES_PARTITION } from './print-pages-session.js';
+import { PrintSettingsStore } from './print-settings-store.js';
 import type { ClipboardService } from './clipboard-service.js';
 import { startPlatform } from '@throng/platform';
 import { createShellDetectionService } from './shell-detection-service.js';
@@ -2312,6 +2318,50 @@ if (isPrimaryInstance)
   // The OS clipboard, behind the seam (016, FR-013a) — one app-global record of what throng last
   // copied and what SHAPE it was, so a block cut in one window pastes as a block in another.
   registerClipboardIpc(container.get<ClipboardService>(UI_TYPES.ClipboardService));
+  /*
+   * 075 — Print Preview. One controller for the app (the window is single, FR-071); its print host runs in a
+   * session of its own whose only routes are the printable document, the bundled assets and the preview's own
+   * images (the same `throng-preview:` handler as the app's), plus the remote images the preview had shown.
+   */
+  {
+    const rendererRoot = pathToFileURL(resolveFromHere('../renderer/')).href;
+    const previewHandler = createPreviewProtocolHandler({
+      fs: fileSystem,
+      previews,
+      settings: () => currentSettings,
+      registry: SHIPPED_PREVIEW_PROVIDERS,
+    });
+    const printJobsDir = join(app.getPath('userData'), 'print-jobs');
+    // The pages view loads the job's PDFs, which the default session's Layer 4 filter refuses (a `file:` URL
+    // outside the renderer's directory), so it has a session whose only files are the jobs folder's.
+    let pagesSession: Electron.Session | null = null;
+    const printPagesSession = (): Electron.Session => {
+      if (pagesSession === null) {
+        pagesSession = session.fromPartition(PRINT_PAGES_PARTITION);
+        installPagesRequestFilter(pagesSession, printJobsDir);
+      }
+      return pagesSession;
+    };
+    const printController = new PrintController({
+      engine: new ElectronPrintEngine({
+        dir: join(printJobsDir, 'hosts'),
+        isBundledAsset: (url) => url.startsWith(rendererRoot),
+        registerPreviewRoute: (printSession) => printSession.protocol.handle(PREVIEW_SCHEME, previewHandler),
+      }),
+      store: new PrintSettingsStore(join(app.getPath('userData'), 'print-settings.json')),
+      jobsDir: printJobsDir,
+      openWindow: (parent, jobId) =>
+        openPrintPreviewWindow(parent, jobId, {
+          indexHtml: resolveFromHere('../renderer/index.html'),
+          preloadPath: resolveFromHere('../preload/preload.cjs'),
+          shellIntegration,
+          backgroundColor: themeBackground,
+          chrome: () => secondaryWindowChrome(platform.windowChrome(), hostTraits().os, { maximise: true }),
+          pagesSession: printPagesSession,
+        }),
+    });
+    registerPrintIpc(printController);
+  }
   // Deleting a file that is open in an editor marks that editor dirty (FR-099): the
   // buffer survives so the user can save it back (re-creating the file) or discard.
   // 050 FR-009 — and a deleted pending item leaves the File Explorer clipboard.

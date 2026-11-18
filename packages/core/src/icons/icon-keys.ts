@@ -156,6 +156,22 @@ export const ICON_KEYS = [
   'dragHandle',
   'menuChecked',
   'overrideIcon',
+  // 075 FR-024 — one per canonical callout type.
+  'calloutNote',
+  'calloutAbstract',
+  'calloutInfo',
+  'calloutTodo',
+  'calloutTip',
+  'calloutSuccess',
+  'calloutQuestion',
+  'calloutWarning',
+  'calloutFailure',
+  'calloutDanger',
+  'calloutBug',
+  'calloutExample',
+  'calloutQuote',
+  // 075 FR-063 — Print… and Print Preview's Print button.
+  'print',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -464,6 +480,33 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on a menu row whose option is switched on.',
   overrideIcon:
     'The icon on the Icons row control that copies the default icon into your icon set, ready for you to replace with your own file.',
+  calloutNote:
+    'The icon at the start of a note callout’s title row in a document preview.',
+  calloutAbstract:
+    'The icon at the start of an abstract callout’s title row in a document preview (also written summary or tldr).',
+  calloutInfo:
+    'The icon at the start of an info callout’s title row in a document preview.',
+  calloutTodo:
+    'The icon at the start of a todo callout’s title row in a document preview.',
+  calloutTip:
+    'The icon at the start of a tip callout’s title row in a document preview (also written hint or important).',
+  calloutSuccess:
+    'The icon at the start of a success callout’s title row in a document preview (also written check or done).',
+  calloutQuestion:
+    'The icon at the start of a question callout’s title row in a document preview (also written help or faq).',
+  calloutWarning:
+    'The icon at the start of a warning callout’s title row in a document preview (also written caution, attention or warn).',
+  calloutFailure:
+    'The icon at the start of a failure callout’s title row in a document preview (also written fail or missing).',
+  calloutDanger:
+    'The icon at the start of a danger callout’s title row in a document preview (also written error).',
+  calloutBug:
+    'The icon at the start of a bug callout’s title row in a document preview.',
+  calloutExample:
+    'The icon at the start of an example callout’s title row in a document preview.',
+  calloutQuote:
+    'The icon at the start of a quote callout’s title row in a document preview (also written cite).',
+  print: 'The icon on Print… in a preview’s menus, and on the Print button in Print Preview.',
 };
 
 /** Is `value` one of the icon keys? */

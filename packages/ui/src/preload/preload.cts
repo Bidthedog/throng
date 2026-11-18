@@ -945,6 +945,16 @@ contextBridge.exposeInMainWorld('throng', {
     /** What a paste should insert, and how — decided against the LIVE clipboard, never cached. */
     paste: () => ipcRenderer.invoke('throng:clipboard:paste'),
   },
+  // 075 (contracts/print.md §IPC) — Print Preview. `open` comes from a preview's window; the rest from the Print
+  // Preview window itself, naming the job it was opened for. Main owns the job, its files and the printer.
+  print: {
+    open: (request: unknown) => ipcRenderer.invoke('throng:print:open', request),
+    job: (jobId: string) => ipcRenderer.invoke('throng:print:job', jobId),
+    render: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:render', jobId, settings),
+    setPageArea: (jobId: string, rect: unknown) => ipcRenderer.invoke('throng:print:setPageArea', jobId, rect),
+    print: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:print', jobId, settings),
+    close: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:close', jobId, settings),
+  },
   // 045 (contracts/settings-and-environment.md §3): file links. Main's FileLinkResolver is the one
   // authority for what a link IS and whether it may be opened, so a renderer sends the link TEXT and
   // never a resolved path — main derives the owning project from `panelId` itself (I1/I2). All three

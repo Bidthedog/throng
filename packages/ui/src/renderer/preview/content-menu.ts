@@ -80,6 +80,11 @@ export interface PreviewContentMenuArgs {
    */
   goToHeading: { run: () => void; chord?: string };
   /**
+   * 075 FR-062, FR-063 — Print…, always drawn. `unavailable` is the hover of a provider that cannot print, whose
+   * row is drawn disabled. Omitted: no row (a builder caller predating 075).
+   */
+  print?: { run: () => void; chord?: string; unavailable?: string };
+  /**
    * 047 US3 (FR-036, contract "Preview body menu") — the fold rows, present only for a Markdown
    * document; omitted or `null` draws none of them. Mirrors the editor's own `markdownFold` arg
    * (`editor/content-menu.ts`) exactly: `section` is the innermost section containing the point the
@@ -235,6 +240,20 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
   // 054 FR-010 supersedes the placement above: the rows are ONE Outlining submenu, built by the builder the
   // editor's menu uses too, so the two menus cannot drift (R3).
   if (fold) items.push({ ...outliningSubmenu(fold), ...lockedOut });
+
+  // 075 FR-063 — Print…, with the other ways out of the panel's document.
+  if (args.print) {
+    const print = args.print;
+    items.push({
+      label: 'Print…',
+      icon: 'print',
+      section: 'navigate',
+      group: 'print',
+      ...(print.chord !== undefined ? { shortcut: print.chord } : {}),
+      ...(print.unavailable !== undefined ? { disabled: true, title: print.unavailable } : locked ? { disabled: true } : {}),
+      onClick: () => print.run(),
+    });
+  }
 
   return withSplit(items, args.split);
 }

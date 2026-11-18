@@ -13,7 +13,7 @@
  * a link or raise a notice rather than doing either itself.
  */
 import type { ComponentType } from 'react';
-import type { DocumentSymbol, FoldState, PreviewContent, PreviewEmbedRead, PreviewLink, PreviewNotice, ProviderSettings } from '@throng/core';
+import type { DocumentSymbol, FoldState, PreviewContent, PreviewEmbedRead, PreviewLink, PreviewNotice, PrintableOutput, ProviderSettings } from '@throng/core';
 import type { PreviewLinkWording } from './link-dom.js';
 import type { TaskToggle } from './task-toggle.js';
 
@@ -218,4 +218,9 @@ export interface PreviewProviderView {
    * its plain text alone.
    */
   exportHtml?(selection: DocumentFragment): Promise<string>;
+  /**
+   * 075 FR-060 — what Print Preview prints for what `body` shows now. Required when the core descriptor declares
+   * `print` (`provider-views.test.ts`); a provider without it cannot print, and Print… says so (FR-062).
+   */
+  printable?(body: HTMLElement, context: { readonly title: string }): Promise<PrintableOutput>;
 }

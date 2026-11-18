@@ -302,6 +302,13 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Go to Heading…',
     'Open a searchable list of the preview’s headings and jump to one. Live in a preview only.',
   ),
+  // 075 FR-064 — Print Preview for the active preview; Print Preview's own Print button sends the job.
+  chord(
+    'preview.print',
+    'Navigate',
+    'Print…',
+    'Open Print Preview for the active preview, to choose a printer and page settings and see the pages before printing. Live in a preview only.',
+  ),
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),

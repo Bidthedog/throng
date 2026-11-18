@@ -25,6 +25,8 @@ export const mermaidProvider: PreviewProviderDescriptor = {
   defaultOpenAction: 'preview',
   // One diagram, not a document: no Select All, Go to Heading or Synchronise Scrolling.
   flowingDocument: false,
+  // 075 FR-060, FR-075 — one diagram, printed fitted to the page.
+  print: 'document',
   enabledLabel: 'Preview .mmd files',
   enabledDescription:
     'Offer previews of standalone Mermaid files (.mmd and .mermaid). When off, every preview of these files closes and their preview commands are shown disabled. Mermaid diagrams inside a Markdown preview are not affected: Markdown: Render Mermaid diagrams controls those.',

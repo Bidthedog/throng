@@ -376,7 +376,12 @@ import { setAtPath } from './metadata.js';
 // Bumped by 069 again (34 → 35): a THEMES payload, additive. FR-064's `fileIconOther` reached every theme's record after 34
 // was already on disk, and theme files take a new token ONLY through the upgrade this version gates — so an install at 34
 // painted no Other File Icons colour of its own in any theme, and the colour did not change with the theme (FR-070).
-export const SHIPPED_DEFAULTS_VERSION = 35;
+//
+// Bumped by 075 (35 → 36): a THEMES payload, additive. Seven colour tokens, the callout roles `calloutNeutral`,
+// `calloutInfo`, `calloutAccent`, `calloutSuccess`, `calloutQuestion`, `calloutWarning` and `calloutDanger` (FR-020 –
+// FR-022). Every payload arrives, no existing value moves. The `typesetMath` provider leaf and the `preview.print`
+// binding need no bump (044's 7 → 8 reasoning: an absent key is filled with its shipped default on every read).
+export const SHIPPED_DEFAULTS_VERSION = 36;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved

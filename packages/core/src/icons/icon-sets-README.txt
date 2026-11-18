@@ -251,4 +251,18 @@ resourceNetwork.svg - The icon on the Resource Monitor's "order by Network" choi
 dragHandle.svg - The icon on the handle you drag to move a project or sub-workspace to a new place in its list.
 menuChecked.svg - The icon on a menu row whose option is switched on.
 overrideIcon.svg - The icon on the Icons row control that copies the default icon into your icon set, ready for you to replace with your own file.
+calloutNote.svg - The icon at the start of a note callout’s title row in a document preview.
+calloutAbstract.svg - The icon at the start of an abstract callout’s title row in a document preview (also written summary or tldr).
+calloutInfo.svg - The icon at the start of an info callout’s title row in a document preview.
+calloutTodo.svg - The icon at the start of a todo callout’s title row in a document preview.
+calloutTip.svg - The icon at the start of a tip callout’s title row in a document preview (also written hint or important).
+calloutSuccess.svg - The icon at the start of a success callout’s title row in a document preview (also written check or done).
+calloutQuestion.svg - The icon at the start of a question callout’s title row in a document preview (also written help or faq).
+calloutWarning.svg - The icon at the start of a warning callout’s title row in a document preview (also written caution, attention or warn).
+calloutFailure.svg - The icon at the start of a failure callout’s title row in a document preview (also written fail or missing).
+calloutDanger.svg - The icon at the start of a danger callout’s title row in a document preview (also written error).
+calloutBug.svg - The icon at the start of a bug callout’s title row in a document preview.
+calloutExample.svg - The icon at the start of an example callout’s title row in a document preview.
+calloutQuote.svg - The icon at the start of a quote callout’s title row in a document preview (also written cite).
+print.svg - The icon on Print… in a preview’s menus, and on the Print button in Print Preview.
 ---- icon keys: end ----

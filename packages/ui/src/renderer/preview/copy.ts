@@ -35,6 +35,7 @@ import {
   DIAGRAM_SOURCE_ATTRIBUTE,
 } from './diagram/diagram-host.js';
 import { rasteriseSvg } from './diagram/rasterise.js';
+import { MATH_COPY_MARK, MATH_TYPESET_ATTRIBUTE, mathLiteralOf } from './math-host.js';
 import { logExpected } from '@throng/core';
 
 /** 054 FR-049a — a diagram the selection reached, in the order its placeholder carries. */
@@ -52,6 +53,8 @@ export interface CapturedSelection {
   fragment: DocumentFragment;
   /** 054 FR-049a — each diagram the selection reached, standing in its place in `fragment` as a placeholder. */
   diagrams?: readonly CapturedDiagram[];
+  /** 075 FR-050 — each typeset equation's MathML (a clone), standing in its place in `fragment` as a placeholder. */
+  equations?: readonly (Element | null)[];
 }
 
 /** The placeholder a diagram becomes in a captured fragment; its value is the diagram's index. */
@@ -80,6 +83,41 @@ function substituteDiagrams(fragment: DocumentFragment): CapturedDiagram[] {
     diagrams.push({ lang, source, svg });
   }
   return diagrams;
+}
+
+/** The placeholder an equation becomes in a captured fragment; its value is the equation's index. */
+const EQUATION_PLACEHOLDER_ATTRIBUTE = 'data-throng-math-copy';
+
+/**
+ * 075 FR-050 — replace each typeset equation in `fragment` with a placeholder holding its source and delimiters,
+ * which is what a plain-text copy carries. The drawing's glyphs are not text the author wrote. A rich copy swaps
+ * the placeholder for the equation's MathML.
+ */
+function substituteEquations(fragment: DocumentFragment): (Element | null)[] {
+  const equations: (Element | null)[] = [];
+  for (const el of [...fragment.querySelectorAll<HTMLElement>(`[${MATH_TYPESET_ATTRIBUTE}]`)]) {
+    const placeholder = el.ownerDocument.createElement('span');
+    placeholder.setAttribute(EQUATION_PLACEHOLDER_ATTRIBUTE, String(equations.length));
+    placeholder.textContent = mathLiteralOf(el);
+    equations.push((el.querySelector('math')?.cloneNode(true) as Element | undefined) ?? null);
+    el.replaceWith(placeholder);
+  }
+  return equations;
+}
+
+/** A copy of `fragment` with each equation placeholder replaced by its MathML, marked so the export profile keeps it. */
+function withEquations(fragment: DocumentFragment, equations: readonly (Element | null)[]): DocumentFragment {
+  for (const placeholder of [...fragment.querySelectorAll<HTMLElement>(`[${EQUATION_PLACEHOLDER_ATTRIBUTE}]`)]) {
+    const math = equations[Number(placeholder.getAttribute(EQUATION_PLACEHOLDER_ATTRIBUTE))];
+    if (math == null) {
+      placeholder.replaceWith(placeholder.ownerDocument.createTextNode(placeholder.textContent ?? ''));
+      continue;
+    }
+    const copy = math.cloneNode(true) as Element;
+    copy.setAttribute(MATH_COPY_MARK, '');
+    placeholder.replaceWith(copy);
+  }
+  return fragment;
 }
 
 /**
@@ -141,7 +179,8 @@ export function selectionRangeIn(host: HTMLElement): Range | null {
  * and a table's column resize handle (sits inside its header cell the same way). Named here, in the
  * provider-agnostic copy path, so a later provider's own throng-drawn control is excluded the same way.
  */
-const THRONG_CHROME_SELECTOR = '.preview-fold-toggle, .preview-table-resize-handle';
+// 075 — a callout's icon and fold control are throng-drawn the same way.
+const THRONG_CHROME_SELECTOR = '.preview-fold-toggle, .preview-table-resize-handle, .preview-callout__icon, .preview-callout__fold';
 
 /**
  * Snapshot the selection inside `host`, or `null` when there is none.
@@ -162,10 +201,11 @@ export function captureSelection(host: HTMLElement): CapturedSelection | null {
   const fragment = range.cloneContents();
   for (const chrome of fragment.querySelectorAll(THRONG_CHROME_SELECTOR)) chrome.remove();
   const diagrams = substituteDiagrams(fragment);
+  const equations = substituteEquations(fragment);
   const text = fragment.textContent ?? '';
-  if (text.length > 0) return { text, fragment, diagrams };
+  if (text.length > 0) return { text, fragment, diagrams, equations };
   const alt = [...fragment.querySelectorAll('img')].map((img) => img.getAttribute('alt') ?? '').join('');
-  return { text: alt, fragment, diagrams };
+  return { text: alt, fragment, diagrams, equations };
 }
 
 /** Select `host`'s contents, and nothing outside it. */
@@ -194,7 +234,7 @@ export async function copyCapturedSelection(
   try {
     if (format === 'rich' && exportHtml !== undefined && clipboard?.writeRich !== undefined) {
       // 054 FR-049a — each diagram as its image, in place; the exporter admits that one data-URI shape.
-      const html = await exportHtml(await withDiagramImages(captured, rasterise));
+      const html = await exportHtml(withEquations(await withDiagramImages(captured, rasterise), captured.equations ?? []));
       if (captured.text === '' && html.trim() === '') return false;
       await clipboard.writeRich({ text: captured.text, html });
       return true;

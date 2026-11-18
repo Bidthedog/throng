@@ -66,6 +66,21 @@ export interface PreviewProviderDescriptor {
    * 2026-10-12). Opening the preview and going to the editor are unaffected.
    */
   flowingDocument?: boolean;
+  /**
+   * 075 FR-060 – FR-062 — whether, and how, this provider's previews print. Absent: they cannot, and Print… is
+   * shown disabled with the reason. `document`: the view hands over a flowing document throng paginates.
+   * `pages`: the view hands over ready-made PDF pages. Declaring it obliges the renderer view to supply
+   * `printable` (`provider-views.test.ts`).
+   */
+  print?: PrintCapability;
+}
+
+/** 075 FR-060 — how a provider's previews print. */
+export type PrintCapability = 'document' | 'pages';
+
+/** Whether `provider`'s previews can print (075 FR-062). */
+export function canPrint(provider: PreviewProviderDescriptor | undefined): boolean {
+  return provider?.print !== undefined;
 }
 
 /** Whether `provider` previews a flowing document (`flowingDocument`, absent = `true`); `false` for none. */

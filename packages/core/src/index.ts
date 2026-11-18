@@ -1346,7 +1346,8 @@ export type {
   PreviewProviderDescriptor,
   PreviewProviderRegistry,
 } from './preview/provider.js';
-export { isFlowingDocument } from './preview/provider.js';
+export { canPrint, isFlowingDocument } from './preview/provider.js';
+export type { PrintCapability } from './preview/provider.js';
 export type {
   PreviewCopyFormat,
   DefaultOpenAction,
@@ -1456,6 +1457,55 @@ export { PREVIEW_KIND, previewPanelType, previewPanelTypeLabel, previewProviderI
 // 054 FR-001, FR-002 — the preview recency a restored tab starts from.
 export { initialPreviewRecency } from './workspace/preview-recency.js';
 export type { PreviewValues } from './preview/panel-type.js';
+// 075 FR-018 – FR-019a — throng's own callout type registry.
+export {
+  CALLOUT_ROLES,
+  CALLOUT_TYPES,
+  FALLBACK_CALLOUT_TYPE,
+  calloutTitle,
+  calloutTypeEntry,
+  isCalloutTypeId,
+  resolveCalloutType,
+} from './preview/callouts.js';
+export type { CalloutRole, CalloutTypeEntry } from './preview/callouts.js';
+// 075 FR-040, FR-041 — GitHub's maths delimiter rules.
+export { matchDisplayBlock, matchInlineMath } from './preview/math-delimiters.js';
+export type { DisplayMathBlock, InlineMathMatch, InlineMathOpen } from './preview/math-delimiters.js';
+export {
+  COPIES_MAX,
+  DEFAULT_PRINT_SETTINGS,
+  MARGIN_MAX_MM,
+  MARGIN_PRESETS_MM,
+  PAGE_SIZE_MM,
+  PRINT_PAGE_SIZES,
+  SCALE_MAX,
+  SCALE_MIN,
+  marginsMm,
+  parsePageRanges,
+  parsePrintSettings,
+  pickDefaultPrinter,
+  printerChoices,
+  serialisePrintSettings,
+  toPdfOptions,
+  toPrintOptions,
+} from './preview/print.js';
+export type {
+  PdfOptions,
+  PrintableOutput,
+  PrinterChoice,
+  PrinterInfoLike,
+  PrintJobRequest,
+  PrintJobView,
+  PrintRenderResult,
+  PrintMarginPreset,
+  PrintMargins,
+  PrintOptions,
+  PrintOrientation,
+  PrintPageSize,
+  PrintSettings,
+} from './preview/print.js';
+export { PRINT_PALETTE, printPaletteCss } from './preview/print-palette.js';
+export type { IPrintEngine, PrintHostHandle, PrintSendResult } from './abstractions/print-engine.js';
 
 // 044 — per-panel navigation history (#136): the pure reducer main's authority is built on.
 export {
@@ -1558,3 +1608,15 @@ export {
   deriveFileIconColours,
   type FileIconCategory,
 } from './config/file-icon-colours.js';
+// 075 FR-020 – FR-023 — the callout colour roles as theme tokens, and their contrast guard.
+export {
+  CALLOUT_ICON_MIN_CONTRAST,
+  CALLOUT_ROLE_TOKENS,
+  CALLOUT_TEXT_MIN_CONTRAST,
+  CALLOUT_TINT,
+  calloutContrastFailures,
+  calloutTint,
+  deriveCalloutColours,
+  measureCalloutContrast,
+} from './config/callout-colours.js';
+export type { CalloutContrastResult } from './config/callout-colours.js';

@@ -464,6 +464,48 @@
     },
     "overrideIcon": {
       "lucide": "paintbrush"
+    },
+    "calloutNote": {
+      "lucide": "notebook-pen"
+    },
+    "calloutAbstract": {
+      "lucide": "clipboard-list"
+    },
+    "calloutInfo": {
+      "lucide": "book-open-text"
+    },
+    "calloutTodo": {
+      "lucide": "list-todo"
+    },
+    "calloutTip": {
+      "lucide": "flame"
+    },
+    "calloutSuccess": {
+      "lucide": "circle-check-big"
+    },
+    "calloutQuestion": {
+      "lucide": "message-circle-question-mark"
+    },
+    "calloutWarning": {
+      "lucide": "message-square-warning"
+    },
+    "calloutFailure": {
+      "lucide": "octagon-x"
+    },
+    "calloutDanger": {
+      "lucide": "zap"
+    },
+    "calloutBug": {
+      "lucide": "bug"
+    },
+    "calloutExample": {
+      "lucide": "list"
+    },
+    "calloutQuote": {
+      "lucide": "quote"
+    },
+    "print": {
+      "lucide": "printer"
     }
   }
 }

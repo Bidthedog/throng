@@ -730,6 +730,21 @@ declare global {
         writeImage?: (entry: { dataUri: string }) => Promise<void>;
         paste: () => Promise<{ text: string; mode: import('@throng/core').ClipboardMode }>;
       };
+      // 075 (contracts/print.md §IPC) — Print Preview.
+      print?: {
+        /** From a preview: open Print Preview for `request`. `opened: false` when one was already open (it is focused). */
+        open: (request: import('@throng/core').PrintJobRequest) => Promise<{ opened: boolean }>;
+        /** From Print Preview: what it was opened for, or `null` for a job that has gone. */
+        job: (jobId: string) => Promise<import('@throng/core').PrintJobView | null>;
+        /** Lay the pages out with `settings` and show them. */
+        render: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<import('@throng/core').PrintRenderResult>;
+        /** Where the page view sits in the window, in CSS pixels. */
+        setPageArea: (jobId: string, rect: { x: number; y: number; width: number; height: number }) => Promise<void>;
+        /** Print with `settings`, with no OS dialog. On success the window closes. */
+        print: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<import('@throng/core').PrintSendResult>;
+        /** Save `settings` and close. */
+        close: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<void>;
+      };
       // 045 — file links (#394). Every call carries the link TEXT and the panel it was seen in, and
       // never a resolved path: main re-resolves, derives the owning project from `panelId`, and
       // re-checks that the target still exists before acting (FR-037, I1/I2).
