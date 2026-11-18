@@ -33,7 +33,8 @@ import { quiesceSampler } from './quiesce-sampler.js';
  * an undefined name here is invisible until it runs.
  */
 import { forceKillProcessTree } from './process-tree.js';
-import { resolveIpcAddress, shippedBindingsFor } from '@throng/core';
+import { resolveIpcAddress } from '@throng/core';
+import { shippedPresses, shippedTwoStroke } from '../shared/window-chords.js';
 import { startPlatform } from '@throng/platform';
 
 // 062: this process connects to the daemon as well, so it resolves IPC addresses by the same traits the app does.
@@ -1682,8 +1683,12 @@ export async function narrowTerminalWindow(
         .toBeLessThan(before),
     );
     const half = Math.ceil(token.length / 2);
-    await runTypedCommand(win, term, `echo ('${token.slice(0, half)}'+'${token.slice(half)}')`, {
-      echoed: `'${token.slice(half)}')`,
+    const [a, b] = [token.slice(0, half), token.slice(half)];
+    // Windows callers run PowerShell (`echo ('A'+'B')`); a POSIX shell joins adjacent quoted words (`echo A''B`).
+    // Either way the output is the token, which the typed line does not contain.
+    const command = process.platform === 'win32' ? `echo ('${a}'+'${b}')` : `echo ${a}''${b}`;
+    await runTypedCommand(win, term, command, {
+      echoed: process.platform === 'win32' ? `'${b}')` : `''${b}`,
       output: token,
     });
   } catch (err) {
@@ -1952,27 +1957,30 @@ export const HOST_OS = process.platform === 'darwin' ? 'macos' : process.platfor
 export const NATIVE_WINDOW_CONTROLS = HOST_OS === 'macos';
 
 /**
- * A throng chord token as the Playwright keys to press, one entry per stroke: `Ctrl+E,W` → `['Control+E', 'W']`,
- * `Meta+,` → `['Meta+,']`. A comma ends a stroke only when another stroke follows it.
+ * The chord throng ships for `action` on this platform, one Playwright key per stroke — {@link shippedPresses}, which
+ * reads the host's own table, so macOS gets its Cmd form and its overrides (070 FR-029). For a two-stroke chord the
+ * strokes are only correct pressed through {@link pressAction}, which holds the first stroke's modifiers. Use
+ * Playwright's `ControlOrMeta` for plain text-editing chords (copy, cut, undo) that are not throng actions.
  */
-export function playwrightStrokes(token: string): string[] {
-  return token.split(/,(?=.)/).map((stroke) => stroke.replace(/\bCtrl\b/g, 'Control'));
+export function chordFor(action: string): string[] {
+  return shippedPresses(action);
 }
 
-/**
- * The chord throng ships for `action` on this platform — what a user here actually presses, read from the app's own
- * bindings (`shippedBindingsFor`), so macOS gets its Cmd form and its overrides (070 FR-029) without a spec restating
- * them. Use Playwright's `ControlOrMeta` for plain text-editing chords (copy, cut, undo) that are not throng actions.
- */
-export function chordFor(action: string, index = 0): string[] {
-  const chord = shippedBindingsFor(HOST_OS).bindings[action]?.[index];
-  if (!chord) throw new Error(`throng ships no chord ${index} for ${action} on ${HOST_OS}`);
-  return playwrightStrokes(chord);
-}
-
-/** Press throng's shipped chord for `action` on this platform, stroke by stroke. */
-export async function pressAction(page: Page, action: string, index = 0): Promise<void> {
-  for (const stroke of chordFor(action, index)) await page.keyboard.press(stroke);
+/** Press throng's shipped chord for `action` on this platform, holding a two-stroke chord's modifiers throughout. */
+export async function pressAction(page: Page, action: string): Promise<void> {
+  const presses = shippedPresses(action);
+  if (presses.length === 1) {
+    await page.keyboard.press(presses[0] as string);
+    return;
+  }
+  const { hold, first, second } = shippedTwoStroke(action);
+  for (const key of hold) await page.keyboard.down(key);
+  try {
+    await page.keyboard.press(first);
+    await page.keyboard.press(second);
+  } finally {
+    for (const key of [...hold].reverse()) await page.keyboard.up(key);
+  }
 }
 
 function probeShellChildren(parentPid: number): ConhostProbe {

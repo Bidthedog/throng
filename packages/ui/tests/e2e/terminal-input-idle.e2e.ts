@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { openApp, createProject as newProject, firstPanelId, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
-import { makeCmdTerminal } from './altscreen-fixture.js';
+import { makeShellTerminal } from './altscreen-fixture.js';
 
 /*
  * ONE app for this file, not one per test: none of these tests seeds state before launch, so each launch
@@ -15,8 +15,6 @@ import { makeCmdTerminal } from './altscreen-fixture.js';
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -76,7 +74,7 @@ test('a key pressed in the same beat as the click reaches the shell', { tag: ['@
     await runApp(async (_app, win) => {
       await createProject(win, 'InputIdle', root);
       const pid = await firstPanelId(win);
-      await makeCmdTerminal(win, pid, basename(root));
+      await makeShellTerminal(win, pid, basename(root));
       const term = win.getByTestId(`terminal-${pid}`);
 
       /*
@@ -189,7 +187,7 @@ test('the terminal keeps every character when a tab switch rebuilds it first', {
     await runApp(async (_app, win) => {
       await createProject(win, 'InputRebuild', root);
       const pid = await firstPanelId(win);
-      await makeCmdTerminal(win, pid, basename(root));
+      await makeShellTerminal(win, pid, basename(root));
 
       // A tab switch UNMOUNTS the panel, so coming back is a rebuild — the terminal is new, its
       // attach is in flight, and the user is already typing. The worst case for a late focus.

@@ -1,7 +1,51 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, createProject, type AppOptions, type OpenApp } from './harness.js';
+import { openApp, createProject, NATIVE_WINDOW_CONTROLS, type AppOptions, type OpenApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
+
+/*
+ * The window controls, on every platform. throng draws its own Minimise / Maximise / Close on Windows and Linux; on
+ * macOS the native traffic lights stand in and throng draws none (title-bar.tsx, 070 FR-026). So "the bar offers a
+ * control" is the drawn button there and, on macOS, the lights' class on the bar, no throng controls, and a window
+ * whose own flag keeps that light live; and pressing a control is a click there and, on macOS, the same call the
+ * light makes on the page's BrowserWindow. Local to this spec (a sibling copy lives in each spec that needs it).
+ */
+type WindowControl = 'min' | 'max' | 'close';
+
+async function expectWindowControls(app: ElectronApplication, page: Page, controls: readonly WindowControl[]): Promise<void> {
+  if (!NATIVE_WINDOW_CONTROLS) {
+    for (const c of controls) await expect(page.getByTestId(`window-${c}`)).toBeVisible();
+    return;
+  }
+  await expect(page.getByTestId('title-bar')).toHaveClass(/\btitle-bar--traffic-lights\b/);
+  await expect(page.getByTestId('window-controls')).toHaveCount(0);
+  const live = await app.evaluate(({ BrowserWindow }, url) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL() === url);
+    if (!w) throw new Error(`no window is showing ${url}`);
+    return { min: w.isMinimizable(), max: w.isMaximizable(), close: w.isClosable() };
+  }, page.url());
+  for (const c of controls) expect(live[c], `the ${c} traffic light is live`).toBe(true);
+}
+
+async function pressWindowControl(app: ElectronApplication, page: Page, control: WindowControl): Promise<void> {
+  if (!NATIVE_WINDOW_CONTROLS) {
+    await page.getByTestId(`window-${control}`).click();
+    return;
+  }
+  await app.evaluate(({ BrowserWindow }, { url, control }) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL() === url);
+    if (!w) throw new Error(`no window is showing ${url}`);
+    if (control === 'min') w.minimize();
+    else if (control === 'close') w.close();
+    else if (w.isMaximized()) w.unmaximize();
+    else w.maximize();
+  }, { url: page.url(), control });
+}
+
+/** The Maximise control names what it will do next — throng's own button only; the native zoom light has no label. */
+async function expectMaximiseLabel(page: Page, title: 'Maximise' | 'Restore'): Promise<void> {
+  if (!NATIVE_WINDOW_CONTROLS) await expect(page.getByTestId('window-max')).toHaveAttribute('title', title);
+}
 
 /**
  * US9 / FR-033/034 — window titles are suffix-form (`<identity> — throng`), and the Preferences
@@ -160,12 +204,13 @@ test.describe('the preferences window itself', () => {
       return bounds.width >= area.width - 16 && bounds.height >= area.height - 16;
     };
     expect(await fills()).toBe(false);
-    await prefs.getByTestId('window-max').click();
+    await expectWindowControls(shared.app, prefs, ['max']);
+    await pressWindowControl(shared.app, prefs, 'max');
     await expect.poll(fills, { timeout: 5000 }).toBe(true);
-    await expect(prefs.getByTestId('window-max')).toHaveAttribute('title', 'Restore');
-    await prefs.getByTestId('window-max').click();
+    await expectMaximiseLabel(prefs, 'Restore');
+    await pressWindowControl(shared.app, prefs, 'max');
     await expect.poll(async () => (await lastWindow()).bounds, { timeout: 5000 }).toEqual(before);
-    await expect(prefs.getByTestId('window-max')).toHaveAttribute('title', 'Maximise');
+    await expectMaximiseLabel(prefs, 'Maximise');
   });
 
   test('Preferences window is non-minimizable at the OS level', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
@@ -179,7 +224,7 @@ test('Main window keeps its minimise control and a suffix-form title', { tag: ['
   skipIfElevated(); // an elevated runner folds [ADMIN] before the suffix; endsWith still holds
   await runApp(async (app, win) => {
     await createProject(win, 'Suffixer', 'C:/c/suffixer');
-    await expect(win.getByTestId('window-min')).toBeVisible();
+    await expectWindowControls(app, win, ['min']);
     const title = await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id)[0].getTitle(),
     );
@@ -209,7 +254,7 @@ test('a sub-workspace window keeps its minimise control and a suffix-form title'
     await expect(child.getByTestId('subworkspace-window')).toBeVisible();
 
     // Sub-workspace keeps minimise, and its in-app identity ends with the brand suffix.
-    await expect(child.getByTestId('window-min')).toBeVisible();
+    await expectWindowControls(app, child, ['min']);
     await expect
       .poll(() => child.getByTestId('title-bar-identity').textContent())
       .toMatch(/ — throng$/);

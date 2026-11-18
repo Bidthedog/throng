@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { FILE_OP_TIMEOUT_MS, runApp as runOwnApp, openApp, cleanupTemp, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, NATIVE_WINDOW_CONTROLS, runApp as runOwnApp, openApp, cleanupTemp, type OpenApp } from './harness.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
 
 /**
@@ -108,6 +108,25 @@ async function sharedApp(
   }
 }
 
+/**
+ * Close a window the way the user does: the title bar's own X on Windows and Linux; on macOS, where throng draws no
+ * controls and the native red light stands in (title-bar.tsx, 070 FR-026), the same `close()` that light makes on the
+ * page's BrowserWindow — which raises the same `close` event the close gate answers. Local to this spec.
+ */
+async function closeFromTitleBar(app: ElectronApplication, page: Page): Promise<void> {
+  if (!NATIVE_WINDOW_CONTROLS) {
+    await page.getByTestId('window-close').click();
+    return;
+  }
+  await expect(page.getByTestId('title-bar')).toHaveClass(/\btitle-bar--traffic-lights\b/);
+  await app.evaluate(({ BrowserWindow }, url) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL() === url);
+    if (!w) throw new Error(`no window is showing ${url}`);
+    if (!w.isClosable()) throw new Error(`the close light of ${url} is greyed`);
+    w.close();
+  }, page.url());
+}
+
 async function openSettings(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
   const [prefs] = await Promise.all([
@@ -128,7 +147,7 @@ async function openSettings(app: ElectronApplication, win: Page): Promise<Page> 
 async function setEditorText(prefs: Page, kind: string, content: string): Promise<void> {
   const editor = prefs.getByTestId(`json-editor-${kind}`).locator('.cm-content');
   await editor.click();
-  await prefs.keyboard.press('Control+A');
+  await prefs.keyboard.press('ControlOrMeta+A');
   await editor.pressSequentially(content);
 }
 
@@ -299,7 +318,7 @@ test('closing the Preferences window applies the JSON buffer (FR-017)', { tag: [
       // Close it the way the user does: the title bar's own X.
       await Promise.all([
         prefs.waitForEvent('close'),
-        prefs.getByTestId('window-close').click(),
+        closeFromTitleBar(app, prefs),
       ]);
 
       // THE ASSERTION. Closing the window is one of FR-017's three apply triggers, so the edit must
@@ -390,7 +409,7 @@ test('a document that is absent or unreadable through no edit of the user’s ne
       // ── And the window still closes.
       await Promise.all([
         prefs.waitForEvent('close'),
-        prefs.getByTestId('window-close').click(),
+        closeFromTitleBar(app, prefs),
       ]);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
@@ -597,7 +616,7 @@ test('Ctrl+Z with no user edits leaves the document alone (#264)', { tag: ['@ext
 
       // Focus the editor and undo, having typed NOTHING.
       await editor.click();
-      await prefs.keyboard.press('Control+z');
+      await prefs.keyboard.press('ControlOrMeta+z');
 
       // The document is still there. On master the buffer is emptied by undoing its own load.
       await expect(editor, 'undo must not reach past the user\'s own edits').toContainText('Matrix');
@@ -639,7 +658,7 @@ test('an untouched document survives Ctrl+Z (#264); an external change does not 
       // history entry and undo empties the buffer, raising "Invalid JSON — not applied.".
       const loaded = await editor.innerText();
       await editor.click();
-      await prefs.keyboard.press('Control+z');
+      await prefs.keyboard.press('ControlOrMeta+z');
       await expect(editor, "undo must not reach past the user's own edits").toContainText('Matrix');
       expect(await editor.innerText(), 'undo must not empty the document it just loaded').toBe(loaded);
       await expect(

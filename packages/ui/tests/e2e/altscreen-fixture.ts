@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { TEST_SHELL } from './harness.js';
 import { expect, type Page } from '@playwright/test';
 
 /**
@@ -59,10 +60,10 @@ process.stdin.on('data', (b) => {
   return file;
 }
 
-/** Turn a panel into a cmd terminal and wait for its prompt. */
-export async function makeCmdTerminal(win: Page, panelId: string, marker: string): Promise<void> {
+/** Turn a panel into this platform's neutral shell (`TEST_SHELL`) and wait for its prompt. */
+export async function makeShellTerminal(win: Page, panelId: string, marker: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   const confirm = win.getByTestId(`panel-type-confirm-${panelId}`);
   await expect(confirm).toBeEnabled();
   await confirm.click();

@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, reloadWindow, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, daemonRpc, firstPanelId, reloadWindow, runApp } from './harness.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /**
@@ -24,14 +24,13 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
 async function newTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   // The live terminal shows the project root in its prompt — proof it attached.
   await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   return pid;
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('a running terminal survives being mirrored into a new sub-workspace and streams to both windows', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-termsurv-'));

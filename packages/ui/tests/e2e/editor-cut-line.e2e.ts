@@ -7,7 +7,7 @@ import { openApp,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS, pressAction } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -144,7 +144,7 @@ test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint
       const beforeCut = await docText(win, pid);
 
       // …and press the very chord that cuts a LINE inside the editor.
-      await win.keyboard.press('Control+x');
+      await pressAction(win, 'file.cut');
 
       // The DOCUMENT is untouched. The editor never saw the key — had it, the line "cut me" would
       // have vanished. This is the whole point of scoping dispatch.
@@ -152,7 +152,7 @@ test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint
 
       // …and the FILE really was cut, not merely ignored: pasting into the subfolder MOVES it.
       await win.getByTestId('file-explorer-tree').getByText('sub', { exact: true }).click();
-      await win.keyboard.press('Control+v');
+      await pressAction(win, 'file.paste');
 
       await expect
         .poll(() => existsSync(join(root, 'sub', 'victim.txt')), { timeout: FILE_OP_TIMEOUT_MS })

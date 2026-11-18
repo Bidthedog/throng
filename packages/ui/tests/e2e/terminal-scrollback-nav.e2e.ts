@@ -11,7 +11,16 @@ import {
   type AppOptions,
   type OpenApp,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
+  pressAction,
 } from './harness.js';
+
+const WINDOWS = process.platform === 'win32';
+/** What {@link TEST_SHELL} prints for a line it could not run as a command. */
+const NOT_A_COMMAND = WINDOWS ? 'is not recognized' : 'command not found';
+/** A command printing `filler 1` … `filler <n>`, one per line, whose own line never contains `filler <n>`. */
+const fillerLines = (n: number): string =>
+  WINDOWS ? `for /l %i in (1,1,${n}) do @echo filler %i` : `for i in $(seq 1 ${n}); do echo filler $i; done`;
 
 /*
  * ONE app for this file, not one per test.
@@ -32,7 +41,6 @@ import {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -71,7 +79,7 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
 async function newTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
   await expect(confirm).toBeEnabled();
   await confirm.click();
@@ -99,39 +107,39 @@ test('page / line / top / bottom move the viewport — and never reach the progr
       const term = win.getByTestId(`terminal-${pid}`);
 
       await run(win, pid, 'echo TOP_OF_HISTORY', 'TOP_OF_HISTORY');
-      await run(win, pid, 'for /l %i in (1,1,200) do @echo filler %i', 'filler 200');
+      await run(win, pid, fillerLines(200), 'filler 200');
 
       // The oldest line has scrolled off the top.
       await expect(term).not.toContainText('TOP_OF_HISTORY');
 
       // Jump to the very start of the retained scrollback.
       await term.click();
-      await win.keyboard.press('Control+Home');
+      await pressAction(win, 'terminal.scrollToTop');
       await expect(term).toContainText('TOP_OF_HISTORY');
 
       // …and back to the live end.
-      await win.keyboard.press('Control+End');
+      await pressAction(win, 'terminal.scrollToBottom');
       await expect(term).not.toContainText('TOP_OF_HISTORY');
       await expect(term).toContainText('filler 200');
 
       // A page up leaves the newest line behind; a page down brings it back.
-      await win.keyboard.press('Shift+PageUp');
+      await pressAction(win, 'terminal.scrollPageUp');
       await expect(term).not.toContainText('filler 200');
-      await win.keyboard.press('Shift+PageDown');
+      await pressAction(win, 'terminal.scrollPageDown');
       await expect(term).toContainText('filler 200');
 
       // Line-wise scrolling nudges the viewport by a single row: enough of them and the
       // newest line goes off screen, and the same number back restores it.
-      for (let i = 0; i < 12; i++) await win.keyboard.press('Control+Shift+ArrowUp');
+      for (let i = 0; i < 12; i++) await pressAction(win, 'terminal.scrollLineUp');
       await expect(term).not.toContainText('filler 200');
-      for (let i = 0; i < 12; i++) await win.keyboard.press('Control+Shift+ArrowDown');
+      for (let i = 0; i < 12; i++) await pressAction(win, 'terminal.scrollLineDown');
       await expect(term).toContainText('filler 200');
 
-      // NOT ONE of those navigation keys was delivered to cmd.exe: nothing was typed at
+      // NOT ONE of those navigation keys was delivered to the shell: nothing was typed at
       // the prompt, so no command was mangled and no error was printed (FR-014 / SC-003).
-      await expect(term).not.toContainText('is not recognized');
+      await expect(term).not.toContainText(NOT_A_COMMAND);
       await run(win, pid, 'echo NAV_CLEAN', 'NAV_CLEAN');
-      await expect(term).not.toContainText('is not recognized');
+      await expect(term).not.toContainText(NOT_A_COMMAND);
     });
   } finally {
     cleanupTemp(root);
@@ -147,10 +155,10 @@ test('at the live bottom, ordinary typing still reaches the program (FR-016)', {
       const term = win.getByTestId(`terminal-${pid}`);
 
       // Scroll away, then come back to the live bottom…
-      await run(win, pid, 'for /l %i in (1,1,120) do @echo filler %i', 'filler 120');
+      await run(win, pid, fillerLines(120), 'filler 120');
       await term.click();
-      await win.keyboard.press('Shift+PageUp');
-      await win.keyboard.press('Control+End');
+      await pressAction(win, 'terminal.scrollPageUp');
+      await pressAction(win, 'terminal.scrollToBottom');
 
       // …and typing goes straight to the shell, uninterrupted by the navigation bindings.
       await run(win, pid, 'echo TYPED_THROUGH', 'TYPED_THROUGH');
@@ -170,12 +178,12 @@ test('with find open, next/previous jump the viewport between matches (FR-015)',
 
       // One marker near the top, one near the bottom, with a lot of noise between.
       await run(win, pid, 'echo HIT_ONE', 'HIT_ONE');
-      await run(win, pid, 'for /l %i in (1,1,200) do @echo filler %i', 'filler 200');
+      await run(win, pid, fillerLines(200), 'filler 200');
       await run(win, pid, 'echo HIT_TWO', 'HIT_TWO');
       // The top marker is far off-screen now.
       await expect(term).not.toContainText('HIT_ONE');
 
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
 
       // Finding a match that lives at the TOP of the scrollback carries the viewport all
       // the way up to it — the match, not the live end, is what the view follows.
@@ -186,10 +194,10 @@ test('with find open, next/previous jump the viewport between matches (FR-015)',
 
       // Stepping between its matches (F3 / Shift+F3 — the same command as find-next, acting
       // in the terminal, FR-015) keeps the viewport on them.
-      await win.keyboard.press('F3');
+      await pressAction(win, 'search.findNext');
       await expect(win.getByTestId('find-count')).toHaveText(/^\d+ of \d+$/);
       await expect(term).toContainText('HIT_ONE');
-      await win.keyboard.press('Shift+F3');
+      await pressAction(win, 'search.findPrevious');
       await expect(term).toContainText('HIT_ONE');
 
       // …and a match at the far end carries it back down there.
@@ -252,15 +260,15 @@ test('scrollback still scrolls after a project switch and back (#290)', { tag: [
       const pid = await newTerminal(win, rootA);
 
       await run(win, pid, 'echo TOP_OF_HISTORY', 'TOP_OF_HISTORY');
-      await run(win, pid, 'for /l %i in (1,1,200) do @echo filler %i', 'filler 200');
+      await run(win, pid, fillerLines(200), 'filler 200');
       await expect(win.getByTestId(`terminal-${pid}`)).not.toContainText('TOP_OF_HISTORY');
 
       // CONTROL: the viewport moves before any project switch, so a failure after one is about
       // the switch and not about these keys.
       await win.getByTestId(`terminal-${pid}`).click();
-      await win.keyboard.press('Control+Home');
+      await pressAction(win, 'terminal.scrollToTop');
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText('TOP_OF_HISTORY');
-      await win.keyboard.press('Control+End');
+      await pressAction(win, 'terminal.scrollToBottom');
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText('filler 200');
 
       // Away to another project and back. Creating one opens it, which unmounts A's panels;
@@ -280,9 +288,9 @@ test('scrollback still scrolls after a project switch and back (#290)', { tag: [
       // …and the viewport must still move. This is the assertion #290 breaks: the panel paints,
       // accepts input and shows live output, while every scroll route does nothing at all.
       await term2.click();
-      await win.keyboard.press('Control+Home');
+      await pressAction(win, 'terminal.scrollToTop');
       await expect(term2).toContainText('TOP_OF_HISTORY');
-      await win.keyboard.press('Control+End');
+      await pressAction(win, 'terminal.scrollToBottom');
       await expect(term2).toContainText('filler 200');
 
       /*
@@ -320,11 +328,11 @@ test('scrollback still scrolls after a project switch and back (#290)', { tag: [
         await expect(termN).toContainText('filler 200', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
         await termN.click();
-        await win.keyboard.press('Control+Home');
+        await pressAction(win, 'terminal.scrollToTop');
         await expect(termN, `scroll died on round trip ${trip + 1} (#290)`).toContainText(
           'TOP_OF_HISTORY',
         );
-        await win.keyboard.press('Control+End');
+        await pressAction(win, 'terminal.scrollToBottom');
         await expect(termN).toContainText('filler 200');
       }
     });

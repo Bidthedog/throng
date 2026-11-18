@@ -40,7 +40,9 @@ test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
 let dataDir: string;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+// Every case here is a Windows shell's own process tree: Git Bash launching through MSYS, cmd's `ping -t`, and cmd
+// running `npm.cmd`. A POSIX shell's directly-started commands are terminal-command-memory.e2e.ts's.
+test.skip(process.platform !== 'win32', "observes Git Bash's MSYS launches and cmd's own process tree (ping -t, npm.cmd)");
 
 test.beforeAll(async () => {
   dataDir = mkdtempSync(join(tmpdir(), 'throng-launch-data-'));

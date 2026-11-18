@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js';
-import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, createProject, firstPanelId, runApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, createProject, firstPanelId, runApp, TEST_SHELL } from './harness.js';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 /**
@@ -45,8 +45,6 @@ async function splitFrom(win: Page, panelId: string, row: 'Split Right' | 'Split
   await expect(win.locator('.panel-box')).toHaveCount(before + 1);
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('Alt+Shift+Enter maximises a real terminal in place; Shift+Enter and Ctrl+Enter still reach its program; restore is exact', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   skipIfHostCannotDeliverReencodedKeys();
   const root = tmpDir('throng-max-term-');
@@ -55,7 +53,7 @@ test('Alt+Shift+Enter maximises a real terminal in place; Shift+Enter and Ctrl+E
     await createProject(win, 'MAX', root);
     const pid = await firstPanelId(win);
     await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-    await win.getByTestId('terminal-flavour').selectOption('cmd');
+    await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
     await win.getByTestId(`panel-type-confirm-${pid}`).click();
     const term = win.getByTestId(`terminal-${pid}`);
     await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });

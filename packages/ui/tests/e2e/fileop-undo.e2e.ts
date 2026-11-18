@@ -15,7 +15,9 @@ import { openApp,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS,
+  pressAction,
+} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /*
@@ -133,21 +135,21 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back; undo works from the pan
 
       // Undo — the file goes back to its old name, on disk.
       await tree.getByText('after.txt', { exact: true }).click();
-      await win.keyboard.press('Control+z');
+      await pressAction(win, 'file.undo');
       await expect(tree.getByText('before.txt', { exact: true })).toBeVisible({ timeout: 8000 });
       await expect.poll(() => existsSync(join(root, 'before.txt'))).toBe(true);
       expect(existsSync(join(root, 'after.txt'))).toBe(false);
 
       // Redo — and it is renamed again.
       await tree.getByText('before.txt', { exact: true }).click();
-      await win.keyboard.press('Control+y');
+      await pressAction(win, 'file.redo');
       await expect(tree.getByText('after.txt', { exact: true })).toBeVisible({ timeout: 8000 });
       await expect.poll(() => existsSync(join(root, 'after.txt'))).toBe(true);
 
       // Undo from the pane header (merged from "undo works from anywhere in the pane"): inside File
       // Explorer, but not on a row and not in the tree. Redo above pushed the rename back on the stack.
       await win.getByTestId('files-pane').getByText('File Explorer').click();
-      await win.keyboard.press('Control+z');
+      await pressAction(win, 'file.undo');
       await expect
         .poll(() => existsSync(join(root, 'before.txt')), {
           timeout: FILE_OP_TIMEOUT_MS,
@@ -166,7 +168,7 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back; undo works from the pan
       await expect(tree.getByText('second.txt', { exact: true })).toBeVisible({ timeout: 8000 });
       writeFileSync(join(root, 'before.txt'), 'a different file\n');
       await tree.getByText('second.txt', { exact: true }).click();
-      await win.keyboard.press('Control+z');
+      await pressAction(win, 'file.undo');
 
       // It is REPORTED — an undo that silently did nothing would read as undo being broken.
       const notice = win.getByTestId('explorer-error');
@@ -223,9 +225,9 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
       // Cut + paste into the folder — the move path. Each chord goes to a row this test has
       // WATCHED take focus, rather than to whatever the click may not have selected yet.
       await selectRow(win, 'moved.txt');
-      await win.keyboard.press('Control+x');
+      await pressAction(win, 'file.cut');
       await selectRow(win, 'dst');
-      await win.keyboard.press('Control+v');
+      await pressAction(win, 'file.paste');
       /*
        * Both ends of the move in ONE wait.
        *
@@ -312,7 +314,7 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
         )
         .toBe('nested');
       // Undo puts it back at the root, where the user had it — again, both ends together.
-      await win.keyboard.press('Control+z');
+      await pressAction(win, 'file.undo');
       await expect
         .poll(
           () =>
@@ -382,7 +384,7 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
       // Undo the delete. The file comes back — and the editor must NOTICE. Leaving it dirty tells
       // the user their work is at risk over a file that is sitting on disk again, and every later
       // "save before closing?" asks about a document with nothing to save.
-      await win.keyboard.press('Control+z');
+      await pressAction(win, 'file.undo');
       /*
        * SAY WHAT THE APP DID, when the file does not come back.
        *

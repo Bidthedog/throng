@@ -27,11 +27,26 @@ import {
   cleanupTemp,
   APP_CLOSE_TIMEOUT_MS,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
 } from './harness.js';
 import Database from 'better-sqlite3';
 import { expectPingCount } from './helpers/processes.js';
 
 const TARGET = '127.0.0.77';
+
+const WINDOWS = process.platform === 'win32';
+/**
+ * This platform's built-in shells: Windows' four, or bash and zsh. Not fish: its default `fish_title` retitles the
+ * window with the command it is running, and `isProgramTitle` (core/src/terminal/window-title.ts) does not list that
+ * as a shell's own title — by reading, not yet measured, fish would name a ping as a program title, not `{command}`.
+ */
+const BUILT_IN_SHELLS = WINDOWS ? ['cmd', 'pwsh', 'windows-powershell', 'git-bash'] : ['bash', 'zsh'];
+/** A ping at {@link TARGET} that runs until interrupted: cmd's needs `-t`, a POSIX ping does by default. */
+const PING = WINDOWS ? `ping ${TARGET} -t` : `ping ${TARGET}`;
+/** A ping command line over 40 characters, in flags this platform's ping accepts unprivileged. */
+const LONG_PING = WINDOWS ? `ping ${TARGET} -t -l 100 -w 2000 -i 64 -4` : `ping -c 99999 -i 1 -s 56 -p ffff ${TARGET}`;
+/** What {@link TEST_SHELL}'s prompt always ends with. */
+const PROMPT_END = WINDOWS ? '>' : '$';
 
 /** The flavours this machine offers, as `{ id, label }`. */
 async function flavours(win: Page, pid: string): Promise<Array<{ id: string; label: string }>> {
@@ -122,8 +137,6 @@ async function interruptUntil(win: Page, term: Locator, pid: string, pattern: Re
     .toBe(true);
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('every shell names its running command, shell and directory, and drops the command when it stops (FR-001, FR-002, FR-009, SC-001)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(480_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-titles-'));
@@ -133,7 +146,7 @@ test('every shell names its running command, shell and directory, and drops the 
     await runApp(async (_app, win) => {
       await createProject(win, 'TitleShells', root);
       const first = await firstPanelId(win);
-      const shells = (await flavours(win, first)).filter((f) => ['cmd', 'pwsh', 'windows-powershell', 'git-bash'].includes(f.id));
+      const shells = (await flavours(win, first)).filter((f) => BUILT_IN_SHELLS.includes(f.id));
       expect(shells.length, 'no built-in shell detected').toBeGreaterThan(0);
 
       // Step 1: one terminal per shell — `<shell> (<project folder>)`.
@@ -152,14 +165,14 @@ test('every shell names its running command, shell and directory, and drops the 
       }
 
       // Step 2: a running ping names itself in every terminal; the tab strip's panel list says the same.
-      for (const term of terms) await typeLine(win, term, `ping ${TARGET} -t`);
+      for (const term of terms) await typeLine(win, term, PING);
       await expectPingCount(TARGET, shells.length);
       for (const [i, shell] of shells.entries()) {
-        expectNoForeignTitle(await expectName(win, pids[i]!, running(`ping ${TARGET} -t`, shell.label, folder)));
+        expectNoForeignTitle(await expectName(win, pids[i]!, running(PING, shell.label, folder)));
         await expectDirectoryOnce(win, pids[i]!, folder);
       }
       await win.locator('.tab-chip').first().hover();
-      await expect(win.getByTestId('tabstrip-popover-panels')).toContainText(`ping ${TARGET} -t`);
+      await expect(win.getByTestId('tabstrip-popover-panels')).toContainText(PING);
       await win.mouse.move(0, 0);
 
       // Step 3: Ctrl+C — each name returns to `<shell> (<folder>)`.
@@ -167,7 +180,7 @@ test('every shell names its running command, shell and directory, and drops the 
       await expectPingCount(TARGET, 0);
 
       // Step 5: a command over 40 characters is cut with `…` after about 40 of them.
-      const longLine = `ping ${TARGET} -t -l 100 -w 2000 -i 64 -4`;
+      const longLine = LONG_PING;
       await typeLine(win, terms[0]!, longLine);
       const long = await expectName(win, pids[0]!, new RegExp(`^${esc(longLine.slice(0, 30))}.*… \\| ${esc(shells[0]!.label)} \\(`));
       expect(long.split(' | ')[0]!.length, `the command is cut at about 40 characters: ${long}`).toBeLessThanOrEqual(41);
@@ -176,14 +189,14 @@ test('every shell names its running command, shell and directory, and drops the 
       /*
        * Step 6 (was its own test, FR-016): a reloaded terminal does not name the command its previous shell was
        * running. Folded in as a step: it needed the same project, the same shells and the same ping. Run on the
-       * cmd terminal (cmd is on every machine); the other shells reload with it and are not looked at.
+       * TEST_SHELL terminal (cmd, or bash: on every machine); the other shells reload with it and are not looked at.
        */
-      const cmdIndex = shells.findIndex((f) => f.id === 'cmd');
-      expect(cmdIndex, 'the cmd shell is not offered').toBeGreaterThanOrEqual(0);
+      const cmdIndex = shells.findIndex((f) => f.id === TEST_SHELL);
+      expect(cmdIndex, `the ${TEST_SHELL} shell is not offered`).toBeGreaterThanOrEqual(0);
       const cmdPid = pids[cmdIndex]!;
       const cmdShell = shells[cmdIndex]!;
-      await typeLine(win, terms[cmdIndex]!, `ping ${TARGET} -t`);
-      await expectName(win, cmdPid, running(`ping ${TARGET} -t`, cmdShell.label, folder));
+      await typeLine(win, terms[cmdIndex]!, PING);
+      await expectName(win, cmdPid, running(PING, cmdShell.label, folder));
 
       await win.locator('.project-item', { hasText: 'TitleShells' }).click({ button: 'right' });
       await win.getByTestId('menu-item-Unload Project and End Terminals').click();
@@ -196,7 +209,7 @@ test('every shell names its running command, shell and directory, and drops the 
       await expect
         .poll(async () => {
           names.push(await fullName(win, cmdPid));
-          return (await reloaded.innerText().catch(() => '')).includes('>');
+          return (await reloaded.innerText().catch(() => '')).includes(PROMPT_END);
         }, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS })
         .toBe(true);
       names.push(await fullName(win, cmdPid));
@@ -205,10 +218,11 @@ test('every shell names its running command, shell and directory, and drops the 
 
       /*
        * Step 7 (was its own test, FR-004, FR-012): a deep directory keeps its drive and last folder and shortens the
-       * middle. Last, because it moves the cmd terminal out of the project folder.
+       * middle (on POSIX, its `/` root). Last, because it moves the terminal out of the project folder.
        */
-      await typeLine(win, reloaded, 'cd alpha\\bravo\\charlie\\delta\\echofold');
-      const deep = await expectName(win, cmdPid, new RegExp(`^${esc(cmdShell.label)} \\([A-Za-z]:\\\\.*….*echofold\\)$`));
+      await typeLine(win, reloaded, WINDOWS ? 'cd alpha\\bravo\\charlie\\delta\\echofold' : 'cd alpha/bravo/charlie/delta/echofold');
+      const pathRoot = WINDOWS ? '[A-Za-z]:\\\\' : '/';
+      const deep = await expectName(win, cmdPid, new RegExp(`^${esc(cmdShell.label)} \\(${pathRoot}.*….*echofold\\)$`));
       expectNoForeignTitle(deep);
       expect(deep, 'the shortened directory still names the temp folders above the project').not.toContain(folder);
     });
@@ -279,7 +293,9 @@ test('a program that titles itself is named `app: title`, across a project switc
       await createProject(win, 'TitleApp', root);
       const pid = await firstPanelId(win);
       const offered = await flavours(win, pid);
-      const shell = offered.find((f) => f.id === 'pwsh') ?? offered.find((f) => f.id === 'windows-powershell')!;
+      const shell = WINDOWS
+        ? (offered.find((f) => f.id === 'pwsh') ?? offered.find((f) => f.id === 'windows-powershell')!)
+        : offered.find((f) => f.id === TEST_SHELL)!;
       shellLabel = shell.label;
       const term = await makeTerminal(win, pid, shell.id, true);
       await expectName(win, pid, atPrompt(shellLabel, folder), TERMINAL_OUTPUT_TIMEOUT_MS);

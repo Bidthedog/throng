@@ -9,6 +9,7 @@ import {
   daemonPid,
   forceKillProcessTree,
   cleanupTemp,
+  TEST_SHELL,
 } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
@@ -77,8 +78,6 @@ async function allNoticeText(win: import('@playwright/test').Page): Promise<stri
   return parts.join(' | ');
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('a daemon that dies is reported to the user, not turned into a raw RPC error', { tag: ['@extended', '@failure', '@reserve:process'] }, async () => {
   // An elevated daemon lives in a different process tree (the de-elevated agent), which
   // `forceKillProcessTree` on the health.ping pid does not describe.
@@ -97,7 +96,7 @@ test('a daemon that dies is reported to the user, not turned into a raw RPC erro
         await createProject(win, 'DaemonProj', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         // SETUP: a real, live shell — so the daemon is genuinely doing work when it is killed.
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {

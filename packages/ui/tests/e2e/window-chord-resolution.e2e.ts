@@ -48,7 +48,8 @@
  * adds a window chord on a letter key and covers it nowhere, and that answer is worth having in the
  * unit tier rather than most of an E2E run later.
  */
-import { TEST_SHELL } from './harness.js';
+import { HOST_OS, TEST_SHELL } from './harness.js';
+import { shippedBindingsFor } from '@throng/core';
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -80,10 +81,11 @@ const KEEP_SHIFT = discoverKeepShiftChords();
  * after the widening the Shift state is part of what the resolver matches on. Getting this wrong
  * would make a test fail for a reason that has nothing to do with the dispatcher.
  */
-function press(token: string): string {
+function press(token: string, { hostToken = false }: { hostToken?: boolean } = {}): string {
   const key = keyOf(token);
-  // ControlOrMeta: the Windows token's Ctrl is Cmd on macOS (070 FR-029), and still Control everywhere else.
-  const mods = token.slice(0, token.length - key.length).replace(/Ctrl\+/g, 'ControlOrMeta+');
+  // ControlOrMeta: the Windows token's Ctrl is Cmd on macOS (070 FR-029), and still Control everywhere else. A token
+  // read from THIS platform's own table is already in its final form, so its Ctrl is a real Control.
+  const mods = token.slice(0, token.length - key.length).replace(/Ctrl\+/g, hostToken ? 'Control+' : 'ControlOrMeta+');
   const shifted = /(^|\+)Shift\+/.test(token);
   /*
    * A DIGIT is pressed by its physical code (046 T049). Measured on this engine: `Control+Shift+0`
@@ -110,7 +112,14 @@ function chordFor(action: string): string {
   if (!chords || chords[0] === undefined) {
     throw new Error(`${action} carries no Shift-keeping chord — the coverage table is stale`);
   }
-  return press(chords[0]);
+  /*
+   * The discovery reads the default (Windows) table; what is PRESSED is the chord this platform ships for the action
+   * (070 FR-029) — on macOS its Cmd form, or an override where macOS reserves the Cmd form: `focus.cycle` keeps
+   * Ctrl+backtick (Cmd+backtick is the window switcher) and `view.fullscreen` is Ctrl+Cmd+F (F11 is Show Desktop).
+   */
+  const host = shippedBindingsFor(HOST_OS).bindings[action]?.[0];
+  if (host === undefined) throw new Error(`${action} ships no chord on ${HOST_OS}`);
+  return press(host, { hostToken: true });
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -464,7 +473,7 @@ test('from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and
     const w = window as unknown as { __t049Key?: string };
     w.__t049Key = undefined;
     const note = (e: KeyboardEvent): void => {
-      if (['Control', 'Shift', 'Alt'].includes(e.key)) return;
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return; // Meta: macOS's Cmd form of the chord
       w.__t049Key = `${e.key}|${e.code}`;
       window.removeEventListener('keydown', note, true);
     };

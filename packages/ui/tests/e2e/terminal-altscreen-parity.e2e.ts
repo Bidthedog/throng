@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, quiesced, reloadWindow, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, daemonRpc, firstPanelId, quiesced, reloadWindow, runApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
@@ -99,7 +99,7 @@ async function settleBothViews(win: Page, child: Page, pid: string, what: string
 async function newTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   return pid;
@@ -146,7 +146,6 @@ async function newTerminal(win: Page, root: string): Promise<string> {
  * enumerable in the meantime:
  *   THRONG_E2E_INCLUDE_QUARANTINE=1 npx playwright test --grep @quarantine --list
  */
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('@quarantine a full-screen (alt-screen) program renders identically in two different-sized views, and stays identical when either window is resized', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   skipIfElevated();

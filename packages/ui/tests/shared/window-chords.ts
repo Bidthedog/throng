@@ -332,9 +332,14 @@ export function pressesChord(src: string, chord: string): boolean {
     const token = (tokens as string[] | undefined)?.[0];
     if (token === undefined) continue;
     const presses = splitStrokes(token) ? toPlaywrightPresses(token) : [];
-    if (presses.length !== 1 || presses[0] !== chord) continue;
+    // Case-blind: a shipped letter is pressed lowercase (`Control+g`, see toPlaywrightPress) where a manifest entry
+    // spells it `Control+G` — the same keystroke.
+    if (presses.length !== 1 || presses[0]?.toLowerCase() !== chord.toLowerCase()) continue;
     const act = action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (new RegExp(String.raw`keyboard\s*\.\s*press\(\s*shippedPress\(\s*['"\`]${act}['"\`]\s*\)`).test(src)) return true;
+    // `pressAction(page, '<action>')` (harness.ts) presses the platform's shipped chord: this one on Windows and
+    // Linux, its Cmd form on macOS — the same keystroke a spec spelling it would send where the chord is defined.
+    if (new RegExp(String.raw`pressAction\(\s*[\w.]+\s*,\s*['"\`]${act}['"\`]\s*\)`).test(src)) return true;
   }
   return false;
 }
@@ -429,9 +434,14 @@ export function toPlaywrightTwoStroke(token: string): PlaywrightTwoStroke {
   return { hold, first: toPlaywrightPress(key), second: toPlaywrightPress(second) };
 }
 
+/** The OS the app under test runs on, as throng names it: a Mac ships Cmd chords (070 FR-029). */
+const hostOs = (): 'macos' | 'linux' | 'windows' =>
+  process.platform === 'darwin' ? 'macos' : process.platform === 'linux' ? 'linux' : 'windows';
+
 /** {@link toPlaywrightTwoStroke} for `action`'s FIRST shipped binding on this platform. */
 export function shippedTwoStroke(action: string): PlaywrightTwoStroke {
-  const token = shippedBindingsFor().bindings[action]?.[0];
+  // The host's table, not the build default: on macOS the default table pressed Ctrl+E,W where throng binds Cmd+E,W.
+  const token = shippedBindingsFor(hostOs()).bindings[action]?.[0];
   if (token === undefined) throw new Error(`${action} ships no binding — nothing to press`);
   return toPlaywrightTwoStroke(token);
 }
@@ -444,10 +454,8 @@ export function shippedTwoStroke(action: string): PlaywrightTwoStroke {
  * rather than pressing nothing, which would pass any negative assertion that followed.
  */
 export function shippedPresses(action: string): string[] {
-  // The table of the OS the app under test runs on: a Mac ships Cmd chords (070 FR-029), and pressing the Windows
-  // default there reaches no binding at all.
-  const os = process.platform === 'darwin' ? 'macos' : process.platform === 'linux' ? 'linux' : 'windows';
-  const token = shippedBindingsFor(os).bindings[action]?.[0];
+  // The table of the OS the app under test runs on: pressing the Windows default on a Mac reaches no binding at all.
+  const token = shippedBindingsFor(hostOs()).bindings[action]?.[0];
   if (token === undefined) throw new Error(`${action} ships no binding — nothing to press`);
   return toPlaywrightPresses(token);
 }

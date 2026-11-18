@@ -1,5 +1,29 @@
 import { test, expect } from '@playwright/test';
-import { createProject, runApp } from './harness.js';
+import type { ElectronApplication, Page } from '@playwright/test';
+import { createProject, runApp, NATIVE_WINDOW_CONTROLS } from './harness.js';
+
+/*
+ * The window controls, on every platform. throng draws its own Minimise / Maximise / Close on Windows and Linux; on
+ * macOS the native traffic lights stand in and throng draws none (title-bar.tsx, 070 FR-026). There the bar carries
+ * the lights' class, no throng controls, and the window's own flags keep each light live. Local to this spec (a
+ * sibling copy lives in each spec that needs it).
+ */
+type WindowControl = 'min' | 'max' | 'close';
+
+async function expectWindowControls(app: ElectronApplication, page: Page, controls: readonly WindowControl[]): Promise<void> {
+  if (!NATIVE_WINDOW_CONTROLS) {
+    for (const c of controls) await expect(page.getByTestId(`window-${c}`)).toBeVisible();
+    return;
+  }
+  await expect(page.getByTestId('title-bar')).toHaveClass(/\btitle-bar--traffic-lights\b/);
+  await expect(page.getByTestId('window-controls')).toHaveCount(0);
+  const live = await app.evaluate(({ BrowserWindow }, url) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL() === url);
+    if (!w) throw new Error(`no window is showing ${url}`);
+    return { min: w.isMinimizable(), max: w.isMaximizable(), close: w.isClosable() };
+  }, page.url());
+  for (const c of controls) expect(live[c], `the ${c} traffic light is live`).toBe(true);
+}
 
 // US7 / T074: detach a Tab or Panel out of the main workspace into a brand-new
 // sub-workspace window. The reliable, discoverable trigger is the context-menu
@@ -45,9 +69,7 @@ test('detaches a Tab into a new sub-workspace window with the custom title bar (
 
     // Identity shows the sub-workspace name; window controls work; NO cog.
     await expect(child.getByTestId('title-bar-identity')).toContainText('Sub-workspace 1');
-    await expect(child.getByTestId('window-min')).toBeVisible();
-    await expect(child.getByTestId('window-max')).toBeVisible();
-    await expect(child.getByTestId('window-close')).toBeVisible();
+    await expectWindowControls(app, child, ['min', 'max', 'close']);
     await expect(child.getByTestId('title-bar-cog')).toHaveCount(0);
 
     // Clone, not move: the main workspace KEEPS both Tabs, and the sidebar lists

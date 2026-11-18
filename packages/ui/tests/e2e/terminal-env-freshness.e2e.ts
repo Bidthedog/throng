@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp, TEST_SHELL } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -41,7 +41,7 @@ import { skipIfElevated } from './admin.js';
  * distinguishable at all.
  */
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+const ON_WINDOWS = process.platform === 'win32';
 
 test('a terminal sees the environment of the app that launched it, not the daemon (#209)', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent, a different process tree
@@ -57,26 +57,28 @@ test('a terminal sees the environment of the app that launched it, not the daemo
         await createProject(win, 'EnvProj', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
         const term = win.getByTestId(`terminal-${pid}`);
         await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
         // Ask the shell what it inherited. `echo` on cmd prints the literal name when a variable is
-        // unset, which distinguishes "absent" from "empty" without any extra machinery.
+        // unset, which distinguishes "absent" from "empty" without any extra machinery; a POSIX shell's
+        // `${VAR-unset}` says the same — `[unset]` only when the variable is absent, `[]` when it is empty —
+        // and the echoed command line cannot contain that answer.
         await term.click();
-        await win.keyboard.type('echo [%STALE_DAEMON_MARKER%]');
+        await win.keyboard.type(ON_WINDOWS ? 'echo [%STALE_DAEMON_MARKER%]' : 'echo "[${STALE_DAEMON_MARKER-unset}]"');
         await win.keyboard.press('Enter');
 
         /**
          * RED — the marker belongs to the DAEMON's session, and must not reach the shell.
          *
-         * `[%STALE_DAEMON_MARKER%]` is cmd's way of saying "no such variable". Seeing
-         * `[stale-daemon-session]` instead means the terminal was built from the environment the
+         * `[%STALE_DAEMON_MARKER%]` is cmd's way of saying "no such variable" (`[unset]` above, elsewhere).
+         * Seeing `[stale-daemon-session]` instead means the terminal was built from the environment the
          * daemon was born with — a session the user may have closed days ago.
          */
-        await expect(term).toContainText('[%STALE_DAEMON_MARKER%]', { timeout: 20_000 });
+        await expect(term).toContainText(ON_WINDOWS ? '[%STALE_DAEMON_MARKER%]' : '[unset]', { timeout: 20_000 });
         await expect(term).not.toContainText('[stale-daemon-session]');
       },
       {

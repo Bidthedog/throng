@@ -9,6 +9,8 @@ import {
   cleanupTemp,
   type OpenApp,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
+  chordFor,
 } from './harness.js';
 
 /*
@@ -50,8 +52,6 @@ import {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -98,6 +98,16 @@ async function lastKeyDecision(win: Page, pid: string): Promise<KeyDecision> {
  * not fail loudly — it would wait the whole budget and then report a product defect.
  */
 const DROPPED_FLAG = 'dropped.flag';
+
+/** The scroll chords as this platform ships them — Ctrl+Home / Ctrl+End, Cmd on macOS — since the report names them. */
+const SCROLL_TO_TOP = chordFor('terminal.scrollToTop')[0]!;
+const SCROLL_TO_BOTTOM = chordFor('terminal.scrollToBottom')[0]!;
+
+/** Two hundred numbered `filler N` lines, each printed by the shell itself: cmd's `for /l`, a POSIX `for`. */
+const FILLER_COMMAND =
+  process.platform === 'win32'
+    ? 'for /l %i in (1,1,200) do @echo filler %i'
+    : 'for i in $(seq 1 200); do echo filler $i; done';
 
 /** `CSI > 1 u` — push the disambiguate flag, i.e. "this program wants enhanced key reporting". */
 const PUSH = "process.stdout.write('\\x1b[>1u');";
@@ -165,7 +175,7 @@ function writeFixtures(root: string): void {
 async function startTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();
@@ -225,12 +235,12 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
     await runCommand(win, pid, 'echo TOP_OF_HISTORY', 'TOP_OF_HISTORY');
     // Three times the shared budget, because this command does 200 times the work of its
     // neighbours — see `runCommand`'s `waitMs`.
-    await runCommand(win, pid, 'for /l %i in (1,1,200) do @echo filler %i', 'filler 200', 90_000);
+    await runCommand(win, pid, FILLER_COMMAND, 'filler 200', 90_000);
 
     // ── The program negotiates, with the panel MOUNTED, so the live view parses it.
     await runCommand(win, pid, 'node push.js', 'KITTY_PUSHED');
     await term.click();
-    await win.keyboard.press('Control+Home');
+    await win.keyboard.press(SCROLL_TO_TOP);
     const armed = await lastKeyDecision(win, pid);
     /*
      * CONTROL. Without this the test cannot tell "the belief was correctly cleared" from "the
@@ -241,7 +251,7 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
     );
     expect(armed.programOwnsKeyboard).toBe(true);
     expect(armed.reserved, 'a program that owns the keyboard must RECEIVE Ctrl+Home').toBe(false);
-    await win.keyboard.press('Control+End');
+    await win.keyboard.press(SCROLL_TO_BOTTOM);
 
     // ── Start the drop, then leave the tab so the pop lands with the panel unmounted.
     await term.click();
@@ -304,13 +314,13 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
      * is the signature that distinguishes THIS defect from a wedged or disconnected terminal, and
      * it is asserted at the end.
      */
-    await win.keyboard.press('Control+Home');
+    await win.keyboard.press(SCROLL_TO_TOP);
     await expect(term2, 'Ctrl+Home did not reach the top of the scrollback (#290)').toContainText(
       'TOP_OF_HISTORY',
     );
     const after = await lastKeyDecision(win, pid);
 
-    await win.keyboard.press('Control+End');
+    await win.keyboard.press(SCROLL_TO_BOTTOM);
     await expect(term2, 'Ctrl+End did not return to the live bottom (#290)').toContainText(
       'filler 200',
     );
@@ -362,7 +372,7 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
      */
     await runCommand(win, pid, 'node push2.js', 'KITTY_PUSHED_AGAIN');
     await term2.click();
-    await win.keyboard.press('Control+Home');
+    await win.keyboard.press(SCROLL_TO_TOP);
     expect((await lastKeyDecision(win, pid)).kitty, 'the second negotiation did not take').toBe(true);
 
     await chips.last().click();
@@ -374,7 +384,7 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
     // One pop, live, with the panel mounted — the program saying "I am done".
     await runCommand(win, pid, 'node pop.js', 'KITTY_POPPED_LIVE');
     await term3.click();
-    await win.keyboard.press('Control+Home');
+    await win.keyboard.press(SCROLL_TO_TOP);
     const settled = await lastKeyDecision(win, pid);
     expect(
       settled.kitty,

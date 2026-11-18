@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { openApp, runApp, createProject as newProject, firstPanelId, focusEditor, cleanupTemp, settle, type OpenApp } from './harness.js';
+import { openApp, runApp, createProject as newProject, firstPanelId, focusEditor, cleanupTemp, pressAction, settle, type OpenApp } from './harness.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
 import { openGotoLine } from './helpers/navigation.js';
 
@@ -207,7 +207,7 @@ test('a live update of a parented preview keeps the heading the reader was looki
       // Type at the TOP of the editor: a block tall enough that an update which merely kept `scrollTop`
       // would push Section 10 a long way down.
       await focusEditor(win, editorId);
-      await win.keyboard.press('Control+Home');
+      await win.keyboard.press('ControlOrMeta+Home');
       const inserted = ['# Inserted above', '', ...Array.from({ length: 40 }, (_, i) => `Inserted line ${i + 1}.`), '', ''].join('\n');
       await win.keyboard.insertText(inserted);
       await win.keyboard.type('Typed at the top', { delay: 20 });
@@ -252,7 +252,7 @@ test('Back twice then Forward once returns a preview to the place the reader lef
     await expect(preview).toContainText('Links fixture');
 
     // README → setup.
-    await preview.getByText('Setup', { exact: true }).click({ modifiers: ['Control'] });
+    await preview.getByText('Setup', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
     await expect(preview).toContainText('Setup fixture');
 
     // Halfway down setup, then on to install from the link that sits there.
@@ -260,26 +260,26 @@ test('Back twice then Forward once returns a preview to the place the reader lef
     const left = await headingPlace(win, previewId, 'Halfway');
     expect(left.scrollTop).toBeGreaterThan(0);
     expect(Math.abs(left.top - 100)).toBeLessThanOrEqual(PLACE_TOLERANCE_PX);
-    await preview.getByText('Install section', { exact: true }).click({ modifiers: ['Control'] });
+    await preview.getByText('Install section', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
     await expect(preview).toContainText('Install instructions for the fixture project.');
     await expect(preview).not.toContainText('Setup fixture');
 
     // The keyboard lands in the preview: a plain click on text does nothing but focus it.
     await preview.getByText('Install instructions for the fixture project.').click();
 
-    // Alt+Left: install → setup, at the place it was left.
-    await win.keyboard.press('Alt+ArrowLeft');
+    // Back (Alt+Left; Cmd+[ on macOS): install → setup, at the place it was left.
+    await pressAction(win, 'navigate.back');
     await expect(preview).toContainText('Setup fixture');
     const back = await headingPlace(win, previewId, 'Halfway');
     expect(Math.abs(back.top - left.top), `Back put Halfway at ${back.top}px, left at ${left.top}px`).toBeLessThanOrEqual(PLACE_TOLERANCE_PX);
 
-    // Alt+Left: setup → README, from its top.
-    await win.keyboard.press('Alt+ArrowLeft');
+    // Back again: setup → README, from its top.
+    await pressAction(win, 'navigate.back');
     await expect(preview).toContainText('Links fixture');
     await expect(preview).not.toContainText('Setup fixture');
 
-    // Alt+Right: README → setup, at the same place again.
-    await win.keyboard.press('Alt+ArrowRight');
+    // Forward (Alt+Right; Cmd+] on macOS): README → setup, at the same place again.
+    await pressAction(win, 'navigate.forward');
     await expect(preview).toContainText('Setup fixture');
     const forward = await headingPlace(win, previewId, 'Halfway');
     expect(
@@ -367,13 +367,13 @@ test('a mouse drag selects preview text across paragraphs, and a Ctrl+drag on a 
     const box = await link.boundingBox();
     expect(box, 'the link is laid out').not.toBeNull();
     await win.mouse.move(box!.x + 2, box!.y + box!.height / 2);
-    await win.keyboard.down('Control');
+    await win.keyboard.down(process.platform === 'darwin' ? 'Meta' : 'Control');
     try {
       await win.mouse.down();
       await win.mouse.move(box!.x + box!.width - 2, box!.y + box!.height / 2, { steps: 8 });
       await win.mouse.up();
     } finally {
-      await win.keyboard.up('Control');
+      await win.keyboard.up(process.platform === 'darwin' ? 'Meta' : 'Control');
     }
     const onLink = await selectionText(win);
     expect(onLink,'a Ctrl+drag on a link selected nothing').not.toBe('');
@@ -385,7 +385,7 @@ test('a mouse drag selects preview text across paragraphs, and a Ctrl+drag on a 
     // Control: once the selection is gone, the same link DOES follow on Ctrl+click.
     await preview.getByText('Alpha paragraph', { exact: false }).click();
     await expect.poll(() => selectionText(win)).toBe('');
-    await link.click({ modifiers: ['Control'] });
+    await link.click({ modifiers: ['ControlOrMeta'] });
     await expect(preview).toContainText('Reaching this document means a link was followed.');
   } finally {
     cleanupTemp(root);
@@ -745,7 +745,7 @@ test('scrolling either side of a parented preview moves the other, a caret move 
 
     // …and Ctrl+End: the preview follows to the block of the editor's new top line, or as near as its own
     //    end allows.
-    await win.keyboard.press('Control+End');
+    await win.keyboard.press('ControlOrMeta+End');
     await expect.poll(async () => (await readSync(win, editorId, previewId)).editorTop).toBeGreaterThan(jumped.editorTop);
     const ended = await settledSync(win, editorId, previewId);
     expect(
@@ -799,7 +799,7 @@ test('scrolling either side of a parented preview moves the other, a caret move 
       for (let c = 0; c <= `typed line ${n}`.length; c += 1) await win.keyboard.press('Backspace');
     }
     await expect(editor.locator('.cm-content')).not.toContainText('typed line', { timeout: 5000 });
-    await win.keyboard.press('Control+s');
+    await pressAction(win, 'editor.save');
     await frames(win, 30);
 
     // (3) Synchronise Scrolling OFF, from the editor's status bar: both buttons flip.
@@ -809,7 +809,7 @@ test('scrolling either side of a parented preview moves the other, a caret move 
 
     // The editor moves; the preview does not.
     await clickVisibleEditorLine(win, editorId);
-    await win.keyboard.press('Control+Home');
+    await win.keyboard.press('ControlOrMeta+Home');
     await expect.poll(async () => (await readSync(win, editorId, previewId)).editorScrollTop).toBe(0);
     await frames(win, 30);
     const editorMoved = await settledSync(win, editorId, previewId);

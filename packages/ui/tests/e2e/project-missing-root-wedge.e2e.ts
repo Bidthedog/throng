@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, TEST_SHELL } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -128,7 +128,8 @@ async function allNoticeText(win: Page): Promise<string> {
   return parts.join(' | ').replace(/\n/g, ' ') || '(no notices)';
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+/** An absolute path on this platform, as a notice would quote it: `C:\…` on Windows, `/…` elsewhere. */
+const ABSOLUTE_PATH = process.platform === 'win32' ? /[A-Za-z]:\\[^\s'"|]+/g : /\/[^\s'"|]+/g;
 
 test('entering a project whose folder is gone reports it and does not split the workspace', { tag: ['@extended', '@window', '@reserve:runtime'] }, async () => {
   skipIfElevated();
@@ -154,7 +155,7 @@ test('entering a project whose folder is gone reports it and does not split the 
         // and the missing folder is never noticed at all (see the first measurement above).
         const bravoPanel = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${bravoPanel}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${bravoPanel}`).click();
         await expect(win.getByTestId(`terminal-${bravoPanel}`)).toContainText(basename(rootB), {
           timeout: 20_000,
@@ -260,7 +261,7 @@ test('entering a project whose folder is gone reports it and does not split the 
          * while the message is still an errno. The point of the requirement is that the sentence
          * names the folder, not that the folder's characters occur somewhere in the blob.
          */
-        const prose = noticeText.replace(/[A-Za-z]:\\[^\s'"|]+/g, '<path>');
+        const prose = noticeText.replace(ABSOLUTE_PATH, '<path>');
         expect(prose, 'the notice does not name the missing folder').toContain(basename(rootB));
         expect(prose, 'the notice does not say the folder is missing')
           .toMatch(/no longer exists|could not be found|missing|moved or deleted/i);

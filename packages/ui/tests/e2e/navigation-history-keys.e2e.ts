@@ -32,7 +32,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { openApp, createProject, firstPanelId, focusEditor, cleanupTemp, type OpenApp } from './harness.js';
+import { openApp, createProject, firstPanelId, focusEditor, cleanupTemp, type OpenApp, pressAction } from './harness.js';
 
 const A = 'export const alphaValue = computeAlpha(1);\n';
 const B = 'export const betaValue = computeBeta(2);\n';
@@ -71,7 +71,7 @@ test('a real Alt+Left in an editor goes Back to the previous file and does not m
 
     // The caret inside `computeBeta`, with a character typed there: `compZ|uteBeta`.
     await focusEditor(win, pid);
-    await win.keyboard.press('Control+Home');
+    await win.keyboard.press('ControlOrMeta+Home');
     const inside = B.indexOf('computeBeta') + 'comp'.length;
     for (let i = 0; i < inside; i += 1) await win.keyboard.press('ArrowRight');
     await win.keyboard.type('Z');
@@ -82,7 +82,7 @@ test('a real Alt+Left in an editor goes Back to the previous file and does not m
     const caretBefore = { line: await line.textContent(), column: await column.textContent() };
 
     // The real chord.
-    await win.keyboard.press('Alt+ArrowLeft');
+    await pressAction(win, 'navigate.back');
 
     // Back ran: the dirty editor asks before leaving b.ts…
     await expect(win.getByTestId('unsaved-open-dialog')).toBeVisible();

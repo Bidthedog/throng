@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, TEST_SHELL } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -17,7 +17,9 @@ import { skipIfElevated } from './admin.js';
  * the others — which is why this is table-driven.
  */
 
-const FLAVOURS = ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] as const;
+/** This platform's built-in shells: Windows' four, or the POSIX shells CI installs (scripts/ci-linux-setup.sh). */
+const FLAVOURS: readonly string[] =
+  process.platform === 'win32' ? ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] : ['bash', 'zsh', 'fish'];
 
 /**
  * Flavours whose live cwd the daemon does not currently report.
@@ -196,8 +198,6 @@ for (const flavour of FLAVOURS) {
   });
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
@@ -214,7 +214,7 @@ test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)',
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
         await expect(win.getByTestId('terminal-flavour')).toBeVisible();
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId('terminal-remember-directory').uncheck();
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 

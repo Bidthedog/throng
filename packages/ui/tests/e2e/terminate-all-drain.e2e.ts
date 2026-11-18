@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu } from './harness.js';
+import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu, TEST_SHELL } from './harness.js';
 // The drain budget itself, so the validity-bound below tracks the production constant instead of
 // restating a number that was true when it was written. `ui-settings` is a pure reader with no
 // OS or native imports — it says so in its own docblock — so importing it here costs nothing.
@@ -104,14 +104,14 @@ async function addPanel(win: Page, hostPid: string): Promise<void> {
   await expect(win.locator('.panel-box')).toHaveCount(before + 1);
 }
 
-/** Add a sibling panel and turn it into a running cmd terminal — the close warning's precondition. */
+/** Add a sibling panel and turn it into a running terminal — the close warning's precondition. */
 async function addTerminalPanel(win: Page, hostPid: string, root: string): Promise<string> {
   await addPanel(win, hostPid);
   const pid = (await panelIds(win)).find((id) => id !== hostPid)!;
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
-  // A SPLIT panel is narrow, so cmd's prompt path wraps across xterm rows — match only the trailing
+  // A SPLIT panel is narrow, so the prompt's path wraps across xterm rows — match only the trailing
   // chars, which stay contiguous on the final wrapped row.
   await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root).slice(-6), {
     timeout: 15000,
@@ -247,7 +247,7 @@ function readSettingsTheme(cfgRoot: string): string | null {
 async function setEditorText(prefs: Page, kind: string, content: string): Promise<void> {
   const editor = prefs.getByTestId(`json-editor-${kind}`).locator('.cm-content');
   await editor.click();
-  await prefs.keyboard.press('Control+A');
+  await prefs.keyboard.press('ControlOrMeta+A');
   await editor.pressSequentially(content);
 }
 
@@ -266,8 +266,8 @@ function readThemeAccent(cfgRoot: string, name: string): string | null {
 /** Zoom one panel in by two presses. ZOOM_STEP is 0.5, so two presses is level 1 — not 2. */
 async function zoomInTwice(win: Page, pid: string): Promise<void> {
   await win.getByTestId(`panel-${pid}`).click();
-  await win.keyboard.press('Control+Alt+Equal');
-  await win.keyboard.press('Control+Alt+Equal');
+  await win.keyboard.press('ControlOrMeta+Alt+Equal');
+  await win.keyboard.press('ControlOrMeta+Alt+Equal');
   await expect(win.getByTestId(`panel-${pid}`)).toHaveAttribute('data-zoom', '1');
 }
 
@@ -286,8 +286,6 @@ async function zoomInTwice(win: Page, pid: string): Promise<void> {
 // THE BLAST RADIUS. Layout and per-panel zoom are ONE deferred write (`workspace.save`, 400ms).
 // The test below FAILS without the drain, and it fails on the ORDINARY close — the exit the issue treats as safe.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('#86 AC3/AC4/C23: layout, zoom, a language override and a config write set immediately before an ORDINARY close all survive the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();

@@ -16,6 +16,7 @@ import {
   splitPanelViaMenu,
   type OpenApp,
   type SplitDirectionName,
+  pressAction,
 } from './harness.js';
 
 /*
@@ -241,7 +242,7 @@ test('an editor with an open find, dropped on another tab, shows that tab, has f
   await expect(editor).toBeVisible();
   await focusEditor(win, first);
   await win.keyboard.type('foo\nfoo\nfoo\nfoo\nfoo');
-  await win.keyboard.press('Control+f');
+  await pressAction(win, 'search.find');
   await win.getByTestId('find-input').fill('foo');
   await expect(win.getByTestId('find-count')).toHaveText('1 of 5');
   await win.getByTestId('find-next').click();

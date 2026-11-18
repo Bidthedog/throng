@@ -189,7 +189,9 @@ test('T045 — the counts follow an add and a destroy (S2)', { tag: ['@extended'
 
 test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await freshProject();
-  await seedOverflowingTabs(shared.win, 'actions-reorder-resize');
+  // SHORT names: the drag below needs two tabs FULLY visible at once, and a long-named chip can be most of the
+  // track on its own — on a smaller screen's window (a hosted macOS runner's) the track holds only one of them.
+  await seedOverflowingTabs(shared.win, 'actions-reorder-resize', { initial: 8, nameFor: (n) => `rr-${n}` });
   await setScrollLeft(shared.win, 0);
   const before = await expectCountsInSync(shared.win);
 

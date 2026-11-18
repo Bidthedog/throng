@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { addPanels, createProject, firstPanelId, runApp, cleanupTemp} from './harness.js';
+import { addPanels, createProject, firstPanelId, runApp, cleanupTemp, TEST_SHELL } from './harness.js';
 
 // FR-026 (batch 2, clarified 2026-07-01): the destroy cascade is ONE-directional.
 // A Panel belongs to its project. Destroying it IN THE PROJECT removes it from the
@@ -39,8 +39,6 @@ async function projectWithMirroredPanel(app: ElectronApplication, win: Page) {
   await expect(win.locator('.panel-box')).toHaveCount(2); // b still in the project
   return { a, b, child };
 }
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('destroying a mirrored Panel in the PROJECT removes it from the sub-workspace too (with warning)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
@@ -93,7 +91,7 @@ test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the sess
 
       // Type the Panel as a Terminal and let it launch.
       await win.getByTestId(`panel-type-select-${a}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${a}`).click();
       await expect(win.getByTestId(`terminal-${a}`)).toBeVisible({ timeout: 15000 });
 

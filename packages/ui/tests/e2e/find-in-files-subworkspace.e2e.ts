@@ -50,7 +50,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { openApp, createProject, cleanupTemp, NEW_WINDOW_TIMEOUT_MS, type OpenApp } from './harness.js';
+import { openApp, createProject, cleanupTemp, NEW_WINDOW_TIMEOUT_MS, type OpenApp, pressAction } from './harness.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -74,7 +74,7 @@ test.afterAll(async () => {
 /** Open a Find in Files panel through the chord, and return its panel id. */
 async function openPanel(win: Page): Promise<string> {
   await win.locator('body').click();
-  await win.keyboard.press('Control+Shift+F');
+  await pressAction(win, 'search.findInFiles');
   const panel = win.locator('[data-testid^="fif-panel-"]');
   await expect(panel).toHaveCount(1, { timeout: 10_000 });
   return (await panel.getAttribute('data-testid'))?.replace('fif-panel-', '') ?? '';

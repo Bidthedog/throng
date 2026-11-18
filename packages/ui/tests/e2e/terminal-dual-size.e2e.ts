@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, reloadWindow, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, reloadWindow, runApp, TEST_SHELL } from './harness.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /**
@@ -26,13 +26,11 @@ const seedSmallSub = `(() => window.throng.invoke('workspace.persistSubWorkspace
 async function newTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   return pid;
 }
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('one terminal in two different-sized windows renders legibly in both, stable across focus', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-dualsize-'));

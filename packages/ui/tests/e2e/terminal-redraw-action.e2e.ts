@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, pressAction, TEST_SHELL } from './harness.js';
 
 /**
  * 028 / #163 — "Refresh / redraw terminal".
@@ -18,7 +18,6 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
  * focus or layout change, no input typed at the shell, and safe to repeat (FR-043–046).
  */
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('a redraw from either menu, and from Ctrl+F5 three times, loses nothing and types nothing', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-redraw-'));
@@ -28,7 +27,7 @@ test('a redraw from either menu, and from Ctrl+F5 three times, loses nothing and
       await createProject(win, 'Redraw', root);
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
       await expect(confirm).toBeEnabled();
       await confirm.click();
@@ -68,9 +67,9 @@ test('a redraw from either menu, and from Ctrl+F5 three times, loses nothing and
 
       // --- the chord (FR-049a), and repeat-safety (FR-046) ---
       await term.click();
-      await win.keyboard.press('Control+F5');
-      await win.keyboard.press('Control+F5');
-      await win.keyboard.press('Control+F5');
+      await pressAction(win, 'terminal.redraw');
+      await pressAction(win, 'terminal.redraw');
+      await pressAction(win, 'terminal.redraw');
       await expect(term).toContainText('redraw-fence');
 
       // The shell is still live and still ours: the fence line is the last thing on screen, no

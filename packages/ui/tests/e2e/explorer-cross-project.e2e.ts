@@ -25,6 +25,7 @@ import {
   cleanupTemp,
   FILE_OP_TIMEOUT_MS,
   type OpenApp,
+  pressAction,
 } from './harness.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -122,7 +123,7 @@ test('a move between projects is undone from the project it came from (US3, SC-0
   await switchProject(win, nameA);
   // Focus the tree on its root row — clicking a FILE would open it in the editor under test.
   await tree(win).getByRole('treeitem').first().click();
-  await win.keyboard.press('Control+z');
+  await pressAction(win, 'file.undo');
   await expect.poll(() => existsSync(home), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
   expect(existsSync(moved)).toBe(false);
   await expect.poll(() => docPath(win, pid), { timeout: FILE_OP_TIMEOUT_MS }).toBe(norm(home));

@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, cleanupTemp } from './harness.js';
+import { runApp, createProject, cleanupTemp, pressAction } from './harness.js';
 
 const PROJECT = 'FifRestartProj';
 const ALPHA = 'needle here\nneedle again\n';
@@ -78,7 +78,7 @@ async function expectLayoutSaved(
 /** Open a Find in Files panel through the chord, and return its panel id. */
 async function openPanel(win: Page): Promise<string> {
   await win.locator('body').click();
-  await win.keyboard.press('Control+Shift+F');
+  await pressAction(win, 'search.findInFiles');
   const panel = win.locator('[data-testid^="fif-panel-"]');
   await expect(panel).toHaveCount(1, { timeout: 10_000 });
   return (await panel.getAttribute('data-testid'))?.replace('fif-panel-', '') ?? '';

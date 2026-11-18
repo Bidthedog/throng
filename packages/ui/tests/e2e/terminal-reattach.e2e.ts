@@ -8,8 +8,9 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
+import { resolveIpcAddress } from '@throng/core';
 import { skipIfElevated } from './admin.js';
-import { APP_CLOSE_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp } from './harness.js';
+import { APP_CLOSE_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, TEST_SHELL } from './harness.js';
 
 /**
  * Poll the persisted layout for `needle` rather than sleeping and hoping the autosave landed
@@ -53,7 +54,8 @@ const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import
 /** Direct terminal.list count over the pipe (out-of-band daemon assertion). */
 function daemonSessionCount(pipe: string): Promise<number> {
   return new Promise((resolve) => {
-    const s = connect(pipe);
+    // The name as the daemon resolved it: a named pipe on Windows, a socket path elsewhere.
+    const s = connect(resolveIpcAddress(pipe));
     let buf = '';
     const done = (n: number): void => { s.removeAllListeners(); s.destroy(); resolve(n); };
     const t = setTimeout(() => done(-1), 3000);
@@ -76,8 +78,6 @@ const requestClose = (app: ElectronApplication): Promise<void> =>
  * id is `terminal-<panel uuid>`, so match that shape.
  */
 const TERMINAL_VIEW = /^terminal-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('a pre-existing terminal reattaches after restart and still warns on close', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   skipIfElevated();
@@ -116,12 +116,12 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
     await win1.getByTestId('project-save').click();
     const pid = await win1.locator('.panel-box').first().evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
     await win1.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-    await win1.getByTestId('terminal-flavour').selectOption('cmd');
+    await win1.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
     await win1.getByTestId(`panel-type-confirm-${pid}`).click();
     await expect(win1.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
     // That is a wait for a WRITE, not a redraw: poll the persisted layout for the terminal config
     // the autosave writes, rather than sleeping and hoping it landed.
-    await expectLayoutContains(dataDir, 'Persist', '"flavourId":"cmd"');
+    await expectLayoutContains(dataDir, 'Persist', `"flavourId":"${TEST_SHELL}"`);
     expect(await daemonSessionCount(pipe)).toBe(1);
 
     await requestClose(app1);
@@ -154,7 +154,7 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
     await expect(win2.getByTestId('app-close-dialog')).toBeVisible({ timeout: 8000 });
     await win2.getByTestId('app-close-details').locator('summary').click();
     await expect(win2.getByTestId('app-close-details')).toContainText('Persist');
-    await expect(win2.getByTestId('app-close-details')).toContainText('Command Prompt');
+    await expect(win2.getByTestId('app-close-details')).toContainText(TEST_SHELL === 'cmd' ? 'Command Prompt' : 'Bash'); // the flavour's label
     const closed2 = app2.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
     await win2.getByTestId('app-close-terminate').click();
     await closed2;

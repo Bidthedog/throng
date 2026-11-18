@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, geom, quiesced } from './harness.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, geom, quiesced, HOST_OS } from './harness.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /**
@@ -82,7 +82,7 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013), a
       // The edit was made in the other window. A per-view history could not reach it.
       await child.bringToFront();
       await childEditor.click();
-      await child.keyboard.press('Control+z');
+      await child.keyboard.press('ControlOrMeta+z');
 
       // It reverts in the view that pressed the key…
       await expect(childEditor).toHaveText('ALPHA', { timeout: 10000 });
@@ -90,7 +90,9 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013), a
       await expect(mainEditor).toHaveText('ALPHA', { timeout: 10000 });
 
       // Redo, still from view B, reapplies it in both.
-      await child.keyboard.press('Control+y');
+      // The editor's own Redo chord (use-editor.ts): Ctrl+Y on Windows and Linux, Cmd+Shift+Z on macOS, where CodeMirror's
+      // Mod-y is spelled Mod-Shift-z.
+      await child.keyboard.press(HOST_OS === 'macos' ? 'Meta+Shift+z' : 'Control+y');
       await expect(childEditor).toHaveText('ALPHA-BETA', { timeout: 10000 });
       await expect(mainEditor).toHaveText('ALPHA-BETA', { timeout: 10000 });
 
@@ -100,7 +102,7 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013), a
       // sub-workspace window and a second mirror gesture.
       await win.bringToFront();
       await mainEditor.click();
-      await win.keyboard.press('Control+End');
+      await win.keyboard.press('ControlOrMeta+End');
       await win.keyboard.type('\ntwo\nthree');
       await expect(childEditor).toContainText('three', { timeout: 10000 });
 
@@ -112,12 +114,12 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013), a
       // Put the two carets on DIFFERENT lines: view B on the first, view A on the last.
       await child.bringToFront();
       await childEditor.click();
-      await child.keyboard.press('Control+Home');
+      await child.keyboard.press('ControlOrMeta+Home');
       await expect(activeLine(child)).toHaveText('ALPHA-BETA', { timeout: 10000 });
 
       await win.bringToFront();
       await mainEditor.click();
-      await win.keyboard.press('Control+End');
+      await win.keyboard.press('ControlOrMeta+End');
       await expect(activeLine(win)).toHaveText('three', { timeout: 10000 });
 
       // An edit in view A is shared; view B's CURSOR is not. The buffer is one; the view is not.

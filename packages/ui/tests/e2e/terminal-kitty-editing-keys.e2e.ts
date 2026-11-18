@@ -6,13 +6,12 @@ import { test, expect, type Page } from '@playwright/test';
 import { skipIfConsoleHidesAltScreen } from './admin.js';
 import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js';
 
-import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, TYPE_DELAY, cleanupTemp, createProject as newProject, firstPanelId, openApp, quiesced, step, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, TYPE_DELAY, cleanupTemp, createProject as newProject, firstPanelId, openApp, quiesced, step, type AppOptions, type OpenApp } from './harness.js';
 
 // EVERY test in this file asserts a byte throng re-encodes and writes itself reaching the
 // program, so the host declaration applies to all of them rather than one. Applied per test
 // rather than per file because this suite is describe.serial: a single failure skips the rest,
 // which is how the same limitation looked like six different problems across three runs.
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeEach(() => skipIfHostCannotDeliverReencodedKeys());
 
@@ -86,7 +85,7 @@ async function runKittyFixture(
   await createProject(win, 'KittyKeys', root);
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();

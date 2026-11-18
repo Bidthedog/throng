@@ -7,6 +7,7 @@ import {
   createProject as newProject,
   firstPanelId,
   charPoint,
+  HOST_OS,
   cleanupTemp,
   type AppOptions,
   type OpenApp,
@@ -94,7 +95,8 @@ async function expectEditorLinkSurfaces(win: Page, pid: string): Promise<void> {
   await expect(readout).toHaveText(EDITOR_WEB_LINK);
   await win.mouse.click(webAt.x, webAt.y);
   await expect(win.getByTestId('link-hint')).toBeVisible();
-  await expect(win.getByTestId('link-hint')).toContainText('Ctrl');
+  // The hint names the link modifier: Cmd on macOS, where Cmd+click follows a link (FR-040), Ctrl elsewhere.
+  await expect(win.getByTestId('link-hint')).toContainText(HOST_OS === 'macos' ? 'Cmd' : 'Ctrl');
   await win.mouse.click(webAt.x, webAt.y, { button: 'right' });
   await expect(menu).toHaveCount(1);
   await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();

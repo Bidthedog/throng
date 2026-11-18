@@ -36,6 +36,7 @@ import {
   focusEditor,
   cleanupTemp,
   NEW_WINDOW_TIMEOUT_MS,
+  pressAction,
   type OpenApp,
 } from './harness.js';
 
@@ -114,13 +115,13 @@ test('a parented preview synced into a sub-workspace follows its parent typed in
 
     /* ── FR-022: typing into the parent in the MAIN window reaches the sub-workspace's view ───── */
     await focusEditor(win, editorId);
-    await win.keyboard.press('Control+Home');
+    await win.keyboard.press('ControlOrMeta+Home');
     await win.keyboard.type(`${TYPED}\n\n`, { delay: 10 });
     await expect(childPreview).toContainText(TYPED, { timeout: 10_000 });
     await expect(mainPreview).toContainText(TYPED);
 
     /* ── History: README → setup, followed in the main window ──────────────────────────────────── */
-    await mainPreview.getByText('Setup', { exact: true }).click({ modifiers: ['Control'] });
+    await mainPreview.getByText('Setup', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
     await expect(mainPreview).toContainText('Setup fixture');
     // One preview, one position: the other window moved with it.
     await expect(childPreview).toContainText('Setup fixture', { timeout: 10_000 });
@@ -128,7 +129,7 @@ test('a parented preview synced into a sub-workspace follows its parent typed in
 
     /* ── FR-110: Back pressed in the SUB-WORKSPACE window moves the MAIN window's preview ──────── */
     await childPreview.getByText('Introductory text for the setup fixture', { exact: false }).click();
-    await child.keyboard.press('Alt+ArrowLeft');
+    await pressAction(child, 'navigate.back');
     await expect(mainPreview).toContainText('Links fixture', { timeout: 10_000 });
     await expect(mainPreview).not.toContainText('Setup fixture');
     // README again, parented again: the editor's UNSAVED text, which only the one position moving could

@@ -13,7 +13,17 @@ import {
   linkMarkedText,
   runTypedCommand,
   shutdownApp,
+  TEST_SHELL,
 } from './harness.js';
+
+const WINDOWS = process.platform === 'win32';
+/** The shell these tests drive: Windows PowerShell (PSReadLine) on Windows, {@link TEST_SHELL} elsewhere. */
+const SHELL = WINDOWS ? 'windows-powershell' : TEST_SHELL;
+/** As `harness.ts` launches every app (070): keep painting a window macOS considers hidden. */
+const MACOS_PAINT_SWITCHES: readonly string[] =
+  process.platform === 'darwin'
+    ? ['--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling']
+    : [];
 
 // Clipboard support (005): a program running inside the terminal — Claude Code,
 // tmux, vim — copies to the system clipboard by emitting an OSC 52 escape sequence.
@@ -96,15 +106,25 @@ async function expectTerminalLinkMenu(win: Page, pid: string, root: string): Pro
   const web = 'https://example.com/terminal-link-menu';
   writeFileSync(join(root, 'menu-target.txt'), 'menu target\n', 'utf8');
 
-  // The line the paste above left at the prompt is dropped first (PSReadLine's Escape reverts it).
-  await win.keyboard.press('Escape');
+  // The line the paste above left at the prompt is dropped first (PSReadLine's Escape reverts it; readline's Ctrl+U
+  // discards it).
+  await win.keyboard.press(WINDOWS ? 'Escape' : 'Control+u');
   // Split in the typed line, so only the OUTPUT rows hold the whole link.
-  await runTypedCommand(
-    win,
-    term,
-    "Write-Host ('https://example.com/'+'terminal-link-menu'); Write-Host ('.\\menu-'+'target.txt')",
-    { echoed: "'target.txt')", output: 'menu-target.txt' },
-  );
+  if (WINDOWS) {
+    await runTypedCommand(
+      win,
+      term,
+      "Write-Host ('https://example.com/'+'terminal-link-menu'); Write-Host ('.\\menu-'+'target.txt')",
+      { echoed: "'target.txt')", output: 'menu-target.txt' },
+    );
+  } else {
+    await runTypedCommand(
+      win,
+      term,
+      "printf '%s\\n' 'https://example.com/''terminal-link-menu' './menu-''target.txt'",
+      { echoed: "''target.txt'", output: 'menu-target.txt' },
+    );
+  }
 
   const rows = term.locator('.xterm-rows > div');
   const arm = async (text: string): Promise<{ x: number; y: number }> => {
@@ -141,7 +161,7 @@ async function expectTerminalLinkMenu(win: Page, pid: string, root: string): Pro
     .toBe(web);
 
   // A detected path inside the project.
-  const fileAt = await arm('.\\menu-target.txt');
+  const fileAt = await arm(WINDOWS ? '.\\menu-target.txt' : './menu-target.txt');
   await win.mouse.click(fileAt.x, fileAt.y, { button: 'right' });
   await expect(menu).toHaveCount(1);
   await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();
@@ -165,8 +185,6 @@ const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import
 const EXPECTED = 'throngClip42';
 const B64 = 'dGhyb25nQ2xpcDQy';
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('an OSC 52 sequence from inside the terminal writes to the system clipboard', { tag: ['@extended', '@terminal', '@reserve:native'] }, async () => {
   const pipe = `\\\\.\\pipe\\throng-clip-${process.pid}-${Date.now()}`;
   const dataDir = mkdtempSync(join(tmpdir(), 'clip-data-'));
@@ -185,7 +203,7 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
     app = await electron.launch({
     // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
     chromiumSandbox: true,
-      args: [mainEntry, `--user-data-dir=${userData}`],
+      args: [...MACOS_PAINT_SWITCHES, mainEntry, `--user-data-dir=${userData}`],
       // THRONG_TEST_SHELL_HISTORY: this file opens a REAL PowerShell and types into it, so without
       // it every command below lands in the developer's own PSReadLine history (#339).
       env: {
@@ -221,7 +239,7 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
       (await typeSelect.getAttribute('data-testid'))?.slice('panel-type-select-'.length) ?? '';
     expect(pid).not.toBe('');
     await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-    await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+    await win.getByTestId('terminal-flavour').selectOption(SHELL);
     await win.getByTestId(`panel-type-confirm-${pid}`).click();
     // Wait for the shell to be live (its prompt shows the project root).
     await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
@@ -245,10 +263,10 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
       };
     });
 
-    // Make PowerShell emit the raw OSC 52 sequence on its stdout. Written to the PTY
+    // Make the shell emit the raw OSC 52 sequence on its stdout. Written to the PTY
     // as if typed; the sequence flows back as terminal output and the xterm OSC 52
     // handler decodes it to the clipboard.
-    const cmd = `[Console]::Write([char]27 + ']52;c;${B64}' + [char]7)`;
+    const cmd = WINDOWS ? `[Console]::Write([char]27 + ']52;c;${B64}' + [char]7)` : `printf '\\033]52;c;${B64}\\007'`;
     await win.evaluate(
       ({ panelId, line }) => window.throng?.terminal?.write(panelId, `${line}\r`),
       { panelId: pid, line: cmd },
@@ -322,7 +340,7 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
     app = await electron.launch({
     // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
     chromiumSandbox: true,
-      args: [mainEntry, `--user-data-dir=${userData}`],
+      args: [...MACOS_PAINT_SWITCHES, mainEntry, `--user-data-dir=${userData}`],
       // The in-process clipboard seam, as `harness.ts` uses for every app it launches. Without it
       // these tests PASTE THE DEVELOPER'S REAL CLIPBOARD: Electron's clipboard does not work under
       // this harness, so the token written below never lands, and Paste delivers whatever the
@@ -405,7 +423,7 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
         (await typeSelect.getAttribute('data-testid'))?.slice('panel-type-select-'.length) ?? '';
       expect(pid).not.toBe('');
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+      await win.getByTestId('terminal-flavour').selectOption(SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
@@ -474,7 +492,7 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
         (await typeSelect.getAttribute('data-testid'))?.slice('panel-type-select-'.length) ?? '';
       expect(pid).not.toBe('');
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+      await win.getByTestId('terminal-flavour').selectOption(SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
@@ -485,7 +503,8 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
       const xtermInput = win.locator(`[data-testid="terminal-${pid}"] .xterm-helper-textarea`);
       await xtermInput.focus();
       await expect(xtermInput).toBeFocused();
-      await win.keyboard.press('Control+V');
+      // The platform's paste chord (`paste-chord.ts`): Ctrl+V, or Cmd+V on macOS.
+      await win.keyboard.press('ControlOrMeta+V');
 
       // It must reach the shell at all — the old bug was that Ctrl+V did nothing. `toContainText`
       // matches on `textContent`, which is where xterm's DOM renderer puts the glyphs (its `innerText`

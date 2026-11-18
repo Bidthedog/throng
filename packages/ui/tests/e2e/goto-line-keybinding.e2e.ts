@@ -22,10 +22,17 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, settle, cleanupTemp } from './harness.js';
+import { chordLabel, shippedBindingsFor } from '@throng/core';
+import { runApp, createProject, firstPanelId, settle, cleanupTemp, HOST_OS, pressAction } from './harness.js';
 
-/** The chord the command ships with, and the one it is moved to. Named, not repeated. */
-const DEFAULT_CHORD = 'Ctrl+G';
+/**
+ * The chord the command ships with on THIS platform, and the one it is moved to. Named, not repeated.
+ *
+ * `DEFAULT_CHORD` is the stored token (`Ctrl+G`; `Meta+G` on macOS, 070 FR-029) — what keybindings.json and a menu's
+ * shortcut carry. `DEFAULT_LABEL` is how Preferences writes it (`chordLabel`: `Cmd+G` on macOS, the token elsewhere).
+ */
+const DEFAULT_CHORD = shippedBindingsFor(HOST_OS).bindings['navigate.gotoLine']?.[0] ?? 'Ctrl+G';
+const DEFAULT_LABEL = chordLabel(DEFAULT_CHORD, HOST_OS);
 const REBOUND_CHORD = 'F8';
 
 /** Line `n` reads `line-NN`, so the rendered text of a line names its own number. */
@@ -184,7 +191,7 @@ test('Go To Line is listed in Preferences → Key Bindings, is rebindable, and a
         // description would satisfy a label-only assertion while telling the user nothing.
         await expect(row.locator('.settings-row__desc')).not.toBeEmpty();
         await expect(prefs.getByTestId('binding-navigate.gotoLine-chord')).toContainText(
-          DEFAULT_CHORD,
+          DEFAULT_LABEL,
         );
         // EDITOR-scoped, and the scope column is where a user reads why it is dead in a terminal.
         await expect(prefs.getByTestId('binding-navigate.gotoLine-scope')).toHaveText('Editor');
@@ -213,7 +220,7 @@ test('Go To Line is listed in Preferences → Key Bindings, is rebindable, and a
         /* ── AS-10, third clause: the NEW chord works, at a real editor, live and without a restart ── */
         await win.bringToFront();
         await focusContent(win, pid);
-        await win.keyboard.press('Control+Home');
+        await win.keyboard.press('ControlOrMeta+Home');
 
         /*
          * PRESS INSIDE THE POLL, exactly as `keybindings.e2e.ts` does for the zoom accelerators.
@@ -243,7 +250,7 @@ test('Go To Line is listed in Preferences → Key Bindings, is rebindable, and a
         expect(await gutterAtCaret(win, pid)).toBe('27');
 
         /* ── …and the OLD one stops. The half a cached resolution would silently fail. ── */
-        await win.keyboard.press('Control+G');
+        await pressAction(win, 'navigate.gotoLine'); // the SHIPPED chord, the one just retired
         await expect(win.getByTestId('gotoline')).toHaveCount(0);
         // The caret did not move either — the retired chord is inert, not merely quiet.
         expect(await gutterAtCaret(win, pid)).toBe('27');

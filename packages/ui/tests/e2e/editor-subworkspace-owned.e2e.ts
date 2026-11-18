@@ -2,7 +2,7 @@ import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, reloadWindow, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
+import { runApp, createProject, reloadWindow, cleanupTemp, FILE_OP_TIMEOUT_MS, pressAction } from './harness.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // FR-077 (post-Delivery-E feedback): a sub-workspace-OWNED editor (created inside a
@@ -47,7 +47,7 @@ test('a sub-workspace-owned editor saves outside projects and can be destroyed',
         dialog.showSaveDialog = async () => ({ canceled: false, filePath: p });
       }, savePath);
       await child.bringToFront();
-      await child.keyboard.press('Control+s');
+      await pressAction(child, 'editor.save');
 
       await expect
         .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })

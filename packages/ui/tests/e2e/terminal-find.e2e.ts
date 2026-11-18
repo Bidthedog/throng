@@ -10,7 +10,13 @@ import {
   type AppOptions,
   type OpenApp,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
+  pressAction,
 } from './harness.js';
+
+const WINDOWS = process.platform === 'win32';
+/** What {@link TEST_SHELL} prints for a line it could not run as a command. */
+const NOT_A_COMMAND = WINDOWS ? 'is not recognized' : 'command not found';
 
 /*
  * ONE app for this file, not one per test.
@@ -31,7 +37,6 @@ import {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -64,20 +69,20 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
 // character grid is never resized by it (FR-010 / FR-013 / SC-002).
 
 /**
- * A cmd.exe terminal in the given panel (plain echo, no PSReadLine repainting).
- * Waits for the shell's first prompt — typing into a still-initialising ConPTY
+ * A {@link TEST_SHELL} terminal in the given panel (cmd.exe on Windows: plain echo, no PSReadLine
+ * repainting). Waits for the shell's first prompt — typing into a still-initialising pty
  * interleaves with its echo and scrambles the line.
  */
 async function newTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
   await expect(confirm).toBeEnabled();
   await confirm.click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();
-  // cmd.exe's prompt shows its cwd — the project root — once it is ready for input.
+  // The prompt shows its cwd — the project root — once it is ready for input.
   await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   return pid;
 }
@@ -198,7 +203,7 @@ test('finds in the scrollback, counts and steps matches — and types nothing at
 
       const before = await grid(win, pid);
 
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       await expect(win.getByTestId(`find-bar-${pid}`)).toBeVisible();
       await win.getByTestId('find-input').fill('NEEDLE_');
 
@@ -252,7 +257,7 @@ test('finds in the scrollback, counts and steps matches — and types nothing at
         buffer.slice(findPhaseAt),
         'the find interaction typed at the shell (output BEFORE the phase marker is out of scope ' +
           'here and belongs to #347)',
-      ).not.toContain('is not recognized');
+      ).not.toContain(NOT_A_COMMAND);
 
       /*
        * The other half of the ambiguity: say when something DID reach the prompt earlier, without
@@ -260,7 +265,7 @@ test('finds in the scrollback, counts and steps matches — and types nothing at
        * demand, so asserting on it here would buy a flake rather than a guarantee. An annotation
        * puts it in the report under its own name, which is all the original message was missing.
        */
-      if (beforeFind.includes('is not recognized')) {
+      if (beforeFind.includes(NOT_A_COMMAND)) {
         test.info().annotations.push({
           type: 'startup-noise',
           description:
@@ -284,18 +289,23 @@ test('parked on a match, incoming output does not yank the viewport away (FR-012
 
       // Scrollback long enough that the marker scrolls off the top of the viewport.
       await run(win, pid, 'echo FREEZE_MARKER', 'FREEZE_MARKER');
-      await run(win, pid, 'for /l %i in (1,1,150) do @echo filler %i', 'filler 150');
+      await run(
+        win,
+        pid,
+        WINDOWS ? 'for /l %i in (1,1,150) do @echo filler %i' : 'for i in $(seq 1 150); do echo filler $i; done',
+        'filler 150',
+      );
       // xterm renders only the VISIBLE rows, so the marker is now off-screen…
       await expect(term).not.toContainText('FREEZE_MARKER');
 
       // Queue output that lands a few seconds from NOW, so it arrives while we are
       // parked on the match without us typing anything in the meantime.
       await term.click();
-      await win.keyboard.type('ping -n 3 127.0.0.1 >nul & echo LATE_OUTPUT', { delay: 15 });
+      await win.keyboard.type(WINDOWS ? 'ping -n 3 127.0.0.1 >nul & echo LATE_OUTPUT' : 'sleep 2; echo LATE_OUTPUT', { delay: 15 });
       await win.keyboard.press('Enter');
 
       // …and find scrolls it back INTO view, parking the viewport up in the scrollback.
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       await win.getByTestId('find-input').fill('FREEZE_MARKER');
       await expect(win.getByTestId('find-count')).toHaveText(/^\d+ of \d+$/, { timeout: 10000 });
       await expect(term).toContainText('FREEZE_MARKER');
@@ -312,7 +322,7 @@ test('parked on a match, incoming output does not yank the viewport away (FR-012
       // The output really did arrive: jumping to the live bottom shows it, and that jump
       // is also what resumes following (FR-012a / FR-014).
       await win.getByTestId('find-close').click();
-      await win.keyboard.press('Control+End');
+      await pressAction(win, 'terminal.scrollToBottom');
       await expect(term).toContainText('LATE_OUTPUT', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
     });
   } finally {
@@ -336,19 +346,35 @@ test('with no find bar open, Escape still reaches the shell (it is not throng’
       // This guards the whole class of "find broke the terminal" bugs: Escape must not be
       // reserved unless a find bar is actually open (vim/less/readline depend on it).
       await term.click();
-      await win.keyboard.type('echo SHOULD_BE_CLEARED', { delay: 15 });
-      await win.keyboard.press('Escape');
-      await win.keyboard.type('echo ESC_REACHED_SHELL', { delay: 15 });
-      await win.keyboard.press('Enter');
+      if (WINDOWS) {
+        await win.keyboard.type('echo SHOULD_BE_CLEARED', { delay: 15 });
+        await win.keyboard.press('Escape');
+        await win.keyboard.type('echo ESC_REACHED_SHELL', { delay: 15 });
+        await win.keyboard.press('Enter');
 
-      await expect(term).toContainText('ESC_REACHED_SHELL', {
-        timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
-      });
-      await expect(term).not.toContainText('is not recognized');
+        await expect(term).toContainText('ESC_REACHED_SHELL', {
+          timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+        });
+        await expect(term).not.toContainText(NOT_A_COMMAND);
+      } else {
+        // Readline reads Escape as Meta, and Escape then Backspace (M-DEL) kills the word before the
+        // cursor. If Escape reached bash, `XQZ` goes whole and the line runs `echo ESC_REACHED SHELL`;
+        // if throng swallowed it, Backspace alone takes only the `Z` and `XQ` stays on the line.
+        await win.keyboard.type('echo ESC_REACHED XQZ', { delay: 15 });
+        await win.keyboard.press('Escape');
+        await win.keyboard.press('Backspace');
+        await win.keyboard.type('SHELL', { delay: 15 });
+        await win.keyboard.press('Enter');
+
+        await expect(term).toContainText('ESC_REACHED SHELL', {
+          timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+        });
+        await expect(term).not.toContainText('XQ');
+      }
 
       // While find IS open, Escape is ours: it closes the bar (and still does not reach
       // the shell, because no stray text appears at the prompt).
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       await expect(win.getByTestId(`find-bar-${pid}`)).toBeVisible();
       await win.keyboard.press('Escape');
       await expect(win.getByTestId(`find-bar-${pid}`)).toHaveCount(0);

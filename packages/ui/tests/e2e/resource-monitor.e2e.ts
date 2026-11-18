@@ -4,7 +4,7 @@ import { cpus, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-import { cleanupTemp, createProject, firstPanelId, openApp, runTypedCommand, TERMINAL_OUTPUT_TIMEOUT_MS } from './harness.js';
+import { cleanupTemp, createProject, firstPanelId, NATIVE_WINDOW_CONTROLS, openApp, runTypedCommand, TERMINAL_OUTPUT_TIMEOUT_MS } from './harness.js';
 import type { OpenApp } from './harness.js';
 import { MONITOR_CHORD, closeMonitorWindow, monitorWindowPage, openMonitorWindow, openProjectsList, pressEscapeToClose } from './helpers/monitor-window.js';
 import { expectWithinSla, noteSlaNotMeasured, slaMeasurable } from './helpers/sla.js';
@@ -359,8 +359,25 @@ test('the monitor is a window beside throng: the terminal takes typing while it 
   });
   expect(moved).not.toBeNull();
 
-  // Minimise is Close with a destination (FR-085): it shrinks into the status bar and the window goes.
-  await monitor.getByTestId('window-min').click();
+  // Minimise is Close with a destination (FR-085): it shrinks into the status bar and the window goes. On macOS
+  // throng draws no Minimise and the yellow light is it (070 FR-026, `routeMonitorMinimise`): that light is the
+  // window's own `minimize()`, which only a window left minimisable can offer.
+  if (NATIVE_WINDOW_CONTROLS) {
+    await expect(monitor.getByTestId('title-bar')).toHaveClass(/\btitle-bar--traffic-lights\b/);
+    await expect(monitor.getByTestId('window-controls')).toHaveCount(0);
+    expect(
+      await app.evaluate(({ BrowserWindow }, url) => {
+        const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL() === url);
+        if (!w) throw new Error(`no window is showing ${url}`);
+        const live = w.isMinimizable();
+        if (live) w.minimize();
+        return live;
+      }, monitor.url()),
+      'the monitor’s yellow light is live',
+    ).toBe(true);
+  } else {
+    await monitor.getByTestId('window-min').click();
+  }
   await expect.poll(() => monitorWindowPage(app), { timeout: 15_000, message: 'Minimise did not close the monitor' }).toBeNull();
 
   // Reopened at the bounds it was left at (FR-087) — and shown, loading state and all, within a second

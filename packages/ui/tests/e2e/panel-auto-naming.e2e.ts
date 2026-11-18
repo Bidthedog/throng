@@ -63,7 +63,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp } from './harness.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, TEST_SHELL } from './harness.js';
 
 function makeProject(prefix: string): string {
   const root = mkdtempSync(join(tmpdir(), prefix));
@@ -163,6 +163,9 @@ function panelTitleInLayout(layoutJson: string, panelId: string): string | undef
   return undefined;
 }
 
+/** The label throng's shell detection gives {@link TEST_SHELL}: Windows' built-in table, or the POSIX one's `Bash`. */
+const TEST_SHELL_LABEL = TEST_SHELL === 'cmd' ? 'Command Prompt' : 'Bash';
+
 /** Open a project that is listed but not showing — after a reload, or in a second launch. */
 async function enterProject(win: Page, name: string): Promise<void> {
   const item = win.locator('.project-item', { hasText: name });
@@ -171,8 +174,6 @@ async function enterProject(win: Page, name: string): Promise<void> {
   if (await sw.isVisible().catch(() => false)) await sw.click();
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
 }
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('a generated name the daemon adjusts is not a rename — the panel still auto-names itself (#218 A1)', { tag: ['@extended', '@window'] }, async () => {
   const rootA = makeProject('throng-a1-alpha-');
@@ -199,12 +200,12 @@ test('a generated name the daemon adjusts is not a rename — the panel still au
         // …and the consequence the user actually reports: a custom title outranks every automatic one,
         // so typing the panel leaves it wearing the placeholder instead of its shell's name.
         await win.getByTestId(`panel-type-select-${b}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${b}`).click();
         await expect(win.getByTestId(`terminal-${b}`)).toBeVisible();
         // 053 FR-001 (superseding 023 FR-033): a terminal is named by the title template — its shell's label, never
-        // the raw window title (`C:\WINDOWS\system32\cmd.exe`) cmd announces.
-        await expect(win.getByTestId(`panel-title-${b}`)).toContainText('Command Prompt', { timeout: 15_000 });
+        // the raw window title its shell announces (cmd's `C:\WINDOWS\system32\cmd.exe`).
+        await expect(win.getByTestId(`panel-title-${b}`)).toContainText(TEST_SHELL_LABEL, { timeout: 15_000 });
       },
       { dataDir },
     );
@@ -236,12 +237,12 @@ test('a terminal that reattaches to its running session keeps its name (#218 B)'
       await createProject(win, 'ReattachNames', root);
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
       // 053 FR-001 (superseding 023 FR-033): a terminal is named by the title template — its shell's label, never
-      // the raw window title (`C:\WINDOWS\system32\cmd.exe`) cmd announces.
-      await expect(win.getByTestId(`panel-title-${pid}`)).toContainText('Command Prompt', {
+      // the raw window title its shell announces (cmd's `C:\WINDOWS\system32\cmd.exe`).
+      await expect(win.getByTestId(`panel-title-${pid}`)).toContainText(TEST_SHELL_LABEL, {
         timeout: 15_000,
       });
 

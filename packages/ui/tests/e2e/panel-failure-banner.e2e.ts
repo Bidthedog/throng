@@ -59,7 +59,7 @@ import { mkdirSync, mkdtempSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { cleanupTemp, createProject, firstPanelId, openApp, runApp as runOwnApp, settle, type OpenApp } from './harness.js';
+import { TEST_SHELL, cleanupTemp, createProject, firstPanelId, openApp, runApp as runOwnApp, settle, type OpenApp } from './harness.js';
 
 /** The shared banner's root (contract: `data-testid="panel-failure-{panelId}"`). */
 function banner(win: Page, panelId: string): Locator {
@@ -110,7 +110,10 @@ function makeRealRoot(prefix: string): string {
 
 /** A project root that has never existed — the cheapest terminal start failure there is. */
 function ghostRoot(name: string): string {
-  return `C:/throng-e2e-missing/${name.toLowerCase()}`;
+  // Absolute on every platform: a bare `C:/…` is a RELATIVE path on Linux and macOS.
+  return process.platform === 'win32'
+    ? `C:/throng-e2e-missing/${name.toLowerCase()}`
+    : `/throng-e2e-missing/${name.toLowerCase()}`;
 }
 
 /** Reopen a project from the sidebar; a no-op when it is already the open one. */
@@ -186,10 +189,10 @@ async function editorOn(win: Page, panelId: string): Promise<void> {
   );
 }
 
-/** Configure `panelId` as a `cmd` terminal into a folder that is not there. */
+/** Configure `panelId` as a {@link TEST_SHELL} terminal into a folder that is not there. */
 async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   /*
    * CONFIRMED BY KEYBOARD, NOT BY CLICK, AND DELIBERATELY (#313).
    *
@@ -225,8 +228,6 @@ let realRoot = '';
 /** The two panel ids, captured once — {@link panelOfProject} settles on the swap against them. */
 let realPid = '';
 let ghostPid = '';
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   test.setTimeout(300_000);

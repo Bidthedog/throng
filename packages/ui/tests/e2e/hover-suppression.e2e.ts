@@ -8,6 +8,7 @@ import {
   cleanupTemp,
   type AppOptions,
   type OpenApp,
+  NATIVE_WINDOW_CONTROLS,
 } from './harness.js';
 
 /**
@@ -134,8 +135,10 @@ test('the File Explorer root drops its hover background while Preferences is ope
 test('a stranded element keeps no hover background until a real pointermove refocuses it (FR-035)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     // Any element with a gated hover background left under the pointer. The main window control is
-    // always present and its hover paints `hoverSurface`.
-    const control = win.getByTestId('window-min');
+    // always present and its hover paints `hoverSurface`. macOS draws native traffic lights instead of
+    // throng's controls (070), so there the cog — the same bar, the same gated `hoverSurface` rule
+    // (title-bar.css) — is the stranded element.
+    const control = win.getByTestId(NATIVE_WINDOW_CONTROLS ? 'title-bar-cog' : 'window-min');
     await expect(control).toBeVisible();
 
     await control.hover();

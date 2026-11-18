@@ -16,7 +16,9 @@ import { openApp,
   createProject as newProject,
   cleanupTemp,
   type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS,
+  pressAction,
+} from './harness.js';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -600,10 +602,10 @@ test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', { ta
         .toBe('none');
       // Down onto a.txt — this must SELECT it, not merely draw a cursor over it.
       await win.keyboard.press('ArrowDown');
-      await win.keyboard.press('Control+x');
+      await pressAction(win, 'file.cut');
       // Back up onto the folder, which is now the paste target for the same reason.
       await win.keyboard.press('ArrowUp');
-      await win.keyboard.press('Control+v');
+      await pressAction(win, 'file.paste');
 
       // a.txt moved into the folder, which the paste opened to reveal it (050 FR-025b): present
       // once, a level down, and selected. The folder can list it before the root's listing drops the

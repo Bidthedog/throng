@@ -117,7 +117,7 @@ test('a crash restores the content AND its undo history — Ctrl+Z still reaches
         // must take back the second typing run, leaving the first — which is only possible if the
         // undo stack itself crossed the crash.
         await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-        await win.keyboard.press('Control+z');
+        await win.keyboard.press('ControlOrMeta+z');
         await expect.poll(() => docText(win, pid), { timeout: 8000 }).toBe('FIRST');
       },
       { dataDir, userDataDir },

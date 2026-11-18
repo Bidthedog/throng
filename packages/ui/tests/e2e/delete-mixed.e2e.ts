@@ -106,13 +106,13 @@ test('recycle mode (default): mixed files + folders all get recycled via the rea
       await expect(tree).toBeVisible();
 
       await tree.getByText('dir1', { exact: true }).click();
-      await tree.getByText('file1.txt', { exact: true }).click({ modifiers: ['Control'] });
-      await tree.getByText('dir2', { exact: true }).click({ modifiers: ['Control'] });
-      await tree.getByText('file2.txt', { exact: true }).click({ modifiers: ['Control'] });
+      await tree.getByText('file1.txt', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
+      await tree.getByText('dir2', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
+      await tree.getByText('file2.txt', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
       await expect(tree.locator('.tree-row--selected')).toHaveCount(4);
 
       // Default deleteMode is 'recycle' → real shell.trashItem.
-      await tree.getByText('file2.txt', { exact: true }).click({ button: 'right', modifiers: ['Control'] });
+      await tree.getByText('file2.txt', { exact: true }).click({ button: 'right', modifiers: ['ControlOrMeta'] });
       await win.getByTestId('menu-item-Delete').click();
       await win.getByTestId('confirm-accept').click();
       const wry = win.getByTestId('confirm-accept');
@@ -141,9 +141,9 @@ test('file-first selection (opens an editor) then Delete key removes ALL selecte
 
         // Plain-click a FILE first — this OPENS it into an editor (and may move focus).
         await tree.getByText('file1.txt', { exact: true }).click();
-        await tree.getByText('dir1', { exact: true }).click({ modifiers: ['Control'] });
-        await tree.getByText('file2.txt', { exact: true }).click({ modifiers: ['Control'] });
-        await tree.getByText('dir2', { exact: true }).click({ modifiers: ['Control'] });
+        await tree.getByText('dir1', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
+        await tree.getByText('file2.txt', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
+        await tree.getByText('dir2', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
         await expect(tree.locator('.tree-row--selected')).toHaveCount(4);
 
         // Delete via the Delete KEY (needs tree focus) + confirm.

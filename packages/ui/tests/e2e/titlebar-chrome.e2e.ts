@@ -2,8 +2,47 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import type { ElectronApplication } from '@playwright/test';
-import { openApp, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import type { ElectronApplication, Page } from '@playwright/test';
+import { openApp, cleanupTemp, NATIVE_WINDOW_CONTROLS, type AppOptions, type OpenApp } from './harness.js';
+
+/*
+ * The window controls, on every platform. throng draws its own Minimise / Maximise / Close on Windows and Linux; on
+ * macOS the native traffic lights stand in and throng draws none (title-bar.tsx, 070 FR-026). So "the bar hosts the
+ * controls" is the drawn buttons there and, on macOS, the lights' class on the bar, no throng controls, and a window
+ * whose own flags keep each light live; and pressing a control is a click there and, on macOS, the same call the
+ * light makes on the page's BrowserWindow. Local to this spec (a sibling copy lives in each spec that needs it).
+ */
+type WindowControl = 'min' | 'max' | 'close';
+
+async function expectWindowControls(app: ElectronApplication, page: Page, controls: readonly WindowControl[]): Promise<void> {
+  if (!NATIVE_WINDOW_CONTROLS) {
+    for (const c of controls) await expect(page.getByTestId(`window-${c}`)).toBeVisible();
+    return;
+  }
+  await expect(page.getByTestId('title-bar')).toHaveClass(/\btitle-bar--traffic-lights\b/);
+  await expect(page.getByTestId('window-controls')).toHaveCount(0);
+  const live = await app.evaluate(({ BrowserWindow }, url) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL() === url);
+    if (!w) throw new Error(`no window is showing ${url}`);
+    return { min: w.isMinimizable(), max: w.isMaximizable(), close: w.isClosable() };
+  }, page.url());
+  for (const c of controls) expect(live[c], `the ${c} traffic light is live`).toBe(true);
+}
+
+async function pressWindowControl(app: ElectronApplication, page: Page, control: WindowControl): Promise<void> {
+  if (!NATIVE_WINDOW_CONTROLS) {
+    await page.getByTestId(`window-${control}`).click();
+    return;
+  }
+  await app.evaluate(({ BrowserWindow }, { url, control }) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL() === url);
+    if (!w) throw new Error(`no window is showing ${url}`);
+    if (control === 'min') w.minimize();
+    else if (control === 'close') w.close();
+    else if (w.isMaximized()) w.unmaximize();
+    else w.maximize();
+  }, { url: page.url(), control });
+}
 
 /*
  * ONE app for this file, not one per test — ALL FOUR tests (test-suite audit).
@@ -101,7 +140,7 @@ function mainWindowState(app: ElectronApplication): Promise<{
 }
 
 test('title bar spans the top and hosts the cog + window controls', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  await runApp(async (_app, win) => {
+  await runApp(async (app, win) => {
     const bar = win.getByTestId('title-bar');
     await expect(bar).toBeVisible();
 
@@ -112,11 +151,9 @@ test('title bar spans the top and hosts the cog + window controls', { tag: ['@ex
     expect(box!.y).toBeLessThanOrEqual(1);
     if (viewport) expect(box!.width).toBeGreaterThanOrEqual(viewport.width - 2);
 
-    // The cog and the three window controls are present (extensible action area).
+    // The cog and the three window controls are present (extensible action area) — on macOS, the native lights.
     await expect(win.getByTestId('title-bar-cog')).toBeVisible();
-    await expect(win.getByTestId('window-min')).toBeVisible();
-    await expect(win.getByTestId('window-max')).toBeVisible();
-    await expect(win.getByTestId('window-close')).toBeVisible();
+    await expectWindowControls(app, win, ['min', 'max', 'close']);
 
     // The cog is a standard, uniform gear glyph (H3, FR-005) — a single svg icon.
     await expect(win.getByTestId('cog-glyph')).toHaveCount(1);
@@ -166,9 +203,9 @@ test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', 
 test('window controls maximise/restore (button + double-click) and minimise', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     // Maximise then restore via the control.
-    await win.getByTestId('window-max').click();
+    await pressWindowControl(app, win, 'max');
     await expect.poll(async () => (await mainWindowState(app)).maximized).toBe(true);
-    await win.getByTestId('window-max').click();
+    await pressWindowControl(app, win, 'max');
     await expect.poll(async () => (await mainWindowState(app)).maximized).toBe(false);
 
     // Double-clicking the drag region toggles maximise (FR-004).
@@ -181,7 +218,7 @@ test('window controls maximise/restore (button + double-click) and minimise', { 
     });
 
     // Minimise, then restore in the main process so the run can continue.
-    await win.getByTestId('window-min').click();
+    await pressWindowControl(app, win, 'min');
     await expect.poll(async () => (await mainWindowState(app)).minimized).toBe(true);
     await app.evaluate(({ BrowserWindow }) => {
       const main = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id)[0];
@@ -267,7 +304,7 @@ test('cog opens the single shared preferences window on the matching tab; non-mo
 
     // Closing preferences returns focus to the main window (FR-013a — no other-app
     // window is left overlaying throng). It was interactive throughout (non-modal).
-    await prefs.getByTestId('window-close').click();
+    await pressWindowControl(app, prefs, 'close');
     await expect.poll(async () => (await mainWindowState(app)).windowCount).toBe(1);
     expect((await mainWindowState(app)).enabled).toBe(true);
     await expect

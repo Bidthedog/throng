@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, geom, quiesced, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, geom, quiesced, runApp, TEST_SHELL } from './harness.js';
 
 // Regression (005 Phase C·1 UX): enlarging a Panel must NOT wipe the terminal's
 // contents. ConPTY repaints the whole enlarged viewport on resize (cursor-home +
@@ -26,8 +26,6 @@ function xtermRows(win: Page, pid: string): Promise<number> {
     .evaluate((el) => el.querySelector('.xterm-rows')?.children.length ?? -1);
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-term-resize-'));
   try {
@@ -39,8 +37,8 @@ test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)
       const pid = await firstPanelId(win);
 
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      // cmd.exe: plain echo, no PSReadLine repainting — straightforward to assert.
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      // cmd.exe on Windows (plain echo, no PSReadLine repainting — straightforward to assert); bash elsewhere.
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
       await expect(confirm).toBeEnabled();
       await confirm.click();

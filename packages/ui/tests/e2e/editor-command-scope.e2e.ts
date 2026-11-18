@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject as newProject, openApp, panelIds, type AppOptions, type OpenApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, chordFor, cleanupTemp, createProject as newProject, openApp, panelIds, type AppOptions, type OpenApp, TEST_SHELL } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -23,8 +23,6 @@ import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject as ne
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -93,10 +91,10 @@ async function openEditor(win: Page, pid: string): Promise<void> {
   });
 }
 
-/** A cmd.exe terminal in the given panel, settled on its first prompt. */
+/** A terminal in the given panel, settled on its first prompt. */
 async function openTerminal(win: Page, pid: string, root: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
   await expect(confirm).toBeEnabled();
   await confirm.click();
@@ -117,11 +115,11 @@ test('with a TERMINAL active, none of the editor commands fire — and the chord
 
       // Focus the TERMINAL, then press every editor chord in turn.
       await win.getByTestId(`terminal-${terminalPanel}`).click();
-      await win.keyboard.press('Control+x'); // cut-line
+      await win.keyboard.press('ControlOrMeta+x'); // cut-line
       await win.keyboard.press('Tab'); // indent-lines
       await win.keyboard.press('Shift+Tab'); // outdent-lines
-      await win.keyboard.press('Shift+Alt+ArrowDown'); // column-select-down
-      await win.keyboard.press('Control+v'); // paste
+      await win.keyboard.press(chordFor('editor.columnSelectDown')[0]!); // column-select-down (Ctrl+Shift+Option on macOS)
+      await win.keyboard.press('ControlOrMeta+v'); // paste
 
       // The document is untouched. Not one of them fired — which is the whole point of a scope: the
       // editor is still open, still holds the document, and is simply not where the keyboard is.
@@ -130,6 +128,11 @@ test('with a TERMINAL active, none of the editor commands fire — and the chord
       // …and throng did not SWALLOW the chords either (FR-017d). Ctrl+X is a control character to a
       // shell, and a terminal that has had its keystrokes eaten by the app is a broken terminal — so
       // the shell must still be listening. It is: it runs the next command it is given.
+      if (process.platform !== 'win32') {
+        // Readline gives these keys meaning cmd does not (Ctrl+X a prefix, Ctrl+V quoted-insert, Tab completion's
+        // "Display all … possibilities?" question), so the line they leave is abandoned before the next command.
+        await win.keyboard.press('Control+c');
+      }
       await win.keyboard.type('echo STILL-ALIVE', { delay: 15 });
       await win.keyboard.press('Enter');
       await expect(win.getByTestId(`terminal-${terminalPanel}`)).toContainText('STILL-ALIVE', {

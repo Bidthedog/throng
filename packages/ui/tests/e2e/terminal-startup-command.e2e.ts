@@ -9,6 +9,7 @@ import {
   cleanupTemp,
   type AppOptions,
   type OpenApp,
+  TEST_SHELL,
 } from './harness.js';
 
 /*
@@ -30,8 +31,6 @@ import {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -67,16 +66,28 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
  * adds a per-flavour command recipe to that same launch chain, so the gap is closed here.
  */
 
-/** A user flavour pointing at a real executable every Windows machine has, under a distinct id
- *  so it cannot be confused with the built-in `cmd`. No fixture binary, no machine assumptions. */
-const USER_FLAVOUR = {
-  id: 'my-cmd',
-  label: 'My CMD',
-  file: 'C:\\Windows\\System32\\cmd.exe',
-  args: [],
-  defaultShellArguments: '',
-  commandRecipe: ['/K', '{command}'],
-};
+/** A user flavour pointing at a real executable every machine of its platform has — `cmd.exe` on Windows,
+ *  `/bin/bash` on Linux and macOS — under a distinct id so it cannot be confused with the built-in one.
+ *  No fixture binary, no machine assumptions. */
+const USER_FLAVOUR =
+  process.platform === 'win32'
+    ? {
+        id: 'my-cmd',
+        label: 'My CMD',
+        file: 'C:\\Windows\\System32\\cmd.exe',
+        args: [],
+        defaultShellArguments: '',
+        commandRecipe: ['/K', '{command}'],
+      }
+    : {
+        id: 'my-bash',
+        label: 'My Bash',
+        file: '/bin/bash',
+        args: [],
+        defaultShellArguments: '',
+        // The built-in bash recipe's shape: run the command, then stay at an interactive prompt.
+        commandRecipe: ['-c', '{command}; exec /bin/bash -i'],
+      };
 
 /*
  * ══ A SECOND APP, SHARED BY THE TWO TESTS THAT GENUINELY NEED ONE (SC-027) — 3 -> 2 ══
@@ -178,8 +189,8 @@ test('a USER-DEFINED flavour actually launches — the gap #113 records (FR-042)
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
         const flavour = win.getByTestId('terminal-flavour');
-        await expect(flavour.locator('option[value="my-cmd"]')).toHaveCount(1);
-        await flavour.selectOption('my-cmd');
+        await expect(flavour.locator(`option[value="${USER_FLAVOUR.id}"]`)).toHaveCount(1);
+        await flavour.selectOption(USER_FLAVOUR.id);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
         // It LAUNCHED — not merely appeared in the dropdown, which is all the suite proved before.
@@ -202,7 +213,7 @@ test('a user-defined flavour launches WITH a startup command, via its own recipe
         await createProject(win, 'UserLaunchCmd', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('my-cmd');
+        await win.getByTestId('terminal-flavour').selectOption(USER_FLAVOUR.id);
         await win.getByTestId('terminal-startup-command').fill('echo USER_FLAVOUR_MARKER');
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
@@ -222,8 +233,8 @@ test('the empty-panel form pre-fills from what the panel remembered (FR-007a)', 
     await createProject(win, 'Prefill', root);
     const pid = await firstPanelId(win);
     await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-    await win.getByTestId('terminal-flavour').selectOption('cmd');
-    await win.getByTestId('terminal-shell-arguments').fill('/K');
+    await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
+    await win.getByTestId('terminal-shell-arguments').fill(process.platform === 'win32' ? '/K' : '-i');
     await win.getByTestId('terminal-startup-command').fill('echo PREFILL_MARKER');
     await win.getByTestId('terminal-remember-command').check();
     await win.getByTestId(`panel-type-confirm-${pid}`).click();
@@ -251,7 +262,7 @@ test('the empty-panel form pre-fills from what the panel remembered (FR-007a)', 
      * and the memory agreed and the assertion could not tell them apart.
      */
     await expect(win.getByTestId('terminal-remember-command')).toBeChecked();
-    await expect(win.getByTestId('terminal-flavour')).toHaveValue('cmd');
+    await expect(win.getByTestId('terminal-flavour')).toHaveValue(TEST_SHELL);
     /*
      * The Startup Command is the one remembered field that is now EMPTY, on purpose: 051 FR-046 supersedes 025
      * FR-017 — with command memory on, a terminal that ends with nothing running clears its saved Startup Command,

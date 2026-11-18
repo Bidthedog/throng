@@ -11,6 +11,7 @@ import {
   cleanupTemp,
   type AppOptions,
   type OpenApp,
+  TEST_SHELL,
 } from './harness.js';
 
 /**
@@ -28,7 +29,7 @@ import {
  *  2. the <select> popup — makes its own project and reads that project's first panel;
  *  3. the Browse button — makes a RED project (so `--accent` is red window-wide) and leaves the create form
  *     open; the test CANCELS it, so the next test's `project-new` opens a form rather than toggling one;
- *  4. the terminal scrollbar — LAST, because it starts a live `cmd` shell that can still hold its project
+ *  4. the terminal scrollbar — LAST, because it starts a live shell that can still hold its project
  *     root after teardown. That cleanup moves to `afterAll`, where the app has actually closed, keeping the
  *     swallow for the same reason it was written.
  * Test 4's `.terminal-panel .xterm-viewport` is window-wide, which is safe because no earlier test opens a
@@ -45,8 +46,6 @@ function own(dir: string): string {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -223,7 +222,7 @@ test('the create-project Browse button is not tinted with the active project col
 });
 
 /*
- * LAST, and it has to be: it starts a live `cmd` shell (see the file header).
+ * LAST, and it has to be: it starts a live shell (see the file header).
  */
 test('the terminal keeps its classic, non-overlay bar — MEASURED, not read from the stylesheet (FR-011)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const root = own(mkdtempSync(join(tmpdir(), 'throng-sb-')));
@@ -233,7 +232,7 @@ test('the terminal keeps its classic, non-overlay bar — MEASURED, not read fro
     await createProject(win, 'Scrollbars', root);
     const pid = await firstPanelId(win);
     await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-    await win.getByTestId('terminal-flavour').selectOption('cmd');
+    await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
     await win.getByTestId(`panel-type-confirm-${pid}`).click();
     await expect(win.locator('.terminal-panel .xterm-viewport')).toBeVisible();
     // THE test of this story, and it must MEASURE.

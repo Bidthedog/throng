@@ -66,6 +66,7 @@ import {
   narrowTerminalWindow,
   runTypedCommand,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
 } from './harness.js';
 import { osc8HalfRuns } from './admin.js';
 
@@ -116,10 +117,12 @@ const LIVE_TEXT = 'LIVEFILELINK';
  * Typing it would put both tokens into the echoed command line, and the row locator below would then
  * be free to find the echo instead of the output — the same trap `terminal-link-once.e2e.ts`'s
  * header records. `-ExecutionPolicy Bypass` because `Restricted` is the Windows client default and a
- * bare `.\links.ps1` only runs on a machine somebody has already relaxed.
+ * bare `.\links.ps1` only runs on a machine somebody has already relaxed. Off Windows, where the
+ * terminal is not PowerShell, `node` prints the same row.
  */
 function writeRowScript(root: string): void {
   writeFileSync(join(root, 'links.ps1'), `Write-Host '${ROW_TEXT}'\n`, 'utf8');
+  writeFileSync(join(root, 'links.js'), `process.stdout.write(${JSON.stringify(`${ROW_TEXT}\r\n`)});\n`, 'utf8');
 }
 
 /** T186 + T213: the wrapped links, then the dead hyperlinks and the live control, each on its own line. */
@@ -127,7 +130,8 @@ function writeMarksScript(root: string): void {
   const ESC = String.fromCharCode(27);
   const ST = ESC + String.fromCharCode(92);
   const osc8 = (uri: string, text: string): string => `${ESC}]8;;${uri}${ST}${text}${ESC}]8;;${ST}`;
-  const live = `file:///${join(root, 'target.ts').replace(/\\/g, '/')}`;
+  // `file:///C:/…` on Windows; a POSIX path brings its own leading slash.
+  const live = `file://${process.platform === 'win32' ? '/' : ''}${join(root, 'target.ts').replace(/\\/g, '/')}`;
   const out = [
     'WRAPWEB_BEGIN',
     WRAPPED.web,
@@ -169,10 +173,23 @@ function writeOffScript(root: string): void {
   writeFileSync(join(root, 'off.js'), `process.stdout.write(${JSON.stringify(row + '\r\n')});\n`, 'utf8');
 }
 
+/**
+ * The shell these tests type at: Windows PowerShell on Windows, as they always have, and {@link TEST_SHELL}
+ * elsewhere. The subject is throng's link marks, not the shell; each command below has a form for both.
+ */
+const ON_WINDOWS = process.platform === 'win32';
+
+/** A command printing `head + tail` whose own echoed line ends in `echoed`, which the output does not contain. */
+function concatEcho(head: string, tail: string): { command: string; echoed: string } {
+  return ON_WINDOWS
+    ? { command: `echo ('${head}'+'${tail}')`, echoed: `'${tail}')` }
+    : { command: `echo '${head}''${tail}'`, echoed: `'${tail}'` };
+}
+
 async function openTerminal(win: Page, root: string): Promise<Locator> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+  await win.getByTestId('terminal-flavour').selectOption(ON_WINDOWS ? 'windows-powershell' : TEST_SHELL);
   const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
   await expect(confirm).toBeEnabled();
   await confirm.click();
@@ -189,8 +206,6 @@ function rowText(raw: string): string {
 }
 
 // One line, deliberately: e2e-budget.test.ts and e2e-tags.test.ts match the declaration with a LINE-based regex.
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('a detected path is marked and a look-alike is marked too, a wrapped link is marked on every row and an unfollowable hyperlink on none (045)', { tag: ['@extended', '@terminal', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-links-'));
   // The file one token names, and deliberately NOT the other. Both are path-shaped, so both are links
@@ -212,8 +227,8 @@ test('a detected path is marked and a look-alike is marked too, a wrapped link i
 
       await createProject(win, 'LinkHover', root);
       const term = await openTerminal(win, root);
-      await runTypedCommand(win, term, 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\links.ps1', {
-        echoed: 'links.ps1',
+      await runTypedCommand(win, term, ON_WINDOWS ? 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\links.ps1' : 'node links.js', {
+        echoed: ON_WINDOWS ? 'links.ps1' : 'links.js',
         output: MARKER,
       });
 
@@ -315,7 +330,7 @@ test('a detected path is marked and a look-alike is marked too, a wrapped link i
        * typed; see `narrowTerminalWindow`. This test owns its app, so nothing needs restoring.
        */
       await narrowTerminalWindow(app, win, term, 600, 'WIDTHSETTLED1');
-      await runTypedCommand(win, term, 'Clear-Host; node marks.js', { echoed: 'marks.js', output: 'MARKS_DONE' });
+      await runTypedCommand(win, term, `${ON_WINDOWS ? 'Clear-Host' : 'clear'}; node marks.js`, { echoed: 'marks.js', output: 'MARKS_DONE' });
       await win.mouse.move(2, 2);
 
       const rows = win.locator('.xterm-rows > div');
@@ -686,11 +701,12 @@ test('with editor.links.detectInTerminals off, a program-declared OSC 8 hyperlin
         // A Ctrl+click on the DECLARED hyperlink opens nothing — the gesture is the program's (FR-060).
         if (oscRuns) {
           const at = await charPoint(row, OFF_OSC_TEXT, 3);
-          await win.keyboard.down('Control');
+          // Cmd on macOS, where Ctrl+click is the context menu's gesture rather than a link's.
+          await win.keyboard.down('ControlOrMeta');
           try {
             await win.mouse.click(at.x, at.y);
           } finally {
-            await win.keyboard.up('Control');
+            await win.keyboard.up('ControlOrMeta');
           }
           /*
            * Fenced on a real round-trip through this same terminal rather than a guessed idle period:
@@ -700,10 +716,8 @@ test('with editor.links.detectInTerminals off, a program-declared OSC 8 hyperlin
            */
           // Split across a concatenation for `narrowTerminalWindow`'s reason: typed whole, the ECHO
           // already satisfies the output wait and the fence would resolve before the round trip.
-          await runTypedCommand(win, term, "echo ('LINKSOFF'+'FENCE')", {
-            echoed: "'FENCE')",
-            output: 'LINKSOFFFENCE',
-          });
+          const fence = concatEcho('LINKSOFF', 'FENCE');
+          await runTypedCommand(win, term, fence.command, { echoed: fence.echoed, output: 'LINKSOFFFENCE' });
           expect(await openedUrls(), 'a Ctrl+click opened a link with detectInTerminals off').toEqual([]);
           expect(
             await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),

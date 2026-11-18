@@ -134,8 +134,8 @@ test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-03
 
       // Delete BOTH files.
       await tree.getByText('alpha.txt', { exact: true }).click();
-      await tree.getByText('beta.txt', { exact: true }).click({ modifiers: ['Control'] });
-      await tree.getByText('beta.txt', { exact: true }).click({ button: 'right', modifiers: ['Control'] });
+      await tree.getByText('beta.txt', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
+      await tree.getByText('beta.txt', { exact: true }).click({ button: 'right', modifiers: ['ControlOrMeta'] });
       await win.getByTestId('menu-item-Delete').click();
       await win.getByTestId('confirm-accept').click();
       const wry = win.getByTestId('confirm-accept');

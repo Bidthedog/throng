@@ -31,6 +31,7 @@ import {
   FILE_OP_TIMEOUT_MS,
   type AppOptions,
   type OpenApp,
+  pressAction,
 } from './harness.js';
 
 /*
@@ -161,7 +162,7 @@ async function expectShared(win: Page, owner: string, linked: string, token: str
   await expect(content(win, linked)).toContainText(A_BODY, { timeout: FILE_OP_TIMEOUT_MS });
   await expect(content(win, linked)).not.toContainText(B_BODY);
   await focusEditor(win, linked);
-  await win.keyboard.press('Control+End');
+  await win.keyboard.press('ControlOrMeta+End');
   await win.keyboard.type(token);
   await expect(content(win, owner)).toContainText(token, { timeout: 10_000 });
 }
@@ -184,7 +185,7 @@ test('Replace onto a clean open file: both panels share one document, and undo g
 
     // Step 4: undo the paste from the File Explorer — focused on its root row, since clicking a file would open it.
     await tree(win).getByRole('treeitem').first().click();
-    await win.keyboard.press('Control+z');
+    await pressAction(win, 'file.undo');
     await expect.poll(() => existsSync(join(root, 'note.md')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
     await expect
       .poll(() => textOf(join(root, 'dest', 'note.md')), { timeout: FILE_OP_TIMEOUT_MS })
@@ -197,7 +198,7 @@ test('Replace onto a clean open file: both panels share one document, and undo g
     await expect(content(win, linked)).not.toContainText(A_BODY);
     // Unlinked: typing in B no longer reaches A.
     await focusEditor(win, linked);
-    await win.keyboard.press('Control+End');
+    await win.keyboard.press('ControlOrMeta+End');
     await win.keyboard.type('ONLYB');
     await expect(content(win, linked)).toContainText('ONLYB');
     await expect(content(win, owner)).not.toContainText('ONLYB');
@@ -214,7 +215,7 @@ test('the replaced pair follows a rename, saves without going stale, and outlive
 
     // Negative: a save in one panel leaves the other neither stale nor dirty.
     await focusEditor(win, linked);
-    await win.keyboard.press('Control+s');
+    await pressAction(win, 'editor.save');
     await expect.poll(() => textOf(join(root, 'dest', 'note.md'))).toContain('FIRSTZ');
     await expect(win.getByTestId(`panel-unsaved-${linked}`)).toHaveCount(0);
     await expect(win.getByTestId(`panel-unsaved-${owner}`)).toHaveCount(0);
@@ -231,7 +232,7 @@ test('the replaced pair follows a rename, saves without going stale, and outlive
     await expect(win.getByTestId(`panel-file-${owner}`)).toContainText('c.md', { timeout: FILE_OP_TIMEOUT_MS });
     await expect(win.getByTestId(`panel-file-${linked}`)).toContainText('c.md', { timeout: FILE_OP_TIMEOUT_MS });
     await focusEditor(win, owner);
-    await win.keyboard.press('Control+End');
+    await win.keyboard.press('ControlOrMeta+End');
     await win.keyboard.type('SECONDZ');
     await expect(content(win, linked)).toContainText('SECONDZ', { timeout: 10_000 });
 
@@ -284,7 +285,7 @@ test('the replaced pair is still one document after a restart (FR-010, SC-004)',
         await replaceAOntoB(win, root);
         await expectShared(win, owner, linked, 'BEFOREZ');
         await focusEditor(win, owner);
-        await win.keyboard.press('Control+s'); // a clean pair, so the restart restores files rather than buffers
+        await pressAction(win, 'editor.save'); // a clean pair, so the restart restores files rather than buffers
         await expect.poll(() => textOf(join(root, 'dest', 'note.md'))).toContain('BEFOREZ');
         await expectLinkPersisted(dataDir, 'ReplRestart');
       },
@@ -304,7 +305,7 @@ test('the replaced pair is still one document after a restart (FR-010, SC-004)',
         await expect(content(win, p2!)).toContainText('BEFOREZ', { timeout: 15_000 });
 
         await focusEditor(win, p2!);
-        await win.keyboard.press('Control+End');
+        await win.keyboard.press('ControlOrMeta+End');
         await win.keyboard.type('AFTERZ');
         await expect(content(win, p1!)).toContainText('AFTERZ', { timeout: 10_000 });
         await expectNoOpenFailure(win);
@@ -339,7 +340,7 @@ const saveAsked = (app: ElectronApplication): Promise<number> =>
 /** Type into B's panel without saving, so the Replace lands on a dirty document. */
 async function dirtyB(win: Page, linked: string): Promise<void> {
   await focusEditor(win, linked);
-  await win.keyboard.press('Control+End');
+  await win.keyboard.press('ControlOrMeta+End');
   await win.keyboard.type(MINE);
   await expect(win.getByTestId(`panel-unsaved-${linked}`)).toHaveCount(1);
 }
@@ -379,7 +380,7 @@ test('Replace onto a dirty open file keeps the changes under one notice; Ctrl+S 
     await stubSaveDialog(app, join(root, 'dest', 'mine.md'));
     const flashBefore = Number((await notice(win, linked).getAttribute('data-flash')) ?? '0');
     await focusEditor(win, linked);
-    await win.keyboard.press('Control+s');
+    await pressAction(win, 'editor.save');
     await expect
       .poll(async () => Number((await notice(win, linked).getAttribute('data-flash')) ?? '0'))
       .toBeGreaterThan(flashBefore);
@@ -446,7 +447,7 @@ test('undoing the Replace gives the dirty panel its file back, still unsaved (FR
 
     // Step 7: undo the paste from the File Explorer.
     await tree(win).getByRole('treeitem').first().click();
-    await win.keyboard.press('Control+z');
+    await pressAction(win, 'file.undo');
     await expect.poll(() => existsSync(join(root, 'note.md')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
     await expect.poll(() => textOf(join(root, 'dest', 'note.md')), { timeout: FILE_OP_TIMEOUT_MS }).toContain(B_BODY);
 
@@ -496,7 +497,7 @@ test('Replace onto a dirty open file whose source is not open keeps the changes 
 
     await stubSaveDialog(app, join(root, 'never.md'));
     await focusEditor(win, pid);
-    await win.keyboard.press('Control+s');
+    await pressAction(win, 'editor.save');
     await expect.poll(async () => Number((await notice(win, pid).getAttribute('data-flash')) ?? '0')).toBeGreaterThan(0);
     expect(textOf(join(root, 'dest', 'note.md'))).not.toContain(MINE);
     expect(await saveAsked(app)).toBe(0);

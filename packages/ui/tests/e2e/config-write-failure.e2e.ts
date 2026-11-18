@@ -220,7 +220,7 @@ test('a JSON edit that could not be saved says so, instead of silently not apply
          */
         const editor = prefs.getByTestId('json-editor-settings').locator('.cm-content');
         await editor.click();
-        await prefs.keyboard.press('Control+A');
+        await prefs.keyboard.press('ControlOrMeta+A');
         await editor.pressSequentially('{ "editor": { "autoSave": false } }');
         await prefs.getByTestId('prefs-mode-toggle').click();
 
