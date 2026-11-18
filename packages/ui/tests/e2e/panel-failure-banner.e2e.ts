@@ -94,11 +94,38 @@ function control(win: Page, panelId: string, name: string): Locator {
  * go out to the daemon and back, and every caller needs the same wait before it acts.
  */
 async function inFailureState(win: Page, panelId: string, kind: 'editor' | 'terminal'): Promise<void> {
+  let hung = 0;
   try {
-    await expect(
-      win.locator(`[data-testid="panel-failure-${panelId}"]`),
-      `panel ${panelId} never reached its ${kind} failure state`,
-    ).toHaveCount(1, { timeout: 90_000 });
+    // Polled from the test, one `evaluate` per sample, not with the locator's in-page wait. On a fresh Linux runner's
+    // first launch that wait answered 0 once and never again for 90 s, while the banner had been in the DOM since
+    // 66 ms after Confirm (added once, never removed, the window drawing throughout) and a one-off `evaluate` and
+    // `locator.count()` straight afterwards both found it — 3 of 32 stress rounds, always round 1.
+    //
+    // Each sample is capped at 2 s, too: polling with plain evaluates failed the same way — one answer of 0, then
+    // nothing for 90 s, with the window drawing no frames — while a FRESH evaluate after the wait answered at once.
+    // A sample that hangs is abandoned and counted, and the next one is a new call.
+    await expect
+      .poll(
+        () =>
+          Promise.race([
+            win.evaluate(
+              (pid) => document.querySelectorAll(`[data-testid="panel-failure-${pid}"]`).length,
+              panelId,
+            ),
+            new Promise<number>((resolve) =>
+              setTimeout(() => {
+                hung += 1;
+                resolve(-1);
+              }, 2_000),
+            ),
+          ]),
+        {
+          timeout: 90_000,
+          message: `panel ${panelId} never reached its ${kind} failure state`,
+        },
+      )
+      .toBe(1);
+    if (hung > 0) console.log(`[pfb] ${hung} banner sample(s) went unanswered for 2 s before one found it`);
   } catch (error) {
     // Linux, the first launches on a fresh runner only, and the page snapshot did not survive the later rounds: name
     // which state the panel was left in instead — still the type form, a terminal whose attach never answered (the
@@ -139,7 +166,29 @@ async function inFailureState(win: Page, panelId: string, kind: 'editor' | 'term
         };
       }, panelId)
       .catch((probe: unknown) => `(could not read the page: ${String(probe)})`);
-    throw new Error(`${(error as Error).message}\n\npanel ${panelId} was left as: ${JSON.stringify(seen)}`, { cause: error });
+    // The same question asked three ways at one moment: Playwright's own locator (bounded, in case it is the thing that
+    // hangs), the DOM directly, and which windows the app has — so a wait on a different page, or a locator that stops
+    // being answered while the page is fine, each show up as a disagreement.
+    const sel = `[data-testid="panel-failure-${panelId}"]`;
+    const locatorCount = await Promise.race([
+      win.locator(sel).count(),
+      new Promise<string>((r) => setTimeout(() => r('(no answer in 5 s)'), 5_000)),
+    ]).catch((probe: unknown) => `(threw: ${String(probe)})`);
+    const page = await win
+      .evaluate((s) => ({
+        domCount: document.querySelectorAll(s).length,
+        visibility: document.visibilityState,
+        hasFocus: document.hasFocus(),
+        msSinceLastFrame:
+          Date.now() - ((window as { __pfbTimeline?: { lastFrameAt: number } }).__pfbTimeline?.lastFrameAt ?? Date.now()),
+      }), sel)
+      .catch((probe: unknown) => `(threw: ${String(probe)})`);
+    const windows = h?.app ? h.app.windows().map((w) => `${w === win ? '*' : ''}${w.url()}`) : '(no app handle)';
+    const where = { locatorCount, page, url: win.url(), windows };
+    throw new Error(
+      `${(error as Error).message}\n\npanel ${panelId} was left as: ${JSON.stringify(seen)}\n\nat that moment: ${JSON.stringify(where)}\n\nsamples unanswered for 2 s: ${hung}`,
+      { cause: error },
+    );
   }
 }
 
@@ -268,32 +317,70 @@ async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
  * DIAGNOSTIC ONLY — when each state of the panel first appeared after Confirm, and the longest the renderer's main
  * thread went without running a timer.
  *
- * On a cold Linux runner the banner has been found present right AFTER a 90 s wait that saw none. Two readings fit:
- * the refusal reached the panel late, or the renderer was too busy for the wait to look. These times split them, and
- * the wall clock lines them up with main's and the daemon's logs, which the stress job keeps for a failing round.
+ * On a cold Linux runner the banner has been found present right AFTER a 90 s wait that saw none — and, measured, it
+ * first appeared 56 ms after Confirm with the renderer never stalling past 251 ms. So either the banner comes and goes
+ * (every presence CHANGE is logged below, not only the first), or the page stopped serving Playwright's queries while
+ * its own timers ran: `rafFrames` and `visibility` say whether Chromium was still producing frames for this window.
  */
 async function recordTimeline(win: Page, panelId: string): Promise<void> {
   await win.evaluate((pid) => {
     const start = Date.now();
     const seen: Record<string, number> = {};
-    const timeline = { confirmedAt: new Date(start).toISOString(), msAfterConfirm: seen, longestStallMs: 0 };
+    const changes: string[] = [];
+    const timeline = {
+      confirmedAt: new Date(start).toISOString(),
+      msAfterConfirm: seen,
+      changes,
+      changeCount: 0,
+      longestStallMs: 0,
+      rafFrames: 0,
+      longestRafGapMs: 0,
+      /** Read against `Date.now()` when the probe runs: a frame loop that stopped never reports its own gap. */
+      lastFrameAt: start,
+      visibility: [`0:${document.visibilityState}`],
+    };
     (window as { __pfbTimeline?: unknown }).__pfbTimeline = timeline;
     const ids = [`terminal-${pid}`, `terminal-skeleton-${pid}`, `terminal-starting-${pid}`, `panel-failure-${pid}`];
+    const present = new Map<string, boolean>(ids.map((id) => [id, false]));
     const look = (): void => {
+      const at = Date.now() - start;
       for (const id of ids) {
-        if (seen[id] === undefined && document.querySelector(`[data-testid="${id}"]`)) seen[id] = Date.now() - start;
+        const now = document.querySelector(`[data-testid="${id}"]`) !== null;
+        if (now && seen[id] === undefined) seen[id] = at;
+        if (now === present.get(id)) continue;
+        present.set(id, now);
+        timeline.changeCount += 1;
+        if (changes.length < 60) changes.push(`${at}:${now ? '+' : '-'}${id.replace(`-${pid}`, '')}`);
       }
     };
+    look();
     const observer = new MutationObserver(look);
     observer.observe(document.body, { childList: true, subtree: true });
+    const onVisibility = (): void => {
+      timeline.visibility.push(`${Date.now() - start}:${document.visibilityState}`);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    let lastFrame = Date.now();
+    let live = true;
+    const frame = (): void => {
+      const now = Date.now();
+      timeline.rafFrames += 1;
+      timeline.longestRafGapMs = Math.max(timeline.longestRafGapMs, now - lastFrame);
+      lastFrame = now;
+      timeline.lastFrameAt = now;
+      if (live) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
     let last = Date.now();
     const beat = setInterval(() => {
       const now = Date.now();
       timeline.longestStallMs = Math.max(timeline.longestStallMs, now - last);
       last = now;
       if (now - start > 120_000) {
+        live = false;
         clearInterval(beat);
         observer.disconnect();
+        document.removeEventListener('visibilitychange', onVisibility);
       }
     }, 250);
   }, panelId);

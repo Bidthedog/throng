@@ -14,7 +14,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   openApp,
   createProject as newProject,
@@ -78,6 +78,31 @@ async function freshProject(): Promise<void> {
   roots.push(root);
   await newProject(shared.win, `tabactions-${(seq += 1)}`, root);
   await settle(shared.win);
+}
+
+
+/**
+ * Wait until the track's width holds across two reads 250 ms apart, and return it.
+ *
+ * After a window is grown and put back, the track need not return to the width it started at: on a small screen (a
+ * hosted macOS runner's, 1004 px) the side panes collapse as the window narrows again and stay collapsed, so the
+ * same window size leaves a wider track — 542 px where it began at 290. What the resize tests claim is that the
+ * strip follows whatever width it is given, so they wait for it to settle and check the counts against it.
+ */
+async function settledTrackWidth(win: Page): Promise<number> {
+  let last = -1;
+  await expect
+    .poll(
+      async () => {
+        const now = (await stripState(win)).viewportWidth;
+        const settled = now === last;
+        last = now;
+        return settled;
+      },
+      { intervals: [250], message: 'the track never settled after the window was put back' },
+    )
+    .toBe(true);
+  return last;
 }
 
 test('T044 — the tab-actions group appears only once the strip overflows (T1)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
@@ -238,7 +263,6 @@ test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@
   // owns more than one BrowserWindow (the drag ghost among them), and resizing whichever happened to
   // be first silently resized something the strip has never heard of.
   const browserWindow = await shared.app.browserWindow(shared.win);
-  const trackWidthBefore = (await stripState(shared.win)).viewportWidth;
   // A maximised window (a hosted macOS runner opens one) is put back the way it was found, not merely to its size:
   // there, sizing it back after growing it left the track at the grown width. Unmaximised first, and settled —
   // macOS animates the change — so the size grown from is the one restored.
@@ -264,11 +288,7 @@ test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@
   } finally {
     await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), original);
     if (wasMaximized) await browserWindow.evaluate((w) => w.maximize());
-    await expect
-      .poll(async () => (await stripState(shared.win)).viewportWidth, {
-        message: 'the track never returned to its original width',
-      })
-      .toBe(trackWidthBefore);
+    await settledTrackWidth(shared.win);
     await expectCountsInSync(shared.win);
   }
 });
@@ -321,7 +341,6 @@ test('step-left is available as soon as a reveal has moved the strip off its sta
    * CUT px — less than the first tab — rather than trusting the default window size to land there.
    */
   const browserWindow = await shared.app.browserWindow(shared.win);
-  const trackWidthAsFound = (await stripState(shared.win)).viewportWidth;
   // Unmaximised first and put back after, as in T045 above: a maximised window does not size back.
   const wasMaximized = await browserWindow.evaluate((w) => w.isMaximized());
   if (wasMaximized) {
@@ -329,21 +348,30 @@ test('step-left is available as soon as a reveal has moved the strip off its sta
     await expect.poll(() => browserWindow.evaluate((w) => w.isMaximized())).toBe(false);
   }
   const CUT = 20;
-  const start = await stripState(shared.win);
-  const cutAtStart = partlyVisibleChips(start).at(-1);
-  expect(cutAtStart, 'a tab is cut off at the right-hand edge').toBeTruthy();
-  const widenBy = Math.max(0, Math.round(cutAtStart!.right - (start.scrollLeft + start.viewportWidth)) - CUT);
+  await settledTrackWidth(shared.win);
   const original = await browserWindow.evaluate((w) => w.getSize());
   try {
-    await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), [
-      original[0]! + widenBy,
-      original[1]!,
-    ]);
-    await expect
-      .poll(async () => (await stripState(shared.win)).viewportWidth, {
-        message: 'the track never widened with the window',
-      })
-      .toBeGreaterThanOrEqual(start.viewportWidth + widenBy - 1);
+    /*
+     * Steered, not computed once: each pass picks the tab whose right edge needs the SMALLEST change of window
+     * width to sit CUT px past the track's edge — narrowing as readily as widening — resizes by that, lets the
+     * track settle and measures again. A single widen-by-the-cut overshot on a hosted macOS runner: its screen is
+     * 1004 px, the window cannot grow past it, and the last tab stayed cut by 308 px. The track also need not move
+     * one-for-one with the window, as side panes open and close, which re-measuring absorbs.
+     */
+    for (let pass = 0; pass < 6; pass += 1) {
+      await setScrollLeft(shared.win, 0);
+      const now = await stripState(shared.win);
+      const cutNow = partlyVisibleChips(now).at(-1);
+      const cutByNow = cutNow ? cutNow.right - (now.scrollLeft + now.viewportWidth) : 0;
+      if (cutNow && cutByNow > 0 && cutByNow < now.chips[0]!.right) break;
+      const deltas = now.chips
+        .map((c) => Math.round(c.right - CUT - now.viewportWidth))
+        .filter((d) => d !== 0);
+      const delta = deltas.reduce((best, d) => (Math.abs(d) < Math.abs(best) ? d : best), deltas[0] ?? 0);
+      const [w, h] = await browserWindow.evaluate((bw) => bw.getSize());
+      await browserWindow.evaluate((bw, size) => bw.setSize(size[0]!, size[1]!), [w! + delta, h!]);
+      await settledTrackWidth(shared.win);
+    }
     await setScrollLeft(shared.win, 0);
 
     const before = await stripState(shared.win);
@@ -375,11 +403,7 @@ test('step-left is available as soon as a reveal has moved the strip off its sta
   } finally {
     await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), original);
     if (wasMaximized) await browserWindow.evaluate((w) => w.maximize());
-    await expect
-      .poll(async () => (await stripState(shared.win)).viewportWidth, {
-        message: 'the track never returned to its original width',
-      })
-      .toBe(trackWidthAsFound);
+    await settledTrackWidth(shared.win);
   }
 });
 
