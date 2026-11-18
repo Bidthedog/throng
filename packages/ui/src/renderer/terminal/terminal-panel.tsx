@@ -351,7 +351,7 @@ export function TerminalPanel({
   // (FR-017), and so keys like Escape reach the program whenever no find bar is up.
   const keybindings = useKeybindings();
   const reserveKey = useCallback(
-    (e: KeyboardEvent, programOwnsKeyboard: boolean) =>
+    (e: KeyboardEvent, programOwnsKeyboard: boolean, kittyNegotiated: boolean) =>
       terminalReservesKeydown(
         keybindings,
         e,
@@ -360,6 +360,7 @@ export function TerminalPanel({
         // otherwise.
         isFindShowingOn(panel.id),
         programOwnsKeyboard,
+        kittyNegotiated,
       ),
     [keybindings, panel.id],
   );

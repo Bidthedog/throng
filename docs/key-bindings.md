@@ -239,8 +239,11 @@ The replace commands do nothing unless an editor is active.
 
 ## Terminal
 
-View-only movement through a terminal's retained output. These keys are never delivered to the
-running program.
+View-only movement through a terminal's retained output. These keys are not delivered to the
+running program, except while a program owns the keyboard: one that has asked for enhanced key
+reporting (as Claude Code does), or one painting the full screen. Then the scroll chords go to that
+program. On a Mac, the scroll chords that use Cmd still scroll throng's view while a program has asked
+for enhanced key reporting: see [macOS](macos.md#terminals).
 
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|

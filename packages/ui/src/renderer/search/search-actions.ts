@@ -18,8 +18,8 @@
  * - The replace commands are never a terminal's: replace is an editor affordance, and their
  *   default chords (Ctrl+H, Alt+Enter) mean something at a shell.
  */
-import { resolveAction, type ActionId, type Keybindings } from '@throng/core';
-import { resolveKeydown } from '../config/chord-key.js';
+import { hostTraits, resolveAction, type ActionId, type Keybindings } from '@throng/core';
+import { resolveKeydown, type ChordEventLike } from '../config/chord-key.js';
 
 export const SEARCH_ACTIONS: readonly ActionId[] = [
   'search.find',
@@ -119,10 +119,36 @@ export function reservedByTerminal(
  */
 export function terminalReservesKeydown(
   keybindings: Keybindings,
-  e: KeyboardEvent,
+  e: ChordEventLike,
   findOpen: boolean,
   programOwnsKeyboard: boolean,
+  /** The program has negotiated the kitty keyboard protocol — one of the two reasons it owns the keyboard. */
+  kittyNegotiated = false,
 ): boolean {
   const action = resolveKeydown(e, (ev) => resolveAction(keybindings, ev, 'terminal'));
+  if (kittyNegotiated && keptFromKittyOnMacos(action, e)) return true;
   return reservedByTerminal(action, findOpen, programOwnsKeyboard);
+}
+
+/**
+ * 070 FR-031a (2026-11-18, maintainer decision): on macOS, every scroll chord that carries Cmd scrolls throng's view
+ * even while a program has negotiated the kitty keyboard protocol, as it does when no program owns the keyboard. The
+ * shipped ones are Cmd+Home / Cmd+End and Shift+Cmd+Up / Shift+Cmd+Down; a user's own Cmd binding counts the same.
+ *
+ * Handing them over sent nothing the program could read, because xterm.js (which has no kitty encoder, and
+ * `encodeModifiedKey` leaves these keys to it) cannot deliver Cmd in any form. Measured against bash 5.3 through
+ * node-pty, each sequence then `echo RAN_OK`:
+ *
+ * - an Arrow with Cmd held is sent as nothing at all: xterm's encoder drops it, so the key was simply dead;
+ * - Home / End with Cmd, and PageUp / PageDown with Ctrl+Cmd, carry a modifier of 9 or more (`CSI 1;9H`, `CSI 1;10F`,
+ *   `CSI 5;13~`), which readline cannot decode: it leaves the tail on the line (`HFecho`, `0Fecho`, `13~echo`);
+ * - PageUp / PageDown with Cmd but not Ctrl lose the Cmd and arrive as a plain PageUp / PageDown (Shift+Cmd scrolls
+ *   xterm's own view and sends nothing).
+ *
+ * Claude Code binds no Cmd chord on these keys (its scroll is Ctrl+Home / Ctrl+End), so nothing it reads is taken.
+ * Ctrl+Home / Ctrl+End elsewhere send `CSI 1;5H` / `CSI 1;5F`, which readline discards whole, so they still go to the
+ * program; and a program on the alternate screen without kitty still receives them on every platform.
+ */
+function keptFromKittyOnMacos(action: ActionId | null, e: ChordEventLike): boolean {
+  return hostTraits().os === 'macos' && (e.metaKey ?? false) && action !== null && SCROLLBACK_ACTIONS.includes(action);
 }

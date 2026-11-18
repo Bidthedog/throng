@@ -68,6 +68,15 @@ Everything runs on both. Intel Macs are not supported.
 - The maintainer directed that this spec also cover the macOS builds, binaries and CI/CD steps. → User Story 8, FR-042
   to FR-049.
 
+### Session 2026-11-18
+
+- Q: Should Cmd+Home / Cmd+End reach a program that negotiated the kitty keyboard protocol on macOS? → A: **No.**
+  throng scrolls its view instead, because readline leaves `HF` on the command line for them. → FR-031a. (Maintainer.)
+- Q: Does the same hold for the other scroll chords that carry Cmd (Shift+Cmd+Up / Shift+Cmd+Down, and any Cmd chord a
+  user binds to a scroll command)? → A: **Yes.** The maintainer left the remaining macOS kitty fixes to judgement
+  ("fix whatever kitty issues you see fit"); measured, xterm.js delivers Cmd to the program in no readable form for any
+  of them. → FR-031a, widened.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Download, open and start working on a Mac (Priority: P1)
@@ -383,6 +392,18 @@ publication.
   use Cmd+click (024 FR-019c).
 - **FR-031**: The terminal's reserved-chord tiers MUST hold on macOS, and the default MUST let Option type the
   characters the keyboard layout puts on it. A setting MUST let the user make Option act as Meta instead.
+- **FR-031a** *(Added 2026-11-18, maintainer decision; supersedes 013 FR-014's keyboard-owner exception on macOS for
+  the scroll chords that carry Cmd — see Supersessions)*: On macOS, a chord that carries Cmd and resolves to a
+  terminal scroll command (013 FR-014: line, page, top, bottom) MUST NOT reach a program that has negotiated the kitty
+  keyboard protocol; throng MUST scroll the terminal's view, as it does when no program owns the keyboard. The shipped
+  ones are Cmd+Home / Cmd+End and Shift+Cmd+Up / Shift+Cmd+Down; a Cmd chord the user binds to a scroll command is held
+  to the same rule. Why: xterm.js delivers Cmd to the program in no form it can read — measured against bash 5.3
+  through node-pty, each sequence then `echo RAN_OK`: an Arrow with Cmd held is sent as nothing at all; Home / End
+  with Cmd, and PageUp / PageDown with Ctrl+Cmd, carry a modifier of 9 or more (`CSI 1;9H`, `CSI 1;10F`, `CSI 5;13~`),
+  which readline cannot decode and leaves on the line (Cmd+Home then Cmd+End gave `bash: HFecho: command not found`);
+  PageUp / PageDown with Cmd and no Ctrl lose the Cmd. Claude Code binds no Cmd chord on these keys. A program on the
+  alternate screen that has not negotiated kitty still receives them, and the chords without Cmd (Shift+PageUp /
+  Shift+PageDown on macOS, every scroll chord on Windows and Linux) are unchanged.
 
 **Resource Monitor (#551)**
 
@@ -474,6 +495,11 @@ publication.
 - **The packaging config's exclusion of the macOS database binaries** (`electron-builder.yml`, the `darwin-*`
   prebuild filter) is replaced by FR-043.
 - **The v1.0.0 exclusion of macOS** was removed from the milestone at the maintainer's direction on 2026-11-15.
+- **013 FR-014's keyboard-owner exception (dated amendment 2026-11-18), for the scroll chords that carry Cmd under the
+  kitty keyboard protocol on macOS**: replaced there by FR-031a. The exception handed every scroll chord to a program
+  that negotiated kitty; on macOS a Cmd chord reached it as nothing (the Arrows), as a sequence bash's readline cannot
+  decode (Cmd+Home / Cmd+End as `CSI 1;9H` / `CSI 1;9F`, which left `HF` on the command line), or without its Cmd.
+  Windows, Linux, the chords without Cmd and the alternate-screen case keep the exception.
 
 ### Key Entities
 
