@@ -121,7 +121,7 @@ import { openInEditorOrPreview } from './open-document-check.js';
 // `isPreferencesOpen` is deliberately no longer imported here: its only two uses in this file were
 // the app-modal `setEnabled(false)` calls that 021 FR-042 superseded (#263). The LAYERING those
 // calls were accidentally providing is now handled app-level inside `preferences-window.ts`.
-import { openPreferences, isPreferencesTab, type PreferencesWindowDeps } from './preferences-window.js';
+import { openPreferences, isPreferencesTab, releasePreferencesForShutdown, type PreferencesWindowDeps } from './preferences-window.js';
 import { buildAppMenu } from './app-menu.js';
 import { appMenuRebuilder } from './app-menu-template.js';
 import { monitorWindowChrome, routeMonitorMinimise, secondaryWindowChrome } from './window-chrome.js';
@@ -3105,6 +3105,9 @@ if (isPrimaryInstance)
     }
     driver.pointOfNoReturn();
     allowClose = true;
+    // 070 FR-028 / #86: drained, so Preferences must not veto the close that ends the app — on macOS
+    // that close is `app.quit()`, which any prevented window close aborts.
+    releasePreferencesForShutdown();
     // A launch from here on must not be told about this instance (067 edge case: opening a folder while closing).
     await instanceGuard.release();
     setTimeout(() => {

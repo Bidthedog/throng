@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu, TEST_SHELL, requestAppClose, HOST_OS } from './harness.js';
+import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu, TEST_SHELL, requestAppClose, HOST_OS, stopTracingBeforeExit } from './harness.js';
 // The drain budget itself, so the validity-bound below tracks the production constant instead of
 // restating a number that was true when it was written. `ui-settings` is a pure reader with no
 // OS or native imports — it says so in its own docblock — so importing it here costs nothing.
@@ -128,6 +128,8 @@ async function addTerminalPanel(win: Page, hostPid: string, root: string): Promi
  * handshake in `main.ts` is bypassed. That is why no existing spec covers this.
  */
 async function terminateAllClose(app: ElectronApplication, win: Page): Promise<void> {
+  // Every close in this file ENDS the app inside the test body, so the trace is stopped first (see `armAppEnd`).
+  await stopTracingBeforeExit(app);
   const closed = app.waitForEvent('close', { timeout: 20_000 });
   await requestAppClose(app);
   await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 15_000 });
@@ -142,6 +144,7 @@ async function terminateAllClose(app: ElectronApplication, win: Page): Promise<v
  * "preserves it correctly". It is in fact the one with the shortest fuse.
  */
 async function ordinaryClose(app: ElectronApplication): Promise<void> {
+  await stopTracingBeforeExit(app);
   const closed = app.waitForEvent('close', { timeout: 20_000 });
   await requestAppClose(app);
   await closed;
@@ -173,8 +176,14 @@ async function ordinaryClose(app: ElectronApplication): Promise<void> {
  * Either way the channel is WARMED here: the first `evaluate` pays connection setup that later
  * ones do not, and that cost belongs outside the race, not inside it. The quit needs no handle —
  * it is one `app.evaluate` — so warming that channel is all macOS has to prefetch.
+ *
+ * The TRACE is stopped here too, before the race. The app exits inside the test body, and Playwright
+ * deletes a context's trace file when its process exits under a snapshot write still in flight — an
+ * ENOENT on `playwright-artifacts-…/<hash>.trace` that fails a passing test (seen on the hosted
+ * Macs). Stopping it is a CDP round-trip, so it belongs with the other costs kept out of the race.
  */
 async function armAppEnd(app: ElectronApplication, main: Page): Promise<() => Promise<void>> {
+  await stopTracingBeforeExit(app);
   if (HOST_OS === 'macos') {
     await app.evaluate(() => true);
     return async () => {
