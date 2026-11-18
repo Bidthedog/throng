@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { isProgramTitle } from '@throng/core';
-import { getTerminalTitle, getTerminalTitleSetAt } from './title-store.js';
+import { clearTerminalTitle, getTerminalTitle, getTerminalTitleSetAt } from './title-store.js';
 
 /**
  * Live foreground commands per terminal panel (025 FR-019), the twin of `cwd-store.ts`.
@@ -32,6 +32,8 @@ const memoryCommands = new Map<string, string>();
  * observation of nothing running). A shell's title is not a program's; see {@link peekProgramTitle}.
  */
 const promptTitles = new Map<string, string>();
+/** The session each panel's title and prompt title were learned from — see {@link adoptTerminalSession}. */
+const titledSessions = new Map<string, number>();
 const listeners = new Set<() => void>();
 
 /**
@@ -171,6 +173,24 @@ export function forgetTerminalCommand(panelId: string): void {
   if (archs.delete(panelId) || had || hadMemory) emit();
 }
 
+
+/**
+ * 053 FR-003 `{title}` — a view of `panelId` attached to session `sessionId`. When that is not the session the
+ * panel's title and prompt title were learned from, both belong to a session that has ended, and are dropped.
+ *
+ * A session's title is otherwise dropped when a view hears its exit, and an exit can be heard by nobody: Unload with
+ * End Terminals unmounts every view before it ends the terminals, and a shell can end in a background tab. The ended
+ * program's title then outlived it, the new shell's first "nothing running" observation snapshotted it as the
+ * prompt's own, and a restarted program setting the same title again (a remembered command) was never named by it.
+ * Called before the attached session's gated output is written, so nothing the new session announced is dropped.
+ */
+export function adoptTerminalSession(panelId: string, sessionId: number): void {
+  const previous = titledSessions.get(panelId);
+  titledSessions.set(panelId, sessionId);
+  if (previous === undefined || previous === sessionId) return;
+  promptTitles.delete(panelId);
+  clearTerminalTitle(panelId);
+}
 
 /**
  * The window title the running program set (053 `{title}`): `undefined` while nothing runs, and for
