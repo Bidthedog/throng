@@ -18,7 +18,7 @@ Three workflows, nothing else (spec 072; *The three pipelines* in `docs/testing.
   check, `CI verdict`. Target 5 minutes.
 - **`pipeline.yml`** — nightly on master and on dispatch: every layer on Windows, Linux and macOS,
   every E2E test sharded, `@admin`, calibration, every artifact built and verified. Never publishes.
-  A dispatch fails fast; the nightly runs to completion and reports on one issue.
+  A dispatch fails fast unless `-f run_to_completion=true`; the nightly runs to completion and reports on one issue.
 - **`release.yml`** — a pushed `v*` tag only: the full pipeline in the same run, then publish.
 - **Nothing runs on a push to master.**
 

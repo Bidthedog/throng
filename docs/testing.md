@@ -108,8 +108,9 @@ gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 Take the verdict from `gh run view`, not from the watch's exit code, and quote the run URL and the SHA
 when reporting done. A failed dispatch concludes `cancelled`: its first failing job dispatches `fail-fast.yml`,
 which cancels the rest once that job has finished, so the failed job is the one whose own conclusion is `failure`. Its inputs select what runs — `stages`, `platforms`, `e2e_filter`,
-`test_filter`, `shards`, and `stress_spec` / `stress_grep` / `stress_rounds` to repeat one test with
-retries off — and the run's name says whether it was `pipeline (full)` or partial. The inputs and what
+`test_filter`, `shards`, `stress_spec` / `stress_grep` / `stress_rounds` to repeat one test with
+retries off, and `run_to_completion` to let every job and test finish, as the nightly does, so one run shows every
+failure — and the run's name says whether it was `pipeline (full)` or partial. The inputs and what
 each guarantees are in [the gate in detail](../.claude/skills/throng-testing/references/gate.md).
 
 `npm run gate` is the same stages in one process, **fail-fast**: **lint → typecheck → build → unit →

@@ -20,6 +20,7 @@ No `push`, `pull_request` or other trigger.
 | `stress_spec` / `stress_grep` / `stress_rounds` | string / string / number | — / — / 20 | run one E2E test N rounds, retries off, every round's evidence kept; implies `stages=e2e` on one platform (`platforms`, default `windows`) |
 | `hand_tests` | boolean | false | also run the manual plan on runners (never in nightly or a release) |
 | `trace` | boolean | false | Playwright traces on failure |
+| `run_to_completion` | boolean | false | Every job and test runs to the end, as the nightly does (`fail_fast=false`); a dispatch only, never a release. Added 2026-11-18 at the maintainer's request |
 
 ## Run name
 

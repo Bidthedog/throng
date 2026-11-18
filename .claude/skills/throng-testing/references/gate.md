@@ -27,8 +27,17 @@ gh workflow run pipeline.yml --ref <branch> -f stages=contract -f platforms=wind
 ```
 
 The inputs (`stages`, `platforms`, `e2e_filter`, `test_filter`, `shards`, `stress_*`, `hand_tests`,
-`trace`) are in `specs/072-ci-pipelines/contracts/pipeline-dispatch.md`. A run with every stage and
+`trace`, `run_to_completion`) are in `specs/072-ci-pipelines/contracts/pipeline-dispatch.md`. A run with every stage and
 platform and no filter is named `pipeline (full)`, and only that run says done.
+
+**Fail fast or run to completion — choose per dispatch.**
+
+- **`-f run_to_completion=true`** when the point of the run is to FIND failures: a platform not yet green, a sweep
+  after a broad or cross-cutting change, or a backlog of failures expected. One run then reports every failure, where
+  fail-fast reports one per round (a hosted macOS round is ~20 minutes).
+- **Fail fast (the default)** when the point is to PROVE something: a fix for one known failure, a narrowed
+  `e2e_filter` run, the done-ness run on a tree believed green, or a stress run. The first failure is the answer, and
+  stopping there frees the runners.
 
 **Dispatch one pipeline per branch at a time.** A newer dispatch on the same branch cancels the one
 before it, whatever its inputs, so two dispatched together leave one run. Only `stress_spec` runs sit
