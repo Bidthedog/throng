@@ -9,7 +9,7 @@ import type {
   PtyHandle,
   PtyStartOptions,
 } from '@throng/core';
-import { TERMINAL_WRITE_METHOD } from '@throng/ipc-contract';
+import { TERMINAL_KILL_METHOD, TERMINAL_WRITE_METHOD } from '@throng/ipc-contract';
 import { TerminalService } from '../../src/terminal-service.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
 import { TerminalLockManager } from '../../src/terminal-lock-manager.js';
@@ -125,6 +125,7 @@ function makeService(pollMs: number) {
     published,
     sink,
     attach: (params: object) => router.handle({ jsonrpc: '2.0', id: 1, method: 'terminal.attach', params }),
+    kill: (panelId: string) => router.handle({ jsonrpc: '2.0', id: 2, method: TERMINAL_KILL_METHOD, params: { panelId } }),
   };
 }
 
@@ -765,5 +766,69 @@ describe('068 Claude Code session resume — memoryCommand on the shared observa
     expect(s.published.at(-1)).not.toHaveProperty('memoryCommand');
     const attention = s.frames.map((f) => JSON.parse(f) as { method: string; params: { detail?: string | null } }).filter((m) => m.method === 'terminal.attention');
     expect(attention.every((m) => !String(m.params.detail ?? '').includes('--resume'))).toBe(true);
+  });
+});
+
+/**
+ * 025 FR-019g / 051 FR-046 — a shell that ends ON ITS OWN ends with nothing running, whatever the last poll saw.
+ *
+ * The UI's end decision reads the last `terminal.command` the daemon published, which is up to one interval old. A
+ * short-lived child the poll happened to catch — macOS's `/usr/libexec/path_helper`, which a login shell's
+ * `/etc/profile` runs for a few milliseconds — therefore stood as "the running command" when the user typed `exit`
+ * before the next poll, and the Panel remembered, and next time re-ran, `path_helper` as its Startup Command.
+ *
+ * ANTI-VACUITY CONTROL: drop the final observation from `handleExit` and the first test fails with 'path_helper' as
+ * the command at the exit; publish it for an end throng asked for as well and the second fails.
+ */
+describe('the final observation when a shell ends (025 FR-019g, 051 FR-046)', () => {
+  const POLL = 1000;
+  type Frame = { method: string; command?: string | null };
+  /** Every `terminal.command` and `terminal.exit` frame, in the order the UI receives them. */
+  function ordered(s: ReturnType<typeof makeService>): Frame[] {
+    const frames: Frame[] = [];
+    s.events.addSink({
+      write: (frame: string): void => {
+        const msg = JSON.parse(frame) as { method: string; params: { command?: string | null } };
+        if (msg.method === 'terminal.command') frames.push({ method: msg.method, command: msg.params.command });
+        if (msg.method === 'terminal.exit') frames.push({ method: msg.method });
+      },
+    });
+    return frames;
+  }
+  /** What the UI's end decision reads: the last command published before the exit. */
+  function commandAtExit(frames: Frame[]): string | null | undefined {
+    const exitAt = frames.findIndex((f) => f.method === 'terminal.exit');
+    expect(exitAt).toBeGreaterThanOrEqual(0);
+    return frames.slice(0, exitAt).filter((f) => f.method === 'terminal.command').at(-1)?.command;
+  }
+  const helper = (): ChildProcess => ({ pid: 2001, ppid: 1000, commandLine: '/usr/libexec/path_helper -s', startedAt: Date.now() });
+
+  it('a startup helper the poll caught is not what a shell that exited by itself was running', async () => {
+    const s = makeService(POLL);
+    const frames = ordered(s);
+    await s.attach({ panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 });
+    s.host.children = [helper()];
+    await sleep(POLL); // the poll lands inside the helper's few milliseconds
+    expect(frames.at(-1)).toEqual({ method: 'terminal.command', command: '/usr/libexec/path_helper -s' });
+
+    s.host.children = []; // the helper is done, the startup command has run, the prompt is back
+    s.host.fireExit(); // and the user types `exit` before the next poll
+    await sleep(50);
+
+    expect(commandAtExit(frames)).toBeNull();
+  });
+
+  it('an end throng asked for keeps the last observation: the command it ended was running (025 FR-020)', async () => {
+    const s = makeService(POLL);
+    const frames = ordered(s);
+    await s.attach({ panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 });
+    s.host.children = [child()];
+    await sleep(POLL);
+
+    await s.kill('p1'); // the panel is closed with `npm run dev` still running
+    s.host.fireExit(); // the end's kill lands
+    await sleep(50);
+
+    expect(commandAtExit(frames)).toBe('npm run dev');
   });
 });

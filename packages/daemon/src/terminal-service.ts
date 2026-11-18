@@ -1319,6 +1319,21 @@ export class TerminalService {
     if (current) this.lastCwd.delete(session.panelId); // stop reporting a dead shell's cwd
     if (current) this.attention.stopActivity(session.panelId); // 057: a dead shell goes neither quiet nor noisy
     const unexpected = !session.userKilled;
+    /*
+     * 025 FR-019g — the final observation of a shell that ended ON ITS OWN: nothing is running. The candidates are
+     * the shell's own children (FR-022a), and a shell that has exited holds none, so this is the observation itself,
+     * not a guess. Without it the UI's end decision read the last poll, up to an interval old: a login shell's
+     * startup helper (macOS's `path_helper`, alive for milliseconds) caught by that poll stood as the running command
+     * when the user typed `exit` before the next one, and became the remembered Startup Command (051 FR-046).
+     *
+     * Not for an end throng asked for (`userKilled`): there the shell died BECAUSE throng ended it, and what the last
+     * observation saw running is the command the next launch must recover (025 FR-020). Published before the exit,
+     * on the same ordered channel, so the end decision reads it; an in-flight poll is dropped by its session check.
+     */
+    if (current && unexpected && !session.superseded && this.lastCommand.get(session.panelId)?.command != null) {
+      this.lastCommand.set(session.panelId, { command: null, arch: null });
+      this.events.publishCommand(session.panelId, null, null, Date.now());
+    }
     for (const dispose of session.disposers) {
       try {
         dispose();
