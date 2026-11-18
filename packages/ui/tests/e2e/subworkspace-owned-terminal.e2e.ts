@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, type OpenApp, panelGrip, splitPanelViaMenu } from './harness.js';
+import { openApp, createProject, firstPanelId, type OpenApp, panelGrip, splitPanelViaMenu, TEST_SHELL } from './harness.js';
 
 // Batch 3 (2026-07-01):
 //  • FR-028 — a Panel created INSIDE a sub-workspace (owned; no project) can open a
@@ -53,7 +53,8 @@ import { openApp, createProject, firstPanelId, type OpenApp, panelGrip, splitPan
  */
 let shared: OpenApp;
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+/** An absolute folder that is never there, as these projects' roots: a bare `C:/…` is relative off Windows. */
+const NOWHERE = process.platform === 'win32' ? 'C:/c' : '/c';
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -93,7 +94,7 @@ test('a sub-workspace-owned Panel can open a terminal (launches at home, no proj
   const app = shared.app;
   const win = shared.win;
   // The project root is irrelevant to an owned Panel — it launches at home.
-  await createProject(win, 'Owned', 'C:/c/owned');
+  await createProject(win, 'Owned', `${NOWHERE}/owned`);
   const a = await firstPanelId(win);
   const child = await syncToNewSubWorkspace(app, win, a);
   try {
@@ -111,7 +112,7 @@ test('a sub-workspace-owned Panel can open a terminal (launches at home, no proj
     // Its form allows confirming Terminal despite there being no project root.
     const form = child.getByTestId(`panel-type-form-${owned}`);
     await form.getByTestId(`panel-type-select-${owned}`).selectOption('terminal');
-    await form.getByTestId('terminal-flavour').selectOption('cmd');
+    await form.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
     await child.getByTestId(`panel-type-confirm-${owned}`).click();
 
     // The inline terminal launches (rooted at home, not blocked by "no project").
@@ -134,7 +135,7 @@ test('a sub-workspace-owned Panel can open a terminal (launches at home, no proj
 test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warning — FR-030', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
   const app = shared.app;
   const win = shared.win;
-  await createProject(win, 'NoDragOut', 'C:/c/nodragout');
+  await createProject(win, 'NoDragOut', `${NOWHERE}/nodragout`);
   const a = await firstPanelId(win);
   const child = await syncToNewSubWorkspace(app, win, a);
   try {
@@ -224,7 +225,7 @@ test('closing the last Panel of a sub-workspace closes the sub-workspace — FR-
    */
   const before = await subWorkspaceIds(win);
 
-  await createProject(win, 'LastPanel', 'C:/c/lastpanel');
+  await createProject(win, 'LastPanel', `${NOWHERE}/lastpanel`);
   const a = await firstPanelId(win);
   const child = await syncToNewSubWorkspace(app, win, a);
   await expect(child.getByTestId(`panel-${a}`)).toBeVisible();

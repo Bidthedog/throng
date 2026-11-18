@@ -28,7 +28,7 @@
  */
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import {
   openApp,
@@ -37,6 +37,7 @@ import {
   settleOnActiveProject,
   cleanupTemp,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
   TYPE_DELAY,
   type OpenApp,
 } from './harness.js';
@@ -49,7 +50,11 @@ let rootB: string;
 const nameA = 'AttnProjA';
 const nameB = 'AttnProjB';
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+/**
+ * The shell that rings: PowerShell on Windows, as this spec has always used, and {@link TEST_SHELL} elsewhere. The
+ * subject is throng's attention path, not the shell, so each platform's own shell writes the time and the BEL.
+ */
+const ON_WINDOWS = process.platform === 'win32';
 
 test.beforeAll(async () => {
   rootA = mkdtempSync(join(tmpdir(), 'throng-attn-a-'));
@@ -73,18 +78,19 @@ const MARK_TIMEOUT_MS = 24_000;
 test('a delayed bell in project A, seen from project B, marks A’s row and raises one toast whose link lands on A’s terminal (US1, US3, SC-002)', { tag: ['@extended', '@terminal', '@reserve:runtime'] }, async () => {
   const { win } = shared;
 
-  // ── Project A with a real PowerShell, started at the prompt ─────────────────────────────────────
+  // ── Project A with a real shell, started at the prompt ──────────────────────────────────────────
   await createProject(win, nameA, rootA);
   const idA = await settleOnActiveProject(win, nameA);
   const panelA = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${panelA}`).selectOption('terminal');
   await expect(win.getByTestId('terminal-flavour')).toBeVisible();
-  await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+  await win.getByTestId('terminal-flavour').selectOption(ON_WINDOWS ? 'windows-powershell' : TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${panelA}`).click();
   const termA = win.getByTestId(`terminal-${panelA}`);
   await expect(termA).toBeVisible();
-  // Keys typed before the prompt is drawn are lost (see the command-launcher spec's `expectPrompt`).
-  await expect(termA).toContainText('>', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+  // Keys typed before the prompt is drawn are lost (see the command-launcher spec's `expectPrompt`). A POSIX
+  // prompt's shape is the user's, so there it is the project folder the prompt names.
+  await expect(termA).toContainText(ON_WINDOWS ? '>' : basename(rootA), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
   // Nothing is marked before anything happens.
   await expect(win.getByTestId(`attention-project-${idA}`)).toHaveCount(0);
@@ -93,10 +99,14 @@ test('a delayed bell in project A, seen from project B, marks A’s row and rais
   // The shell rings only once the test has left the project (a flag file it polls), so the bell can
   // never beat the switch however slow the machine is, and no fixed delay has to out-wait it.
   const flag = join(rootA, 'left-a.flag');
-  const command = `while (-not (Test-Path -LiteralPath '${flag}')) { Start-Sleep -Milliseconds 100 }; Set-Content -NoNewline -LiteralPath '${join(rootA, 'bell-at.txt')}' ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Write([char]7)`;
+  const bellAtFile = join(rootA, 'bell-at.txt');
+  // POSIX: node writes the time and the BEL in one process, so nothing runs between the two (BSD `date` has no ms).
+  const command = ON_WINDOWS
+    ? `while (-not (Test-Path -LiteralPath '${flag}')) { Start-Sleep -Milliseconds 100 }; Set-Content -NoNewline -LiteralPath '${bellAtFile}' ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Write([char]7)`
+    : `while [ ! -e '${flag}' ]; do sleep 0.1; done; node -e 'require("fs").writeFileSync(${JSON.stringify(bellAtFile)}, String(Date.now())); process.stdout.write("\\x07")'`;
   await termA.click();
   await win.keyboard.type(command, { delay: TYPE_DELAY });
-  await expect(termA).toContainText('Start-Sleep', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+  await expect(termA).toContainText(ON_WINDOWS ? 'Start-Sleep' : 'while [ ! -e', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   await win.keyboard.press('Enter');
 
   // ── Leave: project B is now the one on screen, so A's terminal is not attended ─────────────────

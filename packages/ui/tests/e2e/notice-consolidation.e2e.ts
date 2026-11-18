@@ -35,7 +35,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { addPanels, cleanupTemp, createProject, panelIds, quiesced, runApp, settle } from './harness.js';
+import { addPanels, cleanupTemp, createProject, panelIds, quiesced, runApp, settle, TEST_SHELL } from './harness.js';
 
 /** The consolidated notice raised for panels one action defeated. */
 function consolidated(win: Page): Locator {
@@ -152,8 +152,6 @@ async function openFirstTab(win: Page): Promise<void> {
  * workspace, and rebuilding it four times would cost four two-launch dances (~4 minutes) to observe
  * four facets of one state. What each block is proving is stated where it sits.
  */
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('one cause across several tabs is one notice, listing every panel it defeated', { tag: ['@extended', '@failure', '@reserve:window'] }, async () => {
   test.setTimeout(420_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-consol-root-'));
@@ -200,7 +198,7 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         const ids = await panelIds(win);
         const term = ids.find((id) => id !== first)!;
         await win.getByTestId(`panel-type-select-${term}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${term}`).click();
         await expect(win.getByTestId(`terminal-${term}`)).toContainText(basename(root), {
           timeout: 30_000,
@@ -284,7 +282,7 @@ test('one cause across several tabs is one notice, listing every panel it defeat
           /ENOENT|EPERM|EBUSY|EACCES|Cannot lock|Internal error/i,
         );
         // …and not the absolute path the errno carries, either.
-        expect(visible).not.toMatch(/[A-Za-z]:\\/);
+        expect(visible).not.toMatch(process.platform === 'win32' ? /[A-Za-z]:\\/ : /(?:^|\s)\/[^\s/]+\//);
 
         // ═══ T037a — consolidation changes the notice COUNT and nothing else (FR-038). ═══
         //

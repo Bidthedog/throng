@@ -4,6 +4,7 @@ import { connect } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
+import { instanceLockName, resolveIpcAddress } from '@throng/core';
 import { cleanupTemp, mkdtempSync, openApp, tmpdir, type OpenApp } from './harness.js';
 
 /**
@@ -17,7 +18,8 @@ import { cleanupTemp, mkdtempSync, openApp, tmpdir, type OpenApp } from './harne
  * renderer are wired end to end.
  *
  * A different COPY cannot be built in a test, so the spec writes the launch message to
- * `<pipe>.instance` itself (no product seam) — the exact line a different copy's guard would send.
+ * `<pipe>.instance` itself (no product seam) — the exact line a different copy's guard would send,
+ * over the address `resolveIpcAddress` gives it on this platform (named pipe, or Unix socket).
  *
  * One app for both declarations (serial): neither seeds state before launch.
  */
@@ -94,12 +96,12 @@ test('a second launch opens no window, exits, and brings the running window forw
 });
 
 test('a launch of a different copy shows the notice naming the running copy', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  test.skip(process.platform !== 'win32', 'connects to the running copy over a Windows named pipe');
   const runningRoot = dirname(await h.app.evaluate(() => process.execPath));
-  const launchedExe = join(tmpdir(), 'another-throng-copy', 'throng.exe');
+  const launchedExe = join(tmpdir(), 'another-throng-copy', process.platform === 'win32' ? 'throng.exe' : 'throng');
 
+  // The instance lock's address as the guard itself resolves it: a named pipe on Windows, a Unix socket elsewhere.
   await new Promise<void>((resolve, reject) => {
-    const socket = connect(`${h.pipeName}.instance`);
+    const socket = connect(resolveIpcAddress(instanceLockName(h.pipeName)));
     socket.once('error', reject);
     socket.once('close', () => resolve());
     socket.end(`${JSON.stringify({ execPath: launchedExe, version: '99.0.0' })}\n`);

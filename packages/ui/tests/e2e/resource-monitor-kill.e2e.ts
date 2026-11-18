@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-import { cleanupTemp, createProject, firstPanelId, runApp, runTypedCommand } from './harness.js';
+import { cleanupTemp, createProject, firstPanelId, runApp, runTypedCommand, TEST_SHELL } from './harness.js';
 import { MONITOR_CHORD, closeMonitorWindow, openMonitorWindow, openProjectsList, setHideEnded } from './helpers/monitor-window.js';
 import { processesMatching, processTable } from './helpers/processes.js';
 
@@ -29,6 +29,14 @@ const PARENT_COMMAND =
 
 const alive = (): number => processesMatching('node.exe', MARK).length;
 
+const ON_WINDOWS = process.platform === 'win32';
+/** Two sums the shell works out itself, each printing 42: cmd's `set /a`, POSIX arithmetic expansion. */
+const SUM_40_2 = ON_WINDOWS ? 'set /a 40+2' : 'echo $((40+2))';
+const SUM_6_7 = ON_WINDOWS ? 'set /a 6*7' : 'echo $((6*7))';
+/** {@link TEST_SHELL}'s image (`processesMatching` drops `.exe` off Windows) and its friendly name (FR-020). */
+const SHELL_IMAGE = ON_WINDOWS ? 'cmd.exe' : 'bash';
+const SHELL_FRIENDLY_NAME = ON_WINDOWS ? 'Command Prompt' : 'Bash';
+
 /** Click through the kill confirmations (`killProcesses` ships at double). */
 async function acceptKill(win: Page): Promise<void> {
   const dialog = win.getByTestId('confirm-dialog');
@@ -43,8 +51,6 @@ async function acceptKill(win: Page): Promise<void> {
 const rowOf = (win: Page, prefix: string, text?: string): Locator =>
   win.locator(`[data-testid^="breakdown-row-${prefix}"]`, text === undefined ? {} : { hasText: text });
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('Kill All Below ends a parent and its two children, which show ended while the shell lives; on the panel it ends the shell too and the panel keeps its place', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   test.setTimeout(180_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-resmon-kill-'));
@@ -53,13 +59,13 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       await createProject(win, 'KillTree', root);
       const panelId = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${panelId}`).click();
       const term = win.getByTestId(`terminal-${panelId}`);
       await expect(term).toBeVisible();
-      await runTypedCommand(win, term, 'set /a 40+2', { echoed: 'set /a 40+2', output: '42' });
+      await runTypedCommand(win, term, SUM_40_2, { echoed: SUM_40_2, output: '42' });
 
-      // Three node.exe under the shell, by the OS's own count.
+      // Three node processes under the shell, by the OS's own count.
       await term.click();
       await win.keyboard.type(PARENT_COMMAND, { delay: 10 });
       await win.keyboard.press('Enter');
@@ -82,7 +88,7 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       const levels = await nodes.evaluateAll((els) => els.map((e) => Number(e.getAttribute('aria-level'))));
       const parentIndex = levels.indexOf(Math.min(...levels));
       const parent = nodes.nth(parentIndex);
-      const shell = rowOf(mon, 'x:', 'Command Prompt').first(); // cmd.exe's friendly name (FR-020)
+      const shell = rowOf(mon, 'x:', SHELL_FRIENDLY_NAME).first(); // the shell's friendly name (FR-020)
       await expect(shell).toBeVisible();
 
       // Kill All Below on the parent: all three end, the shell does not.
@@ -97,12 +103,12 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       await expect(rowOf(mon, 'x:', 'Node')).toHaveCount(3);
       for (let i = 0; i < 3; i += 1) await expect(nodes.nth(i)).toHaveAttribute('data-ended', 'true', { timeout: 15_000 });
       await expect(shell).not.toHaveAttribute('data-ended', 'true');
-      expect(processesMatching('cmd.exe', '', processTable()).length, 'the shell is still running').toBeGreaterThan(0);
+      expect(processesMatching(SHELL_IMAGE, '', processTable()).length, 'the shell is still running').toBeGreaterThan(0);
       await expect(mon.getByTestId('monitor-notice')).toHaveCount(0);
 
       // The shell keeps working: close the monitor and ask it something.
       await closeMonitorWindow(app);
-      await runTypedCommand(win, term, 'set /a 6*7', { echoed: 'set /a 6*7', output: '42' });
+      await runTypedCommand(win, term, SUM_6_7, { echoed: SUM_6_7, output: '42' });
 
       // Kill All Below on the PANEL ends the shell as well, and the panel keeps its place (FR-066).
       mon = await openMonitorWindow(app, () => win.keyboard.press(MONITOR_CHORD));

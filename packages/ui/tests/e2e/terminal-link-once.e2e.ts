@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -17,10 +17,20 @@ import {
   stayedAbsent,
   TYPE_DELAY,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
 import { osc8HalfRuns, skipIfElevated } from './admin.js';
+
+const WINDOWS = process.platform === 'win32';
+/** The modifier a link click takes, and the name the hint gives it: Ctrl, or Cmd on macOS (Ctrl+click is a right-click there). */
+const LINK_MODIFIER = 'ControlOrMeta';
+const LINK_MODIFIER_LABEL = process.platform === 'darwin' ? 'Cmd' : 'Ctrl';
+/** The link-printing scripts: PowerShell on Windows, as this file always used; `sh` elsewhere. */
+const SCRIPT_EXT = WINDOWS ? 'ps1' : 'sh';
+/** An OSC 8 hyperlink printed by `sh`'s `printf`, its target and text passed as arguments so neither is a format. */
+const SH_OSC8 = "printf '\\033]8;;%s\\033\\\\%s\\033]8;;\\033\\\\\\n'";
 
 /*
  * ONE app for this file, not one per test.
@@ -41,7 +51,6 @@ import { osc8HalfRuns, skipIfElevated } from './admin.js';
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -187,24 +196,26 @@ async function captureOpens(app: ElectronApplication): Promise<{
  * output — the test proceeds before the link exists and clicks on the typed text instead. That is
  * exactly how the first draft of this spec failed for the wrong reason.
  */
-function writeLinkScript(root: string, uri: string, text: string, name = 'lnk.ps1'): void {
+function writeLinkScript(root: string, uri: string, text: string, name = `lnk.${SCRIPT_EXT}`): void {
   const esc = '$e';
   writeFileSync(
     join(root, name),
-    `$e=[char]27\nWrite-Host ("${esc}" + "]8;;${uri}" + "${esc}" + "\\" + "${text}" + "${esc}" + "]8;;" + "${esc}" + "\\")\n`,
+    WINDOWS
+      ? `$e=[char]27\nWrite-Host ("${esc}" + "]8;;${uri}" + "${esc}" + "\\" + "${text}" + "${esc}" + "]8;;" + "${esc}" + "\\")\n`
+      : `${SH_OSC8} '${uri}' '${text}'\n`,
   );
 }
 
-/** A PowerShell script that prints a bare URL — no OSC 8 wrapper, addon detection only. */
+/** A script that prints a bare URL — no OSC 8 wrapper, addon detection only. */
 function writePlainScript(root: string, uri: string): void {
-  writeFileSync(join(root, 'lnk.ps1'), `Write-Host "${uri}"\n`);
+  writeFileSync(join(root, `lnk.${SCRIPT_EXT}`), WINDOWS ? `Write-Host "${uri}"\n` : `printf '%s\\n' '${uri}'\n`);
 }
 
-/** Open a PowerShell terminal in the first panel and wait for its prompt. */
+/** Open a terminal in the first panel — Windows PowerShell, or {@link TEST_SHELL} off Windows — and wait for its prompt. */
 async function openTerminal(win: Page, root: string): Promise<Locator> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+  await win.getByTestId('terminal-flavour').selectOption(WINDOWS ? 'windows-powershell' : TEST_SHELL);
   const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
   await expect(confirm).toBeEnabled();
   await confirm.click();
@@ -241,8 +252,9 @@ async function openTerminal(win: Page, root: string): Promise<Locator> {
  * presses Enter — so `script` must be a name this terminal has not shown yet, or that wait is met by
  * an earlier line.
  */
-async function runScript(win: Page, term: Locator, printed: string, script = 'lnk.ps1'): Promise<void> {
-  await runTypedCommand(win, term, `powershell -NoProfile -ExecutionPolicy Bypass -File .\\${script}`, {
+async function runScript(win: Page, term: Locator, printed: string, script = `lnk.${SCRIPT_EXT}`): Promise<void> {
+  const line = WINDOWS ? `powershell -NoProfile -ExecutionPolicy Bypass -File .\\${script}` : `sh ./${script}`;
+  await runTypedCommand(win, term, line, {
     echoed: script,
     output: printed,
     timeout: 25_000,
@@ -298,10 +310,10 @@ async function clickLink(win: Page, text: string, opts: { ctrl: boolean }): Prom
   await win.mouse.move(x, y);
   // sleep-justified: xterm's Linkifier2 resolves the hovered link internally with no DOM signal of its own. The visible proxy is the status bar's link readout, but it appears only once throng's OWN resolution answers, which is a strictly later event than the one this wait is for — so waiting on it would couple every press to a main-process round trip that the press does not need.
   await win.waitForTimeout(300);
-  if (opts.ctrl) await win.keyboard.down('Control');
+  if (opts.ctrl) await win.keyboard.down(LINK_MODIFIER);
   await win.mouse.down();
   await win.mouse.up();
-  if (opts.ctrl) await win.keyboard.up('Control');
+  if (opts.ctrl) await win.keyboard.up(LINK_MODIFIER);
 }
 
 /*
@@ -339,8 +351,8 @@ test('Ctrl+clicking a PLAIN-TEXT url, and an OSC 8 link whose text IS the url, e
       // The OSC 8 shape (a link whose text is the url, so two mechanisms could match it): its own
       // script name, because runScript waits for the NAME to be echoed and `lnk.ps1` is already shown.
       const osc8Url = 'https://example.com/osc8-same-text';
-      writeLinkScript(root, osc8Url, osc8Url, 'lnk-osc8.ps1');
-      await runScript(win, term, osc8Url, 'lnk-osc8.ps1');
+      writeLinkScript(root, osc8Url, osc8Url, `lnk-osc8.${SCRIPT_EXT}`);
+      await runScript(win, term, osc8Url, `lnk-osc8.${SCRIPT_EXT}`);
       await opens.reset();
       await clickLink(win, osc8Url, { ctrl: true });
       await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([osc8Url]);
@@ -385,10 +397,10 @@ async function ctrlClickSecondRows(
   const oscUri = 'https://example.com/osc8-wrapped-target';
   const oscText = `OSCWRAP_${'klmnopqrst'.repeat(10)}`;
   // A name of its own: `runScript` waits for the shell to echo it, and `lnk.ps1` is already on screen.
-  const script = 'lnk2w.ps1';
+  const script = `lnk2w.${SCRIPT_EXT}`;
   writeFileSync(
     join(root, script),
-    [
+    (WINDOWS ? [
       '$e=[char]27',
       "Clear-Host",
       "Write-Host 'WRAP2WEB'",
@@ -399,7 +411,13 @@ async function ctrlClickSecondRows(
       `Write-Host ("$e" + "]8;;${oscUri}" + "$e" + "\\" + "${oscText}" + "$e" + "]8;;" + "$e" + "\\")`,
       "Write-Host 'WRAP2END'",
       '',
-    ].join('\n'),
+    ] : [
+      "printf '\\033[H\\033[2J'",
+      `printf '%s\\n' 'WRAP2WEB' '${web}' 'WRAP2PATH' '${outsideFile}' 'WRAP2OSC'`,
+      `${SH_OSC8} '${oscUri}' '${oscText}'`,
+      "printf '%s\\n' 'WRAP2END'",
+      '',
+    ]).join('\n'),
   );
 
   // Narrowed, and returned only once the pty has taken the new width and the prompt has answered at
@@ -440,10 +458,10 @@ async function ctrlClickSecondRows(
       return point;
     };
     const ctrlPressHere = async (): Promise<void> => {
-      await win.keyboard.down('Control');
+      await win.keyboard.down(LINK_MODIFIER);
       await win.mouse.down();
       await win.mouse.up();
-      await win.keyboard.up('Control');
+      await win.keyboard.up(LINK_MODIFIER);
     };
 
     // A web url.
@@ -607,7 +625,7 @@ async function expectHintAtLinkThenCtrlHides(win: Page, row: Locator, text: stri
   const hint = win.getByTestId('link-hint');
   await expect(hint, 'a plain click on a link raised no hint').toBeVisible({ timeout: 5000 });
   const shownAt = Date.now();
-  await expect(hint).toContainText('Ctrl');
+  await expect(hint).toContainText(LINK_MODIFIER_LABEL);
 
   const rowBox = (await row.boundingBox())!;
   const last = await row.evaluate((el, want) => {
@@ -647,12 +665,12 @@ async function expectHintAtLinkThenCtrlHides(win: Page, row: Locator, text: stri
     rowBox.height / 2,
   );
 
-  // FR-165d — Ctrl hides it at once.
-  await win.keyboard.down('Control');
+  // FR-165d — Ctrl (Cmd on macOS) hides it at once.
+  await win.keyboard.down(LINK_MODIFIER);
   try {
     await expect(hint, 'Ctrl did not hide the hint').toHaveCount(0, { timeout: 1000 });
   } finally {
-    await win.keyboard.up('Control');
+    await win.keyboard.up(LINK_MODIFIER);
   }
   expect(Date.now() - shownAt, 'the hint went on its own timer, not on Ctrl').toBeLessThan(LINK_HINT_MS);
 }
@@ -1091,10 +1109,10 @@ async function enterLink(win: Page, at: LinkPoint): Promise<void> {
  */
 async function pressAt(win: Page, at: LinkPoint, opts: { ctrl: boolean }): Promise<void> {
   await enterLink(win, at);
-  if (opts.ctrl) await win.keyboard.down('Control');
+  if (opts.ctrl) await win.keyboard.down(LINK_MODIFIER);
   await win.mouse.down();
   await win.mouse.up();
-  if (opts.ctrl) await win.keyboard.up('Control');
+  if (opts.ctrl) await win.keyboard.up(LINK_MODIFIER);
 }
 
 /** Forget what the app has asked the OS to open. The harness stubs both routes at launch. */
@@ -1110,6 +1128,17 @@ async function resetOpenedPaths(app: ElectronApplication): Promise<void> {
  * resolution joined would fail them for a reason that has nothing to do with #198.
  */
 function samePathish(a: string, b: string): boolean {
+  if (!WINDOWS) {
+    // macOS's temp folder is a symlink (`/var` → `/private/var`), and a shell reports the resolved cwd.
+    const real = (p: string): string => {
+      try {
+        return realpathSync(p);
+      } catch {
+        return p;
+      }
+    };
+    return real(a) === real(b);
+  }
   return a.replace(/\//g, '\\').toLowerCase() === b.replace(/\//g, '\\').toLowerCase();
 }
 
@@ -1133,7 +1162,7 @@ test('Ctrl+clicking a link in a program that OWNS THE MOUSE opens it once, not a
   const uri = 'https://example.com/mouse-owning-program';
   const detectedPath = '../outside.txt';
   const folderText = 'FOLDERLINKTEXT';
-  const folderUri = `file:///${folder.replace(/\\/g, '/')}`;
+  const folderUri = WINDOWS ? `file:///${folder.replace(/\\/g, '/')}` : `file://${folder}`;
   const shadowedFile = join(base, 'shadowed.txt');
   writeFileSync(shadowedFile, 'a path inside a scheme-less hyperlink\n', 'utf8');
   const shadowedPath = '../shadowed.txt';

@@ -8,6 +8,7 @@ import {
   firstPanelId,
   type OpenApp,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
 } from './harness.js';
 
 /*
@@ -89,7 +90,6 @@ import {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -144,7 +144,8 @@ function writeFixture(root: string, logPath: string): void {
 async function startTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+  // Windows PowerShell on Windows, for the ConPTY reason in the header; a POSIX pty carries the modes from any shell.
+  await win.getByTestId('terminal-flavour').selectOption(process.platform === 'win32' ? 'windows-powershell' : TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();

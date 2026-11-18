@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { runApp, openApp, createProject, switchProject, firstPanelId, cleanupTemp, type OpenApp } from './harness.js';
+import { runApp, openApp, createProject, switchProject, firstPanelId, cleanupTemp, TEST_SHELL, type OpenApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /*
@@ -18,7 +18,6 @@ test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
 let sharedData: string;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   sharedData = mkdtempSync(join(tmpdir(), 'throng-cmdmem-data-'));
@@ -43,7 +42,14 @@ test.afterAll(async () => {
  * "nothing was seen" from "it was seen and correctly not promoted".
  */
 
-const LONG_RUNNING = 'ping -t 127.0.0.1';
+const WINDOWS = process.platform === 'win32';
+/** A command that runs until interrupted, as the shell's own child, printing as it goes. */
+const LONG_RUNNING = WINDOWS ? 'ping -t 127.0.0.1' : 'ping 127.0.0.1';
+/** What {@link LONG_RUNNING} prints once it is running. */
+const LONG_RUNNING_OUTPUT = WINDOWS ? 'Reply from' : 'bytes from';
+/** A second long-runner, silent, waiting on its standard input — and the name it is observed under. */
+const TAKEOVER = WINDOWS ? 'findstr /R x' : 'grep x';
+const TAKEOVER_SEEN = WINDOWS ? 'findstr' : 'grep';
 
 /** Ask the main process to close the primary window, firing the real close handshake. */
 async function requestClose(app: import('@playwright/test').ElectronApplication): Promise<void> {
@@ -103,7 +109,7 @@ async function withTerminal(
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
         await expect(win.getByTestId('terminal-flavour')).toBeVisible();
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         if (opts.startupCommand !== undefined) {
           await win.getByTestId('terminal-startup-command').fill(opts.startupCommand);
         }
@@ -159,7 +165,7 @@ test('memory ON: a command started IN the terminal is observed and persisted (US
   skipIfElevated();
   test.setTimeout(120_000);
   await withTerminal('MemRow2', { remember: true }, async ({ win, data, term }) => {
-    await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
+    await runInTerminal(win, term, LONG_RUNNING, LONG_RUNNING_OUTPUT);
     // The raw observation must reach the persisted layout while it is still running — this is what
     // survives an end that never runs teardown code.
     await expectLayout(
@@ -185,7 +191,7 @@ test('memory OFF: a running command is never recorded at all (US2 row 6)', { tag
   skipIfElevated();
   test.setTimeout(120_000);
   await withTerminal('MemRow6', { remember: false }, async ({ win, pid, data, term }) => {
-    await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
+    await runInTerminal(win, term, LONG_RUNNING, LONG_RUNNING_OUTPUT);
     /*
      * The fence: wait until the DAEMON's own observation of the running command has reached the
      * renderer, via `window.__throngTerminalCommand` (command-store.ts) — populated by the SAME
@@ -238,7 +244,7 @@ test('a command that takes over REPLACES the startup command the user typed (US2
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
         await expect(win.getByTestId('terminal-flavour')).toBeVisible();
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId('terminal-startup-command').fill(LONG_RUNNING);
         /*
          * 039 (#223) — this scenario is ABOUT command memory, so it must now switch it on: the
@@ -256,7 +262,7 @@ test('a command that takes over REPLACES the startup command the user typed (US2
         const term = win.getByTestId(`terminal-${pid}`);
         await expect(term).toBeVisible();
         // The startup command runs on its own — nothing is typed.
-        await expect(term).toContainText('Reply from', { timeout: 25_000 });
+        await expect(term).toContainText(LONG_RUNNING_OUTPUT, { timeout: 25_000 });
 
         // Interrupt it, as a user would. The shell must survive this (FR-005).
         await term.click();
@@ -264,8 +270,8 @@ test('a command that takes over REPLACES the startup command the user typed (US2
         await expectLayout(data, 'MemOver', (j) => /"observedCommand":null/.test(j), 'the interrupted command still reads as running');
 
         // A different long-runner takes the foreground.
-        await runInTerminal(win, term, 'findstr /R x', '');
-        await expectLayout(data, 'MemOver', (j) => /"observedCommand":"[^"]*findstr/i.test(j), 'the replacement was never observed');
+        await runInTerminal(win, term, TAKEOVER, '');
+        await expectLayout(data, 'MemOver', (j) => new RegExp(`"observedCommand":"[^"]*${TAKEOVER_SEEN}`, 'i').test(j), 'the replacement was never observed');
 
         // End it the way a user does with something still running.
         await requestClose(app);
@@ -290,7 +296,7 @@ test('a command that takes over REPLACES the startup command the user typed (US2
         await expectLayout(
           data,
           'MemOver',
-          (j) => /"startupCommand":"[^"]*findstr/i.test(j),
+          (j) => new RegExp(`"startupCommand":"[^"]*${TAKEOVER_SEEN}`, 'i').test(j),
           'the command that took over the terminal never replaced the saved startup command',
         );
       },

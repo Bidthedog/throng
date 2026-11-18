@@ -18,7 +18,19 @@ import { skipIfElevated } from './admin.js';
  * "Unexpected token '-t'" — while the identical command worked in cmd and bash.
  */
 
-const FLAVOURS = ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] as const;
+const WINDOWS = process.platform === 'win32';
+/** This platform's built-in shells, each handed a startup command by its own recipe (`command-recipe.ts`). */
+const FLAVOURS: readonly string[] = WINDOWS ? ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] : ['bash', 'zsh', 'fish', 'sh'];
+
+/**
+ * A QUOTED absolute executable with a DASH argument, and what it prints when it really ran — never text its own
+ * command line contains. Windows' ping as it always was; elsewhere the node running this suite, whose `-p` prints
+ * the joined string.
+ */
+const QUOTED_COMMAND = WINDOWS
+  ? '"C:\\Windows\\System32\\PING.EXE" -n 1 127.0.0.1'
+  : `"${process.execPath}" -p "'QUOTED_'+'RAN'"`;
+const QUOTED_OUTPUT = WINDOWS ? 'Reply from' : 'QUOTED_RAN';
 
 /** A marker each shell can echo, spelled the way that shell spells an echo. */
 function echoCommand(flavour: string, marker: string): string {
@@ -38,8 +50,6 @@ async function flavourAvailable(
     .evaluateAll((opts) => opts.map((o) => (o as HTMLOptionElement).value));
   return values.includes(flavour);
 }
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 for (const flavour of FLAVOURS) {
   test(`[${flavour}] a startup command runs and leaves a live prompt (FR-004/FR-005)`, { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
@@ -93,9 +103,7 @@ for (const flavour of FLAVOURS) {
         // spaces in it. The DASH argument matters: PowerShell only mis-parses when a `-` token
         // follows the quoted string. A `/`-style switch does not reproduce it at all, so an
         // earlier version of this test passed against the very bug it was written for.
-        await win
-          .getByTestId('terminal-startup-command')
-          .fill('"C:\\Windows\\System32\\PING.EXE" -n 1 127.0.0.1');
+        await win.getByTestId('terminal-startup-command').fill(QUOTED_COMMAND);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
         const term = win.getByTestId(`terminal-${pid}`);
@@ -107,9 +115,9 @@ for (const flavour of FLAVOURS) {
         // Assert POSITIVELY that the command RAN. A negative assertion on the error text is
         // unreliable: xterm wraps long lines, so 'Unexpected token' can be split across rows and
         // silently never match — an earlier version of this test passed against the real bug
-        // for exactly that reason. Ping's own output is unambiguous and cannot be faked by an
+        // for exactly that reason. The program's own output is unambiguous and cannot be faked by an
         // echo of the command line.
-        await expect(term).toContainText('Reply from', { timeout: 30_000 });
+        await expect(term).toContainText(QUOTED_OUTPUT, { timeout: 30_000 });
       });
       test.skip(!present, `${flavour} is not installed on this machine`);
     } finally {

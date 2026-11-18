@@ -28,7 +28,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { openApp, createProject as newProject, firstPanelId, panelIds, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { openApp, createProject as newProject, chordFor, firstPanelId, panelIds, cleanupTemp, HOST_OS, type AppOptions, type OpenApp, TEST_SHELL } from './harness.js';
 
 /*
  * ONE app for this file, not one per test: none of these tests seeds state before launch, so each launch
@@ -40,8 +40,6 @@ import { openApp, createProject as newProject, firstPanelId, panelIds, cleanupTe
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -63,6 +61,16 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
 
 const SENTINEL = 'zqsplit048';
 
+/** The split chord's first stroke as this platform ships it: `Control+Shift+Alt+End`, Cmd for Ctrl on macOS. */
+const SPLIT_PREFIX = chordFor('panel.splitRight')[0]!;
+/** The modifier the held variant keeps down in Ctrl's place. */
+const PRIMARY = HOST_OS === 'macos' ? 'Meta' : 'Control';
+
+/** Every line the panel's view holds, scrollback included (061's test seam). */
+function terminalLines(win: Page, panelId: string): Promise<string[]> {
+  return win.evaluate((id) => (window as unknown as { __throngTerminalLines?: (p: string) => string[] }).__throngTerminalLines?.(id) ?? [], panelId);
+}
+
 /** Right-click the panel handle and sync it into a brand-new sub-workspace window. */
 async function syncToNewSubWorkspace(app: ElectronApplication, win: Page, panelId: string): Promise<Page> {
   await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });
@@ -82,43 +90,52 @@ test('neither stroke of a split chord reaches a real shell, completed or cancell
       await createProject(win, 'SplitMode', root);
       const term = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${term}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${term}`).click();
       const terminal = win.getByTestId(`terminal-${term}`);
       await expect(terminal).toContainText(basename(root), { timeout: 30_000 });
 
-      // The sentinel sits on cmd's line, un-entered, through every chord below.
+      // The sentinel sits on the shell's line, un-entered, through every chord below.
       await terminal.click();
       await win.keyboard.type(SENTINEL);
       await expect(terminal).toContainText(SENTINEL, { timeout: 10_000 });
 
-      // ── Held: Ctrl+Shift+Alt stay down from End through the arrow (FR-020a). ──
-      await win.keyboard.down('Control');
+      // ── Held: Ctrl (Cmd on macOS)+Shift+Alt stay down from End through the arrow (FR-020a). ──
+      await win.keyboard.down(PRIMARY);
       await win.keyboard.down('Shift');
       await win.keyboard.down('Alt');
       await win.keyboard.press('End');
       await win.keyboard.press('ArrowDown');
       await win.keyboard.up('Alt');
       await win.keyboard.up('Shift');
-      await win.keyboard.up('Control');
+      await win.keyboard.up(PRIMARY);
       await expect(win.locator('.panel-box')).toHaveCount(2);
 
       // ── Released: the arrow on its own after the first stroke. ──
       await terminal.click();
-      await win.keyboard.press('Control+Shift+Alt+End');
+      await win.keyboard.press(SPLIT_PREFIX);
       await win.keyboard.press('ArrowRight');
       await expect(win.locator('.panel-box')).toHaveCount(3);
 
       // ── Cancelled: Escape ends split mode and is consumed (FR-022). ──
       await terminal.click();
-      await win.keyboard.press('Control+Shift+Alt+End');
+      await win.keyboard.press(SPLIT_PREFIX);
       await win.keyboard.press('Escape');
       await expect(win.locator('.panel-box')).toHaveCount(3);
 
-      // cmd reports the line it received: exactly the sentinel, nothing added, nothing cleared.
+      // The shell reports the line it received: exactly the sentinel, nothing added, nothing cleared.
       await terminal.click();
       await win.keyboard.press('Enter');
-      await expect(terminal).toContainText(`'${SENTINEL}' is not recognized`, { timeout: 15_000 });
+      if (process.platform === 'win32') {
+        await expect(terminal).toContainText(`'${SENTINEL}' is not recognized`, { timeout: 15_000 });
+      } else {
+        // bash names the word it could not run as a whole line of its own (`-bash: ` from a login shell), read
+        // line by line because the view's text runs the echoed sentinel straight into that line.
+        const notFound = new RegExp(`^(?:-?bash: )?${SENTINEL}: command not found$`);
+        await expect
+          .poll(async () => (await terminalLines(win, term)).some((line) => notFound.test(line.trim())), { timeout: 15_000 })
+          .toBe(true);
+      }
     });
   } finally {
     cleanupTemp(root);
@@ -137,7 +154,7 @@ test('a sub-workspace window splits by chord through the same dispatcher (FR-091
         await child.bringToFront();
         await child.getByTestId(`panel-${a}`).click();
 
-        await child.keyboard.press('Control+Shift+Alt+End');
+        await child.keyboard.press(SPLIT_PREFIX);
         await child.keyboard.press('ArrowRight');
 
         await expect(child.locator('.panel-box')).toHaveCount(2);

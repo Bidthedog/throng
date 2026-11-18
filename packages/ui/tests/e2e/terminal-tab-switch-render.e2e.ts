@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, cleanupTemp, TEST_SHELL } from './harness.js';
 
 /**
  * 028 / #162 — a terminal must be correct the moment its tab appears.
@@ -52,10 +52,10 @@ async function installRepaintProbe(app: ElectronApplication): Promise<{
   };
 }
 
-/** Turn the given panel into a cmd terminal and wait for its prompt. */
+/** Turn the given panel into a {@link TEST_SHELL} terminal and wait for its prompt. */
 async function makeTerminal(win: Page, panelId: string, marker: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   const confirm = win.getByTestId(`panel-type-confirm-${panelId}`);
   await expect(confirm).toBeEnabled();
   await confirm.click();
@@ -64,7 +64,6 @@ async function makeTerminal(win: Page, panelId: string, marker: string): Promise
   await expect(term).toContainText(marker, { timeout: 20000 });
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('switching tabs asks each rebuilt terminal to redraw, and its content survives', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tabswitch-'));

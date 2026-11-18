@@ -9,6 +9,7 @@ import {
   linkMarkedText,
   type OpenApp,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
 } from './harness.js';
 import { osc8HalfRuns } from './admin.js';
 
@@ -51,7 +52,6 @@ import { osc8HalfRuns } from './admin.js';
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -91,7 +91,8 @@ function writeFixture(root: string): void {
 async function startTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+  // Any shell runs the fixture: Windows PowerShell on Windows, as this file always used, {@link TEST_SHELL} elsewhere.
+  await win.getByTestId('terminal-flavour').selectOption(process.platform === 'win32' ? 'windows-powershell' : TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();

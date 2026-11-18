@@ -149,19 +149,36 @@ test('on window resize only PROJECTS changes; Sub-workspaces stays pinned to the
           proj: Math.round(rect('.sidebar-panel').height),
           sub: Math.round(sub.height),
           bottomGap: Math.abs(body.bottom - sub.bottom),
+          inner: window.innerHeight,
         };
       });
 
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 900));
+    /*
+     * The main window, by its page — not `getAllWindows()[0]`, which can be another of throng's windows (the drag
+     * ghost) — resized between two heights it can actually take: no taller than its display's work area, which
+     * macOS keeps a window inside (a hosted macOS runner's display is shorter than 900, and both heights used to
+     * clamp to the same one), and no shorter than the window's own minimum. 900 and 680 wherever they fit.
+     */
+    const mainWindow = await app.browserWindow(win);
+    const [bigH, smallH] = await app.evaluate(({ BrowserWindow, screen }, url) => {
+      const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL() === url);
+      if (!w) throw new Error(`no window is showing ${url}`);
+      const area = screen.getDisplayMatching(w.getBounds()).workArea.height;
+      const big = Math.min(900, area);
+      return [big, Math.max(w.getMinimumSize()[1] ?? 0, big - 220)];
+    }, win.url());
+    await mainWindow.evaluate((w, h) => w.setSize(1000, h), bigH);
     // Wait for Projects — the panel that actually absorbs the resize — to stop moving before
     // measuring, rather than assuming a fixed duration is always enough for it to propagate.
     await geom(win.getByTestId('projects-panel'));
     const big = await measure();
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 680));
+    await mainWindow.evaluate((w, h) => w.setSize(1000, h), smallH);
     await geom(win.getByTestId('projects-panel'));
     const small = await measure();
 
-    expect(big.proj - small.proj).toBeGreaterThan(150); // Projects absorbed the change
+    const shrunk = big.inner - small.inner;
+    expect(shrunk, `the window got shorter (${bigH} → ${smallH} asked)`).toBeGreaterThan(100);
+    expect(big.proj - small.proj).toBeGreaterThanOrEqual(shrunk - 2); // Projects absorbed the change — all of it
     expect(Math.abs(big.sub - small.sub)).toBeLessThanOrEqual(2); // pinned, unchanged
     expect(big.bottomGap).toBeLessThanOrEqual(2); // stays anchored to the bottom
     expect(small.bottomGap).toBeLessThanOrEqual(2);

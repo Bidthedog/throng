@@ -7,12 +7,15 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
+import { shippedBindingsFor } from '@throng/core';
 import {
   openApp,
   createProject as newProject,
   cleanupTemp,
   type AppOptions,
   type OpenApp,
+  pressAction,
+  HOST_OS,
 } from './harness.js';
 
 /*
@@ -146,7 +149,8 @@ test('a menu item shows its shortcut in brackets, and the advertised shortcut ru
       await expect(win.getByTestId('menu-item-Copy')).toBeVisible();
       // Merged from context-menu-shortcuts.e2e.ts (#125): Copy is bound to Ctrl+C in the explorer scope, so its
       // shortcut shows in brackets after the label (FR-003)...
-      await expect(win.getByTestId('menu-shortcut-Copy')).toHaveText('(Ctrl+C)');
+      // The text is the binding token itself (`firstBinding`, context-menu-items.ts): `Ctrl+C`, and `Meta+C` on macOS (070 FR-029).
+      await expect(win.getByTestId('menu-shortcut-Copy')).toHaveText(`(${shippedBindingsFor(HOST_OS).bindings['file.copy']?.[0]})`);
       // ...visually smaller than the label (FR-005)...
       const sizes = await win.evaluate(() => {
         const sc = document.querySelector('[data-testid="menu-shortcut-Copy"]') as HTMLElement;
@@ -160,7 +164,7 @@ test('a menu item shows its shortcut in brackets, and the advertised shortcut ru
       // ...and an item whose action has no keybinding (New File) renders no shortcut element (FR-004).
       await expect(win.getByTestId('menu-item-New File')).toBeVisible();
       await expect(win.getByTestId('menu-shortcut-New File')).toHaveCount(0);
-      await win.keyboard.press('Control+c');
+      await pressAction(win, 'file.copy');
       await expect(win.getByTestId('context-menu')).toHaveCount(0);
       // Paste at the root → a de-duplicated copy proves Ctrl+C actually copied. The row names what
       // will land (050 FR-025a), which is also the first proof the copy reached the clipboard.

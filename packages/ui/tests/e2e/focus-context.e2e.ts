@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject, firstPanelId, geom, installResizeProbe, openApp, panelIds, type AppOptions, type OpenApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject, firstPanelId, geom, installResizeProbe, openApp, panelIds, type AppOptions, type OpenApp, TEST_SHELL } from './harness.js';
 
 // 012 US1 (FR-001/002/005, SC-001a/006): the active panel is a single, visible,
 // theme-driven focus context per window — the foreground treatment when the
@@ -40,8 +40,6 @@ function own(dir: string): string {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -111,7 +109,7 @@ test('changing which panel holds focus sends zero terminal resize messages (SC-0
 
       // Type the first panel as a terminal and wait for it to be live.
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
       await expect(confirm).toBeEnabled();
       await confirm.click();

@@ -4,7 +4,7 @@ import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { openApp, createProject as newProject, firstPanelId, cleanupTemp, quiesced, type AppOptions, type OpenApp } from './harness.js';
 import { quiesceSampler } from './quiesce-sampler.js';
-import { writeAltScreenProgram, makeCmdTerminal, runAltScreenProgram } from './altscreen-fixture.js';
+import { writeAltScreenProgram, makeShellTerminal, runAltScreenProgram } from './altscreen-fixture.js';
 import { skipIfElevated } from './admin.js';
 
 /*
@@ -17,8 +17,6 @@ import { skipIfElevated } from './admin.js';
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -113,7 +111,7 @@ test('a wheel notch moves an alternate-screen program that never asked for the m
     await runApp(async (_app, win) => {
       await createProject(win, 'WheelAlt', root);
       const pid = await firstPanelId(win);
-      await makeCmdTerminal(win, pid, basename(root));
+      await makeShellTerminal(win, pid, basename(root));
       await runAltScreenProgram(win, pid);
 
       await wheelOver(win, pid, -300); // scroll up
@@ -140,12 +138,14 @@ test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', { ta
     await runApp(async (_app, win) => {
       await createProject(win, 'WheelShell', root);
       const pid = await firstPanelId(win);
-      await makeCmdTerminal(win, pid, basename(root));
+      await makeShellTerminal(win, pid, basename(root));
       const term = win.getByTestId(`terminal-${pid}`);
 
       // Fill the buffer so there is something to scroll, then leave a marker on the command line.
       await term.click();
-      await win.keyboard.type('for /L %i in (1,1,80) do @echo WHEELFILL%i');
+      await win.keyboard.type(
+        process.platform === 'win32' ? 'for /L %i in (1,1,80) do @echo WHEELFILL%i' : 'for i in $(seq 1 80); do echo WHEELFILL$i; done',
+      );
       await win.keyboard.press('Enter');
       await expect(term).toContainText('WHEELFILL80', { timeout: 30_000 });
       await win.keyboard.type('echo UNTOUCHED');
@@ -184,7 +184,7 @@ test('Ctrl+wheel is left to zoom, not sent to the program', { tag: ['@extended',
     await runApp(async (_app, win) => {
       await createProject(win, 'WheelZoom', root);
       const pid = await firstPanelId(win);
-      await makeCmdTerminal(win, pid, basename(root));
+      await makeShellTerminal(win, pid, basename(root));
       await runAltScreenProgram(win, pid);
 
       /*

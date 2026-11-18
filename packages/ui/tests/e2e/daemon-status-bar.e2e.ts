@@ -10,6 +10,7 @@ import {
   daemonPid,
   forceKillProcessTree,
   cleanupTemp,
+  TEST_SHELL,
 } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
@@ -35,8 +36,6 @@ import { skipIfElevated } from './admin.js';
 /** The status-bar indicator: present only when the daemon is NOT healthy (029 FR-008). */
 const indicator = (win: Page) => win.getByTestId('status-daemon');
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('the daemon indicator reports the state, restarts on demand, and outlives the notice', { tag: ['@extended', '@failure', '@reserve:process'] }, async () => {
   // An elevated daemon lives in a different process tree (the de-elevated agent), which
   // `forceKillProcessTree` on the health.ping pid does not describe.
@@ -51,7 +50,7 @@ test('the daemon indicator reports the state, restarts on demand, and outlives t
         await createProject(win, 'BarProj', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         // SETUP: a real shell, so the daemon is genuinely working when it is killed.
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {

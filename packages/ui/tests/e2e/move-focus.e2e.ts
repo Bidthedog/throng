@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { shippedPress } from '../shared/window-chords.js';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject as newProject, firstPanelId, openApp, panelIds, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject as newProject, firstPanelId, openApp, panelIds, type AppOptions, type OpenApp, splitPanelViaMenu, TEST_SHELL } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -24,8 +24,6 @@ import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject as ne
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -113,10 +111,10 @@ test('move-focus works from a focused terminal and editor, and input routing fol
     await runApp(async (_app, win) => {
       await createProject(win, 'FocusIO', root);
 
-      // p1 = terminal (cmd), p2 = editor, as a row: [terminal | editor].
+      // p1 = terminal, p2 = editor, as a row: [terminal | editor].
       const p1 = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${p1}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${p1}`).click();
       await expect(win.getByTestId(`terminal-${p1}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
@@ -127,8 +125,8 @@ test('move-focus works from a focused terminal and editor, and input routing fol
       await win.getByTestId(`panel-type-confirm-${p2}`).click();
       await expect(win.getByTestId(`editor-${p2}`)).toBeVisible();
 
-      // Give the TERMINAL caret focus, then move focus right by keyboard. Git Bash /
-      // cmd must NOT swallow the chord — the capture-phase handler intercepts it.
+      // Give the TERMINAL caret focus, then move focus right by keyboard. The
+      // shell must NOT swallow the chord — the capture-phase handler intercepts it.
       await win.getByTestId(`terminal-${p1}`).click();
       await win.keyboard.press(shippedPress('focus.right'));
       await expect(win.getByTestId(`panel-${p2}`)).toHaveAttribute('data-active', 'true');

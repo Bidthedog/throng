@@ -27,6 +27,7 @@ import {
   cleanupTemp,
   NEW_WINDOW_TIMEOUT_MS,
   type OpenApp,
+  pressAction,
 } from './harness.js';
 
 const FIXTURES = fileURLToPath(new URL('../fixtures/preview/', import.meta.url));
@@ -65,9 +66,9 @@ test('an editor synced into a new sub-workspace window keeps its selection and i
 
     // A selection of the first line, and a find session over a term that is in the file.
     await focusEditor(win, editorId);
-    await win.keyboard.press('Control+Home');
+    await win.keyboard.press('ControlOrMeta+Home');
     await win.keyboard.press('Shift+End');
-    await win.keyboard.press('Control+f');
+    await pressAction(win, 'search.find');
     const input = win.getByTestId(`find-bar-${editorId}`).getByTestId('find-input');
     await expect(input).toBeFocused();
     // A term whose count differs from the seed's: Ctrl+F seeded the selected first line ("1 of 1"), and the typed

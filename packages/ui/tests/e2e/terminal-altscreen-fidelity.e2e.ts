@@ -8,12 +8,13 @@ import {
   createProject as newProject,
   firstPanelId,
   panelIds,
+  pressAction,
   cleanupTemp,
   quiesced,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
-import { ALT_MARKER, makeCmdTerminal, runAltScreenProgram, writeAltScreenProgram } from './altscreen-fixture.js';
+import { ALT_MARKER, makeShellTerminal, runAltScreenProgram, writeAltScreenProgram } from './altscreen-fixture.js';
 import { skipIfElevated } from './admin.js';
 
 /*
@@ -35,8 +36,6 @@ import { skipIfElevated } from './admin.js';
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -89,7 +88,7 @@ test('clicking into a terminal on the alternate screen does not wipe its screen'
     await runApp(async (_app, win) => {
       await createProject(win, 'AltClick', root);
       const pid = await firstPanelId(win);
-      await makeCmdTerminal(win, pid, marker);
+      await makeShellTerminal(win, pid, marker);
       await runAltScreenProgram(win, pid);
       const term = win.getByTestId(`terminal-${pid}`);
 
@@ -134,13 +133,13 @@ test('re-attaching to an alternate-screen program replays no scrollback', { tag:
     await runApp(async (_app, win) => {
       await createProject(win, 'AltFlash', root);
       const p1 = await firstPanelId(win);
-      await makeCmdTerminal(win, p1, marker);
+      await makeShellTerminal(win, p1, marker);
       await runAltScreenProgram(win, p1);
 
       // A second tab, so switching away really does unmount the first.
       await win.getByTestId('tab-add').click();
       const p2 = (await panelIds(win))[0];
-      await makeCmdTerminal(win, p2, marker);
+      await makeShellTerminal(win, p2, marker);
 
       const tab1 = win.getByTestId('tab-strip').locator('.tab-chip').first();
       await tab1.click();
@@ -198,7 +197,7 @@ process.stdin.resume();
     await runApp(async (_app, win) => {
       await createProject(win, 'RedrawClear', root);
       const pid = await firstPanelId(win);
-      await makeCmdTerminal(win, pid, marker);
+      await makeShellTerminal(win, pid, marker);
       const term = win.getByTestId(`terminal-${pid}`);
 
       // Real scrollback the user would not expect to lose.
@@ -208,7 +207,7 @@ process.stdin.resume();
       await expect(term).toContainText('KEEPLINE-B', { timeout: 25000 });
 
       // Ask for a redraw — the program repaints in exactly the shape of a `cls`.
-      await win.keyboard.press('Control+F5');
+      await pressAction(win, 'terminal.redraw'); // Ctrl+F5; Shift+Cmd+F5 on macOS
       // Wait for the requested redraw to actually land and settle before reading anything — the
       // same redrawing-terminal condition quiesced() exists for.
       const settledText = await quiesced(term, { what: 'terminal after requested redraw' });

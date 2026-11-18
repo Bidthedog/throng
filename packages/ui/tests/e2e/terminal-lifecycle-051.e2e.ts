@@ -41,17 +41,38 @@ import {
   cleanupTemp,
   APP_CLOSE_TIMEOUT_MS,
   TERMINAL_OUTPUT_TIMEOUT_MS,
+  TEST_SHELL,
 } from './harness.js';
 import { expectWithinSla } from './helpers/sla.js';
 import { processTable, pings, expectPingCount, type Proc } from './helpers/processes.js';
 
+// ── This platform's shell ──────────────────────────────────────────────────────────────────────────────────────────
+
+const ON_WINDOWS = process.platform === 'win32';
+
+/** A ping of `count` packets at `target`: a real command, under its shell, that the process table can find. */
+const pingFor = (count: number, target: string): string => (ON_WINDOWS ? `ping -n ${count} ${target}` : `ping -c ${count} ${target}`);
+
+/**
+ * A command that prints once a second until it is ended, and the text it prints. Off Windows it pings 127.0.0.1: macOS
+ * answers on no other loopback address, and nothing here counts this ping's processes.
+ */
+const PRINTER_COMMAND = ON_WINDOWS ? 'ping -t 127.0.0.72' : 'ping 127.0.0.1';
+const PRINTER_OUTPUT = ON_WINDOWS ? 'Reply from 127.0.0.72' : 'bytes from 127.0.0.1';
+
+/** `head` and `tail` joined by an escape the shell drops — cmd's caret, a POSIX shell's empty quotes — so the output is text the typed line does not contain. */
+const dropped = (head: string, tail: string): string => (ON_WINDOWS ? `${head}^${tail}` : `${head}''${tail}`);
+
+/** A line the shell reads and does nothing with. */
+const COMMENT = ON_WINDOWS ? 'rem' : '#';
+
 // ── Terminals ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Turn panel `pid` into a cmd terminal, optionally with a startup command. */
+/** Turn panel `pid` into a terminal, optionally with a startup command. */
 async function makeTerminal(win: Page, pid: string, startup?: string): Promise<Locator> {
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
   await expect(win.getByTestId('terminal-flavour')).toBeVisible();
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   if (startup !== undefined) await win.getByTestId('terminal-startup-command').fill(startup);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
@@ -60,7 +81,7 @@ async function makeTerminal(win: Page, pid: string, startup?: string): Promise<L
 }
 
 /**
- * `n` cmd terminals in the active project, two to a tab (the first in the tab already showing), each running
+ * `n` terminals in the active project, two to a tab (the first in the tab already showing), each running
  * `startup`. Two to a tab keeps every panel wide enough to be a usable terminal.
  */
 async function makeTerminals(win: Page, n: number, startup: string): Promise<string[]> {
@@ -177,8 +198,6 @@ async function typeTimingEchoes(win: Page, panelId: string, text: string): Promi
 
 // ── MT-01 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('Unload with End Terminals then an immediate switch succeeds four times running (#468, SC-001)', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   test.setTimeout(300_000);
   const TARGET = '127.0.0.71';
@@ -192,13 +211,13 @@ test('Unload with End Terminals then an immediate switch succeeds four times run
       // four terminals and twenty attempts: the race is between the unload and the switch, and it either shows in
       // the first few attempts or is not a function of how many terminals there are.)
       const first = await firstPanelId(win);
-      await makeTerminal(win, first, `ping -n 120 ${TARGET}`);
+      await makeTerminal(win, first, pingFor(120, TARGET));
       for (let i = 0; i < 1; i += 1) {
         const before = await panelIds(win);
         await splitPanelViaMenu(win, before[before.length - 1]!, 'right');
         await expect(win.locator('.panel-box')).toHaveCount(before.length + 1);
         const pid = (await panelIds(win)).find((id) => !before.includes(id))!;
-        await makeTerminal(win, pid, `ping -n 120 ${TARGET}`);
+        await makeTerminal(win, pid, pingFor(120, TARGET));
       }
 
       for (let attempt = 1; attempt <= 4; attempt += 1) {
@@ -246,7 +265,6 @@ test('Unload with End Terminals then an immediate switch succeeds four times run
 
 test('a printing terminal and a typing terminal keep flowing while ten terminals end and five start (SC-002, SC-003)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(600_000);
-  const LIVE = '127.0.0.72';
   const ENDING = '127.0.0.73';
   const rootA = mkdtempSync(join(tmpdir(), 'throng-flow-a-'));
   const rootB = mkdtempSync(join(tmpdir(), 'throng-flow-b-'));
@@ -255,32 +273,32 @@ test('a printing terminal and a typing terminal keep flowing while ten terminals
       // B: one terminal printing every second, one to type in.
       await createProject(win, 'FlowB', rootB);
       const printer = await firstPanelId(win);
-      await makeTerminal(win, printer, `ping -t ${LIVE}`);
+      await makeTerminal(win, printer, PRINTER_COMMAND);
       await splitPanelViaMenu(win, printer, 'right');
       await expect(win.locator('.panel-box')).toHaveCount(2);
       const typer = (await panelIds(win)).find((id) => id !== printer)!;
       const typerTerm = await makeTerminal(win, typer);
-      await expect(win.getByTestId(`terminal-${printer}`)).toContainText(`Reply from ${LIVE}`, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
-      // cmd drops the caret, so the output is text the typed line does not contain.
-      await runTypedCommand(win, typerTerm, 'echo rea^dy41', { echoed: 'rea^dy41', output: 'ready41' });
+      await expect(win.getByTestId(`terminal-${printer}`)).toContainText(PRINTER_OUTPUT, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+      // The shell drops the escape, so the output is text the typed line does not contain.
+      await runTypedCommand(win, typerTerm, `echo ${dropped('rea', 'dy41')}`, { echoed: dropped('rea', 'dy41'), output: 'ready41' });
 
       // A: ten terminals each running a ping that would last two minutes.
       await createProject(win, 'FlowA', rootA);
-      await makeTerminals(win, 10, `ping -n 120 ${ENDING}`);
+      await makeTerminals(win, 10, pingFor(120, ENDING));
       await expectPingCount(ENDING, 10, 60_000);
 
       // Back to B; unload A with End Terminals while watching B's output and typing in B.
       await switchProject(win, 'FlowB');
-      await expect(win.getByTestId(`terminal-${printer}`)).toContainText(`Reply from ${LIVE}`, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+      await expect(win.getByTestId(`terminal-${printer}`)).toContainText(PRINTER_OUTPUT, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
       // Control: the same echo with nothing ending or starting — the baseline the readings below are read against.
       await typerTerm.click();
-      const quietEcho = await typeTimingEchoes(win, typer, 'rem qu^iet40');
+      const quietEcho = await typeTimingEchoes(win, typer, `${COMMENT} ${dropped('qu', 'iet40')}`);
       await win.keyboard.press('Enter');
       console.log(`[051 MT-02] control: slowest echo ${quietEcho} ms with nothing else happening`);
       await startOutputWatch(win, printer);
       await unloadEndingTerminals(win, 'FlowA');
       await typerTerm.click();
-      const slowestEcho = await typeTimingEchoes(win, typer, 'echo hel^lo42');
+      const slowestEcho = await typeTimingEchoes(win, typer, `echo ${dropped('hel', 'lo42')}`);
       await expectPingCount(ENDING, 0);
       const ending = await stopOutputWatch(win);
       console.log(`[051 MT-02] while ten ended: ${ending.changes} output changes, longest gap ${ending.longestGapMs} ms, slowest echo ${slowestEcho} ms`);
@@ -294,12 +312,12 @@ test('a printing terminal and a typing terminal keep flowing while ten terminals
       // straight back to the first tab to watch the ping and type while they come up.
       await win.getByTestId('tab-add').click();
       await commitTabRename(win);
-      await makeTerminals(win, 5, `ping -n 120 ${ENDING}`);
+      await makeTerminals(win, 5, pingFor(120, ENDING));
       await win.locator('.tab-chip').first().click();
       await expect(win.getByTestId(`terminal-${printer}`)).toBeVisible();
       await startOutputWatch(win, printer);
       await typerTerm.click();
-      const slowestEcho2 = await typeTimingEchoes(win, typer, 'echo aga^in43');
+      const slowestEcho2 = await typeTimingEchoes(win, typer, `echo ${dropped('aga', 'in43')}`);
       await expectPingCount(ENDING, 5, 60_000);
       // Watch for at least two ping intervals: the starts can finish inside one, and a window shorter than the
       // printer's own one-second interval cannot tell a stall from silence.
@@ -342,9 +360,9 @@ test('Terminate all on close leaves no shell, command or console host behind, an
       // One terminal in each of two projects, each running a ping. (Narrowed from five per project: the close
       // handshake, the notice and the relaunch are per terminal, not per count.)
       await createProject(win, 'TermAllA', rootA);
-      await makeTerminals(win, 1, `ping -n 120 ${TARGET}`);
+      await makeTerminals(win, 1, pingFor(120, TARGET));
       await createProject(win, 'TermAllB', rootB);
-      await makeTerminals(win, 1, `ping -n 120 ${TARGET}`);
+      await makeTerminals(win, 1, pingFor(120, TARGET));
       await expectPingCount(TARGET, 2, 60_000);
 
       // What those terminals are, in the OS: each ping, its shell, and the console hosts under the daemon or the
@@ -360,7 +378,8 @@ test('Terminate all on close leaves no shell, command or console host behind, an
       const hosts = table.filter((p) => /^conhost\.exe$/i.test(p.name) && hostParents.has(p.parent));
       ours = [...mine, ...shells, ...hosts];
       expect(shells.length, 'every ping should have a shell').toBe(2);
-      expect(hosts.length, 'every terminal should have a console host').toBeGreaterThanOrEqual(2);
+      // Linux and macOS have no console host: a terminal there is its shell, which `shells` already holds.
+      if (ON_WINDOWS) expect(hosts.length, 'every terminal should have a console host').toBeGreaterThanOrEqual(2);
 
       // Negative: no "Terminal exited" notice while throng closes — reported out of the page as it happens.
       const exited: string[] = [];

@@ -2,7 +2,10 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, openApp, type AppOptions, type OpenApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, firstPanelId, openApp, type AppOptions, type OpenApp } from './harness.js';
+
+/** What the panel header calls {@link TEST_SHELL}: the detected flavour's label. */
+const TEST_SHELL_LABEL = process.platform === 'win32' ? /Command Prompt/ : /Bash/;
 
 // US1 / Plan Phase A (FR-001..008, SC-001/002/010): a new Panel shows an
 // extensible type-selection form instead of "Empty Panel"; choosing Terminal
@@ -37,8 +40,6 @@ function own(dir: string): string {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -91,10 +92,10 @@ test('replaces Empty Panel with the type form; Confirm types + launches a live t
       const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
       const select = win.getByTestId(`panel-type-select-${pid}`);
 
-      // Select Terminal (cmd flavour) and Confirm → the form + type control go away and a
+      // Select Terminal (the test shell) and Confirm → the form + type control go away and a
       // live terminal opens (FR-006/014).
       await select.selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await expect(confirm).toBeEnabled();
       await confirm.click();
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toHaveCount(0);
@@ -105,8 +106,8 @@ test('replaces Empty Panel with the type form; Confirm types + launches a live t
       // its hover title (012 — the former text pill was replaced by the icon).
       const kind = win.getByTestId(`panel-kind-${pid}`);
       await expect(kind).toHaveAttribute('title', /Terminal/);
-      await expect(kind).toHaveAttribute('title', /Command Prompt/);
-      // Wait for cmd's prompt (its cwd) so it is ready for input.
+      await expect(kind).toHaveAttribute('title', TEST_SHELL_LABEL);
+      // Wait for the prompt (its cwd, the project folder) so it is ready for input.
       await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Close the shell → the Panel reverts to the form (FR-020) and the root unlocks.
@@ -143,7 +144,7 @@ test('the type form renders and confirms in a sub-workspace window (FR-008)', { 
       // The same type-selection form renders in the child window and confirms there.
       await expect(child.getByTestId(`panel-type-form-${pid}`)).toBeVisible();
       await child.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await child.getByTestId('terminal-flavour').selectOption('cmd');
+      await child.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       const confirm = child.getByTestId(`panel-type-confirm-${pid}`);
       await expect(confirm).toBeEnabled();
       await confirm.click();

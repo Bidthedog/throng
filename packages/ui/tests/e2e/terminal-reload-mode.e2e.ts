@@ -11,6 +11,7 @@ import {
   daemonPid,
   firstPanelId,
   runApp as runOwnApp,
+  TEST_SHELL,
 } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
@@ -59,8 +60,6 @@ function freshRoot(): string {
   return dir;
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.afterAll(() => {
   for (const d of cfgRoots.splice(0)) cleanupTemp(d);
   for (const d of roots.splice(0)) cleanupTemp(d);
@@ -71,7 +70,7 @@ async function makeTerminal(win: import('@playwright/test').Page): Promise<strin
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
   await expect(win.getByTestId('terminal-flavour')).toBeVisible();
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   return pid;
 }

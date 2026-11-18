@@ -7,7 +7,9 @@ import { openApp,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS,
+  pressAction,
+} from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -114,7 +116,7 @@ test('replace-all rewrites every match in one undoable step, preserving CRLF (SC
       await openFile(win, pid, 'crlf.txt', 'alpha one');
 
       // Ctrl+H opens find WITH the replace controls (editor only).
-      await win.keyboard.press('Control+h');
+      await pressAction(win, 'search.replace');
       await expect(win.getByTestId(`find-bar-${pid}`)).toBeVisible();
       await expect(win.getByTestId('find-replace-row')).toBeVisible();
 
@@ -127,7 +129,7 @@ test('replace-all rewrites every match in one undoable step, preserving CRLF (SC
       await expect(win.getByTestId('find-count')).toHaveText('No results');
 
       await win.keyboard.press('Escape');
-      await win.keyboard.press('Control+s');
+      await pressAction(win, 'editor.save');
 
       // Only the intended text changed — and the file is still CRLF, still UTF-8.
       await expect
@@ -138,8 +140,8 @@ test('replace-all rewrites every match in one undoable step, preserving CRLF (SC
 
       // ONE undo puts the whole replace-all back (FR-008): not two, not three.
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+z');
-      await win.keyboard.press('Control+s');
+      await win.keyboard.press('ControlOrMeta+z');
+      await pressAction(win, 'editor.save');
       await expect
         .poll(() => readFileSync(file, 'utf8'), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe('alpha one\r\nalpha two\r\nbeta three\r\n');

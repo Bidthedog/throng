@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, cleanupTemp, FILE_OP_TIMEOUT_MS, type OpenApp } from './harness.js';
+import { openApp, createProject, firstPanelId, cleanupTemp, FILE_OP_TIMEOUT_MS, pressAction, type OpenApp } from './harness.js';
 
 // Session 2026-07-06 feedback: "This editor" rename + selected-editor disable
 // (FR-082), New Folder tree menu (FR-086), Save As (FR-084), and the save-dialog
@@ -137,7 +137,7 @@ test('Save As writes the document to a newly chosen location', { tag: ['@extende
     await win.keyboard.type('hello');
 
     await stub(app, first);
-    await win.keyboard.press('Control+s');
+    await pressAction(win, 'editor.save');
     await expect.poll(() => (existsSync(first) ? readFileSync(first, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS }).toBe('hello');
 
     // Save As → choose a different location; the doc is written there too.
@@ -173,7 +173,7 @@ test('the save dialog defaults the file name to the Panel name (FR-083)', { tag:
 
     await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
     await win.keyboard.type('x');
-    await win.keyboard.press('Control+s');
+    await pressAction(win, 'editor.save');
 
     await expect
       .poll(async () => app.evaluate(() => (globalThis as Record<string, unknown>).__savePath), {

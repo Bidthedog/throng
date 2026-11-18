@@ -58,11 +58,18 @@ const runApp = (
  *
  *  - the TITLE BAR mark — the app icon inlined as SVG (the renderer CSP forbids a
  *    data: URI), on its own black plate so it reads on every theme;
- *  - the OS WINDOW icon — a multi-size .ico handed to every BrowserWindow, which
+ *  - the OS WINDOW icon — a multi-size .ico (a PNG on Linux and macOS) handed to every BrowserWindow, which
  *    is what the taskbar and Alt-Tab show.
  */
 
-const icoPath = fileURLToPath(new URL('../../assets/throng.ico', import.meta.url));
+/*
+ * The window icon the running platform's windows are given (`appIcon()`, src/main/app-icon.ts): the multi-size .ico on
+ * Windows, the 256px PNG on Linux and macOS, whose `BrowserWindow` icon cannot read an .ico. (macOS's packaged .icns
+ * is made by electron-builder from the PNGs at packaging time; a dev run has none to decode.)
+ */
+const windowIconPath = fileURLToPath(
+  new URL(process.platform === 'win32' ? '../../assets/throng.ico' : '../../assets/throng-256.png', import.meta.url),
+);
 
 test('the title bar carries the throng mark, left of the identity', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
@@ -122,16 +129,17 @@ test('the mark keeps its own plate and tiles whatever the theme paints', { tag: 
 // TitleBar renders the throng-mark, and every window (main, sub-workspace, Preferences, About, monitor)
 // renders TitleBar.
 
-test('Electron can decode the bundled .ico the windows are given', { tag: ['@extended', '@window', '@reserve:native'] }, async () => {
-  test.skip(process.platform !== 'win32', 'only Windows windows are given the .ico');
+test('Electron can decode the bundled icon the windows are given (.ico on Windows, PNG elsewhere)', { tag: ['@extended', '@window', '@reserve:native'] }, async () => {
   // The .ico is hand-packed (scripts/build-app-icons.mjs, no image dependency), so
   // the thing worth proving is that Chromium's decoder actually accepts it and finds
   // the sizes inside — a malformed container fails silently as a blank taskbar icon.
+  // On Linux and macOS the windows are given the PNG instead, and the same decode holds
+  // it to the same 256px.
   await runApp(async (app) => {
     const icon = await app.evaluate(({ nativeImage }, path) => {
       const image = nativeImage.createFromPath(path);
       return { empty: image.isEmpty(), size: image.getSize() };
-    }, icoPath);
+    }, windowIconPath);
     expect(icon.empty).toBe(false);
     expect(icon.size).toEqual({ width: 256, height: 256 });
   });

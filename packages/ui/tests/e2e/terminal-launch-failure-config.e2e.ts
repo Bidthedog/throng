@@ -3,7 +3,7 @@ import { mkdtempSync, renameSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp, stayedAbsent } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp, stayedAbsent, TEST_SHELL } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -122,8 +122,6 @@ async function renameWhenReleased(from: string, to: string): Promise<void> {
   expect(existsSync(to)).toBe(true);
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('a terminal that fails to launch keeps its configuration and comes back once the root returns', { tag: ['@extended', '@terminal', '@reserve:runtime'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent — a different process tree
   // from the one these assertions describe. Same guard as `terminal-persistence.e2e.ts:39`.
@@ -137,13 +135,13 @@ test('a terminal that fails to launch keeps its configuration and comes back onc
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-204-ud-'));
 
   try {
-    // ── Launch 1: configure a real cmd terminal and let the layout persist ────────────────────
+    // ── Launch 1: configure a real terminal and let the layout persist ────────────────────
     await runApp(
       async (_app, win) => {
         await createProject(win, 'LaunchFail', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         // SETUP, asserted positively: the shell really reached its prompt in the project root.
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {
@@ -156,7 +154,7 @@ test('a terminal that fails to launch keeps its configuration and comes back onc
 
     // SETUP: the layout on disk describes a terminal, and it names the flavour the user chose.
     expect(layoutJson(dataDir, 'LaunchFail')).toContain('"kind":"terminal"');
-    expect(layoutJson(dataDir, 'LaunchFail')).toContain('"flavourId":"cmd"');
+    expect(layoutJson(dataDir, 'LaunchFail')).toContain(`"flavourId":"${TEST_SHELL}"`);
 
     // ── throng is closed. Break the project root, exactly as the report does. ─────────────────
     await renameWhenReleased(root, moved);

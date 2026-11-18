@@ -235,7 +235,10 @@ async function openShell(win: Page, root: string, flavour: Flavour): Promise<str
   return pid;
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
+test.skip(
+  process.platform !== 'win32',
+  "the line-editing chords of Windows' own shells — cmd, PSReadLine and Git Bash — through ConPTY",
+);
 
 for (const flavour of FLAVOURS) {
   test(`line-editing chords — ${flavour.label}`, { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {

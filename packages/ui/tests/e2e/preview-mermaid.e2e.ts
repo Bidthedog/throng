@@ -148,7 +148,7 @@ test('MT-01: a followed #heading below drawing diagrams ends at the top of the b
   const win = shared!.win;
   const id = await previewFromEditor(win, 'nav.md', 'Nav');
   const body = win.getByTestId(`preview-body-${id}`);
-  await body.locator('a').first().click({ modifiers: ['Control'] }); // the note's one link: [[sysctx#2. System Context]]
+  await body.locator('a').first().click({ modifiers: ['ControlOrMeta'] }); // the note's one link: [[sysctx#2. System Context]]
   const heading = body.locator('h2', { hasText: 'System Context' });
   await expect(heading).toBeVisible({ timeout: 10_000 });
   // Every diagram has drawn: three fences and two embeds.

@@ -3,14 +3,12 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp, TEST_SHELL } from './harness.js';
 
 // FR-020 (dedicated E2E, T127): when a Terminal Panel's shell ends — the user typed
 // `exit` (or it crashed) — the Panel reverts to the type-selection form, surfacing the
 // exit info, and can be re-typed: selecting Terminal again + Confirm starts a fresh
 // session. The Panel's type is fixed only while content is live.
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('typing exit reverts the Panel to the form with exit info, then it re-types', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-revert-'));
@@ -19,9 +17,9 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       await createProject(win, 'Revert', root);
       const pid = await firstPanelId(win);
 
-      // Confirm a Terminal (cmd) and wait until its prompt is live.
+      // Confirm a Terminal and wait until its prompt is live.
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
@@ -41,7 +39,7 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       // A FAILING exit is still surfaced, with its code — constitutional Principle III. This is
       // the other half of the rule, and without it the change above would just be "hide exits".
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const failing = win.getByTestId(`terminal-${pid}`);
       await expect(failing).toBeVisible();
@@ -71,7 +69,7 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
 
       // Re-type the Panel: Terminal again → a fresh live session starts.
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term2 = win.getByTestId(`terminal-${pid}`);
       await expect(term2).toBeVisible();

@@ -172,7 +172,11 @@ test.describe('an eased strip', () => {
 
   test('T048 — clicking a partly-visible tab brings it fully into view (A1: clicked)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
-    await seedOverflowingTabs(shared.win, 'scroll-clicked');
+    // MEDIUM names: the clicked tab sits mid-strip, between BOTH fades, and a long-named chip (~340px) is wider than
+    // the clear view on a smaller screen's window (a hosted macOS runner's) — a tab no scroll can bring fully into
+    // view, which `revealTarget` rightly answers by aligning its leading edge (`tooWide`). Still wide enough for
+    // `cutAtRightEdge` to leave its leading edge on screen.
+    await seedOverflowingTabs(shared.win, 'scroll-clicked', { nameFor: (n) => `scroll-clicked-tab-${n}` });
     await setScrollLeft(shared.win, 0);
 
     const before = await stripState(shared.win);

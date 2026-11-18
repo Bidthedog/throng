@@ -35,7 +35,7 @@
  * `helpers/navigation.ts` already fixes them: `gotoline` for the dialog card, `gotoline-input` for
  * the field, `gotoline-overlay` for the scrim.
  */
-import { TEST_SHELL } from './harness.js';
+import { HOST_OS, TEST_SHELL } from './harness.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -619,6 +619,9 @@ test('with a terminal focused the chord opens nothing and the shell receives ^G 
 
       // SC-007's second half — and the shell got the control character, exactly as it would with
       // this feature absent. That is the property that keeps readline's `abort` working.
+      // readline's abort is Ctrl+G on every platform. Elsewhere that IS the chord pressed above; on macOS Go To Line is
+      // Cmd+G (070 FR-029) and a terminal keeps Ctrl, so the abort is its own press there.
+      if (HOST_OS === 'macos') await win.keyboard.press('Control+G');
       await expect
         .poll(async () => (await inputWrites(win, pid)).slice(beforeChord.length))
         .toContain(BEL);

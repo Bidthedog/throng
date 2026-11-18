@@ -8,7 +8,9 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, TEST_SHELL } from './harness.js';
+
+const WINDOWS = process.platform === 'win32';
 
 function treeDrop(win: Page, panelId: string, paths: string[]): Promise<void> {
   return win.evaluate(
@@ -19,7 +21,6 @@ function treeDrop(win: Page, panelId: string, paths: string[]): Promise<void> {
   );
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('dropping tree paths onto a terminal inserts them at the prompt, quoted and space-joined (#155)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tdrop-'));
@@ -28,18 +29,23 @@ test('dropping tree paths onto a terminal inserts them at the prompt, quoted and
       await createProject(win, 'DropProj', root);
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
       const term = win.getByTestId(`terminal-${pid}`);
       // Let the shell reach its first prompt.
-      await expect(term).toContainText('>', { timeout: 10_000 });
+      await expect(term).toContainText(WINDOWS ? '>' : '$', { timeout: 10_000 });
 
       // (The bare, whitespace-free path is core/tests/unit/terminal-drop-paths.test.ts; what only a
       // real shell shows is that the dropped text reaches its input line, quoted and joined.)
       // A path with spaces arrives double-quoted; two items join with a single space.
-      await treeDrop(win, pid, ['C:\\my dir\\b.txt', 'C:\\c.txt']);
-      await expect(term).toContainText('"C:\\my dir\\b.txt" C:\\c.txt', { timeout: 8000 });
+      if (WINDOWS) {
+        await treeDrop(win, pid, ['C:\\my dir\\b.txt', 'C:\\c.txt']);
+        await expect(term).toContainText('"C:\\my dir\\b.txt" C:\\c.txt', { timeout: 8000 });
+      } else {
+        await treeDrop(win, pid, ['/my dir/b.txt', '/c.txt']);
+        await expect(term).toContainText('"/my dir/b.txt" /c.txt', { timeout: 8000 });
+      }
     });
   } finally {
     cleanupTemp(root);

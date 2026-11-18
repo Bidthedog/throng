@@ -73,7 +73,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { cleanupTemp, createProject, openApp, panelIds, settle, type OpenApp } from './harness.js';
+import { cleanupTemp, createProject, openApp, panelIds, settle, type OpenApp, TEST_SHELL } from './harness.js';
 
 function explorerNotices(win: Page): Locator {
   return win.getByTestId('explorer-error');
@@ -119,8 +119,6 @@ async function dismissAllNotices(win: Page): Promise<void> {
 }
 
 let shared: OpenApp;
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -211,7 +209,7 @@ test('a terminal failure names its flavour', { tag: ['@extended', '@failure', '@
     expect(panel).toBeTruthy();
 
     await win.getByTestId(`panel-type-select-${panel!}`).selectOption('terminal');
-    await win.getByTestId('terminal-flavour').selectOption('cmd');
+    await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
     await win.getByTestId(`panel-type-confirm-${panel!}`).click();
     await expect(win.getByTestId(`terminal-${panel!}`)).toContainText(basename(root), {
       timeout: 25_000,
@@ -222,10 +220,10 @@ test('a terminal failure names its flavour', { tag: ['@extended', '@failure', '@
     await expect(notice).toBeVisible({ timeout: 25_000 });
 
     // RED — the flavour is named. Matched loosely on purpose: the label is the flavour registry's
-    // ("Command Prompt"), and pinning it here would make this a spelling check.
+    // ("Command Prompt", "Bash"), and pinning it here would make this a spelling check.
     const heading = notice.locator('.notice__title');
     expect(await heading.innerText(), 'the exit notice does not name the flavour').toMatch(
-      /cmd|command prompt/i,
+      TEST_SHELL === 'cmd' ? /cmd|command prompt/i : /bash/i,
     );
     // …and the panel it happened in, through the same formatter (FR-022).
     await expect(heading).toContainText('SubjTerm');

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp, splitPanelViaMenu } from './harness.js';
+import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp, splitPanelViaMenu, TEST_SHELL } from './harness.js';
 
 // FR-027a (batch 2, revised 2026-07-02): a cloned Panel (same id in the project +
 // its sub-workspaces) syncs its CONTENT across windows — the type-selection form
@@ -54,8 +54,6 @@ import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp, splitP
  * its target at run time rather than assuming what came before it.
  */
 let shared: OpenApp;
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -143,7 +141,7 @@ test('confirming a Panel type in one window types the clone in the other', { tag
 
     // Choose Terminal + a known flavour, then confirm in the MAIN window.
     await win.getByTestId(`panel-type-select-${a}`).selectOption('terminal');
-    await win.getByTestId('terminal-flavour').selectOption('cmd');
+    await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
     await win.getByTestId(`panel-type-confirm-${a}`).click();
 
     // Both windows leave the form and show the inline terminal for the same Panel

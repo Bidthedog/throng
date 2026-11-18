@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // FR-019 restore arm (dedicated E2E, T130): a Terminal Panel persisted with a flavour
@@ -31,6 +31,9 @@ const TERMINAL_VIEW = /^terminal-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}
  * — two elements, so `toBeVisible` fails Playwright's strict mode on what is really one notice.
  */
 const EXIT_NOTICE = /^panel-exit-[0-9a-f-]{36}$/;
+
+/** The persisted flavour of a {@link TEST_SHELL} terminal, as the layout row spells it. */
+const PERSISTED_FLAVOUR = `"flavourId":"${TEST_SHELL}"`;
 
 /**
  * Wait until the project's layout has actually been persisted to the daemon's SQLite store, in the
@@ -65,12 +68,10 @@ async function layoutPersisted(
           db?.close();
         }
       },
-      { timeout: 15_000, message: `the layout for "${projectName}" was never persisted with a cmd flavour` },
+      { timeout: 15_000, message: `the layout for "${projectName}" was never persisted with a ${TEST_SHELL} flavour` },
     )
     .toBe(true);
 }
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('a Panel restored with a now-removed flavour surfaces unavailability, not a blank terminal', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
@@ -80,17 +81,17 @@ test('a Panel restored with a now-removed flavour surfaces unavailability, not a
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-persist-flavour-'));
   const root = mkdtempSync(join(tmpdir(), 'throng-persist-root-'));
   try {
-    // Run 1: confirm a real cmd terminal so the layout persists a Terminal Panel whose
-    // config records flavourId "cmd".
+    // Run 1: confirm a real terminal so the layout persists a Terminal Panel whose
+    // config records the flavour it was started with.
     await runApp(
       async (_app, win) => {
         await createProject(win, 'Persist', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
-        await layoutPersisted(dataDir, 'Persist', (json) => json.includes('"flavourId":"cmd"'));
+        await layoutPersisted(dataDir, 'Persist', (json) => json.includes(PERSISTED_FLAVOUR));
       },
       { dataDir },
     );
@@ -100,7 +101,7 @@ test('a Panel restored with a now-removed flavour surfaces unavailability, not a
     const db = new Database(join(dataDir, 'throng.db'));
     const changed = db
       .prepare('UPDATE workspace_layout SET layout_json = REPLACE(layout_json, ?, ?)')
-      .run('"flavourId":"cmd"', '"flavourId":"ghost-removed-flavour"');
+      .run(PERSISTED_FLAVOUR, '"flavourId":"ghost-removed-flavour"');
     db.close();
     expect(changed.changes).toBeGreaterThan(0); // the terminal config was persisted & rewritten
 

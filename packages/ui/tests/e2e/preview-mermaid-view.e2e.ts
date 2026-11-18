@@ -18,7 +18,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp } from './harness.js';
+import { openApp, createProject, firstPanelId, cleanupTemp, pressAction, type OpenApp } from './harness.js';
 import { byTitle } from './helpers/titles.js';
 
 const FLOW = 'graph TD\n  Start[Begin here] --> Finish[Done]\n';
@@ -99,6 +99,29 @@ async function drawnFrame(win: Page, id: string): Promise<Locator> {
   const frame = win.getByTestId(`diagram-frame-${id}-diagram-0`);
   await expect(frame.locator('.preview-diagram-frame__layer svg').first()).toBeVisible({ timeout: 15_000 });
   return frame;
+}
+
+/**
+ * Click a diagram where a reader would: in its viewport, clear of the view toolbar pinned over its top-left corner
+ * (diagram.css). Fit shrinks a diagram in a narrow panel — a smaller screen's window, such as a hosted macOS
+ * runner's — until the viewport is barely taller than that toolbar, and its centre then lies under the toolbar, so
+ * a centre click presses Fit instead of focusing the diagram. Right of the toolbar where there is room, else below it.
+ */
+async function clickDiagram(frame: Locator): Promise<void> {
+  const viewport = frame.locator('.preview-diagram-frame__viewport');
+  const v = await viewport.boundingBox();
+  const t = await frame.locator('.preview-diagram-frame__toolbar').boundingBox();
+  if (!v || !t) throw new Error('the diagram viewport and its toolbar are not laid out');
+  const right = v.x + v.width - (t.x + t.width);
+  const below = v.y + v.height - (t.y + t.height);
+  const position =
+    right >= 8
+      ? { x: t.x + t.width - v.x + right / 2, y: v.height / 2 }
+      : below >= 8
+        ? { x: v.width / 2, y: t.y + t.height - v.y + below / 2 }
+        : null;
+  if (!position) throw new Error(`no part of the diagram is clear of its toolbar: viewport ${JSON.stringify(v)}, toolbar ${JSON.stringify(t)}`);
+  await viewport.click({ position });
 }
 
 interface Box {
@@ -192,7 +215,7 @@ test('B3: a maximised diagram sits above an open find bar, which stays open', { 
   const id = await previewFromEditor(win, 'diagram.md', 'Diagram doc');
   const frame = await drawnFrame(win, id);
   await win.getByTestId(`preview-markdown-${id}`).getByText('Some words to find.').click();
-  await win.keyboard.press('Control+f');
+  await pressAction(win, 'search.find');
   const bar = win.getByTestId(`find-bar-${id}`);
   await expect(bar).toBeVisible();
 
@@ -424,7 +447,7 @@ test('B8: focus borders paint above a zoomed diagram — a .mmd preview’s pane
   // project's (MT-04 retest, 2026-10-13: it took the theme's default).
   const mdId = await previewFromEditor(win, 'max.md', 'Max doc');
   const mdFrame = await drawnFrame(win, mdId);
-  await mdFrame.locator('.preview-diagram-frame__viewport').click();
+  await clickDiagram(mdFrame);
   const panelColour = (
     (await win.getByTestId(`panel-${mdId}`).evaluate((el) => getComputedStyle(el).outlineColor)).match(/\d+/g) ?? []
   )
@@ -455,12 +478,12 @@ test('B9: Ctrl+middle-click on a diagram resets it to Fit and never starts a pan
     await byTitle(frame, 'Zoom in').click();
     await expect(frame).toHaveAttribute('data-mode', 'zoom');
     const v = await viewport.boundingBox();
-    await win.keyboard.down('Control');
+    await win.keyboard.down(process.platform === 'darwin' ? 'Meta' : 'Control');
     await win.mouse.move(v!.x + v!.width / 2, v!.y + v!.height / 2);
     await win.mouse.down({ button: 'middle' });
     await expect(viewport, 'no pan starts: no move cursor').not.toHaveClass(/preview-diagram-frame__viewport--panning/);
     await win.mouse.up({ button: 'middle' });
-    await win.keyboard.up('Control');
+    await win.keyboard.up(process.platform === 'darwin' ? 'Meta' : 'Control');
     // The diagram's default view, Fit — not 1:1 (manual test change request, 2026-10-13).
     await expect(frame).toHaveAttribute('data-mode', 'fit');
   }

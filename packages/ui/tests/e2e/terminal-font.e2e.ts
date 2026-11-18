@@ -2,14 +2,13 @@ import { mkdtempSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test, expect } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 
 // FR-074: terminals ARE app-stylable — xterm renders from fontFamily/fontSize
 // options, now sourced from the themeable `terminal` typography role (default
 // Consolas monospace). This E2E confirms the terminal font applies (rather than
 // silently assuming terminals cannot be styled).
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('a terminal renders in the themeable monospace font (terminals are stylable)', { tag: ['@extended', '@terminal', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tf-'));
@@ -18,7 +17,7 @@ test('a terminal renders in the themeable monospace font (terminals are stylable
       await createProject(win, 'TermFont', root);
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
       const term = win.getByTestId(`terminal-${pid}`);

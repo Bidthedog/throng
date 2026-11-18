@@ -4,7 +4,7 @@ import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp, splitPanelViaMenu } from './harness.js';
 import { expectWithinSla, noteSlaNotMeasured, slaMeasurable } from './helpers/sla.js';
-import { makeCmdTerminal } from './altscreen-fixture.js';
+import { makeShellTerminal } from './altscreen-fixture.js';
 
 /**
  * 028 T028b (SC-012) — what a tab switch costs the main thread.
@@ -64,10 +64,8 @@ async function addTerminal(win: Page, root: string, existingPanelId: string): Pr
   await expect(formLocator).toBeVisible();
   const form = await formLocator.getAttribute('data-testid');
   const pid = form!.replace('panel-type-form-', '');
-  await makeCmdTerminal(win, pid, basename(root));
+  await makeShellTerminal(win, pid, basename(root));
 }
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('switching to a tab of four terminals never blocks the main thread', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(180_000);
@@ -87,7 +85,7 @@ test('switching to a tab of four terminals never blocks the main thread', { tag:
     await runApp(async (_app, win) => {
       await createProject(win, 'Activation', root);
       const first = await firstPanelId(win);
-      await makeCmdTerminal(win, first, basename(root));
+      await makeShellTerminal(win, first, basename(root));
 
       // Four terminals in one tab — an ordinary layout, and four rebuilds per activation.
       for (let i = 0; i < 3; i += 1) await addTerminal(win, root, first);

@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject as newProject, firstPanelId, installResizeProbe, openApp, panelIds, reloadWindow, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject as newProject, firstPanelId, installResizeProbe, openApp, panelIds, reloadWindow, type AppOptions, type OpenApp, splitPanelViaMenu, TEST_SHELL } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -23,8 +23,6 @@ import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject as newProject, f
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -92,7 +90,7 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       const [, p2, p3] = await panelIds(win);
       await newEditor(win, p2);
       await win.getByTestId(`panel-type-select-${p3}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${p3}`).click();
       await expect(win.getByTestId(`terminal-${p3}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
@@ -110,8 +108,8 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       await win.getByTestId(`panel-${p1}`).click();
       const probe = await installResizeProbe(app);
       await probe.reset();
-      await win.keyboard.press('Control+Alt+Equal');
-      await win.keyboard.press('Control+Alt+Equal');
+      await win.keyboard.press('ControlOrMeta+Alt+Equal');
+      await win.keyboard.press('ControlOrMeta+Alt+Equal');
 
       // Only p1 grew. p2 (the other editor) is unchanged — the whole point of per-instance.
       await expect.poll(() => editorFontPx(win, p1)).toBeGreaterThan(baseP1);
@@ -143,7 +141,7 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       // Reset returns only p1 to its default size — on the keypad zero since 046 FR-114; the main-row
       // 0 no longer resets.
       await win.getByTestId(`panel-${p1}`).click();
-      await win.keyboard.press('Control+Alt+Numpad0');
+      await win.keyboard.press('ControlOrMeta+Alt+Numpad0');
       await expect.poll(() => editorFontPx(win, p1)).toBeCloseTo(baseP1, 1);
       expect(await panelZoom(win, p1)).toBe(0);
     });
@@ -165,7 +163,7 @@ test('zooming a terminal recomputes its grid (SC-005)', { tag: ['@extended', '@w
       await createProject(win, 'ZoomTerm', root);
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
       // sleep-justified: the terminal's own initial fit fires a resize the probe below must not
@@ -178,8 +176,8 @@ test('zooming a terminal recomputes its grid (SC-005)', { tag: ['@extended', '@w
       await probe.reset();
 
       await win.getByTestId(`panel-${pid}`).click();
-      await win.keyboard.press('Control+Alt+Equal');
-      await win.keyboard.press('Control+Alt+Equal');
+      await win.keyboard.press('ControlOrMeta+Alt+Equal');
+      await win.keyboard.press('ControlOrMeta+Alt+Equal');
       await expect.poll(() => probe.count(), { timeout: 10000 }).toBeGreaterThan(0);
     });
   } finally {

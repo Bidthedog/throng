@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { openApp, createProject as newProject, daemonRpc, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
+import { openApp, createProject as newProject, daemonRpc, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, splitPanelViaMenu, TEST_SHELL } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -24,8 +24,6 @@ import { openApp, createProject as newProject, daemonRpc, firstPanelId, cleanupT
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -77,7 +75,7 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
  *
  * WHAT STAYS, AND WHY IT IS NOT THE SAME DECISION.
  *
- * ":86" hosts a REAL cmd shell. Its confirmation is gated on `panelHasLiveTerminal`, which reads a
+ * ":86" hosts a REAL shell. Its confirmation is gated on `panelHasLiveTerminal`, which reads a
  * registry fed by real PTY sessions, and its last assertion polls the DAEMON's own session list.
  * ":141" cancels a TAB destroy, which is `tab-group.tsx` — a different component, and one nothing
  * has yet mounted. Both are still on the movable backlog; neither is movable today.
@@ -96,10 +94,10 @@ test('warns before destroying a Panel that hosts a live terminal', { tag: ['@ext
 
       // Turn the first Panel into a live Terminal.
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       // Wait until the shell prompt is live. This Panel is SPLIT (two panels), so the
-      // full root path in the cmd prompt wraps across xterm rows; match only the temp
+      // full root path in the prompt wraps across xterm rows; match only the temp
       // dir's trailing (random) chars, which land contiguously on the final wrapped row.
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root).slice(-6), {
         timeout: 15000,

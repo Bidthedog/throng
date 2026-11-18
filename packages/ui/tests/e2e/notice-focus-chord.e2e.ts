@@ -64,13 +64,11 @@ import { mkdtempSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, panelIds, addPanels, cleanupTemp } from './harness.js';
+import { runApp, createProject, panelIds, addPanels, cleanupTemp, HOST_OS, TEST_SHELL } from './harness.js';
 
 /** Which element the keyboard is actually in, as a test-id — `''` when it is nowhere useful. */
 const focusedTestId = (win: Page): Promise<string> =>
   win.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? '');
-
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
 
 test('the notice chord reaches the app while a real shell has the keyboard', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-noticechord-'));
@@ -82,7 +80,7 @@ test('the notice chord reaches the app while a real shell has the keyboard', { t
       await addPanels(win, 1);
       const [editorPanel, terminalPanel] = await panelIds(win);
 
-      // ── An editor holding a real file, and a REAL cmd beside it in the same tab. ───────────
+      // ── An editor holding a real file, and a REAL shell beside it in the same tab. ─────────
       await win.getByTestId(`panel-type-select-${editorPanel}`).selectOption('editor');
       await win.getByTestId(`panel-type-confirm-${editorPanel}`).click();
       await win.getByTestId('file-explorer-tree').getByText('doc.txt', { exact: true }).click();
@@ -92,7 +90,7 @@ test('the notice chord reaches the app while a real shell has the keyboard', { t
       );
 
       await win.getByTestId(`panel-type-select-${terminalPanel}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${terminalPanel}`).click();
       await expect(win.getByTestId(`terminal-${terminalPanel}`)).toContainText(basename(root), {
         timeout: 30_000,
@@ -139,9 +137,11 @@ test('the notice chord reaches the app while a real shell has the keyboard', { t
        * is the guard being right rather than fussy.
        *
        * A changed default therefore makes this press the wrong key and fail loudly, which is the
-       * same answer deriving it from the shipped bindings would have given.
+       * same answer deriving it from the shipped bindings would have given. macOS ships it in its Cmd form
+       * (070 FR-029), also a literal for the same reason.
        */
-      await win.keyboard.press('Control+Shift+Alt+V');
+      if (HOST_OS === 'macos') await win.keyboard.press('Shift+Alt+Meta+V');
+      else await win.keyboard.press('Control+Shift+Alt+V');
       await expect(
         list,
         'the shell swallowed the chord, or it resolved to nothing — focus never reached the notice',

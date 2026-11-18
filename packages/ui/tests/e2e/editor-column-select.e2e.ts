@@ -9,7 +9,7 @@ import { openApp,
   addPanels,
   cleanupTemp,
   type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS, pressAction } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -190,7 +190,7 @@ test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters
       await win.mouse.up();
       await win.keyboard.up('Alt');
 
-      await win.keyboard.press('Control+x');
+      await pressAction(win, 'editor.cutLine');
 
       // Each line closes up HORIZONTALLY, keeping everything outside the block's columns. A cut that
       // fell through to the whole-line path would have destroyed the 'a'/'b'/'c' either side of it —
@@ -215,9 +215,9 @@ test('Delete on a block clears it per row and NEVER touches the clipboard (FR-02
       await writeExternal(win, 'SENTINEL');
 
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
+      await win.keyboard.press('ControlOrMeta+Home');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectDown');
 
       // A ZERO-WIDTH block. Delete is not a no-op on it: it removes one character to the right of
       // every caret (FR-025g).
@@ -245,12 +245,12 @@ test('a block copied in one panel pastes COLUMN-WISE in another — the mode is 
 
       // A block of the first two columns, three rows deep — then a NATIVE Ctrl+C.
       await win.getByTestId(`editor-${p1}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Control+c');
+      await win.keyboard.press('ControlOrMeta+Home');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectRight');
+      await pressAction(win, 'editor.columnSelectRight');
+      await win.keyboard.press('ControlOrMeta+c');
 
       // OUTBOUND (FR-025d/US6 AS5): what ANOTHER APPLICATION receives is the rows as plain text,
       // separated by line breaks. Ctrl+C is not a registered command in throng, so without a native
@@ -261,8 +261,8 @@ test('a block copied in one panel pastes COLUMN-WISE in another — the mode is 
 
       // …and the block pastes as a BLOCK in a different panel, holding a different document.
       await win.getByTestId(`editor-${p2}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Control+v');
+      await win.keyboard.press('ControlOrMeta+Home');
+      await win.keyboard.press('ControlOrMeta+v');
 
       await expect.poll(() => docText(win, p2)).toBe('aaone\nbbtwo\nccthree\n');
       // The source document is untouched by a COPY.
@@ -285,20 +285,20 @@ test('a column paste into a TAB-indented file pads with TABS, and lands on the c
 
       // Cut a one-column, three-row block out of the SPACE-indented file…
       await win.getByTestId(`editor-${p1}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Control+x');
+      await win.keyboard.press('ControlOrMeta+Home');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectRight');
+      await pressAction(win, 'editor.cutLine');
       await expect.poll(async () => (await clipboard(win)).text).toBe('a\nb\nc');
 
       // …and paste it into the TAB-indented one at visual column 6. Line 2 is the short one ("B"),
       // so it must be padded out to reach column 6 — in the document's OWN whitespace.
       await win.getByTestId(`editor-${p2}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
+      await win.keyboard.press('ControlOrMeta+Home');
       for (let i = 0; i < 3; i += 1) await win.keyboard.press('ArrowRight'); // …visual column 6
-      await win.keyboard.press('Control+v');
-      await win.keyboard.press('Control+s');
+      await win.keyboard.press('ControlOrMeta+v');
+      await pressAction(win, 'editor.save');
 
       // Assert on the BYTES, not the screen: this requirement is about what lands on disk. A tab
       // carries column 1 → 4, then two spaces land exactly on column 6 — a second tab would have
@@ -320,21 +320,21 @@ test('ONE Undo reverts a ten-row column paste — a command is one undo entry (F
       const pid = await openFileInEditor(win, 'rows.txt', 'r0');
 
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      for (let i = 0; i < 9; i += 1) await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Control+x');
+      await win.keyboard.press('ControlOrMeta+Home');
+      for (let i = 0; i < 9; i += 1) await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectRight');
+      await pressAction(win, 'editor.cutLine');
 
       const cut = '0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n';
       await expect.poll(() => docText(win, pid)).toBe(cut);
 
       // Paste all ten rows back, column-wise…
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Control+v');
+      await win.keyboard.press('ControlOrMeta+Home');
+      await win.keyboard.press('ControlOrMeta+v');
       await expect.poll(() => docText(win, pid)).toBe('r0\nr1\nr2\nr3\nr4\nr5\nr6\nr7\nr8\nr9\n');
 
       // …and ONE Ctrl+Z takes all ten away again. Ten edits, one command, one entry.
-      await win.keyboard.press('Control+z');
+      await win.keyboard.press('ControlOrMeta+z');
       await expect.poll(() => docText(win, pid)).toBe(cut);
     });
   } finally {

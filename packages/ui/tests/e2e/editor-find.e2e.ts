@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { openApp, runApp as runOwnApp, createProject as newProject, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, focusEditor } from './harness.js';
+import { openApp, runApp as runOwnApp, createProject as newProject, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, focusEditor, pressAction } from './harness.js';
 import { expectWithinSla } from './helpers/sla.js';
 
 /*
@@ -147,7 +147,7 @@ test('seeds the term from the selection, and shows a no-results state for a miss
 
       // Select the word under the caret (double-click), then open find.
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').getByText('haystack').dblclick();
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
 
       await expect(win.getByTestId('find-input')).toHaveValue('haystack');
       await expect(win.getByTestId('find-count')).toHaveText('1 of 1');
@@ -219,13 +219,13 @@ test('finds as you type, and is a no-op on an untyped panel', { tag: ['@extended
 
       // (merged) find is a no-op while the panel has no type — nothing to search.
       const untyped = await firstPanelId(win);
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       await expect(win.getByTestId(`find-bar-${untyped}`), 'Ctrl+F on an untyped panel opens no find bar').toHaveCount(0);
 
       const pid = await newEditor(win);
       await typeInto(win, pid, 'alpha beta\nalpha gamma\nALPHA delta\n');
 
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       await expect(win.getByTestId(`find-bar-${pid}`), 'Ctrl+F opens the find bar on an editor').toBeVisible();
       await win.getByTestId('find-input').fill('alpha');
 
@@ -249,7 +249,7 @@ test('closing find clears the highlights and returns focus to the editor', { tag
       const pid = await newEditor(win);
       await typeInto(win, pid, 'close me\n');
 
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       await win.getByTestId('find-input').fill('close');
       await expect(matches(win, pid), 'the term is highlighted before closing').toHaveCount(1);
 
@@ -289,7 +289,7 @@ test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', {
       // Clicking the tree made the Files pane active, and find is a PANEL command —
       // so put the workspace back in focus first (the same gate as Ctrl+S).
       await focusEditor(win, pid);
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       const started = Date.now();
       await win.getByTestId('find-input').fill('needle');
       // All 20 matches must resolve. WHICH one is current depends on where the caret
@@ -318,7 +318,7 @@ test('every find-bar action control is the same size, and the match toggles draw
       const pid = await newEditor(win);
       await typeInto(win, pid, 'sizing\n');
 
-      await win.keyboard.press('Control+h'); // find WITH replace, so every control is up
+      await pressAction(win, 'search.replace'); // find WITH replace, so every control is up
       await expect(win.getByTestId(`find-bar-${pid}`)).toBeVisible();
       await expect(win.getByTestId('find-replace-row')).toBeVisible();
 
@@ -387,7 +387,7 @@ test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-
       // Establish a term, so "seeds nothing" is distinguishable from "seeds empty". The bar stays
       // OPEN throughout: 013 keeps the term across a re-open on the same panel, and clears it on a
       // close — so a close here would destroy the very thing this asserts is preserved.
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       await win.getByTestId('find-input').fill('gamma');
       /*
        * Wait for the term to reach the STORE, not just the input.
@@ -409,20 +409,20 @@ test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-
       // A MULTI-ROW block seeds NOTHING — find keeps the term it had, exactly as 013 already does
       // for a multi-line selection. It must never pick one row of the block.
       await focusEditor(win, pid);
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Control+f');
+      await win.keyboard.press('ControlOrMeta+Home');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectRight');
+      await pressAction(win, 'editor.columnSelectRight');
+      await pressAction(win, 'search.find');
       await expect(win.getByTestId('find-input')).toHaveValue('gamma');
 
       // A ONE-ROW block — indistinguishable from an ordinary selection, so it DOES seed.
       await focusEditor(win, pid);
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Control+f');
+      await win.keyboard.press('ControlOrMeta+Home');
+      await pressAction(win, 'editor.columnSelectRight');
+      await pressAction(win, 'editor.columnSelectRight');
+      await pressAction(win, 'search.find');
       await expect(win.getByTestId('find-input')).toHaveValue('al');
 
       // …and the document is untouched by any of it (013 FR-003).

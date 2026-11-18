@@ -39,11 +39,14 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { addPanels, cleanupTemp, createProject, firstPanelId, focusEditor, panelIds, runApp, settle } from './harness.js';
+import { addPanels, cleanupTemp, createProject, firstPanelId, focusEditor, panelIds, runApp, settle, TEST_SHELL } from './harness.js';
 
 /** A project root that has never existed — the cheapest panel failure there is, and it scales. */
 function ghostRoot(name: string): string {
-  return `C:/throng-e2e-missing/${name.toLowerCase()}`;
+  // An absolute path on every platform: a POSIX `C:/…` would be a relative path, not a missing root.
+  return process.platform === 'win32'
+    ? `C:/throng-e2e-missing/${name.toLowerCase()}`
+    : join(tmpdir(), 'throng-e2e-missing', name.toLowerCase());
 }
 
 /** The consolidated notice US3 raises for the panels one cause defeated. */
@@ -96,10 +99,10 @@ function expectRenderedIsCopied(rendered: string[], copied: string[]): void {
   }
 }
 
-/** Turn `panelId` into a `cmd` terminal that cannot start, and wait until it says so. */
+/** Turn `panelId` into a terminal that cannot start, and wait until it says so. */
 async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   /*
    * CONFIRMED BY KEYBOARD, NOT BY CLICK, AND DELIBERATELY (#313).
    *
@@ -128,8 +131,6 @@ async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
  * rebuilding a four-casualty workspace three times would spend three launches to observe three
  * facets of one clipboard.
  */
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('a copied notice carries everything it renders, plus the system error it must not render', { tag: ['@extended', '@failure'] }, async () => {
   test.setTimeout(300_000);
   const real = mkdtempSync(join(tmpdir(), 'throng-copy-real-'));
@@ -220,13 +221,13 @@ test('a copied notice carries everything it renders, plus the system error it mu
       await win.locator('.project-item', { hasText: 'Real' }).locator('[data-testid^="project-switch-"]').click();
       await expect(win.getByTestId(`editor-${editorPid}`)).toBeVisible({ timeout: 30_000 });
       await focusEditor(win, editorPid);
-      await win.keyboard.press('Control+a');
-      await win.keyboard.press('Control+v');
+      await win.keyboard.press('ControlOrMeta+a');
+      await win.keyboard.press('ControlOrMeta+v');
       await expect(win.getByTestId(`editor-${editorPid}`).locator('.cm-content')).toContainText(
         'Ghost',
         { timeout: 20_000 },
       );
-      await win.keyboard.press('Control+s');
+      await win.keyboard.press('ControlOrMeta+s');
       await expect
         .poll(() => readFileSync(join(real, 'notes.txt'), 'utf8'), {
           timeout: 20_000,

@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, geom, quiesced } from './harness.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, geom, quiesced, pressAction } from './harness.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // US10 (Delivery E): a project editor synced into a sub-workspace mirrors ONE
@@ -102,12 +102,12 @@ test('cut-line, a column paste and the language picker all work in a sub-workspa
 
       // Copy a two-column, three-row BLOCK in the MAIN window.
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Control+c');
+      await win.keyboard.press('ControlOrMeta+Home');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectDown');
+      await pressAction(win, 'editor.columnSelectRight');
+      await pressAction(win, 'editor.columnSelectRight');
+      await win.keyboard.press('ControlOrMeta+c');
 
       // Open the sub-workspace window and sync the panel into it.
       const child = await openSubWorkspaceWindow(app, win, 'sw1');
@@ -138,18 +138,18 @@ test('cut-line, a column paste and the language picker all work in a sub-workspa
       // would then be testing nothing but the cut that preceded it.
       await child.bringToFront();
       await childEditor.locator('.cm-content').click();
-      await child.keyboard.press('Control+Home');
+      await child.keyboard.press('ControlOrMeta+Home');
       await child.keyboard.press('ArrowDown'); // …line 2, column 0
-      await child.keyboard.press('Control+v');
+      await child.keyboard.press('ControlOrMeta+v');
       await expect.poll(childDoc, { timeout: 8000 }).toBe('aaaa\naabbbb\nbbcccc\nccdddd\n');
 
       // …one Undo takes the whole ten-cell paste away again, in the child.
-      await child.keyboard.press('Control+z');
+      await child.keyboard.press('ControlOrMeta+z');
       await expect.poll(childDoc, { timeout: 8000 }).toBe('aaaa\nbbbb\ncccc\ndddd\n');
 
       // CUT-LINE, driven in the child window.
-      await child.keyboard.press('Control+Home');
-      await child.keyboard.press('Control+x');
+      await child.keyboard.press('ControlOrMeta+Home');
+      await pressAction(child, 'editor.cutLine');
       await expect.poll(childDoc, { timeout: 8000 }).toBe('bbbb\ncccc\ndddd\n');
 
       // …and the LANGUAGE PICKER: it shows, and it applies, in the child.

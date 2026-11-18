@@ -3,8 +3,14 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonPid, firstPanelId, forceKillProcessTree, runApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, daemonPid, firstPanelId, forceKillProcessTree, runApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
+
+const WINDOWS = process.platform === 'win32';
+/** An absolute path on this platform, as a banner would quote it: `C:\…` on Windows, `/…` elsewhere. */
+const ABSOLUTE_PATH = WINDOWS ? /[A-Za-z]:\\[^\s'"|]+/g : /\/[^\s'"|]+/g;
+/** The persisted flavour of a {@link TEST_SHELL} terminal, as the layout row spells it. */
+const PERSISTED_FLAVOUR = `"flavourId":"${TEST_SHELL}"`;
 
 /**
  * 029 US1 — the CONTROLS on a terminal that could not start.
@@ -140,8 +146,6 @@ async function enterProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
 }
 
-test.skip(process.platform !== 'win32', 'drives the Windows Command Prompt or PowerShell');
-
 test('a terminal that could not start offers Try again and Clear, on the badge and in its menu', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent — a different process tree
   // from the one these assertions describe.
@@ -160,7 +164,7 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
         await createProject(win, 'Controls', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {
           timeout: 20_000,
@@ -212,7 +216,7 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
         // is missing. `moved` is where it went, which the user has no way to know and no reason to
         // be told.
         expect(shown, 'the banner does not name the folder that is missing').toContain(basename(root));
-        const prose = shown.replace(/[A-Za-z]:\\[^\s'"|]+/g, '<path>');
+        const prose = shown.replace(ABSOLUTE_PATH, '<path>');
         expect(prose).not.toMatch(/ENOENT|Cannot lock|Internal error/i);
 
         /**
@@ -322,7 +326,7 @@ test('a remembered directory that has gone is reported in the panel, and is not 
         await createProject(win, 'Fallback', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         const term = win.getByTestId(`terminal-${pid}`);
         await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
@@ -330,7 +334,14 @@ test('a remembered directory that has gone is reported in the panel, and is not 
         await term.click();
         await win.keyboard.type('cd Deep');
         await win.keyboard.press('Enter');
-        await expect(term).toContainText(`${basename(root)}\\Deep>`, { timeout: 20_000 });
+        if (WINDOWS) {
+          await expect(term).toContainText(`${basename(root)}\\Deep>`, { timeout: 20_000 });
+        } else {
+          // A POSIX prompt may name only the last folder (macOS bash's `\W`), so ask the shell where it is.
+          await win.keyboard.type('pwd');
+          await win.keyboard.press('Enter');
+          await expect(term).toContainText(`${basename(root)}/Deep`, { timeout: 20_000 });
+        }
 
         // SETUP: the directory reached the PERSISTED layout. Without this the second launch would
         // remember nothing, no fallback would occur, and the assertions below would pass vacuously
@@ -454,7 +465,7 @@ test('a terminal keeps its configuration when the daemon is gone, not just when 
         await createProject(win, 'DaemonGone', root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {
           timeout: 20_000,
@@ -462,7 +473,7 @@ test('a terminal keeps its configuration when the daemon is gone, not just when 
         // SETUP: the layout on disk really describes a configured terminal, so "still a terminal"
         // below is a statement about something that was true to begin with.
         await expect
-          .poll(() => layoutJson(dataDir, 'DaemonGone').includes('"flavourId":"cmd"'), {
+          .poll(() => layoutJson(dataDir, 'DaemonGone').includes(PERSISTED_FLAVOUR), {
             timeout: 30_000,
             message: 'the terminal was never persisted',
           })
@@ -522,7 +533,7 @@ test('a terminal keeps its configuration when the daemon is gone, not just when 
 
         const layout = layoutJson(dataDir, 'DaemonGone');
         expect(layout, 'the persisted layout stopped describing a terminal').toContain('"kind":"terminal"');
-        expect(layout, 'the flavour the user chose was discarded').toContain('"flavourId":"cmd"');
+        expect(layout, 'the flavour the user chose was discarded').toContain(PERSISTED_FLAVOUR);
 
         /**
          * And RETRY is safe to press, which is the half that turns the bug into a trap.

@@ -44,6 +44,7 @@ import {
   focusEditor,
   commitTabRename,
   FILE_OP_TIMEOUT_MS,
+  pressAction,
 } from './harness.js';
 import { openQuickOpen, quickOpenRows, chooseQuickOpenRow } from './helpers/navigation.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
@@ -198,7 +199,7 @@ test('two renames and an undo reach a closed sub-workspace, which reopens on the
 
       // Step 6: undo the last rename from the File Explorer — c.md is b.md again, and the closed record follows.
       await tree(win).getByRole('treeitem').first().click();
-      await win.keyboard.press('Control+z');
+      await pressAction(win, 'file.undo');
       await expect.poll(() => existsSync(join(root, 'b.md')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
       await expect.poll(() => swRecord(pipeName, 'sw1'), { timeout: 10_000 }).not.toContain('c.md');
 
@@ -237,7 +238,7 @@ test('a closed sub-workspace’s navigation history follows two renames: Back ne
       child = await openSub(app, win, 'sw1');
       await expect(child.getByTestId(`panel-title-${PANEL}`)).toHaveText('other', { timeout: 10_000 });
       await focusEditor(child, PANEL);
-      await child.keyboard.press('Alt+ArrowLeft');
+      await pressAction(child, 'navigate.back');
       await expect(child.getByTestId(`panel-title-${PANEL}`)).toHaveText('c', { timeout: 10_000 });
       await expect(child.getByTestId(`editor-${PANEL}`).locator('.cm-content')).toContainText(BODY, { timeout: 10_000 });
       await expectNoMissingReport(child, PANEL);

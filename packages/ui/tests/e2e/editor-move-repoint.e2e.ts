@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, FILE_OP_TIMEOUT_MS, pressAction } from './harness.js';
 
 /** A project with a file at the root and an empty `dest` folder to move it into. */
 function makeProject(tag: string): string {
@@ -235,7 +235,7 @@ test('AC2/AC3 — a drag-move re-points the editor, and the next save writes to 
       await content.click();
       await win.keyboard.type('EDITED-AFTER-MOVE ');
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
-      await win.keyboard.press('Control+s');
+      await pressAction(win, 'editor.save');
 
       // The edit lands at the NEW location…
       await expect

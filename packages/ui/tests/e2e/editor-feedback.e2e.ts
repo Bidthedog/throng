@@ -7,7 +7,7 @@ import { openApp,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
-  type OpenApp, focusEditor } from './harness.js';
+  type OpenApp, focusEditor, pressAction } from './harness.js';
 import { shippedTwoStroke } from '../shared/window-chords.js';
 
 /*
@@ -197,8 +197,8 @@ test('word wrap toggles from the status bar, the chord, and the content menu (#1
       await expect(wrapBtn).toHaveAttribute('aria-pressed', 'false');
       await expect.poll(() => contentWraps(win, pid)).toBe(false);
 
-      // Ctrl+E,W → back on. Two strokes (046 FR-091) in ONE continuous press (FR-124): Ctrl held
-      // from E through W. The first leaves the editor visibly waiting, and only then is the second
+      // Ctrl+E,W (Cmd+E,W on macOS) → back on. Two strokes (046 FR-091) in ONE continuous press (FR-124): the
+      // modifier held from E through W. The first leaves the editor visibly waiting, and only then is the second
       // sent, so it lands in the chord rather than in the document.
       const { hold, first, second } = shippedTwoStroke('editor.toggleWordWrap');
       await focusEditor(win, pid);
@@ -257,7 +257,7 @@ test('with the pref off (default), opening a different file in place scrolls to 
 
       // Scroll to the bottom of file one.
       await win.locator('.cm-content').first().click();
-      await win.keyboard.press('Control+End');
+      await win.keyboard.press('ControlOrMeta+End');
       await expect.poll(() => scrollTop(win)).toBeGreaterThan(100);
 
       // Open file two IN PLACE (default openTarget reuses this editor).
@@ -321,7 +321,7 @@ test('a UTF-16 LE file shows its format, switches to CR and UTF-8 from the statu
       expect(readFileSync(file).toString('hex')).toBe(utf16le('héllo\r\nwörld\r\n').toString('hex'));
 
       await focusEditor(win, pid);
-      await win.keyboard.press('Control+S');
+      await pressAction(win, 'editor.save');
       await expect
         .poll(() => readFileSync(file).toString('hex'), { timeout: 8000 })
         .toBe(Buffer.from('héllo\rwörld\r', 'utf8').toString('hex'));

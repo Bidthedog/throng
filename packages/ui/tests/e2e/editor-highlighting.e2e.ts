@@ -10,6 +10,7 @@ import {
   cleanupTemp,
   type AppOptions,
   type OpenApp,
+  pressAction,
 } from './harness.js';
 
 /*
@@ -211,7 +212,7 @@ test('an unknown extension is plain text — no highlighting, no error, and a sh
       // Typing a shebang must not re-detect: content is never inspected (FR-002).
       const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
       await content.click();
-      await win.keyboard.press('Control+Home');
+      await win.keyboard.press('ControlOrMeta+Home');
       await win.keyboard.type('#!/usr/bin/env node\n');
       // The edit has landed — the positive fence a re-detect (if it existed) would already have
       // had its chance to run against, since it would fire off the very same keystroke.
@@ -774,7 +775,7 @@ test('a search match keeps the code beneath it syntax-coloured (FR-007a)', { tag
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
 
       // Search for something that lands ON highlighted code.
-      await win.keyboard.press('Control+f');
+      await pressAction(win, 'search.find');
       await win.getByTestId('find-input').fill('target');
       await expect(win.locator('.throng-search-match').first()).toBeVisible({ timeout: 8000 });
 
