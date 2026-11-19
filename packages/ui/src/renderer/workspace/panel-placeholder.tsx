@@ -1031,9 +1031,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          *
          * 044 FR-040, FR-043 — a PARENTED preview displays its source document's dot too, read from the
          * update main sent (never editor-state, so the document is still counted once). A standalone
-         * preview never wears it. The editor gate stays spelled out inline, where
+         * preview never wears it — unless it holds the document itself (073 FR-033: a CSV Preview Editor's
+         * grid document), when the dot is that document's. The editor gate stays spelled out inline, where
          * `unsaved-dot-call-sites.test.ts` reads it. */}
-        {(panel.kind === 'editor' && editorUi?.dirty) || (isPreview && previewUi?.parent != null && previewUi.dirty) ? (
+        {(panel.kind === 'editor' && editorUi?.dirty) ||
+        (isPreview && (previewUi?.parent != null || previewUi?.ownsDocument === true) && previewUi.dirty) ? (
           <span
             className="throng-unsaved-dot panel-box__unsaved"
             data-testid={`panel-unsaved-${panel.id}`}

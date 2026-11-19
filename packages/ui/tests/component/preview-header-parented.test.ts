@@ -236,4 +236,14 @@ describe('the unsaved dot is the source document’s, exactly while it is dirty 
     push(update({ revision: 3, content: null, parent: null, dirty: true }));
     expect(dot(id)).toBeNull();
   });
+
+  it('a preview that holds its own document (the CSV Preview Editor) shows it exactly while that is dirty (073 FR-033)', async () => {
+    const { id, push } = await mountPreview();
+    push(update({ revision: 2, content: null, parent: null, ownsDocument: true, dirty: false }));
+    expect(dot(id)).toBeNull();
+    push(update({ revision: 3, content: null, parent: null, ownsDocument: true, dirty: true }));
+    expect(dot(id)).toBeInTheDocument();
+    push(update({ revision: 4, content: null, parent: null, ownsDocument: true, dirty: false }));
+    expect(dot(id)).toBeNull();
+  });
 });
