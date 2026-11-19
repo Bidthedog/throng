@@ -10,8 +10,6 @@ export const CELL_PADDING_X = 13;
 /** The narrowest and widest a fitted column may be, at zoom 1 (the same limits as a dragged width). */
 export const FIT_MIN_WIDTH = 40;
 export const FIT_MAX_WIDTH = 2000;
-/** An expanded row is at most this many lines tall; a taller cell scrolls inside itself. */
-export const EXPANDED_MAX_LINES = 20;
 
 export type MeasureText = (text: string) => number;
 
@@ -44,14 +42,14 @@ export function fitColumnWidth(opts: FitColumnOptions): number {
 }
 
 /**
- * How many lines `text` takes when wrapped to `maxWidth` px, line breaks honoured, never more than `cap`.
+ * How many lines `text` takes when wrapped to `maxWidth` px, line breaks honoured, never more than `cap` (default: no cap, 073 FR-013).
  * Greedy wrap at spaces; a word wider than the column is broken across lines.
  */
 export function wrappedLineCount(
   text: string,
   maxWidth: number,
   measure: MeasureText,
-  cap: number = EXPANDED_MAX_LINES,
+  cap: number = Number.POSITIVE_INFINITY,
 ): number {
   const width = Math.max(1, maxWidth);
   let lines = 0;

@@ -11,6 +11,7 @@ import {
   isJsonContainer,
   isLongCell,
   longCellThresholdOf,
+  wrapCellsOn,
 } from '../../src/csv/cell-text.js';
 
 describe('isJsonContainer', () => {
@@ -89,5 +90,23 @@ describe('the long-cell threshold', () => {
   it('calls a value long only when it has MORE characters than the threshold', () => {
     expect(isLongCell('x'.repeat(50), 50)).toBe(false);
     expect(isLongCell('x'.repeat(51), 50)).toBe(true);
+  });
+});
+
+describe('wrapCellsOn (FR-013)', () => {
+  it('follows the setting when the panel has no choice, which ships off', () => {
+    expect(wrapCellsOn(undefined, undefined)).toBe(false);
+    expect(wrapCellsOn(undefined, true)).toBe(true);
+    expect(wrapCellsOn(undefined, false)).toBe(false);
+  });
+
+  it('takes the panel choice over the setting, either way', () => {
+    expect(wrapCellsOn(true, false)).toBe(true);
+    expect(wrapCellsOn(false, true)).toBe(false);
+  });
+
+  it('ignores a value that is not a boolean', () => {
+    expect(wrapCellsOn('yes', 'no')).toBe(false);
+    expect(wrapCellsOn(1, true)).toBe(true);
   });
 });

@@ -223,12 +223,11 @@ or column right-click menu. Inside the grid, the arrow keys, Page Up/Down, Home/
 move (with Shift to extend), Enter, F2 or a double-click edits a cell (a double-click selects its text;
 while a cell is being edited those keys move the caret in it), Delete clears, Ctrl+C, Ctrl+X and Ctrl+V copy, cut
 and paste tab-separated cells, Ctrl+Z and Ctrl+Y undo and redo as in the text editor, and
-[`editor.save`](#editor) saves. Double-clicking a column letter fits the column to its widest value, and a
-row number expands the row to show its values in full; double-click again to undo either. Clicking the corner
+[`editor.save`](#editor) saves. Double-clicking a column letter fits the column to its widest value (double-click again to undo); a row number does nothing, since rows are not resized. The **Wrap** toggle on a CSV preview's status bar (or its **Wrap** menu item) shows every cell in full, wrapped to its column, each row as tall as its tallest cell. Clicking the corner
 above the row numbers selects every row and column. Every
 right-click menu in the grid — cell, selection, row number, column letter — offers Cut, Copy and Paste; a
 paste overwrites the selection from its top-left cell, and one value pasted onto several cells fills them.
-**Reset Column Width** on a column letter and **Reset Row Height** on a row number put them back to their default size. With whole rows or
+**Reset Column Width** on a column letter puts it back to its default width. With whole rows or
 columns copied from a grid, the row and column menus also offer **Insert Copied Rows Above/Below** and
 **Insert Copied Columns Left/Right**. [`editor.saveAs`](#editor) and the Save As icon in the title bar save
 the CSV under a new name, as in the text editor. A cell longer than the

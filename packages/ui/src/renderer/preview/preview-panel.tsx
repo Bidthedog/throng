@@ -100,6 +100,7 @@ import {
 import { diagramActionsAt } from './diagram/diagram-actions.js';
 import {
   cellDialogOn,
+  wrapCellsOn,
   collapseAll as foldCollapseAll,
   defaultOpenActionFor,
   enabledProviderFor,
@@ -1888,6 +1889,13 @@ export function PreviewPanel({
   const onToggleCellDialog = useCallback((): void => {
     ws.updatePanelConfig(panelId, { cellDialog: !cellDialogEffective });
   }, [ws, panelId, cellDialogEffective]);
+  // 073 FR-013 — a provider whose grid can wrap its cells: on for THIS panel by its own choice, else by the setting.
+  const hasWrapToggle = (state ? registry.get(state.providerId) : undefined)?.wrapToggle === true;
+  const wrapChoice = config?.wrapCells;
+  const wrapEffective = wrapCellsOn(wrapChoice, state ? settings.editor.previews.providers[state.providerId]?.wrapCells : undefined);
+  const onToggleWrap = useCallback((): void => {
+    ws.updatePanelConfig(panelId, { wrapCells: !wrapEffective });
+  }, [ws, panelId, wrapEffective]);
 
   /*
    * FR-113, FR-114, FR-121 — two-way scroll sync. The parent editor's top line, from the store its view in
@@ -2485,6 +2493,7 @@ export function PreviewPanel({
             projectRoot={projectRoot ?? ''}
             providerSettings={settings.editor.previews.providers[state.providerId] ?? NO_PROVIDER_SETTINGS}
             cellDialogChoice={cellDialogChoice}
+            wrapChoice={wrapChoice}
             registerGoTo={registerGoTo}
             linkWording={linkWording}
             initialViewState={state.viewState}
@@ -2565,6 +2574,7 @@ export function PreviewPanel({
           syncScroll={settings.editor.previews.syncScroll}
           showSyncScroll={flowing}
           cellDialog={hasCellDialog ? { on: cellDialogEffective, onToggle: onToggleCellDialog } : undefined}
+          wrap={hasWrapToggle ? { on: wrapEffective, onToggle: onToggleWrap } : undefined}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}
           metrics={documentMetrics}

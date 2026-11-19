@@ -29,7 +29,7 @@ const EXPECTED_KEYS = [
   // 076 FR-002: the terminal status bar's three per-panel toggles.
   'rememberCommand', 'rememberDirectory', 'terminalNotifications',
   'cellDialog',
-  'insertRowAbove', 'insertRowBelow', 'insertColumnLeft', 'insertColumnRight', 'resetColumnWidth', 'resetRowHeight', 'goToRow',
+  'insertRowAbove', 'insertRowBelow', 'insertColumnLeft', 'insertColumnRight', 'resetColumnWidth', 'goToRow', 'wrapCells',
 ];
 
 describe('icon keys (069 FR-010 to FR-012)', () => {

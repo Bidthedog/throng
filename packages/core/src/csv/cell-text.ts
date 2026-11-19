@@ -46,6 +46,15 @@ export function cellDialogOn(panelChoice: unknown, setting: unknown): boolean {
   return typeof setting === 'boolean' ? setting : true;
 }
 
+/**
+ * Whether a panel wraps its cells (FR-013): the panel's own choice when it has made one, else the "Wrap cells"
+ * setting, which ships off.
+ */
+export function wrapCellsOn(panelChoice: unknown, setting: unknown): boolean {
+  if (typeof panelChoice === 'boolean') return panelChoice;
+  return typeof setting === 'boolean' ? setting : false;
+}
+
 /** The Long cell threshold as a reader of the setting uses it: a whole number of at least 1, else the shipped 50. */
 export function longCellThresholdOf(raw: unknown): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return SHIPPED_THRESHOLD;

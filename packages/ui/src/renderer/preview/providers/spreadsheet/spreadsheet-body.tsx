@@ -205,9 +205,6 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
               ...copies,
               { label: 'Select All', icon: 'selectAll', section: 'content', onClick: () => grid.selectAll() },
               { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open },
-              ...(target.kind === 'row'
-                ? [{ label: 'Reset Row Height', icon: 'resetRowHeight' as const, section: 'viewState' as const, onClick: () => grid.collapseRow(target.row) }]
-                : []),
             ];
       openMenu(point.x, point.y, items);
     },

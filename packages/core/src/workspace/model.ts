@@ -187,6 +187,11 @@ export type PreviewPanelConfig = {
    */
   cellDialog?: boolean;
   /**
+   * 073 FR-013 — the CSV Preview Editor's own choice to wrap its cells (on or off). Absent: the panel follows the
+   * "Wrap cells" setting. Written by the status-bar toggle and the panel menu's Wrap, so it survives a restart.
+   */
+  wrapCells?: boolean;
+  /**
    * 054 FR-005, FR-009 — the preview panel TYPE: the id of the provider whose file it shows. Written when
    * the preview is placed, and whenever it comes to show a file of another provider. Absent on a layout
    * written before 054 — `previewProviderIdOf` derives it from the file, without writing it back.

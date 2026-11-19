@@ -1593,6 +1593,7 @@ export {
   CSV_LONG_CELL_THRESHOLD,
   cellDialogOn,
   cellDialogText,
+  wrapCellsOn,
   flattenCellText,
   isJsonContainer,
   isLongCell,

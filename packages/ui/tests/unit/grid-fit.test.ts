@@ -6,7 +6,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CELL_PADDING_X,
-  EXPANDED_MAX_LINES,
   fitColumnWidth,
   wrappedLineCount,
 } from '../../src/renderer/grid/fit.js';
@@ -66,9 +65,9 @@ describe('wrappedLineCount (FR-012)', () => {
     expect(wrappedLineCount('abcdefghij', 4, measure)).toBe(3);
   });
 
-  it('stops counting at the cap', () => {
+  it('counts every line by default, and stops at an explicit cap', () => {
     const many = Array.from({ length: 100 }, (_, i) => `line ${i}`).join('\n');
-    expect(wrappedLineCount(many, 50, measure)).toBe(EXPANDED_MAX_LINES);
-    expect(EXPANDED_MAX_LINES).toBe(20);
+    expect(wrappedLineCount(many, 50, measure)).toBe(100);
+    expect(wrappedLineCount(many, 50, measure, 20)).toBe(20);
   });
 });

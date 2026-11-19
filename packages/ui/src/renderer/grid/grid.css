@@ -182,14 +182,14 @@
   border-bottom: 1px solid var(--throng-colour-border);
 }
 
-/* FR-012 — an expanded row shows each value in full: line breaks kept, wrapped to the column's width, and a
-   cell taller than the row's 20-line cap scrolls inside itself. The line height is set inline (row height). */
-.data-grid__cell--expanded {
+/* FR-013 — a wrapped cell shows its value in full: line breaks kept, wrapped to the column's width. The row is as
+   tall as its tallest cell (data-grid.tsx sizes it), so nothing scrolls inside the cell. The line height is set
+   inline, from the row height. */
+.data-grid__cell--wrap {
   display: block;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   text-overflow: clip;
 }
 

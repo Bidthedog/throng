@@ -29,6 +29,7 @@ describe('the CSV provider (the CSV Preview Editor)', () => {
       openTarget: 'lastActive',
       editLongCellsInDialog: true,
       longCellThreshold: 50,
+      wrapCells: false,
     });
     expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, shipped, 'D:/p/data.csv')).toBe('preview');
   });
@@ -43,6 +44,7 @@ describe('the CSV provider (the CSV Preview Editor)', () => {
       'editor.previews.providers.csv.openTarget',
       'editor.previews.providers.csv.editLongCellsInDialog',
       'editor.previews.providers.csv.longCellThreshold',
+      'editor.previews.providers.csv.wrapCells',
     ]);
   });
 });
@@ -76,6 +78,24 @@ describe('the CSV cell dialog settings (FR-060a)', () => {
     const threshold = rows.find((d) => d.key.endsWith('.longCellThreshold'));
     expect(dialog).toMatchObject({ label: 'CSV: Edit long cells in a dialog', control: 'toggle' });
     expect(threshold).toMatchObject({ label: 'CSV: Long cell threshold', min: 1 });
+  });
+});
+
+describe('the CSV Wrap cells setting (FR-013)', () => {
+  it('ships off, keeps a stored value and falls back on a wrong type', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ wrapCells: false });
+    expect(parsePreviewSettings({ providers: { csv: { wrapCells: true } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ wrapCells: true });
+    expect(parsePreviewSettings({ providers: { csv: { wrapCells: 'yes' } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ wrapCells: false });
+  });
+
+  it('is a toggle under the CSV subsection, labelled CSV: Wrap cells', () => {
+    const row = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).find((d) => d.key.endsWith('.csv.wrapCells'));
+    expect(row).toMatchObject({ label: 'CSV: Wrap cells', control: 'toggle', subsection: 'CSV' });
+  });
+
+  it('only the CSV provider offers the per-panel wrap toggle', () => {
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('csv')?.wrapToggle).toBe(true);
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')?.wrapToggle).toBeUndefined();
   });
 });
 

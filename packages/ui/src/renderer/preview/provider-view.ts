@@ -29,6 +29,11 @@ export interface PreviewBodyProps {
    */
   cellDialogChoice?: boolean;
   /**
+   * 073 FR-013 — this panel's own choice to wrap its cells (the CSV Preview Editor's Wrap toggle, persisted with the
+   * panel). Absent: the panel follows the provider's "Wrap cells" setting.
+   */
+  wrapChoice?: boolean;
+  /**
    * 073 FR-043a — a body that has a Go to (a grid: rows) hands the panel its opener, and takes it back with `null` on
    * unmount. `preview.goToHeading` (Ctrl+G) runs it in place of the heading pop-down. The chrome names no provider.
    */

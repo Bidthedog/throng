@@ -492,11 +492,11 @@
     "resetColumnWidth": {
       "throng": "A two-headed horizontal arrow with a centre mark: puts a column back to its standard width"
     },
-    "resetRowHeight": {
-      "throng": "A two-headed vertical arrow with a centre mark: puts a row back to its standard height"
-    },
     "goToRow": {
       "throng": "An arrow running to a bar: go to a numbered row"
+    },
+    "wrapCells": {
+      "throng": "Text lines with the last one wrapping back under itself: cells wrap onto further lines"
     }
   }
 }

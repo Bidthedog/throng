@@ -318,17 +318,15 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     expect(colWidth(1)).toBe(120);
   });
 
-  it('Reset Row Height on a row header collapses an expanded row', () => {
+  it('a row header menu has no Reset Row Height, and a double-click on a row number does nothing (FR-012a, FR-006c)', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
       () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8 }) }) as unknown as CanvasRenderingContext2D,
     );
     mount('a,b\n"x\ny\nz",2\n');
-    const height = (): number => Number.parseFloat(rowHead(1).style.height);
     fireEvent.doubleClick(rowHead(1));
-    expect(height()).toBe(66);
+    expect(Number.parseFloat(rowHead(1).style.height)).toBe(22);
     fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
-    fireEvent.click(screen.getByTestId('menu-item-Reset Row Height'));
-    expect(height()).toBe(22);
+    expect(screen.queryByTestId('menu-item-Reset Row Height')).toBeNull();
   });
 });
 
@@ -656,7 +654,6 @@ describe('CsvBody menu icons (FR-037g)', () => {
       Copy: 'copy',
       Paste: 'paste',
       'Go to Row…': 'goToRow',
-      'Reset Row Height': 'resetRowHeight',
     });
   });
 
@@ -672,6 +669,46 @@ describe('CsvBody menu icons (FR-037g)', () => {
       'Reset Column Width': 'resetColumnWidth',
     });
     expect(iconOf('Column Width…')).toBeUndefined();
+  });
+});
+
+describe('CsvBody wrap (FR-013, FR-060b)', () => {
+  const rowHeight = (r: number): number =>
+    Number.parseFloat(document.querySelector<HTMLElement>(`[role="rowheader"][data-row="${r}"]`)!.style.height);
+  const DOC = 'a,b\n"x\ny\nz",2\n';
+
+  beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8 }) }) as unknown as CanvasRenderingContext2D,
+    );
+  });
+
+  it('is off by default: every row one line, cells truncated', () => {
+    mount(DOC);
+    expect(rowHeight(1)).toBe(22);
+    expect(cellAt(1, 0).textContent).toBe('x⏎y⏎z');
+  });
+
+  it('wraps when the panel chose it: the row grows to show every line break', () => {
+    mount(DOC, { wrapChoice: true });
+    expect(rowHeight(1)).toBe(66);
+    expect(cellAt(1, 0).textContent).toBe('x\ny\nz');
+  });
+
+  it('wraps when the setting is on and the panel has not chosen', () => {
+    mount(DOC, { providerSettings: { enabled: true, wrapCells: true } });
+    expect(rowHeight(1)).toBe(66);
+  });
+
+  it('takes the panel choice over the setting, either way', () => {
+    mount(DOC, { wrapChoice: false, providerSettings: { enabled: true, wrapCells: true } });
+    expect(rowHeight(1)).toBe(22);
+  });
+
+  it('changes nothing in the document: no edit is sent and nothing becomes dirty', () => {
+    mount(DOC, { wrapChoice: true });
+    expect(bridge.gridEdit).not.toHaveBeenCalled();
+    expect(getEditorState('p1')?.dirty ?? false).toBe(false);
   });
 });
 

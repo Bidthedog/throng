@@ -144,7 +144,7 @@ describe('SpreadsheetBody', () => {
       expect(iconOf('Column Width…')).toBeUndefined();
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       fireEvent.contextMenu(rowHead(0), { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow', 'Reset Row Height': 'resetRowHeight' });
+      expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       fireEvent.contextMenu(document.querySelector('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
       expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
@@ -178,19 +178,17 @@ describe('SpreadsheetBody', () => {
       expect(width()).toBe(120);
     });
 
-    it('Reset Row Height on a row header collapses an expanded row', async () => {
+    it('a row header menu has no Reset Row Height, and a double-click on a row number does nothing (FR-012a)', async () => {
       vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
         () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8 }) }) as unknown as CanvasRenderingContext2D,
       );
       bytes = book({ Data: [['h'], ['x\ny\nz']] });
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(1, 0)).toBe('x\ny\nz'.replace(/\n/g, '⏎')));
-      const height = (): number => Number.parseFloat(rowHead(1).style.height);
       fireEvent.doubleClick(rowHead(1));
-      expect(height()).toBe(66);
+      expect(Number.parseFloat(rowHead(1).style.height)).toBe(22);
       fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
-      fireEvent.click(screen.getByTestId('menu-item-Reset Row Height'));
-      expect(height()).toBe(22);
+      expect(screen.queryByTestId('menu-item-Reset Row Height')).toBeNull();
     });
   });
 
@@ -203,6 +201,16 @@ describe('SpreadsheetBody', () => {
     expect(screen.queryByTestId('cell-dialog')).toBeNull();
     fireEvent.contextMenu(document.querySelector('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
     expect(screen.queryByTestId('menu-item-Edit in Dialog…')).toBeNull();
+  });
+
+  it('never wraps: a workbook has no Wrap, whatever a stray choice or setting says (FR-013)', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8 }) }) as unknown as CanvasRenderingContext2D,
+    );
+    bytes = book({ Data: [['h'], ['x\ny\nz']] });
+    mount('throng-preview://source/s1?rev=1', { wrapChoice: true });
+    await waitFor(() => expect(cell(1, 0)).toBe('x\ny\nz'.replace(/\n/g, '⏎')));
+    expect(Number.parseFloat(document.querySelector<HTMLElement>('[role="rowheader"][data-row="1"]')!.style.height)).toBe(22);
   });
 
   it('never opens a cell editor (read-only, FR-001)', async () => {

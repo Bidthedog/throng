@@ -260,6 +260,6 @@ insertRowBelow.svg - The icon on the grid menu row that inserts an empty row bel
 insertColumnLeft.svg - The icon on the grid menu row that inserts an empty column to the left of the active column.
 insertColumnRight.svg - The icon on the grid menu row that inserts an empty column to the right of the active column.
 resetColumnWidth.svg - The icon on the grid menu row that puts a column back to the default width.
-resetRowHeight.svg - The icon on the grid menu row that puts a row back to one line high.
 goToRow.svg - The icon on the grid menu row that asks for a row number and goes to that row.
+wrapCells.svg - The icon on the CSV Preview Editor status bar toggle and the panel menu item that wraps cells, so every row shows its whole content.
 ---- icon keys: end ----

@@ -26,6 +26,7 @@ export const csvProvider: PreviewProviderDescriptor = {
   previewOptionLabel: 'Throng Preview Editor',
   flowingDocument: false,
   cellDialog: true,
+  wrapToggle: true,
   enabledDescription:
     'Offer the CSV Preview Editor, the editable grid for .csv files. When off, every CSV Preview Editor closes (asking first about unsaved changes) and the preview commands for these files are shown disabled; a CSV still opens in the text editor.',
   // FR-036a, FR-036b, FR-060a — the cell dialog for long values.
@@ -47,6 +48,15 @@ export const csvProvider: PreviewProviderDescriptor = {
       min: CSV_LONG_CELL_THRESHOLD.min,
       max: CSV_LONG_CELL_THRESHOLD.max,
       step: 10,
+    },
+    // FR-013, FR-060b — wrap cells.
+    {
+      leaf: 'wrapCells',
+      label: 'Wrap cells',
+      description:
+        'Show every cell in full: line breaks kept, each value wrapped to its column, and every row as tall as its tallest cell. Each CSV Preview Editor can turn wrapping on or off for itself from its status bar; a panel that has not follows this setting. Wrapping changes only how the grid draws and never edits the file.',
+      control: 'toggle',
+      default: false,
     },
   ],
 };

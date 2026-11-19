@@ -71,7 +71,7 @@ import {
   type GridRange,
   type GridSelection,
 } from './grid-selection.js';
-import { CELL_PADDING_X, EXPANDED_MAX_LINES, fitColumnWidth, wrappedLineCount, type MeasureText } from './fit.js';
+import { CELL_PADDING_X, fitColumnWidth, wrappedLineCount, type MeasureText } from './fit.js';
 import './grid.css';
 
 export type { GridRange, GridSelection };
@@ -107,8 +107,6 @@ export interface DataGridHandle {
   setScroll(pos: { top: number; left: number }): void;
   /** Opens the in-cell editor on the active cell (editable only). */
   beginEdit(initial?: string, selectAllText?: boolean): void;
-  /** Collapses an expanded row to one line (FR-006a); a no-op for a row that is not expanded. */
-  collapseRow(row: number): void;
   /** Goes to a row (0-based): its cell in the active column becomes the active cell and the row scrolls to the top (FR-043a). */
   goToRow(row: number): void;
 }
@@ -152,6 +150,12 @@ export interface DataGridProps {
    */
   longCellThreshold?: number;
   onEditInDialog?(row: number, col: number): void;
+  /**
+   * 073 FR-013 — wrap cells: every cell shows its whole value, line breaks kept and wrapped to its column's width, and
+   * every row is as tall as its tallest cell, with no line cap. Heights are worked out lazily for the rows near the
+   * window and cached until a width, the zoom or the content changes (SC-009). Absent or false: one line per row.
+   */
+  wrap?: boolean;
 }
 
 interface EditingState {
@@ -165,8 +169,8 @@ interface EditingState {
   selectAll: boolean;
 }
 
-/** An expanded cell shows at most this many characters; its own scrollbar carries the rest of what is drawn. */
-const MAX_EXPANDED_CHARS = 50_000;
+/** A wrapped cell shows at most this many characters, so one pathological value cannot stall the layout. */
+const MAX_WRAP_CHARS = 50_000;
 
 /** Pixel widths of a text in `el`'s computed font, from one canvas context (no DOM, no layout per text). */
 function makeMeasure(el: Element): MeasureText {
@@ -287,17 +291,9 @@ interface CellProps {
   getCell(row: number, col: number): string;
   selected: boolean;
   active: boolean;
-  expanded: boolean;
-  /** Line height of an expanded cell, in px. */
+  wrap: boolean;
+  /** Line height of a wrapped cell, in px. */
   lineH: number;
-}
-
-/** Whether two row-height maps hold the same rows at the same heights. */
-function sameHeights(a: ReadonlyMap<number, number>, b: ReadonlyMap<number, number>): boolean {
-  if (a === b) return true;
-  if (a.size !== b.size) return false;
-  for (const [row, h] of a) if (b.get(row) !== h) return false;
-  return true;
 }
 
 /** One cell. Memoised on primitives, so a scroll step rebuilds only the cells that entered the window (SC-009). */
@@ -313,14 +309,14 @@ const GridCell = memo(function GridCell(p: CellProps): ReactElement {
       data-col={p.col}
       className={
         'data-grid__cell' +
-        (p.expanded ? ' data-grid__cell--expanded' : '') +
+        (p.wrap ? ' data-grid__cell--wrap' : '') +
         (p.selected ? ' data-grid__cell--selected' : '') +
         (p.active ? ' data-grid__cell--active' : '')
       }
-      style={p.expanded ? { width: p.size, lineHeight: `${p.lineH}px` } : { width: p.size }}
+      style={p.wrap ? { width: p.size, lineHeight: `${p.lineH}px` } : { width: p.size }}
       title={value === '' ? undefined : value}
     >
-      {p.expanded ? (value.length > MAX_EXPANDED_CHARS ? value.slice(0, MAX_EXPANDED_CHARS) : value) : displayText(value)}
+      {p.wrap ? (value.length > MAX_WRAP_CHARS ? value.slice(0, MAX_WRAP_CHARS) : value) : displayText(value)}
     </div>
   );
 });
@@ -339,7 +335,7 @@ interface RowProps {
   selRight: number;
   /** The active column when the active cell is on this row, else -1. */
   activeCol: number;
-  expanded: boolean;
+  wrap: boolean;
   lineH: number;
 }
 
@@ -363,7 +359,7 @@ const GridRow = memo(function GridRow(p: RowProps): ReactElement {
           getCell={p.getCell}
           selected={c.index >= p.selLeft && c.index <= p.selRight}
           active={c.index === p.activeCol}
-          expanded={p.expanded}
+          wrap={p.wrap}
           lineH={p.lineH}
         />
       ))}
@@ -393,6 +389,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     onScrollChange,
     longCellThreshold,
     onEditInDialog,
+    wrap = false,
   } = props;
 
   const rows = Math.max(1, rowCount);
@@ -409,8 +406,6 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
   const [resizing, setResizing] = useState<{ col: number; startX: number; startWidth: number } | null>(null);
   const [dragging, setDragging] = useState<{ mode: 'cells' | 'rows' | 'cols'; anchor: GridCell } | null>(null);
   const lastKeyboardMenu = useRef(0);
-  // FR-012: the rows shown in full. View state for the panel's life; never persisted, never a setting.
-  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
   // FR-011: per column, the width a fit replaced and the width it set, so a second fit can undo the first.
   const fitMemo = useRef(new Map<number, { before: number; fitted: number }>());
 
@@ -434,33 +429,16 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     [],
   );
 
-  // FR-012: an expanded row is as tall as its tallest cell's wrapped line count (capped), computed from
-  // the canvas font rather than measured from the DOM, so virtualisation survives 100,000 rows (R12).
-  const computedHeights = useMemo((): ReadonlyMap<number, number> => {
-    const heights = new Map<number, number>();
-    const root = rootRef.current;
-    if (expanded.size === 0 || !root) return heights;
-    const measure = makeMeasure(root);
-    for (const row of expanded) {
-      let lines = 1;
-      if (row < rowCount) {
-        for (let col = 0; col < Math.min(cols, colCount) && lines < EXPANDED_MAX_LINES; col++) {
-          const value = getCell(row, col);
-          if (value === '') continue;
-          const text = value.length > MAX_EXPANDED_CHARS ? value.slice(0, MAX_EXPANDED_CHARS) : value;
-          lines = Math.max(lines, wrappedLineCount(text, widthOf(col) - CELL_PADDING_X * zoom, measure));
-        }
-      }
-      heights.set(row, lines * rowH);
-    }
-    return heights;
-  }, [expanded, getCell, cols, colCount, rowCount, widthOf, zoom, rowH]);
-  // A new map with the SAME heights must not change `rowSize`: a new `rowSize` re-measures every row, and
-  // with 100,000 rows that ran on every pointer move of a column resize (SC-004, SC-009).
-  const heightsRef = useRef<ReadonlyMap<number, number>>(computedHeights);
-  if (!sameHeights(heightsRef.current, computedHeights)) heightsRef.current = computedHeights;
-  const expandedHeights = heightsRef.current;
-  const rowSize = useCallback((i: number): number => expandedHeights.get(i) ?? rowH, [expandedHeights, rowH]);
+  // FR-013: with wrap on, a row is as tall as its tallest cell's wrapped line count, computed from the canvas font
+  // rather than measured from the DOM. The virtualiser is given a constant estimate, and only the rows it has
+  // laid out near the window are sized (the layout effect below), so 100,000 rows never cost 100,000 measures (R12).
+  // The cache is keyed by (row) within one (content, widths, zoom, wrap) and is dropped whenever any of them changes.
+  const wrapCache = useMemo(
+    () => (wrap ? new Map<number, number>() : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the cache is dropped when its inputs change, not read here
+    [wrap, getCell, widthOf, cols, colCount, rowCount, rowH],
+  );
+  const rowSize = useCallback((): number => rowH, [rowH]);
 
   // `useFlushSync: false` lets React batch the window update with the browser's own scroll instead of
   // flushing synchronously inside every scroll event (SC-009).
@@ -487,7 +465,32 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
   // The virtualisers cache item sizes; a new zoom, width or live resize preview invalidates them.
   useLayoutEffect(() => {
     rowV.measure();
-  }, [rowV, rowSize]);
+  }, [rowV, rowSize, wrapCache]);
+  // FR-013 — size the rows the virtualiser has laid out. Runs after every render and settles at once: a row already
+  // at its height asks for nothing, and a cached row costs a map read.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (wrapCache === null || !root) return;
+    let measure: MeasureText | null = null;
+    for (const item of rowV.getVirtualItems()) {
+      let height = wrapCache.get(item.index);
+      if (height === undefined) {
+        measure ??= makeMeasure(root);
+        let lines = 1;
+        if (item.index < rowCount) {
+          for (let col = 0; col < Math.min(cols, colCount); col++) {
+            const value = getCell(item.index, col);
+            if (value === '') continue;
+            const text = value.length > MAX_WRAP_CHARS ? value.slice(0, MAX_WRAP_CHARS) : value;
+            lines = Math.max(lines, wrappedLineCount(text, widthOf(col) - CELL_PADDING_X * zoom, measure));
+          }
+        }
+        height = lines * rowH;
+        wrapCache.set(item.index, height);
+      }
+      if (item.size !== height) rowV.resizeItem(item.index, height);
+    }
+  });
   useLayoutEffect(() => {
     colV.measure();
   }, [colV, widthOf]);
@@ -590,13 +593,6 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         const el = scrollRef.current;
         if (el) el.scrollTop = rowV.measurementsCache[target]?.start ?? target * rowH;
       },
-      collapseRow: (row) =>
-        setExpanded((prev) => {
-          if (!prev.has(row)) return prev;
-          const next = new Set(prev);
-          next.delete(row);
-          return next;
-        }),
     }),
     [beginEdit, cols, commitSel, ensureVisible, rowH, rowV, rows],
   );
@@ -728,14 +724,6 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     onColumnWidthChange(col, fitted);
   };
 
-  const toggleRow = (row: number): void => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(row)) next.add(row);
-      return next;
-    });
-  };
-
   const onDoubleClick = (e: ReactMouseEvent<HTMLDivElement>): void => {
     const target = e.target as HTMLElement;
     if (target.tagName === 'TEXTAREA') return;
@@ -745,12 +733,8 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       if (col !== null) fitColumn(col);
       return;
     }
-    const rowEl = target.closest('[data-grid-rowheader]');
-    if (rowEl) {
-      const row = numAttr(rowEl, 'data-row');
-      if (row !== null) toggleRow(row);
-      return;
-    }
+    // FR-012a — a row number's double-click does nothing: there is no row resize.
+    if (target.closest('[data-grid-rowheader]')) return;
     const cellEl = target.closest('[data-grid-cell]');
     if (cellEl && editable) {
       const row = numAttr(cellEl, 'data-row');
@@ -1057,7 +1041,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
                     selLeft={inRows ? range.left : 0}
                     selRight={inRows ? range.right : -1}
                     activeCol={r.index === sel.active.row ? sel.active.col : -1}
-                    expanded={expanded.has(r.index)}
+                    wrap={wrap}
                     lineH={rowH}
                   />
                 );

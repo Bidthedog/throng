@@ -19,6 +19,7 @@ import {
   toDisplayPath,
   effectiveActivePanelId,
   cellDialogOn,
+  wrapCellsOn,
   panelZoomLevel,
   zoomFactor,
   findPanelLocations,
@@ -722,6 +723,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                           },
                         }
                       : {}),
+                    ...((previewUi ? previewRegistry.get(previewUi.providerId) : undefined)?.wrapToggle === true
+                      ? {
+                          wrap: {
+                            on: wrapCellsOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.wrapCells,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.wrapCells : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
                   }
                 : null,
               // 044 FR-002 — an editor's Open Preview, from the same affordance its status-bar button uses.
@@ -940,6 +951,13 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   const held = (panel.config as PreviewPanelConfig | undefined)?.cellDialog;
                   const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.editLongCellsInDialog : undefined;
                   if (provider?.cellDialog === true) wsRef.current.updatePanelConfig(panel.id, { cellDialog: !cellDialogOn(held, setting) });
+                },
+                // 073 FR-013 — the panel's own choice, saved with the panel; a panel that has not chosen reads the setting.
+                toggleWrap: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.wrapCells;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.wrapCells : undefined;
+                  if (provider?.wrapToggle === true) wsRef.current.updatePanelConfig(panel.id, { wrapCells: !wrapCellsOn(held, setting) });
                 },
               },
             }),

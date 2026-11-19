@@ -169,6 +169,8 @@ export interface PanelHeaderMenuActions {
   toggleSyncScroll: () => void;
   /** 073 FR-036b — flip this panel's own choice to offer the cell dialog (persisted with the panel). */
   toggleCellDialog: () => void;
+  /** 073 FR-013 — flip this panel's own choice to wrap its cells (persisted with the panel). */
+  toggleWrap: () => void;
   /** 057 FR-125 — raise a user-flagged Attention mark on this panel (`attention.flag`). */
   flag: () => void;
 }
@@ -183,6 +185,8 @@ export interface PanelHeaderPreviewState {
   flowingDocument?: boolean;
   /** 073 FR-036b — the provider has a cell dialog; `on` is whether it is on for this panel (its own choice, else the setting). */
   cellDialog?: { on: boolean };
+  /** 073 FR-013 — the provider wraps cells; `on` is whether it does for this panel (its own choice, else the setting). */
+  wrap?: { on: boolean };
 }
 
 /**
@@ -578,6 +582,19 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       icon: 'cellDialog' as const,
       section: 'viewState',
       onClick: () => actions.toggleCellDialog(),
+    });
+  }
+
+  // 073 FR-013 — a grid provider's Wrap, on or off for THIS panel: a checked toggle in View & state, the menu route the
+  // status bar's toggle is an accelerator over.
+  if (isPreview && args.preview?.wrap !== undefined) {
+    items.push({
+      label: 'Wrap',
+      checked: args.preview.wrap.on,
+      testId: 'menu-item-Wrap',
+      icon: 'wrapCells' as const,
+      section: 'viewState',
+      onClick: () => actions.toggleWrap(),
     });
   }
 

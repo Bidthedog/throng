@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactElement } from 'react';
 import {
   cellDialogOn,
+  wrapCellsOn,
   cellDialogText,
   cellValue,
   columnLabel,
@@ -113,7 +114,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, registerGoTo, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, registerGoTo, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -458,7 +459,6 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           ...insertCopied,
           ...clipboard(true),
           { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open, shortcut: chord('preview.goToHeading') },
-          { label: 'Reset Row Height', icon: 'resetRowHeight', section: 'viewState', onClick: () => grid.collapseRow(target.row) },
         );
       } else if (target.kind === 'column') {
         items.push(
@@ -546,6 +546,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       <DataGrid
         longCellThreshold={cellDialogAvailable ? longCellThreshold : undefined}
         onEditInDialog={openCellDialog}
+        wrap={wrapCellsOn(wrapChoice, providerSettings.wrapCells)}
         ref={gridRef}
         testId={`csv-grid-${panelId}`}
         rowCount={rowCount}

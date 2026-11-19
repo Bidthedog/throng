@@ -68,6 +68,8 @@ export interface PreviewStatusBarProps {
    * toggle's click. Absent for every other provider, which draws no such control.
    */
   cellDialog?: { on: boolean; onToggle: () => void };
+  /** 073 FR-013 — a provider whose grid wraps its cells: whether wrapping is on for THIS panel, and the toggle's click. */
+  wrap?: { on: boolean; onToggle: () => void };
   /** FR-118 — the hovered or focused link's target; omitted, `null` or empty shows nothing. */
   readout?: string | null;
   /** FR-118a — the drawn document's counts, or `null` until they settle (no counts are drawn). */
@@ -87,6 +89,8 @@ const ALL_ON = { showCursorPosition: true, showCounts: true };
 
 /** The cell dialog toggle's name: the setting's own label, so the control and the Preferences row read alike. */
 const CELL_DIALOG_LABEL = 'Edit long cells in a dialog';
+/** The Wrap toggle's name (FR-013). */
+const WRAP_LABEL = 'Wrap cells';
 
 export function PreviewStatusBar({
   panelId,
@@ -98,6 +102,7 @@ export function PreviewStatusBar({
   onToggleSyncScroll,
   showSyncScroll = true,
   cellDialog,
+  wrap,
   readout,
   metrics = null,
   selection = null,
@@ -178,6 +183,19 @@ export function PreviewStatusBar({
         {/* 073 FR-036b — the cell dialog's per-panel switch, at the trailing end: pressed while the dialog is on
             for this panel. Present only for a provider that declares one. An accelerator over the header
             menu's checked *Edit Long Cells in Dialog* item (Principle VI). */}
+        {/* 073 FR-013 — the grid's Wrap switch: pressed while this panel wraps its cells. An accelerator over the
+            header menu's checked *Wrap* item (Principle VI). */}
+        {wrap !== undefined ? (
+          <IconButton
+            token="wrapCells"
+            className="editor-status-strip__preview"
+            testId={`preview-wrap-${panelId}`}
+            title={WRAP_LABEL}
+            ariaLabel={WRAP_LABEL}
+            ariaPressed={wrap.on}
+            onClick={wrap.onToggle}
+          />
+        ) : null}
         {cellDialog !== undefined ? (
           <IconButton
             token="cellDialog"

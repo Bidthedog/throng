@@ -641,54 +641,109 @@ describe('DataGrid column fit (FR-011)', () => {
   });
 });
 
-describe('DataGrid row expand (FR-012)', () => {
+describe('DataGrid has no row resize (FR-012a)', () => {
+  it('a double-click on a row number does nothing: the row keeps its height and its one-line text', () => {
+    stubCanvas();
+    const g = setup({ getCell: (r, c) => (r === 2 && c === 3 ? 'l0\nl1\nl2' : `r${r}c${c}`) });
+    const head = g.root.querySelector<HTMLElement>('[role="rowheader"][data-row="2"]')!;
+    fireEvent.doubleClick(head);
+    expect(Number.parseFloat(head.style.height)).toBe(22);
+    expect(g.cellAt(2, 3).textContent).toBe('l0⏎l1⏎l2');
+  });
+
+  it('offers no collapseRow on the handle', () => {
+    const g = setup();
+    expect('collapseRow' in g.ref.current!).toBe(false);
+  });
+});
+
+describe('DataGrid wrap (FR-013)', () => {
   const rowHead = (g: ReturnType<typeof setup>, row: number): HTMLElement =>
     g.root.querySelector<HTMLElement>(`[role="rowheader"][data-row="${row}"]`)!;
   const top = (el: HTMLElement): number => Number.parseFloat(el.style.top);
   const height = (el: HTMLElement): number => Number.parseFloat(el.style.height);
   const lines = (n: number): string => Array.from({ length: n }, (_, i) => `l${i}`).join('\n');
 
-  it('expands to the tallest cell\'s line count, shows the full value, and collapses on a second double-click', () => {
+  it('is off by default: every row one line, line breaks drawn as a mark', () => {
     stubCanvas();
     const g = setup({ getCell: (r, c) => (r === 2 && c === 3 ? lines(3) : `r${r}c${c}`) });
-    expect(g.cellAt(2, 3).textContent).toBe('l0⏎l1⏎l2');
-    fireEvent.doubleClick(rowHead(g, 2));
-    expect(height(rowHead(g, 2))).toBe(66);
-    expect(g.cellAt(2, 3).textContent).toBe('l0\nl1\nl2');
-    expect(g.cellAt(2, 3)).toHaveClass('data-grid__cell--expanded');
-    expect(top(rowHead(g, 3))).toBe(22 * 2 + 66);
-    fireEvent.doubleClick(rowHead(g, 2));
     expect(height(rowHead(g, 2))).toBe(22);
     expect(g.cellAt(2, 3).textContent).toBe('l0⏎l1⏎l2');
-    expect(top(rowHead(g, 3))).toBe(66);
+    expect(g.cellAt(2, 3)).not.toHaveClass('data-grid__cell--wrap');
   });
 
-  it('wraps a long value to its column\'s width', () => {
+  it('makes a row as tall as its tallest cell, showing the line breaks, and moves the rows below', () => {
+    stubCanvas();
+    const g = setup({ wrap: true, getCell: (r, c) => (r === 2 && c === 3 ? lines(3) : `r${r}c${c}`) });
+    expect(height(rowHead(g, 2))).toBe(66);
+    expect(g.cellAt(2, 3).textContent).toBe('l0\nl1\nl2');
+    expect(g.cellAt(2, 3)).toHaveClass('data-grid__cell--wrap');
+    expect(height(rowHead(g, 1))).toBe(22);
+    expect(top(rowHead(g, 3))).toBe(22 * 2 + 66);
+  });
+
+  it('wraps a long value to its column width', () => {
     stubCanvas();
     // 120 px column less 13 px padding = 107 px = 13 characters at 8 px: 17 characters wrap to two lines.
-    const g = setup({ getCell: (r, c) => (r === 1 && c === 0 ? 'aaaaaaaa bbbbbbbb' : '') });
-    fireEvent.doubleClick(rowHead(g, 1));
+    const g = setup({ wrap: true, getCell: (r, c) => (r === 1 && c === 0 ? 'aaaaaaaa bbbbbbbb' : '') });
     expect(height(rowHead(g, 1))).toBe(44);
   });
 
-  it('caps at 20 lines', () => {
+  it('has no line cap: sixty lines make a sixty-line row', () => {
     stubCanvas();
-    const g = setup({ getCell: (r) => (r === 0 ? lines(60) : '') });
-    fireEvent.doubleClick(rowHead(g, 0));
-    expect(height(rowHead(g, 0))).toBe(20 * 22);
+    const g = setup({ wrap: true, getCell: (r) => (r === 0 ? lines(60) : '') });
+    expect(height(rowHead(g, 0))).toBe(60 * 22);
   });
 
   it('scales the line height with the zoom', () => {
     stubCanvas();
-    const g = setup({ zoom: 2, getCell: (r) => (r === 0 ? lines(2) : '') });
-    fireEvent.doubleClick(rowHead(g, 0));
+    const g = setup({ wrap: true, zoom: 2, getCell: (r) => (r === 0 ? lines(2) : '') });
     expect(height(rowHead(g, 0))).toBe(2 * 22 * 2);
   });
 
-  it('hit-tests, and places the cell editor, by the measured row positions below an expanded row', () => {
+  it('re-flows when a column width changes, and back again when it is restored', () => {
     stubCanvas();
-    const g = setup({ getCell: (r, c) => (r === 2 && c === 0 ? lines(3) : `r${r}c${c}`) });
-    fireEvent.doubleClick(rowHead(g, 2));
+    const getCell = (r: number, c: number): string => (r === 1 && c === 0 ? 'aaaaaaaa bbbbbbbb' : '');
+    const g = setup({ wrap: true, getCell, columnWidths: { 0: 400 } });
+    expect(height(rowHead(g, 1))).toBe(22);
+    g.rerender({ columnWidths: { 0: 120 } });
+    expect(height(rowHead(g, 1))).toBe(44);
+    g.rerender({ columnWidths: { 0: 400 } });
+    expect(height(rowHead(g, 1))).toBe(22);
+  });
+
+  it('re-flows when the content changes', () => {
+    stubCanvas();
+    const g = setup({ wrap: true, getCell: () => 'one' });
+    expect(height(rowHead(g, 0))).toBe(22);
+    g.rerender({ getCell: (r: number) => (r === 0 ? lines(4) : 'one') });
+    expect(height(rowHead(g, 0))).toBe(88);
+  });
+
+  it('returns every row to one line when turned off', () => {
+    stubCanvas();
+    const getCell = (r: number): string => (r === 0 ? lines(3) : 'x');
+    const g = setup({ wrap: true, getCell });
+    expect(height(rowHead(g, 0))).toBe(66);
+    g.rerender({ wrap: false });
+    expect(height(rowHead(g, 0))).toBe(22);
+    expect(g.cellAt(0, 0).textContent).toBe('l0⏎l1⏎l2');
+  });
+
+  it('measures only the rows near the window, not all of 100,000 (SC-009)', () => {
+    const measureText = vi.fn((t: string) => ({ width: t.length * 8 }));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () => ({ font: '', measureText }) as unknown as CanvasRenderingContext2D,
+    );
+    const getCell = vi.fn((r: number, c: number) => `row ${r} col ${c}`);
+    setup({ wrap: true, rowCount: 100_000, getCell });
+    const rowsAsked = new Set(getCell.mock.calls.map((call) => call[0]));
+    expect(rowsAsked.size).toBeLessThan(200);
+  });
+
+  it('hit-tests, and places the cell editor, by the measured row positions below a tall row', () => {
+    stubCanvas();
+    const g = setup({ wrap: true, getCell: (r, c) => (r === 2 && c === 0 ? lines(3) : `r${r}c${c}`) });
     const gutter = Number.parseFloat(g.root.querySelector<HTMLElement>('.data-grid__gutter')!.style.width);
     const header = Number.parseFloat(g.root.querySelector<HTMLElement>('.data-grid__header')!.style.height);
     fireEvent.mouseDown(g.cellAt(0, 0), { button: 0 });
@@ -825,11 +880,10 @@ describe('DataGrid goToRow handle (FR-043a)', () => {
     expect(scroll.top()).toBe(899 * 22);
   });
 
-  it('takes a row below an expanded row from the measured positions', () => {
+  it('takes a row below a wrapped row from the measured positions', () => {
     stubCanvas();
-    const g = setup({ getCell: (r, c) => (r === 1 && c === 0 ? 'a\nb\nc' : `r${r}c${c}`) });
+    const g = setup({ wrap: true, getCell: (r, c) => (r === 1 && c === 0 ? 'a\nb\nc' : `r${r}c${c}`) });
     const scroll = trackedScroller(g.root);
-    fireEvent.doubleClick(g.root.querySelector('[role="rowheader"][data-row="1"]')!);
     act(() => g.ref.current!.goToRow(4));
     // Rows 0 and 2 are 22 px, row 1 is 66 px: row 4 starts at 22 + 66 + 22 + 22.
     expect(scroll.top()).toBe(132);
@@ -845,20 +899,6 @@ describe('DataGrid goToRow handle (FR-043a)', () => {
     expect(g.onSelectionChange).toHaveBeenLastCalledWith(sel(g));
   });
 
-});
-
-describe('DataGrid collapseRow handle (FR-006a)', () => {
-  it('collapses an expanded row to one line, and leaves a collapsed row alone', () => {
-    stubCanvas();
-    const g = setup({ getCell: (r, c) => (r === 1 && c === 0 ? 'a\nb\nc' : `r${r}c${c}`) });
-    const head = (): HTMLElement => g.root.querySelector<HTMLElement>('[role="rowheader"][data-row="1"]')!;
-    fireEvent.doubleClick(head());
-    expect(Number.parseFloat(head().style.height)).toBe(66);
-    act(() => g.ref.current!.collapseRow(1));
-    expect(Number.parseFloat(head().style.height)).toBe(22);
-    act(() => g.ref.current!.collapseRow(1));
-    expect(Number.parseFloat(head().style.height)).toBe(22);
-  });
 });
 
 describe('DataGrid scrolling cost (SC-009)', () => {
