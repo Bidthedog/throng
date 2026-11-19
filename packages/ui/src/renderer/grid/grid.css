@@ -153,14 +153,23 @@
 .data-grid__row {
   position: absolute;
   left: 0;
+  /*
+   * Cells flow left to right after a spacer as wide as the columns scrolled past, so a column resize moves
+   * the cells after it by layout alone: only the resized column's cells change, not every cell's `left`.
+   */
+  display: flex;
   /* A row's cells never affect layout outside it, so a scroll step restyles only the rows that changed. */
   contain: layout style;
 }
 
+.data-grid__row-spacer {
+  flex: 0 0 auto;
+}
+
 .data-grid__cell {
-  position: absolute;
-  top: 0;
-  bottom: 0;
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
   box-sizing: border-box;
   padding: 0 6px;
   display: flex;

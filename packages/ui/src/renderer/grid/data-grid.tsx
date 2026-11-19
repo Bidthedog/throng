@@ -271,7 +271,6 @@ function CellEditor(props: {
 interface CellProps {
   row: number;
   col: number;
-  start: number;
   size: number;
   /** False outside the data (the phantom empty row / column): drawn empty, never asked of `getCell`. */
   valid: boolean;
@@ -281,6 +280,14 @@ interface CellProps {
   expanded: boolean;
   /** Line height of an expanded cell, in px. */
   lineH: number;
+}
+
+/** Whether two row-height maps hold the same rows at the same heights. */
+function sameHeights(a: ReadonlyMap<number, number>, b: ReadonlyMap<number, number>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const [row, h] of a) if (b.get(row) !== h) return false;
+  return true;
 }
 
 /** One cell. Memoised on primitives, so a scroll step rebuilds only the cells that entered the window (SC-009). */
@@ -300,7 +307,7 @@ const GridCell = memo(function GridCell(p: CellProps): ReactElement {
         (p.selected ? ' data-grid__cell--selected' : '') +
         (p.active ? ' data-grid__cell--active' : '')
       }
-      style={p.expanded ? { left: p.start, width: p.size, lineHeight: `${p.lineH}px` } : { left: p.start, width: p.size }}
+      style={p.expanded ? { width: p.size, lineHeight: `${p.lineH}px` } : { width: p.size }}
       title={value === '' ? undefined : value}
     >
       {p.expanded ? (value.length > MAX_EXPANDED_CHARS ? value.slice(0, MAX_EXPANDED_CHARS) : value) : displayText(value)}
@@ -335,12 +342,12 @@ const GridRow = memo(function GridRow(p: RowProps): ReactElement {
       className="data-grid__row"
       style={{ top: p.start, height: p.size, width: p.totalW }}
     >
+      <div className="data-grid__row-spacer" style={{ width: p.colItems[0]?.start ?? 0 }} aria-hidden="true" />
       {p.colItems.map((c) => (
         <GridCell
           key={c.key}
           row={p.row}
           col={c.index}
-          start={c.start}
           size={c.size}
           valid={p.row < p.rowCount && c.index < p.colCount}
           getCell={p.getCell}
@@ -417,7 +424,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
 
   // FR-012: an expanded row is as tall as its tallest cell's wrapped line count (capped), computed from
   // the canvas font rather than measured from the DOM, so virtualisation survives 100,000 rows (R12).
-  const expandedHeights = useMemo((): ReadonlyMap<number, number> => {
+  const computedHeights = useMemo((): ReadonlyMap<number, number> => {
     const heights = new Map<number, number>();
     const root = rootRef.current;
     if (expanded.size === 0 || !root) return heights;
@@ -436,6 +443,11 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     }
     return heights;
   }, [expanded, getCell, cols, colCount, rowCount, widthOf, zoom, rowH]);
+  // A new map with the SAME heights must not change `rowSize`: a new `rowSize` re-measures every row, and
+  // with 100,000 rows that ran on every pointer move of a column resize (SC-004, SC-009).
+  const heightsRef = useRef<ReadonlyMap<number, number>>(computedHeights);
+  if (!sameHeights(heightsRef.current, computedHeights)) heightsRef.current = computedHeights;
+  const expandedHeights = heightsRef.current;
   const rowSize = useCallback((i: number): number => expandedHeights.get(i) ?? rowH, [expandedHeights, rowH]);
 
   // `useFlushSync: false` lets React batch the window update with the browser's own scroll instead of
