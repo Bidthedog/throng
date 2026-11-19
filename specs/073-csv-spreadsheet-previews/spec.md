@@ -68,7 +68,7 @@ the feedback, the code and precedent rather than stated by the maintainer.
   is as tall as its tallest cell. Double-clicking it again collapses it to one line. *(derived)* An
   expanded row is at most 20 lines tall, and a cell taller than that scrolls inside itself; expansion
   lasts for the life of the panel and is not persisted, because row indexes shift as rows are inserted.
-  Both grids. (FR-012, refining FR-004 for an expanded row)
+  Both grids. (FR-012, refining FR-004 for an expanded row) *(Superseded by Q24: there is no row expand.)*
 - Q8: What does double-clicking a cell do? → A: In the CSV Preview Editor it opens the in-cell editor
   with the cell's whole text selected. While the editor is open, the arrow keys, Home and End move the
   caret within the text, *(derived)* Ctrl+Home and Ctrl+End move it to the start and end of the text,
@@ -142,6 +142,14 @@ the feedback, the code and precedent rather than stated by the maintainer.
 - Q23: Should a row number's menu offer Select Row? → A: No — clicking or right-clicking the row number has
   already selected the row, so the item is removed. *(derived)* The column letter's **Select Column** goes for the
   same reason. Both grids. Supersedes scenario 20's "Select Row / Column". (FR-037h)
+- Q24: How are long values shown, and is there a row resize? → A: A cell either fits (column auto-fit,
+  FR-011), wraps, or truncates. A **Wrap** toggle in the CSV Preview Editor's status bar, off by default,
+  wraps every cell so each shows its whole value, line breaks honoured, rows as tall as their tallest cell; a
+  CSV setting sets the default. There is no row resize: row expand on a row-number double-click and **Reset
+  Row Height** go. *(derived)* The setting is **Wrap cells** (ships off); the toggle is per panel, saved with
+  the panel, an untouched panel following the setting (as FR-036b); a wrapped row has no line cap; the
+  toggle is keyboard-reachable and shows its state; Wrap is on the panel menu too. CSV only: a workbook
+  preview fits or truncates. (FR-013, FR-012a, FR-006c, FR-060b)
 
 ## Terminology
 
@@ -225,7 +233,8 @@ string; check every value lands in its cell, the HTML shows literally, and nothi
    width it had before (FR-011).
 9. **Given** a row holding a long value and a value with a line break, **When** the user double-clicks
    its row number, **Then** the row grows to show both values in full, wrapped and on their own lines;
-   **When** they double-click it again, **Then** it is one line high again (FR-012).
+   **When** they double-click it again, **Then** it is one line high again (FR-012). *(Superseded by
+   FR-012a: there is no row expand.)*
 
 ---
 
@@ -304,6 +313,13 @@ expected bytes: only the edited field differs.
 23. **Given** a grid scrolled to row 500, **When** the user clicks the corner cell above the row numbers,
     **Then** every row and column is selected, the grid stays at row 500, and Ctrl+C copies the whole table
     (FR-008b).
+24. **Given** Wrap cells off and a CSV holding a 300-character value and a value with line breaks, **When**
+    the user turns on Wrap in the status bar, **Then** every row grows to show its cells in full, wrapped
+    within their columns and broken at the line breaks; turning it off truncates them again. Another CSV
+    panel is unaffected, and the panel keeps its choice after a restart (FR-013).
+25. **Given** Wrap cells on in Preferences, **When** the user opens a CSV, **Then** it opens wrapped; a
+    row-number double-click changes nothing and the row-number menu has no Reset Row Height (FR-012a,
+    FR-006c, FR-060b).
 
 ---
 
@@ -336,7 +352,8 @@ check every sheet is reachable, the formula shows its stored value, and nothing 
    Folders, **Then** the OS default program opens it and no throng panel opens.
 7. **Given** a sheet in the preview, **When** the user double-clicks a column header or a row number,
    **Then** the column fits its widest value or the row expands to show its values in full, and a second
-   double-click undoes it, exactly as in the CSV Preview Editor (FR-011, FR-012).
+   double-click undoes it, exactly as in the CSV Preview Editor (FR-011, FR-012). *(Superseded by FR-012a
+   for rows: a row-number double-click does nothing.)*
 
 ---
 
@@ -410,7 +427,7 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-003**: The grid MUST virtualise rows and columns, so only what is on screen is drawn.
 - **FR-004**: The grid MUST scroll horizontally rather than wrap. A cell's content MUST stay on its row's
   single line, truncated with an ellipsis, with the full value in the cell's tooltip. *(Refined by FR-012
-  for an expanded row, 2026-11-19.)*
+  for an expanded row, 2026-11-19; refined by FR-013 while Wrap is on in a CSV Preview Editor.)*
 - **FR-005**: Every cell value MUST be rendered as text, never interpreted as markup, a link or a formula.
 - **FR-006**: Columns MUST be resizable by dragging the header strip's column edge, and by keyboard from
   the column header's menu (**Column Width…**).
@@ -419,6 +436,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
   **Reset Size**, collapsing an expanded row (FR-012) to one line. Both grids.
 - **FR-006b** *(Q19, 2026-11-19)*: The column header's item MUST be named **Reset Column Width** and the
   row header's **Reset Row Height**. *(Supersedes FR-006a's item name, "Reset Size"; its behaviour stands.)*
+- **FR-006c** *(Q24, 2026-11-19)*: The row header's menu MUST NOT offer **Reset Row Height**; **Reset Column
+  Width** stays. *(Supersedes FR-006a and FR-006b for rows.)*
 - **FR-007**: The grid MUST take its colours, fonts and selection highlight from the active theme's
   tokens, and MUST follow the panel's zoom (044 FR-034).
 - **FR-008**: The grid MUST be navigable from the keyboard: arrows, Page Up/Down, Home/End,
@@ -442,7 +461,15 @@ Markdown and Mermaid pattern, each setting working as labelled.
   shows its full value, line breaks honoured and wrapped within its column's width, the row as tall as its
   tallest cell up to 20 lines, a taller cell scrolling inside itself. Double-clicking an expanded row's
   header MUST collapse it to one line. Expansion lasts for the life of the panel and is not persisted.
-  Both grids.
+  Both grids. *(Superseded by FR-012a.)*
+- **FR-012a** *(Q24, 2026-11-19)*: There MUST be no row resize in either grid: a row-number double-click
+  MUST do nothing, and no menu offers expanding or resetting a row's height. *(Supersedes FR-012.)*
+- **FR-013** *(Q24, 2026-11-19)*: The CSV Preview Editor's status bar MUST show a **Wrap** toggle that, when
+  on, wraps every cell within its column's width, line breaks honoured, each row as tall as its tallest cell
+  so every value shows in full, with no line cap; off, cells truncate as FR-004 says. The toggle MUST show its
+  state, be reachable by keyboard, and have a matching checked item on the panel menu. Whether Wrap is on is
+  decided per panel: the panel's own choice, saved with the panel so it survives a restart, else **Wrap
+  cells** (FR-060b). Scrolling with Wrap on still meets SC-009. *(Refines FR-004.)*
 
 #### CSV parsing
 
@@ -621,6 +648,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-060a** *(Q17, 2026-11-19)*: The CSV provider MUST have two more settings, rendered and documented as
   FR-060 requires: **Edit long cells in a dialog** (on/off, ships **on**) and **Long cell threshold**
   (characters, a whole number of at least 1, ships **50**).
+- **FR-060b** *(Q24, 2026-11-19)*: The CSV provider MUST have a **Wrap cells** setting (on/off, ships **off**),
+  rendered and documented as FR-060 requires: the Wrap state of every CSV panel that has not chosen its own.
 - **FR-061**: **Preview size limit** MUST be a Spreadsheet provider setting, shipping at **25 MB**.
 - **FR-062**: A workbook above the preview size limit MUST show one inline notice naming the file's size
   and the limit, with Refresh retrying under the current limit. This **supersedes 044 FR-026**'s "the size
