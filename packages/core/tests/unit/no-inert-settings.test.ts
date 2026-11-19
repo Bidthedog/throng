@@ -28,12 +28,14 @@ import { CONFIGURATION_LAYER, INERT_ALLOWLIST, allowlistProblems, isProductionSo
 const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
 
 /**
- * Building one program over every package's source is this file's whole cost — about 12 s on a workstation
- * (research R2, R7) — so it happens once, in the hook, and every case below reads the same report in
- * milliseconds. The hook states its own budget rather than inheriting the unit project's 15 s test timeout, which
- * a loaded CI runner could exceed; a hung build is hung, so 120 s costs the signal nothing.
+ * Building one program over every package's source and scanning it is this file's whole cost — about 11 s on a
+ * workstation, close to the 10.6 s a plain type check of the same program takes (research R2, R7) — so it happens
+ * once, in the hook, and every case below reads the same report in milliseconds. The hook states its own budget
+ * rather than inheriting the unit project's 15 s test timeout. Hosted runners took 15–28 s for it, and one macOS
+ * runner whose whole unit stage ran 3.5× slower than usual took 128 s, so the budget is 240 s: a hung build is
+ * hung, so the headroom costs the signal nothing.
  */
-const BUILD_BUDGET_MS = 120_000;
+const BUILD_BUDGET_MS = 240_000;
 
 let report: KeyReaders[] = [];
 
