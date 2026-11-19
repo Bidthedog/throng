@@ -69,6 +69,7 @@ import {
   TERMINAL_ATTENTION_LEDGER_METHOD,
   TERMINAL_ATTENTION_SYNC_METHOD,
   TERMINAL_ATTENTION_FOCUS_METHOD,
+  TERMINAL_ATTENTION_IGNORED_METHOD,
   type TerminalAttachParams,
   type TerminalAttachResult,
   type TerminalCapabilitiesResult,
@@ -676,6 +677,18 @@ export class TerminalService {
       return { ok: true };
     });
     router.register(TERMINAL_ATTENTION_FOCUS_METHOD, (p) => this.attentionFocus(p));
+    router.register(TERMINAL_ATTENTION_IGNORED_METHOD, (p) => this.attentionIgnored(p));
+  }
+
+  /** 076 FR-022: which of the given panels are ignored now (contracts/attention-ignore.md). */
+  private attentionIgnored(rawParams: unknown): { ignored: string[] } {
+    const panels = asObject(rawParams).panels;
+    if (!Array.isArray(panels)) throw new RpcError('"panels" must be an array', JSON_RPC_INVALID_PARAMS);
+    const subjects = panels.filter(
+      (p): p is { panelId: string; projectId: string } =>
+        typeof p === 'object' && p !== null && typeof p.panelId === 'string' && typeof p.projectId === 'string',
+    );
+    return { ignored: this.attention.ignoredOf(subjects) };
   }
 
   /** 057: main pushes the producer settings (idempotent). */

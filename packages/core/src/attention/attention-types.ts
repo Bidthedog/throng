@@ -159,4 +159,6 @@ export interface AttentionProducerConfig {
   enabled: boolean;
   signals: Record<AttentionSignalName, boolean>;
   quietMs: number;
+  /** 076 FR-025: whether a panel with no `notifications` of its own raises notifications (Clarifications Q4). */
+  notifyByDefault: boolean;
 }

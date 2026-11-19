@@ -464,6 +464,15 @@
     },
     "overrideIcon": {
       "lucide": "paintbrush"
+    },
+    "rememberCommand": {
+      "lucide": "history"
+    },
+    "rememberDirectory": {
+      "lucide": "folder-clock"
+    },
+    "terminalNotifications": {
+      "lucide": "bell"
     }
   }
 }

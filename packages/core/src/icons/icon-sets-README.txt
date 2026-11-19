@@ -251,4 +251,7 @@ resourceNetwork.svg - The icon on the Resource Monitor's "order by Network" choi
 dragHandle.svg - The icon on the handle you drag to move a project or sub-workspace to a new place in its list.
 menuChecked.svg - The icon on a menu row whose option is switched on.
 overrideIcon.svg - The icon on the Icons row control that copies the default icon into your icon set, ready for you to replace with your own file.
+rememberCommand.svg - The icon on the terminal status bar toggle that keeps a terminal’s startup command up to date with the command running when it ends, so it runs again next time. Draw it plain: throng greys it out and draws a line through it while the toggle is off.
+rememberDirectory.svg - The icon on the terminal status bar toggle that reopens a terminal in the folder it was last working in, rather than where it first started. Draw it plain: throng greys it out and draws a line through it while the toggle is off.
+terminalNotifications.svg - The icon on the terminal status bar toggle that lets that one terminal raise attention marks, pop-ups and desktop notifications, or silences it. Draw it plain: throng greys it out and draws a line through it while the toggle is off.
 ---- icon keys: end ----

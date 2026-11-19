@@ -2667,6 +2667,11 @@ if (isPrimaryInstance)
     if (!Array.isArray(ids)) return;
     for (const id of ids) if (typeof id === 'string') attentionService.onPanelDestroyed(id);
   });
+  // 076 FR-022: a panel's own toggle turned its notifications off, and its layout save landed — its terminal mark goes now.
+  ipcMain.on('throng:attention:panelIgnored', (_event, payload: unknown) => {
+    const id = (payload as { panelId?: unknown } | null)?.panelId;
+    if (typeof id === 'string') attentionService.panelIgnored(id);
+  });
   // T068: a renderer that registers late pulls the set it missed; T069: one that can draw the badge says so.
   ipcMain.handle('throng:attention:getMarks', () => ({ marks: attentionService.currentMarks() }));
   ipcMain.on('throng:attention:badgeReady', () => attentionService.onBadgeAnswererReady());

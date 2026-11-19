@@ -33,6 +33,14 @@ export interface TerminalContentMenuActions {
   clearPanelType: () => void;
 }
 
+/** 076 FR-005 — one status-bar toggle as its menu item: the label, the resolved value, the chord and the flip. */
+export interface TerminalMenuToggle {
+  label: string;
+  on: boolean;
+  chord?: string;
+  toggle: () => void;
+}
+
 export interface TerminalContentMenuArgs {
   /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
   split?: SplitMenuArgs;
@@ -43,6 +51,8 @@ export interface TerminalContentMenuArgs {
   /** Whether a start failure is live — the only state in which its three commands are meaningful. */
   startFailure: boolean;
   actions: TerminalContentMenuActions;
+  /** 076 FR-005 — the panel's toggles, in status-bar order; always present, whether or not the bar is shown. */
+  toggles?: readonly TerminalMenuToggle[];
 }
 
 export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[] {
@@ -82,6 +92,22 @@ export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[]
     shortcut: redrawChord,
     onClick: () => actions.redraw(),
   });
+
+  /*
+   * 076 FR-005 (constitution VI, "Every panel action is reachable") — the status-bar toggles as checkable items,
+   * in the editor's Word Wrap idiom: the check renders the panel's resolved value, and choosing one runs exactly
+   * the toggle's flip. Present whether or not `terminals.showStatusBar` hides the bar, and in a failed state too.
+   */
+  for (const t of args.toggles ?? []) {
+    items.push({
+      label: t.label,
+      checked: t.on,
+      testId: `menu-item-${t.label}`,
+      section: 'viewState',
+      shortcut: t.chord,
+      onClick: () => t.toggle(),
+    });
+  }
 
   /*
    * 029 FR-004d — Retry and Clear as MENU ITEMS, not only as icons on the failure badge.

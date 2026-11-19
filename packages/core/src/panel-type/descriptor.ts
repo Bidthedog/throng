@@ -37,6 +37,8 @@ export interface TerminalMemory {
   rememberCommand?: boolean;
   /** Reopen in the last directory (025 FR-027). Absent means on. */
   rememberDirectory?: boolean;
+  /** 076 FR-020 — Terminal notifications, carried so the setup form shows it after the terminal ends. */
+  notifications?: boolean;
   /** Last working directory this Panel's terminal was pointed at (FR-027). */
   lastCwd?: string;
   /**
@@ -66,6 +68,8 @@ export interface TerminalPanelDefaults {
   rememberCommand: boolean;
   rememberDirectory: boolean;
   runAsAdmin: boolean;
+  /** 076 FR-025 — mirrors `terminals.defaultNotifications`. */
+  notifications: boolean;
 }
 
 /**
