@@ -31,7 +31,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 
 ## MT-02: Editing and saving a CSV in the grid
 
-Covers: FR-033, FR-035, FR-035a, FR-036, FR-037, FR-038, FR-040, FR-043
+Covers: FR-033, FR-035, FR-035a, FR-036, FR-036a, FR-037, FR-038, FR-040, FR-043, FR-060a
 Paths: `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/ui/src/main/csv-grid-service.ts`, `packages/ui/src/main/editor-coordinator.ts`, `packages/core/src/csv/**`, `packages/core/src/config/keybindings.ts`
 
 ### Steps
@@ -46,6 +46,10 @@ Paths: `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/
 8a. The CSV preview's title bar shows the Save and Save As icons, as an editor's does; narrowing the panel hides Save As, then Save. Edit a cell and click Save: the marker clears. Click Save As, choose `copy.csv`: `copy.csv` holds the edited table, the original is unchanged, and the panel's title now names `copy.csv`. Save As is also on the grid's right-click menu and on Ctrl+Shift+S.
 9. Double-click a cell holding `hello world`. The cell editor opens with all of `hello world` selected. Press Home, then End, then Left and Right: the caret moves within the text and the active cell does not change. Press Shift+Home: the text from the caret to the start is selected. Escape leaves the cell unchanged.
 10. Double-click the cell again and type `x`. The whole value is replaced by `x`; Enter commits it.
+11. Put `{"id":1,"tags":["alpha","beta"],"note":"long enough to pass fifty"}` in a cell. Double-click it: a dialog opens with the JSON indented and highlighted. Change `alpha` to `gamma`, save: the cell shows the JSON on one line, `{ "id": 1, "tags": [ ...`. Ctrl+Z restores the original in one step.
+12. Double-click the same cell, change nothing, save: the file stays clean (no unsaved marker). Press F2 and Enter on it: the dialog again. Select it and type a letter: the in-cell editor replaces the value instead.
+13. Right-click a short cell, **Edit in Dialog…**, type `first`, Enter, `  second`, save: the cell holds `first   second` (the line break became one space, the indent kept). Open the dialog and press Esc: nothing changes.
+14. Preferences › Editor › Previews › CSV: **Edit long cells in a dialog** (on) and **Long cell threshold** (50). Turn the dialog off: double-click on a long cell opens the in-cell editor; Edit in Dialog… is still on the menu. Set the threshold to 10: a 20-character cell opens the dialog.
 
 ### Negative cases
 - Edit a cell and close the preview panel. The unsaved-changes prompt appears; Cancel keeps the panel, Discard closes it and the file on disk is unchanged.

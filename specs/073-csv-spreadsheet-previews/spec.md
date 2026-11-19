@@ -105,6 +105,15 @@ the feedback, the code and precedent rather than stated by the maintainer.
   means the clipboard still holds the whole rows or columns this grid (any CSV grid) last copied or cut;
   the items are named **Insert Copied Rows Above** / **Below** and **Insert Copied Columns Left** /
   **Right**, and one insertion is one undo step. (FR-038a)
+- Q17: How are long cells (long strings, JSON) edited? → A: In a modal dialog holding an editor, which allows
+  line breaks. Double-click, F2 and Enter on a cell whose value is longer than a threshold open the dialog
+  instead of the in-cell editor; typing a character still replaces the cell in place. Every cell's menu
+  offers **Edit in Dialog…**, whatever its length. A value that is a JSON object or array opens
+  pretty-printed; saving flattens it, each line break with the indentation after it becoming one space.
+  Any other text is flattened by turning each line break into one space, indentation kept. Two CSV
+  settings: the dialog on or off (ships on), and the threshold in characters (ships **50**).
+  *(derived)* Saving a dialog whose text is unchanged writes nothing; the dialog's save is one undo step;
+  Esc cancels. (FR-036a, FR-060a)
 
 ## Terminology
 
@@ -242,6 +251,12 @@ expected bytes: only the edited field differs.
 15. **Given** rows 2–3 copied by their row numbers, **When** the user right-clicks row 6's number and
     chooses **Insert Copied Rows Above**, **Then** two rows holding the copied values appear above row 6,
     and one Undo removes both; likewise columns with **Insert Copied Columns Left/Right** (FR-038a).
+16. **Given** a cell holding `{"id":1,"tags":["a","b"]}` (over 50 characters with the threshold at 50),
+    **When** the user double-clicks it, **Then** a dialog opens with the JSON indented over several lines;
+    **When** they change `"a"` to `"x"` and save, **Then** the cell holds the JSON on one line with each
+    line break and its indent turned into one space, and one Undo restores the original (FR-036a).
+17. **Given** a short cell, **When** the user right-clicks it and chooses **Edit in Dialog…**, types two
+    lines and saves, **Then** the cell holds the two lines joined by one space (FR-036a).
 
 ---
 
@@ -429,6 +444,16 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-036**: Editing a cell: typing on a selected cell or pressing F2 or Enter MUST open an in-cell
   editor; Enter commits and moves down, Tab commits and moves right, Esc cancels. Delete on a cell
   selection MUST clear their values.
+- **FR-036a** *(Q17, 2026-11-19)*: With **Edit long cells in a dialog** on, double-click, F2 and Enter on a
+  cell whose value is longer than **Long cell threshold** characters MUST open a modal **cell dialog** in
+  place of the in-cell editor; typing a character on a cell still opens the in-cell editor. Every cell's
+  right-click menu MUST offer **Edit in Dialog…**, whatever the value's length or the setting. The dialog
+  holds an editor that accepts line breaks. A value whose whole text parses as a JSON object or array MUST
+  open pretty-printed (two-space indent) with JSON highlighting. Saving MUST flatten the text to one line:
+  for a value that parses as JSON, each line break together with the whitespace after it becomes one space;
+  for any other text, each line break becomes one space and the rest is kept. The flattened value is
+  written as one grid edit (one undo step), and nothing is written when the dialog's text is unchanged from
+  what it opened with. Esc and Cancel close it without writing. *(Refines FR-036 for long cells.)*
 - **FR-037**: Selection MUST cover text within a cell (while its editor is open), single cells, cell
   ranges and whole rows (by the row gutter). **Copy**, **Cut** and **Paste** MUST be offered on the
   grid's right-click menu and work by their chords.
@@ -517,6 +542,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
   in, Open previews in (054 FR-051). Spreadsheet: Enabled, Open spreadsheets in, Open previews in, First
   row is a header, Preview size limit. Every setting MUST have a descriptor the preferences editor
   renders, and MUST be documented in `docs/preferences.md`.
+- **FR-060a** *(Q17, 2026-11-19)*: The CSV provider MUST have two more settings, rendered and documented as
+  FR-060 requires: **Edit long cells in a dialog** (on/off, ships **on**) and **Long cell threshold**
+  (characters, a whole number of at least 1, ships **50**).
 - **FR-061**: **Preview size limit** MUST be a Spreadsheet provider setting, shipping at **25 MB**.
 - **FR-062**: A workbook above the preview size limit MUST show one inline notice naming the file's size
   and the limit, with Refresh retrying under the current limit. This **supersedes 044 FR-026**'s "the size
