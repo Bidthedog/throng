@@ -258,10 +258,13 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
        * was the same unclassed DIV in every run, passing or not.)
        *
        * THE ROW BECOMING A CHILD OF `dst` IS THE SIGNAL, and the ordering is guaranteed by the code
-       * rather than by a measurement. In `use-explorer-data.ts`'s `paste` handler, the cut branch
-       * calls `pushUndo` FIRST and only then fires `reloadDirs(affected)` unawaited, both inside the
-       * same `.then()` — so the re-render that re-parents this row cannot precede the undo entry.
-       * That is a stronger ordering than the delete case below, where the two are merely same-tick.
+       * rather than by a measurement. A paste is a job main runs (050); its result reaches
+       * `transfer-completion.tsx`, which registers the undo recording as IN FLIGHT and only then
+       * tells the tree to re-read the folders — and the tree's Undo waits for any in-flight recording
+       * and its own re-read of the stack before popping (`onSettledStack` in `use-explorer-data.ts`).
+       * The redraw used to beat the recording to the tree's in-memory stack, so a chord sent here
+       * found it empty and did nothing: `false,true` for 30 s on hosted Linux, run 44467300039. That
+       * was an app defect — a quick user hits the same gap — fixed in the app, not waited out here.
        *
        * IT IS AN INDENT COMPARISON RATHER THAN A DISAPPEARANCE, and that is not fussiness. Waiting
        * for the row to leave the tree was tried and FAILS: pasting selects and expands `dst`
@@ -272,9 +275,9 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
        * actually changes.
        *
        * ONE RESIDUAL RACE, stated rather than papered over: the debounced fs-watch reload could in
-       * principle drop the row on its own, ahead of the move promise resolving in the renderer. It
+       * principle drop the row on its own, ahead of the paste's result reaching the renderer. It
        * is the same exposure the delete test below already accepts, and it is not a coin flip —
-       * that path carries an 80 ms coalescing delay the move promise does not, on top of the same
+       * that path carries an 80 ms coalescing delay the result's delivery does not, on top of the same
        * IPC round-trip. If this ever does flake, the fix is a signal the undo stack itself
        * publishes, not a bigger number here.
        */

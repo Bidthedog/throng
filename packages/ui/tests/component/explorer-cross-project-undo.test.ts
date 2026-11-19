@@ -141,9 +141,35 @@ describe('recording a cross-project move (050 T062)', () => {
     await waitFor(() => expect(m.daemon.stack('project-b').undo).toHaveLength(1));
 
     // The recording happens in the window host; the tree must pick it up and act on it.
-    await new Promise((r) => setTimeout(r, 50)); // the tree re-reads the recorded stack
     pressUndo();
     await waitFor(() => expect(m.transfer.api.applyUndo).toHaveBeenCalledTimes(1));
+  });
+
+  /*
+   * The window records the entry over the daemon (load, save) and only then tells the tree, which
+   * re-reads it (load, projects.list). The tree's own re-read of the pasted folders runs alongside —
+   * so the moved file is drawn in its new place while this tree's in-memory stack is still empty, and
+   * a Ctrl+Z in that gap used to do nothing at all: the file stayed where it was moved to (Linux CI,
+   * fileop-undo.e2e.ts "undo reverses a move", run 44467300039). Undo must wait for the recording.
+   */
+  it('an undo pressed while the entry is still being recorded waits for it, rather than doing nothing', async () => {
+    const m = await mountExplorer(standardHost, { ...B, extra: host() });
+    await stacksLoaded(m);
+    m.transfer.done({
+      jobId: 'job-1',
+      sourceProjectId: 'project-a',
+      targetProjectId: 'project-b',
+      placed: ['D:/projects/other/x.ts'],
+      undo: CROSS,
+    });
+
+    pressUndo(); // no wait: the recording has begun, and has not reached this tree
+
+    await waitFor(() => expect(m.transfer.api.applyUndo).toHaveBeenCalledWith(CROSS, 'undo'));
+    await waitFor(() => {
+      expect(m.daemon.stack('project-b').undo).toHaveLength(0);
+      expect(ids(m.daemon.stack('project-b').redo)).toEqual(['cross-1']);
+    });
   });
 
   it('records a within-project paste entry in that project only', async () => {

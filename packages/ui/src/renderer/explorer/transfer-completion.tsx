@@ -57,6 +57,20 @@ export function onUndoStacksChanged(listener: StacksListener): () => void {
   };
 }
 
+const recording = new Set<Promise<void>>();
+
+/**
+ * Settles once every undo entry the window has begun recording is written and announced
+ * (`onUndoStacksChanged` has been called), or `null` when none is in flight.
+ *
+ * A finished paste is drawn in its new place by the tree's re-read while the entry is still on its way
+ * through the daemon — so an undo pressed in that gap found an empty stack and did NOTHING, the file
+ * staying where it was moved to (050 FR-020: "undoable at once"). The tree's undo waits on this first.
+ */
+export function undoRecordingSettled(): Promise<void> | null {
+  return recording.size > 0 ? Promise.all([...recording]).then(() => undefined) : null;
+}
+
 /** Which projects an entry belongs to: the target always, and the source of a cross-project one. */
 function projectsOf(entry: FileOpUndoEntry, fallback: string): string[] {
   const named = entry.kind === 'move' || entry.kind === 'paste' ? entry.projects : undefined;
@@ -151,8 +165,14 @@ export function TransferCompletionHost(): ReactElement | null {
       // FR-013 — the failures are reported by the run's own notice (`paste-progress-notice.tsx`), the
       // same card that showed its progress, not by a second one raised from here.
 
-      // FR-020 — one operation, recorded in every project's stack it belongs to.
-      void recordUndo(result, services);
+      // FR-020 — one operation, recorded in every project's stack it belongs to. Registered as in flight
+      // BEFORE the trees are told below, so no tree can redraw the result ahead of an undo waiting on it.
+      const recorded = recordUndo(result, services);
+      recording.add(recorded);
+      const settled = (): void => {
+        recording.delete(recorded);
+      };
+      recorded.then(settled, settled);
       // FR-016 — overrides follow what moved.
       void carryOverrides(movedPairs(result), result.sourceProjectId, result.targetProjectId, services);
 

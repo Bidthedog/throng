@@ -56,7 +56,12 @@ import { useServices } from '../composition-root.js';
 import { clearFileClipboard, setFileClipboard, useFileClipboard } from './file-clipboard-store.js';
 import { hasPendingReveal, subscribeReveal, takeReveal } from './pending-reveal.js';
 import { useTransferFailureReporter } from './paste-failure-notice.js';
-import { carryOverrides, onTransferCompleted, onUndoStacksChanged } from './transfer-completion.js';
+import {
+  carryOverrides,
+  onTransferCompleted,
+  onUndoStacksChanged,
+  undoRecordingSettled,
+} from './transfer-completion.js';
 import { logCaught, logExpected } from '@throng/core';
 
 /** react-arborist rejects empty-string ids, so the root (relPath "") uses this
@@ -438,15 +443,23 @@ export function useExplorerData(
     };
   }, [loadStack]);
 
+  /** This tree's re-read of a stack the window just wrote, while one is in flight — undo waits on it. */
+  const stackReread = useRef<Promise<void> | null>(null);
+
   // The window recorded something in this project's stack (a finished paste, 050 FR-020): re-read it.
   useEffect(
     () =>
       onUndoStacksChanged((ids) => {
         if (!ids.includes(projectId)) return;
-        void loadStack().then((loaded) => {
+        const reread = loadStack().then((loaded) => {
           stackRef.current = loaded;
           setStack(loaded);
         });
+        stackReread.current = reread;
+        const settled = (): void => {
+          if (stackReread.current === reread) stackReread.current = null;
+        };
+        reread.then(settled, settled);
       }),
     [loadStack, projectId],
   );
@@ -1977,7 +1990,37 @@ export function useExplorerData(
    */
   const applying = useRef(false);
 
-  const undoFileOp = useCallback(() => {
+  /**
+   * Run `act` against the stack as it WILL be once every entry the window is recording has reached it.
+   *
+   * A finished paste is redrawn by this tree while its undo entry is still being written by the window
+   * and then re-read here — so a Ctrl+Z in that gap used to pop an empty stack and silently do nothing,
+   * leaving the file where it was moved to (050 FR-020: what the host recorded is undoable at once).
+   * With nothing in flight `act` runs synchronously, exactly as before; otherwise the press is held,
+   * and counts as `applying` so a second press cannot jump the queue.
+   */
+  const onSettledStack = useCallback((act: () => void) => {
+    const recordingNow = undoRecordingSettled();
+    if (!recordingNow && !stackReread.current) {
+      act();
+      return;
+    }
+    applying.current = true;
+    void (async () => {
+      try {
+        await recordingNow;
+        // Read only now: the window announces the entry as its recording settles, starting the re-read.
+        await stackReread.current;
+      } catch (error) {
+        logCaught('use-explorer-data: wait for a recorded undo entry', error);
+      } finally {
+        applying.current = false;
+      }
+      act();
+    })();
+  }, []);
+
+  const undoNow = useCallback(() => {
     if (applying.current) return;
     const popped = popUndo(stackRef.current);
     if (!popped) return; // nothing to undo is not a failure, and says so by being silent
@@ -1996,7 +2039,7 @@ export function useExplorerData(
       });
   }, [applyEntry, fileOpUndo, projectId, syncOtherStack]);
 
-  const redoFileOp = useCallback(() => {
+  const redoNow = useCallback(() => {
     if (applying.current) return;
     const popped = popRedo(stackRef.current);
     if (!popped) return;
@@ -2014,6 +2057,13 @@ export function useExplorerData(
         applying.current = false;
       });
   }, [applyEntry, fileOpUndo, projectId, syncOtherStack]);
+
+  const undoFileOp = useCallback(() => {
+    if (!applying.current) onSettledStack(undoNow);
+  }, [onSettledStack, undoNow]);
+  const redoFileOp = useCallback(() => {
+    if (!applying.current) onSettledStack(redoNow);
+  }, [onSettledStack, redoNow]);
 
   return {
     data,
