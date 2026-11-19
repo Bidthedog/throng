@@ -93,8 +93,12 @@ test('what the Restart action starts can still start a browser installed as a sn
     await expect.poll(() => existsSync(record), { timeout: 20_000 }).toBe(true);
   } finally {
     // An app that is never closed holds up the worker's teardown, and that is an error no retry absorbs.
+    // Daemon FIRST: it holds the app's piped stdio (fd 3/4, inherited through the detached spawn), so closing the app
+    // while it lives waits out shutdownApp's whole 15 s grace — measured in run 44479757262's log at this very line.
+    // The app quits for the restart before its daemon is listening (measured: asked once, nobody answered, and the
+    // daemon outlived the worker), so keep asking for a while.
+    await killAppSpawnedDaemon(pipeName, 10_000);
     await shutdownApp(app);
-    await killAppSpawnedDaemon(pipeName);
   }
 
   expect(
