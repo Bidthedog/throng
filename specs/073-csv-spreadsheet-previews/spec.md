@@ -120,6 +120,22 @@ the feedback, the code and precedent rather than stated by the maintainer.
   the dialog on or off for that panel alone. *(derived)* A panel whose toggle was never used follows the
   setting, as 076's terminal toggles follow theirs; a used toggle is saved with the panel and survives a
   restart; the toggle is keyboard-reachable and shows its state. (FR-036b)
+- Q19: What is Reset Size called? → A: **Reset Column Width** on a column header. *(derived)* **Reset Row
+  Height** on a row header. The behaviour is unchanged; this supersedes Q13's and FR-006a's item name.
+  (FR-006b)
+- Q20: Do the grid's menu items carry icons? → A: Yes, every item where an icon makes sense, as the File
+  Explorer's menus do. *(derived)* Icons are themeable icon keys, an existing key reused where one fits
+  (Cut, Copy, Paste, Save, Save As, Select All, Edit in Dialog) and a new drawn key otherwise; an item with no
+  sensible picture (Column Width…) keeps the empty icon column. (FR-037g)
+- Q21: What does Ctrl+G do in a CSV preview? → A: It opens the same **Go to** dialog the PDF preview opens
+  for pages (074 FR-062b), here for rows, and the editor's Go to Line becomes the same dialog with the same
+  features. The dialog is one shared component. *(derived)* Its features, for every user: it names where
+  the user is and how far the document goes ("Row 3 of 120", "Line 3 of 120", "Page 3 of 120", digit-grouped);
+  its field takes only a whole number from 1 to that count, refusing any other keystroke; Enter goes there
+  and closes it; Escape or a click outside closes it; focus returns to what it was opened over. In a CSV
+  (and a workbook sheet) **Go to Row…** is also on the cell and row menus; Enter moves the active cell to
+  that row in the active column and scrolls the row to the top. Go to Line keeps its remembered number
+  (033 FR-057 – FR-061), the seed clamped into range. (FR-043a, FR-043b)
 
 ## Terminology
 
@@ -267,6 +283,18 @@ expected bytes: only the edited field differs.
     any cell, **Then** the in-cell editor opens and the menu has no Edit in Dialog…; **When** they turn the
     status-bar toggle on in that panel, **Then** that panel offers the dialog again and other CSV panels do
     not (FR-036b).
+19. **Given** a widened column and an expanded row, **When** the user right-clicks the column letter,
+    **Then** the menu offers **Reset Column Width** (no Reset Size), and the row number's menu offers
+    **Reset Row Height**, each doing what Reset Size did (FR-006b).
+20. **Given** any grid menu, **When** it opens, **Then** Cut, Copy, Paste, Save, Save As, the Insert items,
+    Select Row / Column / All, Edit in Dialog…, Go to Row… and the Reset items each show an icon in the
+    theme's colours (FR-037g).
+21. **Given** a 1,200-row CSV with the active cell in column C, **When** the user presses Ctrl+G, **Then** a
+    dialog reads "Row 1 of 1,200"; typing a letter or 1300 changes nothing in its field; typing 900 and Enter
+    makes C900 the active cell at the top of the grid and focus is back in the grid (FR-043a, FR-043b).
+22. **Given** an editor on a 300-line file, **When** the user presses Ctrl+G, **Then** the same dialog reads
+    "Line <caret line> of 300" and refuses a letter or 301; Escape closes it with focus back in the editor
+    (FR-043b).
 
 ---
 
@@ -380,6 +408,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-006a** *(Q13, 2026-11-19)*: A column header's right-click menu MUST offer **Reset Size**, returning
   the column to the default width and removing its stored width (FR-040). A row header's menu MUST offer
   **Reset Size**, collapsing an expanded row (FR-012) to one line. Both grids.
+- **FR-006b** *(Q19, 2026-11-19)*: The column header's item MUST be named **Reset Column Width** and the
+  row header's **Reset Row Height**. *(Supersedes FR-006a's item name, "Reset Size"; its behaviour stands.)*
 - **FR-007**: The grid MUST take its colours, fonts and selection highlight from the active theme's
   tokens, and MUST follow the panel's zoom (044 FR-034).
 - **FR-008**: The grid MUST be navigable from the keyboard: arrows, Page Up/Down, Home/End,
@@ -489,6 +519,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
     overwrite from the selection's top-left cell (column A for whole rows), extending the table only where
     the pasted block runs past its last row or column; a single value pasted onto a selection of more than
     one cell MUST fill every selected cell. *(Refines FR-037c's "from the active cell".)*
+- **FR-037g** *(Q20, 2026-11-19)*: Every grid menu item with a sensible picture MUST show a themeable icon
+  in the menu's icon column, as the File Explorer's menus do: an existing icon key where one fits, a new
+  drawn key otherwise. Items with no sensible picture keep the empty icon column. Both grids.
 - **FR-038**: A row header's right-click menu MUST offer **Insert Row Above** and **Insert Row Below**; a
   column header's MUST offer **Insert Column Left** and **Insert Column Right**. Each MUST also be a
   bindable command acting on the active cell (every panel action has a menu item, and the reverse).
@@ -510,6 +543,18 @@ Markdown and Mermaid pattern, each setting working as labelled.
   text selected. While the in-cell editor is open, the arrow keys, Home, End, Ctrl+Home and Ctrl+End MUST
   move the caret within the text (Shift extending the text selection) and MUST NOT move the active cell.
   *(Refines FR-036 and FR-037; FR-008's navigation applies while no in-cell editor is open.)*
+- **FR-043a** *(Q21, 2026-11-19)*: In a CSV Preview Editor or a workbook sheet, the preview's Go to command
+  (`preview.goToHeading`, `Ctrl+G`) and a **Go to Row…** item on the cell and row-header menus MUST open
+  the shared Go to dialog (FR-043b) for rows, naming the active cell's row and the row count as the row
+  header numbers them. Enter MUST move the active cell to that row in the active column, scroll the row to
+  the top, and return focus to the grid.
+- **FR-043b** *(Q21, 2026-11-19)*: The Go to dialog MUST be one shared component, used by the PDF preview's
+  Go to Page (074 FR-062b), the grids' Go to Row (FR-043a) and the editor's Go to Line (033 FR-019). Each use
+  MUST name the current position and the count ("Line 3 of 120", digit-grouped), accept only a whole number
+  from 1 to the count — any other keystroke refused — go there on Enter and close, close on Escape or a
+  click outside, and return focus to what it was opened over. *(Supersedes 033 FR-022 and FR-023 for typed
+  input: an out-of-range or non-numeric value can no longer be typed. A remembered Go to Line number
+  (033 FR-057 – FR-061) is still seeded and selected, clamped into the document's range.)*
 
 #### Writing CSV
 
