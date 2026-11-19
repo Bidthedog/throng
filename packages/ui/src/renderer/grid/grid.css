@@ -47,6 +47,7 @@
 .data-grid__corner {
   position: sticky;
   left: 0;
+  cursor: pointer;
   z-index: 4;
   box-sizing: border-box;
   background: var(--throng-colour-editorGutterBg);

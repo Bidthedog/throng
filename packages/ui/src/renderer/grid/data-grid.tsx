@@ -669,6 +669,11 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       return;
     }
 
+    // FR-008b — the corner selects everything, as Select All does, and never scrolls.
+    if (target.closest('[data-grid-corner]')) {
+      commitSel(selectAll(rows, cols), false);
+      return;
+    }
     const cur = selRef.current;
     const cellEl = target.closest('[data-grid-cell]');
     if (cellEl) {
@@ -797,6 +802,14 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       return;
     }
     const point = { x: e.clientX, y: e.clientY };
+    if (target.closest('[data-grid-corner]')) {
+      // FR-008b — everything selected, then the selection's menu, opened over the active cell's menu target.
+      handled();
+      commitSel(selectAll(rows, cols), false);
+      const { row: ar, col: ac } = selRef.current.active;
+      openMenu({ kind: 'cell', row: ar, col: ac }, point);
+      return;
+    }
     const cellEl = target.closest('[data-grid-cell]');
     const rowEl = target.closest('[data-grid-rowheader]');
     const colEl = target.closest('[data-grid-colheader]');
@@ -974,7 +987,14 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       <div ref={scrollRef} className="data-grid__scroller" onScroll={onScroll}>
         <div className="data-grid__canvas" style={{ width: gutterW + totalW, height: headerH + totalH }}>
           <div className="data-grid__header" role="row" style={{ width: gutterW + totalW, height: headerH }}>
-            <div className="data-grid__corner" style={{ width: gutterW, height: headerH }} />
+            <div
+              className="data-grid__corner"
+              data-grid-corner=""
+              role="button"
+              aria-label="Select all"
+              title="Select all"
+              style={{ width: gutterW, height: headerH }}
+            />
             <div className="data-grid__header-cells" style={{ left: gutterW, width: totalW, height: headerH }}>
               {colItems.map((c) => (
                 <div

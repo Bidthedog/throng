@@ -182,6 +182,34 @@ describe('DataGrid mouse', () => {
     fireEvent.mouseUp(window);
     expect(g.ref.current!.selectedRange()).toEqual({ top: 0, left: 3, bottom: 49, right: 3 });
   });
+
+  describe('the corner cell selects everything (FR-008b)', () => {
+    const corner = (g: ReturnType<typeof setup>): HTMLElement => g.root.querySelector<HTMLElement>('.data-grid__corner')!;
+
+    it('is a named control', () => {
+      const g = setup();
+      expect(corner(g)).toHaveAccessibleName('Select all');
+    });
+
+    it('a click selects every row and column, as Select All does, without scrolling', () => {
+      const g = setup();
+      fireEvent.mouseDown(g.cellAt(2, 2), { button: 0 });
+      fireEvent.mouseUp(window);
+      const scroller = g.root.querySelector<HTMLElement>('.data-grid__scroller')!;
+      scroller.scrollTop = 300;
+      fireEvent.mouseDown(corner(g), { button: 0 });
+      fireEvent.mouseUp(window);
+      expect(g.ref.current!.selectedRange()).toEqual({ top: 0, left: 0, bottom: 49, right: 5 });
+      expect(scroller.scrollTop).toBe(300);
+    });
+
+    it('a right-click selects everything and opens the selection menu', () => {
+      const g = setup();
+      fireEvent.contextMenu(corner(g), { button: 2 });
+      expect(g.ref.current!.selectedRange()).toEqual({ top: 0, left: 0, bottom: 49, right: 5 });
+      expect(g.onContextMenu).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe('DataGrid cell editor (FR-036)', () => {
