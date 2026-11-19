@@ -30,6 +30,33 @@ describe('validateGridOperation', () => {
     }
   });
 
+  it('accepts an insert carrying copied values, and refuses values that do not match the count (FR-038a)', () => {
+    expect(validateGridOperation({ kind: 'insertRows', at: 0, count: 2, values: [['a'], ['b']] })).toEqual({
+      kind: 'insertRows',
+      at: 0,
+      count: 2,
+      values: [['a'], ['b']],
+    });
+    expect(validateGridOperation({ kind: 'insertColumn', at: 1, count: 2, columns: [['a'], ['b']] })).toEqual({
+      kind: 'insertColumn',
+      at: 1,
+      count: 2,
+      columns: [['a'], ['b']],
+    });
+    expect(validateGridOperation({ kind: 'insertColumn', at: 1, count: 3 })).toEqual({ kind: 'insertColumn', at: 1, count: 3 });
+    expect(validateGridOperation({ kind: 'insertColumn', at: 1 })).toEqual({ kind: 'insertColumn', at: 1 });
+    for (const bad of [
+      { kind: 'insertRows', at: 0, count: 2, values: [['a']] },
+      { kind: 'insertRows', at: 0, count: 1, values: [[1]] },
+      { kind: 'insertRows', at: 0, count: 1, values: 'no' },
+      { kind: 'insertColumn', at: 0, count: 2, columns: [['a']] },
+      { kind: 'insertColumn', at: 0, count: 0 },
+      { kind: 'insertColumn', at: 0, count: 1, columns: [[null]] },
+    ]) {
+      expect(validateGridOperation(bad)).toBeNull();
+    }
+  });
+
   it('refuses a paste of more than a million cells', () => {
     const cells = Array.from({ length: 1_000_001 }, (_, i) => ({ row: i, col: 0, value: '' }));
     expect(validateGridOperation({ kind: 'setCells', cells })).toBeNull();
@@ -48,6 +75,8 @@ describe('resolveGridOperation', () => {
     expect(apply({ kind: 'insertRows', at: 1, count: 1 })).toBe('a,b\n,\n1,2\n');
     expect(apply({ kind: 'insertColumn', at: 0 })).toBe(',a,b\n,1,2\n');
     expect(apply({ kind: 'deleteRows', from: 0, count: 1 })).toBe('1,2\n');
+    expect(apply({ kind: 'insertRows', at: 1, count: 1, values: [['x', 'y']] })).toBe('a,b\nx,y\n1,2\n');
+    expect(apply({ kind: 'insertColumn', at: 1, count: 1, columns: [['p', 'q']] })).toBe('a,p,b\n1,q,2\n');
   });
 
   it('refuses every operation on a document with an unterminated quote, naming its line', () => {

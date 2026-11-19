@@ -131,12 +131,23 @@ function appendRecords(model: CsvModel, emptyText: boolean, lines: readonly stri
 /**
  * Insert `count` empty records before record `at` (FR-038 Insert Row Above / Below). Each has the
  * widest record's field count, so it shows as a full empty row in any other tool too. `at` equal to the
- * record count appends.
+ * record count appends. With `values` (FR-038a, Insert Copied Rows) the records hold those values instead:
+ * one text change, so one undo step.
  */
-export function csvInsertRows(model: CsvModel, at: number, count: number): CsvTextChange[] {
+export function csvInsertRows(
+  model: CsvModel,
+  at: number,
+  count: number,
+  values?: readonly (readonly string[])[],
+): CsvTextChange[] {
   if (count <= 0) return [];
-  const empty = model.delimiter.repeat(Math.max(0, model.width - 1));
-  const lines = Array.from({ length: count }, () => empty);
+  const d = model.delimiter;
+  // FR-038a — copied rows carry their values, in the document's delimiter and quoting, padded to its width.
+  const lines = Array.from({ length: count }, (_, i) => {
+    const fields = (values?.[i] ?? []).map((v) => encodeCsvField(v, d));
+    while (fields.length < model.width) fields.push('');
+    return fields.join(d);
+  });
   if (at < model.records) {
     const from = model.recordStart[Math.max(0, at)] ?? 0;
     return [{ from, to: from, insert: lines.map((l) => l + eol(model)).join('') }];
@@ -152,16 +163,26 @@ export function csvInsertRows(model: CsvModel, at: number, count: number): CsvTe
  * width a trailing empty field, so the table widens; a shorter record is left alone, since its missing
  * fields already read as empty.
  */
-export function csvInsertColumn(model: CsvModel, at: number): CsvTextChange[] {
+export function csvInsertColumn(
+  model: CsvModel,
+  at: number,
+  count = 1,
+  columns?: readonly (readonly string[])[],
+): CsvTextChange[] {
+  const d = model.delimiter;
   const changes: CsvTextChange[] = [];
   for (let row = 0; row < model.records; row++) {
-    const count = recordFieldCount(model, row);
-    if (at < count) {
+    // FR-038a — `columns[k][row]` is the value copied column k puts in this record; none means empty.
+    const fields = Array.from({ length: count }, (_, k) => columns?.[k]?.[row] ?? '');
+    const encoded = fields.map((v) => encodeCsvField(v, d));
+    const reach = recordFieldCount(model, row);
+    if (at < reach) {
       const from = model.fieldStart[(model.recordFieldStart[row] ?? 0) + at] ?? 0;
-      changes.push({ from, to: from, insert: model.delimiter });
-    } else if (at === count && count === model.width) {
+      changes.push({ from, to: from, insert: encoded.join(d) + d });
+    } else if (fields.some((v) => v !== '') || (at === reach && reach === model.width)) {
+      // A record shorter than the point is padded up to it only when there is a value to place.
       const end = model.recordEnd[row] ?? 0;
-      changes.push({ from: end, to: end, insert: model.delimiter });
+      changes.push({ from: end, to: end, insert: d.repeat(at - reach) + encoded.map((f) => d + f).join('') });
     }
   }
   return changes;

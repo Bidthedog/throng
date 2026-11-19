@@ -112,6 +112,29 @@ describe('a grid edit with no editor open', () => {
     expect(coord.getContent(GRID_DOC)?.text).toBe('a,b\n,\n1,2\n');
   });
 
+  it('inserts copied rows, or copied columns, with their values in one undo step back to the original text (FR-038a)', async () => {
+    await writeFile(file, 'a;b\n1;2\n');
+    const rows = await service.edit({
+      panelId: PREVIEW,
+      filePath: file,
+      operation: { kind: 'insertRows', at: 1, count: 2, values: [['x;y', 'z'], ['p', 'q']] },
+    });
+    expect(rows).toEqual({ ok: true, dirty: true });
+    expect(coord.getContent(GRID_DOC)?.text).toBe('a;b\n"x;y";z\np;q\n1;2\n');
+    expect(service.undo(PREVIEW)).toEqual({ ok: true });
+    expect(coord.getContent(GRID_DOC)).toMatchObject({ text: 'a;b\n1;2\n', dirty: false });
+
+    const columns = await service.edit({
+      panelId: PREVIEW,
+      filePath: file,
+      operation: { kind: 'insertColumn', at: 1, count: 2, columns: [['m', 'n'], ['o', 'p']] },
+    });
+    expect(columns).toEqual({ ok: true, dirty: true });
+    expect(coord.getContent(GRID_DOC)?.text).toBe('a;m;o;b\n1;n;p;2\n');
+    expect(service.undo(PREVIEW)).toEqual({ ok: true });
+    expect(coord.getContent(GRID_DOC)).toMatchObject({ text: 'a;b\n1;2\n', dirty: false });
+  });
+
   it('saves only the edited field, keeping the file’s quoting and CRLF endings (FR-045, FR-047)', async () => {
     await writeFile(file, '"id","name"\r\n"1","Ann"\r\n"2","Bob"\r\n');
     await service.edit({ panelId: PREVIEW, filePath: file, operation: setB2('Ann, A') });

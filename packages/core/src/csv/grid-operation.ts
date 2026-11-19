@@ -22,8 +22,10 @@ import {
 
 export type CsvGridOperation =
   | { kind: 'setCells'; cells: CsvCellEdit[] }
-  | { kind: 'insertRows'; at: number; count: number }
-  | { kind: 'insertColumn'; at: number }
+  /** `values` (FR-038a, Insert Copied Rows): one array per inserted record, so its length is `count`. */
+  | { kind: 'insertRows'; at: number; count: number; values?: string[][] }
+  /** `count` empty columns (default 1); with `columns` (FR-038a) the copied ones: `columns[k][row]`, `count` of them. */
+  | { kind: 'insertColumn'; at: number; count?: number; columns?: string[][] }
   | { kind: 'deleteRows'; from: number; count: number };
 
 /** The most rows one insert or delete may name. */
@@ -33,6 +35,21 @@ export const GRID_MAX_CELLS = 1_000_000;
 
 const index = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 const count = (v: unknown): v is number => index(v) && v >= 1 && v <= GRID_MAX_ROW_COUNT;
+
+/** `raw` as exactly `n` arrays of strings, at most the paste cap of cells in all; `null` when it is not. */
+function stringRows(raw: unknown, n: number): string[][] | null {
+  if (!Array.isArray(raw) || raw.length !== n) return null;
+  const out: string[][] = [];
+  let cells = 0;
+  for (const row of raw as unknown[]) {
+    if (!Array.isArray(row)) return null;
+    cells += row.length;
+    if (cells > GRID_MAX_CELLS) return null;
+    if (!row.every((v) => typeof v === 'string')) return null;
+    out.push([...(row as string[])]);
+  }
+  return out;
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -51,10 +68,20 @@ export function validateGridOperation(raw: unknown): CsvGridOperation | null {
       }
       return { kind: 'setCells', cells };
     }
-    case 'insertRows':
-      return index(raw.at) && count(raw.count) ? { kind: 'insertRows', at: raw.at, count: raw.count } : null;
-    case 'insertColumn':
-      return index(raw.at) ? { kind: 'insertColumn', at: raw.at } : null;
+    case 'insertRows': {
+      if (!index(raw.at) || !count(raw.count)) return null;
+      if (raw.values === undefined) return { kind: 'insertRows', at: raw.at, count: raw.count };
+      const values = stringRows(raw.values, raw.count);
+      return values === null ? null : { kind: 'insertRows', at: raw.at, count: raw.count, values };
+    }
+    case 'insertColumn': {
+      if (!index(raw.at)) return null;
+      if (raw.count === undefined) return raw.columns === undefined ? { kind: 'insertColumn', at: raw.at } : null;
+      if (!count(raw.count)) return null;
+      if (raw.columns === undefined) return { kind: 'insertColumn', at: raw.at, count: raw.count };
+      const columns = stringRows(raw.columns, raw.count);
+      return columns === null ? null : { kind: 'insertColumn', at: raw.at, count: raw.count, columns };
+    }
     case 'deleteRows':
       return index(raw.from) && count(raw.count) ? { kind: 'deleteRows', from: raw.from, count: raw.count } : null;
     default:
@@ -72,9 +99,9 @@ export function resolveGridOperation(text: string, op: CsvGridOperation): GridOp
     case 'setCells':
       return { changes: csvSetCells(model, text, op.cells) };
     case 'insertRows':
-      return { changes: csvInsertRows(model, Math.min(op.at, model.records), op.count) };
+      return { changes: csvInsertRows(model, Math.min(op.at, model.records), op.count, op.values) };
     case 'insertColumn':
-      return { changes: csvInsertColumn(model, op.at) };
+      return { changes: csvInsertColumn(model, op.at, op.count ?? 1, op.columns) };
     case 'deleteRows':
       return { changes: csvDeleteRows(model, op.from, op.count) };
   }

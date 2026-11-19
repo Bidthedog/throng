@@ -101,6 +101,48 @@ describe('csvInsertColumn', () => {
   });
 });
 
+describe('csvInsertRows with values (FR-038a)', () => {
+  it('inserts the copied records above a record, in the document\'s delimiter and line ending', () => {
+    const text = 'a;b\r\n1;2\r\n';
+    const out = edit(text, (m) => csvInsertRows(m, 1, 2, [['x', 'y;z'], ['p', 'q']]));
+    expect(out).toBe('a;b\r\nx;"y;z"\r\np;q\r\n1;2\r\n');
+  });
+
+  it('pads a copied record narrower than the table to the full width, and appends below the last record', () => {
+    expect(edit('a,b,c\n', (m) => csvInsertRows(m, 1, 1, [['x']]))).toBe('a,b,c\nx,,\n');
+    expect(edit('a,b', (m) => csvInsertRows(m, 1, 1, [['x', 'y']]))).toBe('a,b\nx,y');
+  });
+
+  it('quotes a value holding a quote or a line break', () => {
+    expect(edit('a\n', (m) => csvInsertRows(m, 0, 1, [['say "hi"\nthere']]))).toBe('"say ""hi""\nthere"\na\n');
+  });
+
+  it('is one text change, so one undo step', () => {
+    const m = parseCsv('a,b\n1,2\n');
+    expect(csvInsertRows(m, 1, 2, [['x', 'y'], ['p', 'q']])).toHaveLength(1);
+  });
+});
+
+describe('csvInsertColumn with a count and values (FR-038a)', () => {
+  it('inserts several empty columns at once', () => {
+    expect(edit('a,b\n1,2\n', (m) => csvInsertColumn(m, 1, 2))).toBe('a,,,b\n1,,,2\n');
+  });
+
+  it('inserts the copied columns, record by record, before a column', () => {
+    const cols = [['x', 'y'], ['p', 'q']];
+    expect(edit('a,b\n1,2\n', (m) => csvInsertColumn(m, 1, 2, cols))).toBe('a,x,p,b\n1,y,q,2\n');
+  });
+
+  it('appends them right of the last column, and pads a record shorter than the insertion point', () => {
+    expect(edit('a,b\n1\n', (m) => csvInsertColumn(m, 2, 1, [['x', 'y']]))).toBe('a,b,x\n1,,y\n');
+  });
+
+  it('quotes values by the document\'s delimiter and leaves a record that ends before the point alone when the values are empty', () => {
+    expect(edit('a;b\n', (m) => csvInsertColumn(m, 0, 1, [['x;y']]))).toBe('"x;y";a;b\n');
+    expect(edit('a,b,c\n1\n', (m) => csvInsertColumn(m, 2, 1, [['', '']]))).toBe('a,b,,c\n1\n');
+  });
+});
+
 describe('csvDeleteRows', () => {
   it('removes whole records with their line endings', () => {
     expect(edit('a\nb\nc\n', (m) => csvDeleteRows(m, 1, 1))).toBe('a\nc\n');

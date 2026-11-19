@@ -227,7 +227,10 @@ and paste tab-separated cells, Ctrl+Z and Ctrl+Y undo and redo as in the text ed
 row number expands the row to show its values in full; double-click again to undo either. Every
 right-click menu in the grid — cell, selection, row number, column letter — offers Cut, Copy and Paste; a
 paste overwrites the selection from its top-left cell, and one value pasted onto several cells fills them.
-**Reset Size** on a column letter or row number puts it back to its default size.
+**Reset Size** on a column letter or row number puts it back to its default size. With whole rows or
+columns copied from a grid, the row and column menus also offer **Insert Copied Rows Above/Below** and
+**Insert Copied Columns Left/Right**. [`editor.saveAs`](#editor) and the Save As icon in the title bar save
+the CSV under a new name, as in the text editor.
 
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|
