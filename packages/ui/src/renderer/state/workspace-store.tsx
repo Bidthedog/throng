@@ -176,6 +176,12 @@ export interface WorkspaceContextValue {
   /** Merge partial config into an already-typed Panel (006 — persist editor path). */
   updatePanelConfig(panelId: string, config: PanelConfig): void;
   /**
+   * 076 FR-004, research R4 — {@link updatePanelConfig}, then save the layout AT ONCE rather than after the
+   * autosave debounce. Resolves whether `workspace.save` succeeded (`true` too when there was nothing to
+   * change), so a caller can show what is actually stored and report a failed write. Never rejects.
+   */
+  commitPanelConfig(panelId: string, config: PanelConfig): Promise<boolean>;
+  /**
    * 054 FR-002 (research R1) — the tab's preview recency, most recent first, saved with the layout so a
    * restored tab reuses the preview the user last had. A normal debounced save; an unchanged order or
    * an unknown tab writes nothing.
@@ -625,6 +631,29 @@ export function WorkspaceProvider({
       setPanelDormant: (panelId, dormant) =>
         apply((l) => opSetPanelDormant(l, panelId, dormant)),
       updatePanelConfig: (panelId, config) => apply((l) => opUpdatePanelConfig(l, panelId, config)),
+      commitPanelConfig: (panelId, config) =>
+        new Promise<boolean>((resolve) => {
+          setLayout((prev) => {
+            if (!prev || !prev.tabs.some((t) => collectPanels(t.root).some((p) => p.id === panelId))) {
+              resolve(true);
+              return prev;
+            }
+            const next = opUpdatePanelConfig(prev, panelId, config);
+            // `next` carries every change still waiting out the debounce, so that save is subsumed by this one.
+            if (saveTimer.current) clearTimeout(saveTimer.current);
+            saveTimer.current = null;
+            pendingSave.current = null;
+            const saved = client.save(next.projectId, boundForSave(next)).then(
+              () => resolve(true),
+              (error: unknown) => {
+                logCaught('workspace-store: save a panel setting', error);
+                resolve(false);
+              },
+            );
+            void trackLayoutSave(saved, next.projectId);
+            return next;
+          });
+        }),
       setPreviewRecency: (tabId, ids) =>
         apply((l) => {
           const tab = l.tabs.find((t) => t.id === tabId);
@@ -645,7 +674,7 @@ export function WorkspaceProvider({
           return { ...l, sidePanes: next };
         }),
     }),
-    [layout, loading, restoreFailed, apply, scheduleSave],
+    [layout, loading, restoreFailed, apply, scheduleSave, client, boundForSave],
   );
 
   /*

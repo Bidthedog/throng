@@ -17,7 +17,7 @@ import type { WorkspaceLayout } from '@throng/core';
  * `false`, and they changed BECAUSE THE SPEC SAYS WHY — see 039's Supersessions block. They are the
  * record of the behaviour that moved, not collateral damage from a refactor.
  */
-const SHIPPED = { rememberCommand: false, rememberDirectory: true, runAsAdmin: false } as const;
+const SHIPPED = { rememberCommand: false, rememberDirectory: true, runAsAdmin: false, notifications: false } as const;
 
 function layout(): WorkspaceLayout {
   return {
@@ -123,6 +123,7 @@ describe('readTerminalPanelConfig migration (025 FR-002d/FR-002f)', () => {
       // which is 025 FR-015 back in force. It read `true` before, from a hard-coded literal.
       rememberCommand: false,
       rememberDirectory: true,
+      notifications: false,
     });
   });
 
@@ -142,6 +143,7 @@ describe('readTerminalPanelConfig migration (025 FR-002d/FR-002f)', () => {
       // which is 025 FR-015 back in force. It read `true` before, from a hard-coded literal.
       rememberCommand: false,
       rememberDirectory: true,
+      notifications: false,
     });
   });
 
@@ -153,6 +155,7 @@ describe('readTerminalPanelConfig migration (025 FR-002d/FR-002f)', () => {
       // which is 025 FR-015 back in force. It read `true` before, from a hard-coded literal.
       rememberCommand: false,
       rememberDirectory: true,
+      notifications: false,
     });
   });
 
@@ -167,6 +170,7 @@ describe('readTerminalPanelConfig migration (025 FR-002d/FR-002f)', () => {
       startupCommand: 'npm run dev',
       rememberCommand: false,
       rememberDirectory: true,
+      notifications: false,
     });
     // An explicit value is the Panel's own answer and still wins, in both directions (FR-005).
     expect(readTerminalPanelConfig({ rememberCommand: true }, SHIPPED).rememberCommand).toBe(true);
@@ -209,7 +213,7 @@ describe('readTerminalPanelConfig migration (025 FR-002d/FR-002f)', () => {
  */
 describe('readTerminalPanelConfig — absent values resolve to the preferences (039 FR-005a)', () => {
   /** A user who has turned command memory back on globally. `SHIPPED` is module-scoped above. */
-  const COMMAND_ON = { rememberCommand: true, rememberDirectory: true, runAsAdmin: false } as const;
+  const COMMAND_ON = { rememberCommand: true, rememberDirectory: true, runAsAdmin: false, notifications: false } as const;
 
   it('an absent rememberCommand takes the preference, not a literal', () => {
     expect(readTerminalPanelConfig({}, SHIPPED).rememberCommand).toBe(false);
@@ -246,5 +250,26 @@ describe('readTerminalPanelConfig — absent values resolve to the preferences (
    */
   it('FR-047a safeguard: on a clean config a fresh Panel does not remember commands', () => {
     expect(readTerminalPanelConfig({}, SHIPPED).rememberCommand).toBe(false);
+  });
+});
+
+/*
+ * 076 FR-020, Clarifications Q4 — Terminal notifications resolves exactly as the other two flags do: only a
+ * real boolean is the panel's own value, and an absent one (every panel saved before 076) takes the preference.
+ */
+describe('readTerminalPanelConfig — notifications (076)', () => {
+  it('takes the panel’s own boolean', () => {
+    expect(readTerminalPanelConfig({ notifications: true }, SHIPPED).notifications).toBe(true);
+    expect(
+      readTerminalPanelConfig({ notifications: false }, { ...SHIPPED, notifications: true }).notifications,
+    ).toBe(false);
+  });
+
+  it('resolves an absent or non-boolean value to the preference', () => {
+    expect(readTerminalPanelConfig({}, SHIPPED).notifications).toBe(false);
+    expect(readTerminalPanelConfig({}, { ...SHIPPED, notifications: true }).notifications).toBe(true);
+    expect(
+      readTerminalPanelConfig({ notifications: 'yes' }, { ...SHIPPED, notifications: true }).notifications,
+    ).toBe(true);
   });
 });

@@ -37,6 +37,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberCommand: false,
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
+      defaultNotifications: true,
       // 070 FR-031 — asserted on its own in mac-option-is-meta-setting.test.ts.
       macOptionIsMeta: false,
       reloadMode: 'automatic',
@@ -64,6 +65,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberCommand: false,
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
+      defaultNotifications: true,
       // 070 FR-031 — asserted on its own in mac-option-is-meta-setting.test.ts.
       macOptionIsMeta: false,
       reloadMode: 'automatic',
@@ -208,6 +210,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberCommand: false,
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
+      defaultNotifications: true,
       // 070 FR-031 — asserted on its own in mac-option-is-meta-setting.test.ts.
       macOptionIsMeta: false,
       reloadMode: 'automatic',
@@ -291,6 +294,7 @@ describe('parseAppSettings — terminals section (039: reload mode and New Panel
       'defaultRememberCommand',
       'defaultRememberDirectory',
       'defaultRunAsAdmin',
+      'defaultNotifications',
       'reloadMode',
     ] as const) {
       expect(t[key], `${key} was dropped by cloneTerminals`).toBeDefined();

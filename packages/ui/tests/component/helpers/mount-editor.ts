@@ -243,6 +243,13 @@ export function mountEditor(opts: {
    * open, so the panel drops its link and loads `filePath` itself. Absent means `null`.
    */
   linkOwner?: EditorDoc | null;
+  /**
+   * 076 — the layout holds THIS panel instead of the editor, and no editor is mounted: the caller mounts the
+   * component for it in `extras` (a `TerminalPanel`, say), so a write through the store finds the panel it is for.
+   */
+  layoutPanel?: Panel;
+  /** 076 — while this answers true, `workspace.save` rejects (a config write that fails). */
+  saveFails?: () => boolean;
 }): EditorHarness {
   const panelId = opts.panelId ?? 'p-ed';
   const projectRoot = opts.projectRoot ?? 'C:/proj';
@@ -442,14 +449,15 @@ export function mountEditor(opts: {
    * is what a passing scan looks like, and a repro written against it would be red because the scan
    * never ran rather than because of the defect it was written for. Measured exactly once, on #369.
    */
-  const layout: WorkspaceLayout = createDefaultLayout(PROJECT, { tab: 't1', panel: panelId });
-  layout.tabs[0].root = panel;
+  const layout: WorkspaceLayout = createDefaultLayout(PROJECT, { tab: 't1', panel: opts.layoutPanel?.id ?? panelId });
+  layout.tabs[0].root = opts.layoutPanel ?? panel;
   const bridge: ThrongBridge = {
     invoke<T>(method: string, args?: unknown): Promise<T> {
       switch (method) {
         case 'workspace.load':
           return Promise.resolve({ layout, restored: true } as T);
         case 'workspace.save':
+          if (opts.saveFails?.()) return Promise.reject(new Error('the config write failed'));
           savedLayouts.push((args as { layout: WorkspaceLayout }).layout);
           return Promise.resolve({ ok: true } as T);
         case 'workspace.loadSubWorkspaces':
@@ -535,7 +543,9 @@ export function mountEditor(opts: {
                   createElement(
                     Fragment,
                     null,
-                    opts.withHeader
+                    opts.layoutPanel
+                      ? null
+                      : opts.withHeader
                       ? createElement(PanelPlaceholder, { key: mountKey, panel, tabId: 't1' })
                       : createElement(EditorPanel, {
                           key: mountKey,

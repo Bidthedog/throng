@@ -21,12 +21,16 @@ import {
   shouldNotifyCaptureOutcome,
   panelZoomLevel,
   readTerminalPanelConfig,
+  resolveTerminalToggles,
+  TERMINAL_PANEL_TOGGLES,
   startFailurePreservesPanelType,
   causeMessage,
   toDisplayPath,
   type FailureCause,
   type Panel,
   type TerminalPanelConfig,
+  type TerminalPanelDefaults,
+  type TerminalToggleId,
   type Theme,
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
@@ -54,7 +58,8 @@ import {
   type TreeDropDetail,
 } from '../explorer/tree-drag-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import { terminalContentMenu } from './terminal-content-menu.js';
+import { terminalContentMenu, type TerminalMenuToggle } from './terminal-content-menu.js';
+import { registerTerminalToggles } from './terminal-toggle-registry.js';
 import { Icon } from '../common/icon.js';
 import { PanelFailureBanner, retryPanelFailure } from '../common/panel-failure-banner.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
@@ -198,6 +203,8 @@ export function TerminalPanel({
    */
   /** …and for *Copy details*, which is assembled below this callback for the same reason (FR-042c). */
   const copyFailureRef = useRef<() => void>(() => {});
+  /** 076 FR-005 — the toggles as menu items, read when the menu OPENS (they are built further down). */
+  const menuTogglesRef = useRef<readonly TerminalMenuToggle[]>([]);
   /**
    * The pending *Try again* (030 FR-045), resolved by whichever of the three attach outcomes lands.
    *
@@ -384,6 +391,7 @@ export function TerminalPanel({
           redrawChord: firstBinding(keybindings, 'terminal.redraw'),
           split: { panelId: panel.id, keybindings },
           startFailure: startFailureRef.current !== null,
+          toggles: menuTogglesRef.current,
           actions: {
             copySelection: () => {
               // #290 — the copy symptom: Copy enabled, clipboard unchanged. Record what was sent and
@@ -522,11 +530,63 @@ export function TerminalPanel({
   // 039 FR-005a: the reader also needs the global preferences, because an ABSENT `rememberCommand`
   // or `rememberDirectory` now resolves to them rather than to a hard-coded literal. A Panel that
   // holds an explicit value still wins.
-  const rawConfig = readTerminalPanelConfig(config as Record<string, unknown>, {
+  const panelDefaults: TerminalPanelDefaults = {
     rememberCommand: terminalSettings.defaultRememberCommand,
     rememberDirectory: terminalSettings.defaultRememberDirectory,
     runAsAdmin: terminalSettings.defaultRunAsAdmin,
-  });
+    // 076 FR-025 — an absent Terminal notifications resolves to its default, read-side, panels saved before 076 included (Q4).
+    notifications: terminalSettings.defaultNotifications,
+  };
+  const rawConfig = readTerminalPanelConfig(config as Record<string, unknown>, panelDefaults);
+
+  /*
+   * 076 — the status-bar toggles (FR-001 – FR-008). Each shows the panel's own value, else the preference (FR-003),
+   * and a flip writes an EXPLICIT value through `commitPanelConfig`, saved at once (FR-004, research R4). The
+   * terminal keeps running: the capture in `end()` and the two persistence effects below read `terminalConfig`,
+   * which this render recomputes from the new config, and `useTerminal` holds `onExit` in a ref (FR-011).
+   *
+   * Refs, not closures: the flip is reached from the status bar, the content menu (built in a memoised callback
+   * above) and the command registry, and each must act on the value the panel holds when it runs.
+   */
+  const toggleValues = resolveTerminalToggles(config as Record<string, unknown>, panelDefaults);
+  const toggleStateRef = useRef({ config: config as Record<string, unknown>, values: toggleValues });
+  toggleStateRef.current = { config: config as Record<string, unknown>, values: toggleValues };
+  const flipToggle = useCallback(
+    (id: TerminalToggleId): void => {
+      const { config: held, values } = toggleStateRef.current;
+      const previous = held[id];
+      const next = !values[id];
+      void ws.commitPanelConfig(panel.id, { [id]: next }).then((ok) => {
+        if (ok) {
+          // FR-022 — turning notifications off withdraws this panel's terminal mark, once the daemon holds the value.
+          if (id === 'notifications' && !next) window.throng?.attention?.panelIgnored?.(panel.id);
+          return;
+        }
+        // FR-004 — the write failed: show what is stored (absent stays absent), and say so.
+        ws.updatePanelConfig(panel.id, { [id]: typeof previous === 'boolean' ? previous : undefined });
+        const label = TERMINAL_PANEL_TOGGLES.find((t) => t.id === id)?.label ?? id;
+        notify({
+          severity: 'error',
+          title: 'Setting not saved',
+          subject: panelSubject(place),
+          message: `“${label}” could not be saved, so it is still ${values[id] ? 'on' : 'off'}.`,
+          testId: 'notice-terminal-toggle-failed',
+        });
+      });
+    },
+    [ws, panel.id, notify, place],
+  );
+  // FR-006 — the toggle commands reach this panel's flip through the registry the window dispatcher reads.
+  useEffect(() => registerTerminalToggles(panel.id, flipToggle), [panel.id, flipToggle]);
+  const statusToggles = TERMINAL_PANEL_TOGGLES.map((t) => ({
+    id: t.id,
+    label: t.label,
+    icon: t.icon,
+    on: toggleValues[t.id],
+    chord: firstBinding(keybindings, t.command),
+    onToggle: () => flipToggle(t.id),
+  }));
+  menuTogglesRef.current = statusToggles.map((t) => ({ label: t.label, on: t.on, chord: t.chord, toggle: t.onToggle }));
 
   // 025 FR-019 — resolve a STRANDED observation during render, before the launch reads it.
   //
@@ -697,6 +757,8 @@ export function TerminalPanel({
         shellArguments: terminalConfig.shellArguments,
         rememberCommand: terminalConfig.rememberCommand,
         rememberDirectory: terminalConfig.rememberDirectory,
+        // 076 FR-020 — the setup form shown next pre-fills Terminal notifications as well (025 FR-007a).
+        notifications: rawConfig.notifications,
       };
       // FR-026a: every outcome is logged, including the no-ops, so "it forgot my command" is
       // answerable from the log alone. FR-026d: this is fire-and-forget — nothing here may delay
@@ -743,7 +805,7 @@ export function TerminalPanel({
 
       ws.clearPanelType(panel.id); // revert to the type-selection form (FR-020)
     },
-    [panel.id, ws, config.flavourId, terminalConfig, notify, place],
+    [panel.id, ws, config.flavourId, terminalConfig, rawConfig.notifications, notify, place],
   );
 
   // A failure notice arrives AFTER the Panel has reverted to its type-selection form, so there is
@@ -1192,10 +1254,15 @@ export function TerminalPanel({
           </button>
         </div>
       ) : null}
-      {/* 024 US1 (FR-001/001b): the new terminal status bar, preference-controlled. Shows the shell
-          flavour label; no wrap control this feature (terminal wrap descoped to #169, FR-003e). */}
+      {/* 024 US1 (FR-001/001b): the terminal status bar, preference-controlled. The flavour label at the left;
+          076's per-panel toggles at the right, each also in the content menu (FR-005). No wrap control (024
+          FR-003e stands; 076 dropped #169). */}
       {showStatusBar && (
-        <TerminalStatusBar panelId={panel.id} flavourLabel={config.flavourLabel ?? 'Terminal'} />
+        <TerminalStatusBar
+          panelId={panel.id}
+          flavourLabel={config.flavourLabel ?? 'Terminal'}
+          toggles={statusToggles}
+        />
       )}
     </div>
   );

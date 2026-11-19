@@ -1100,6 +1100,15 @@ export {
   type TitleTemplateNode,
   type TitleTemplateParse,
 } from './terminal/index.js';
+// 076 — the terminal status bar's per-panel toggles, declared once.
+export {
+  TERMINAL_PANEL_TOGGLES,
+  resolveTerminalToggles,
+  terminalToggleTitle,
+  type TerminalPanelToggle,
+  type TerminalToggleId,
+  type TerminalToggleValues,
+} from './terminal/panel-toggles.js';
 export {
   countPanels,
   collectPanels,

@@ -20,6 +20,7 @@ import {
   ATTENTION_FLAG_LIST_METHOD,
   ATTENTION_FLAG_SET_METHOD,
   TERMINAL_ATTENTION_CONFIG_METHOD,
+  TERMINAL_ATTENTION_IGNORED_METHOD,
   TERMINAL_ATTENTION_LEDGER_METHOD,
   TERMINAL_ATTENTION_SYNC_METHOD,
   WORKSPACE_LOAD_METHOD,
@@ -48,6 +49,8 @@ interface Rig {
     hosts: number[];
     badgeNulls: number;
     badgeRequests: number;
+    /** 076 — what `terminal.attentionIgnored` answers, or 'fail' to reject. */
+    ignored: string[] | 'fail';
   };
   settings: AttentionSettingsSource;
   ledger: AttentionLedgerEntry[];
@@ -58,7 +61,7 @@ interface Rig {
 
 function settingsFromDefaults(): AttentionSettingsSource {
   const s = structuredClone(DEFAULT_APP_SETTINGS) as AppSettings;
-  return { attention: s.attention, notifications: s.notifications, terminals: { attention: s.terminals.attention } };
+  return { attention: s.attention, notifications: s.notifications, terminals: { attention: s.terminals.attention, defaultNotifications: s.terminals.defaultNotifications } };
 }
 
 function rig(ledger: AttentionLedgerEntry[] = [], flags: AttentionFlagEntry[] = []): Rig {
@@ -76,6 +79,7 @@ function rig(ledger: AttentionLedgerEntry[] = [], flags: AttentionFlagEntry[] = 
     hosts: [1] as number[],
     badgeNulls: 0,
     badgeRequests: 0,
+    ignored: [] as string[] | 'fail',
   };
   let settings = settingsFromDefaults();
   const layouts: Record<string, string[]> = {};
@@ -102,6 +106,12 @@ function rig(ledger: AttentionLedgerEntry[] = [], flags: AttentionFlagEntry[] = 
       daemonCalls.push({ method, params });
       if (method === TERMINAL_ATTENTION_LEDGER_METHOD) return { entries: ledger } as T;
       if (method === ATTENTION_FLAG_LIST_METHOD) return { flags } as T;
+      if (method === TERMINAL_ATTENTION_IGNORED_METHOD) {
+        if (state.ignored === 'fail') throw new Error('daemon gone');
+        const asked = (params as { panels: { panelId: string }[] }).panels.map((p) => p.panelId);
+        const answer = state.ignored;
+        return { ignored: asked.filter((id) => answer.includes(id)) } as T;
+      }
       if (method === WORKSPACE_LOAD_METHOD) {
         const ids = layouts[(params as { projectId: string }).projectId] ?? [];
         const panels = ids.map((id) => ({ type: 'panel', id, originProjectId: 'x', title: id }));
@@ -228,6 +238,7 @@ describe('AttentionService — marks (T020)', () => {
         outputQuiet: false,
       },
       quietMs: 10_000,
+      notifyByDefault: true,
     });
     r.setSettings((s) => {
       s.terminals.attention.signals.bell = false;
@@ -687,6 +698,72 @@ describe('AttentionService — switches (T051)', () => {
     });
     r.service.onSignal(signal());
     expect(changed(r)).toHaveLength(0);
+  });
+
+  // 076 FR-022 — a panel becoming ignored by its own toggle withdraws its terminal mark at once (SC-004).
+  it('panelIgnored withdraws that panel’s terminal mark and dismisses its toast and OS notification', () => {
+    const r = rig();
+    r.service.onSignal(signal({ panelId: 'p1' }));
+    r.service.onSignal(signal({ panelId: 'p2' }));
+    r.service.panelIgnored('p1');
+    expect(lastMarks(r).map((m: any) => m.panelId)).toEqual(['p2']);
+    expect(r.notifier.closed).toEqual(['p1']);
+  });
+
+  it('panelIgnored leaves a user Flag on that panel (057 FR-128)', () => {
+    const r = rig();
+    r.service.flag({ panelId: 'p1', projectId: 'proj-a', panelTitle: 'Build', projectName: 'Alpha', tabTitle: 'T' } as any);
+    r.service.panelIgnored('p1');
+    expect(lastMarks(r).map((m: any) => m.panelId)).toEqual(['p1']);
+  });
+
+  // 076 FR-022, Clarifications Q4 — the default turning off reaches every panel that holds no value of its own.
+  it('the notifications default turning off pushes the config, asks which marked panels are ignored, and withdraws those', async () => {
+    const r = rig();
+    r.service.onSignal(signal({ panelId: 'p1' }));
+    r.service.onSignal(signal({ panelId: 'p2', projectId: 'proj-b' }));
+    r.state.ignored = ['p2'];
+    r.setSettings((s) => {
+      s.terminals.defaultNotifications = false;
+    });
+    await settle();
+    const calls = r.daemonCalls.map((c) => c.method);
+    expect(calls.indexOf(TERMINAL_ATTENTION_CONFIG_METHOD)).toBeLessThan(calls.indexOf(TERMINAL_ATTENTION_IGNORED_METHOD));
+    const asked = r.daemonCalls.find((c) => c.method === TERMINAL_ATTENTION_IGNORED_METHOD)!.params;
+    expect(asked.panels).toEqual([
+      { panelId: 'p1', projectId: 'proj-a' },
+      { panelId: 'p2', projectId: 'proj-b' },
+    ]);
+    expect(lastMarks(r).map((m: any) => m.panelId)).toEqual(['p1']);
+  });
+
+  it('asks nothing when the default turns on, or when no panel is marked', async () => {
+    const r = rig();
+    r.setSettings((s) => {
+      s.terminals.defaultNotifications = false;
+    });
+    await settle();
+    r.service.onSignal(signal({ panelId: 'p1' }));
+    r.setSettings((s) => {
+      s.terminals.defaultNotifications = true;
+    });
+    await settle();
+    expect(r.daemonCalls.filter((c) => c.method === TERMINAL_ATTENTION_IGNORED_METHOD)).toHaveLength(0);
+    expect(lastMarks(r).map((m: any) => m.panelId)).toEqual(['p1']);
+  });
+
+  it('a failed ignore query is logged and withdraws nothing (Principle XIII)', async () => {
+    const r = rig();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    r.service.onSignal(signal({ panelId: 'p1' }));
+    r.state.ignored = 'fail';
+    r.setSettings((s) => {
+      s.terminals.defaultNotifications = false;
+    });
+    await settle();
+    expect(lastMarks(r).map((m: any) => m.panelId)).toEqual(['p1']);
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it('switching one signal off keeps existing marks (US4 AS4)', () => {

@@ -17,6 +17,7 @@ import { useEffect, useRef, type ReactElement } from 'react';
 import {
   COMMAND_SCOPES,
   KEYBINDINGS_METADATA,
+  TERMINAL_PANEL_TOGGLES,
   WINDOW_HANDLED_ACTIONS as CORE_WINDOW_HANDLED_ACTIONS,
   collectPanels,
   cycleOrder,
@@ -58,6 +59,7 @@ import { focusMostRecentNotice } from '../common/notification.js';
 import { getExplorerCommands } from '../explorer/explorer-commands.js';
 import { navigateFocusedHistory } from '../navigation/navigate-history.js';
 import { focusPanel } from '../workspace/panel-focus.js';
+import { runTerminalToggle } from '../terminal/terminal-toggle-registry.js';
 import { getActivePane, setActivePane } from '../workspace/active-pane.js';
 import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
@@ -894,6 +896,19 @@ export function WindowDispatcher({
          * Window-handled, so it is taken here ahead of a focused terminal or editor; Shift+Enter and
          * Ctrl+Enter resolve to nothing in this set and pass straight through.
          */
+        /*
+         * 076 FR-006 — a terminal toggle on the panel that holds focus, found the way Destroy Panel finds it. The
+         * panel runs its own flip (the status-bar toggle's and the menu item's); a panel that is not a mounted
+         * terminal has nothing to flip, which is reported like any other unavailable command (048 FR-092).
+         */
+        case 'terminal.toggleRememberCommand':
+        case 'terminal.toggleRememberDirectory':
+        case 'terminal.toggleNotifications': {
+          const target = destroyTarget(document.activeElement, activePanelId());
+          const id = TERMINAL_PANEL_TOGGLES.find((t) => t.command === action)?.id;
+          if (!target || !id || !runTerminalToggle(target, id)) return 'unavailable';
+          break;
+        }
         case 'panel.toggleMaximise': {
           const target = destroyTarget(document.activeElement, activePanelId());
           const tab = target

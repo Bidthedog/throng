@@ -44,6 +44,12 @@ export interface TerminalAttentionOptions {
    * other panel was stranded by a destroy, and is forgotten rather than restored by a reconnecting main.
    */
   livePanels?: () => ReadonlySet<string> | null;
+  /**
+   * 076 FR-021, research R3 — the panel's OWN `notifications`, read from the saved layout: `true` or
+   * `false` when it holds one, `undefined` when it holds none or cannot be found (it then takes
+   * `notifyByDefault`). Read at publish, once per signal that would go out, never per raise.
+   */
+  storedNotifications?: (subject: AttentionSubject) => boolean | undefined;
   /** Test seam: the scanner a session gets. */
   createScanner?: () => AttentionScanner;
 }
@@ -98,7 +104,12 @@ function readEntry(raw: unknown): AttentionLedgerEntry | null {
 /** The shipped defaults, used until main pushes its settings (contracts/daemon-attention.md). */
 export function defaultAttentionConfig(): AttentionProducerConfig {
   const base = DEFAULT_APP_SETTINGS.terminals.attention;
-  return { enabled: base.enabled, signals: { ...base.signals }, quietMs: base.quietSeconds * 1000 };
+  return {
+    enabled: base.enabled,
+    signals: { ...base.signals },
+    quietMs: base.quietSeconds * 1000,
+    notifyByDefault: DEFAULT_APP_SETTINGS.terminals.defaultNotifications,
+  };
 }
 
 /** Read a pushed config tolerantly: a malformed leaf keeps the value already held. */
@@ -116,6 +127,7 @@ export function mergeAttentionConfig(current: AttentionProducerConfig, raw: unkn
     enabled: typeof r.enabled === 'boolean' ? r.enabled : current.enabled,
     signals,
     quietMs: typeof r.quietMs === 'number' && Number.isFinite(r.quietMs) && r.quietMs > 0 ? r.quietMs : current.quietMs,
+    notifyByDefault: typeof r.notifyByDefault === 'boolean' ? r.notifyByDefault : current.notifyByDefault,
   };
 }
 
@@ -331,9 +343,33 @@ export class TerminalAttention {
     byPanel.set(signal, this.open(panelId, signal, next));
   }
 
+  /**
+   * 076 FR-021 — is this panel ignored now, its notifications off? Its own stored value, else the pushed default. A stored value that
+   * cannot be read is logged and resolves by the default: an unreadable layout must not silence a terminal the
+   * user never asked to silence, nor lose the trace of why (Principle XIII).
+   */
+  private isIgnored(subject: AttentionSubject): boolean {
+    let own: boolean | undefined;
+    try {
+      own = this.options.storedNotifications?.(subject);
+    } catch (error) {
+      logCaught('terminal-attention: read a panel\'s notifications setting', error);
+      own = undefined;
+    }
+    return !(typeof own === 'boolean' ? own : this.config.notifyByDefault);
+  }
+
+  /** `terminal.attentionIgnored` (076 research R5): the panels among these that are ignored now. */
+  ignoredOf(subjects: readonly AttentionSubject[]): string[] {
+    return subjects.filter((s) => this.isIgnored(s)).map((s) => s.panelId);
+  }
+
   /** Resolve the names now, once, for a signal that is really going out. */
   private publish(raw: RawSignal): void {
     if (!this.config.enabled || !this.config.signals[raw.signal]) return;
+    // 076 FR-021 — the one choke point: live delivery and the detached ledger alike. A signal waiting in a rate
+    // window when its panel became ignored is dropped here too, and is never replayed (FR-023).
+    if (this.isIgnored(raw)) return;
     const sig: AttentionSignal = { ...raw, ...this.namesFor(raw) };
     if (this.events.sinkCount === 0) {
       this.recordDetached(sig);
@@ -380,6 +416,8 @@ export class TerminalAttention {
       logCaught('terminal-attention: list live panels', error); // unknown: prune nothing
     }
     if (live !== null) for (const id of [...this.ledger.keys()]) if (!live.has(id)) this.ledger.delete(id);
+    // 076 FR-022 — an entry for a panel that is ignored now is withdrawn, not restored.
+    for (const [id, e] of [...this.ledger]) if (this.isIgnored(e)) this.ledger.delete(id);
     const out = [...this.ledger.values()].map((e) => ({ ...e }));
     for (const [id, e] of this.ledger) if (e.whileDetached) this.ledger.set(id, { ...e, whileDetached: false });
     return out;

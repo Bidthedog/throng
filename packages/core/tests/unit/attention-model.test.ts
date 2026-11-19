@@ -375,6 +375,19 @@ describe('AttentionModel — manual flags (057 round 12: FR-125, FR-127, FR-128)
     expect(model.marks().map((m) => m.panelId)).toEqual(['p1']);
   });
 
+  // 076 FR-022 — a panel turning Ignore on withdraws ITS terminal mark, and nothing else.
+  it('withdrawPanel clears that panel’s terminal mark, leaving its neighbours and every user flag', () => {
+    const h = harness();
+    h.model.flag(flag); // p1, the user's
+    h.model.raise(signal({ panelId: 'p2' }));
+    h.model.raise(signal({ panelId: 'p3' }));
+    h.model.withdrawPanel('p2');
+    expect(h.model.marks().map((m) => m.panelId).sort()).toEqual(['p1', 'p3']);
+    expect(h.cleared).toEqual(['p2']);
+    h.model.withdrawPanel('p1');
+    expect(h.model.marks().map((m) => m.panelId).sort()).toEqual(['p1', 'p3']);
+  });
+
   it('the ledger carries terminal marks only (R19)', () => {
     const { model } = harness();
     model.flag(flag);

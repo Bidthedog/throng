@@ -92,6 +92,8 @@ export interface HarnessOptions {
   names?: (panelId: string, projectId: string, liveTitle: string | null) => { panelTitle: string; projectName: string; tabTitle?: string };
   commandPollMs?: number;
   livePanels?: () => ReadonlySet<string> | null;
+  /** 076 — the panel's own stored ignore value. */
+  storedNotifications?: (subject: { panelId: string; projectId: string }) => boolean | undefined;
 }
 
 export function makeHarness(options: HarnessOptions = {}): AttentionHarness {
@@ -112,6 +114,7 @@ export function makeHarness(options: HarnessOptions = {}): AttentionHarness {
     {
       resolveNames: options.names,
       livePanels: options.livePanels,
+      storedNotifications: options.storedNotifications,
       createScanner: () => {
         const inner = createAttentionScan();
         return {
@@ -166,6 +169,7 @@ export function config(
   return {
     enabled: base.enabled,
     quietMs: base.quietSeconds * 1000,
+    notifyByDefault: DEFAULT_APP_SETTINGS.terminals.defaultNotifications,
     ...overrides,
     signals: { ...base.signals, ...signals },
   };

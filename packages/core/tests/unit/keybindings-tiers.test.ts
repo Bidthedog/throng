@@ -142,6 +142,10 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'editor.toggleWhitespace': 'outside',
   'editor.convertLineEndingsToLf': 'outside',
   'editor.convertLineEndingsToCrlf': 'outside',
+  // 076 FR-006 — the terminal status-bar toggles, unbound by default.
+  'terminal.toggleRememberCommand': 'outside',
+  'terminal.toggleRememberDirectory': 'outside',
+  'terminal.toggleNotifications': 'outside',
 };
 
 /**
@@ -432,6 +436,10 @@ describe('the FR-101 tier guard', () => {
       'app.settings': [],
       'app.installCommandLine': [],
       'app.uninstallCommandLine': [],
+      // 076 FR-006 — unbound.
+      'terminal.toggleRememberCommand': [],
+      'terminal.toggleRememberDirectory': [],
+      'terminal.toggleNotifications': [],
     };
     expect(DEFAULT_KEYBINDINGS.bindings).toEqual(EXPECTED);
   });

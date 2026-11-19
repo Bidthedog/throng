@@ -254,6 +254,11 @@ for enhanced key reporting: see [macOS](macos.md#terminals).
 | Scroll to top | `terminal.scrollToTop` | `Ctrl+Home` | Terminal | Jump to the oldest retained line of scrollback. |
 | Scroll to bottom | `terminal.scrollToBottom` | `Ctrl+End` | Terminal | Jump to the newest output and resume following it. |
 | Refresh / redraw terminal | `terminal.redraw` | `Ctrl+F5` | Terminal | Ask the running program to redraw its screen. Changes no content, scrollback, selection or layout. Bare `F5` is left to the program. |
+| Remember the last running command | `terminal.toggleRememberCommand` | *(unbound)* | Terminal | Turn on or off whether the focused terminal saves the command running when it ends as its startup command. The terminal keeps running. |
+| Reopen in the last directory | `terminal.toggleRememberDirectory` | *(unbound)* | Terminal | Turn on or off whether the focused terminal reopens in the folder it was last working in. |
+| Terminal notifications | `terminal.toggleNotifications` | *(unbound)* | Terminal | Turn on or off whether the focused terminal can raise attention marks, pop-ups and desktop notifications. |
+
+The last three are the toggles at the right of a terminal's status bar, which are also in its right-click menu.
 
 ## On macOS
 

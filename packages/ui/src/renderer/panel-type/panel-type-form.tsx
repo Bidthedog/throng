@@ -73,11 +73,14 @@ export function PanelTypeForm({
       rememberCommand: settings.terminals.defaultRememberCommand,
       rememberDirectory: settings.terminals.defaultRememberDirectory,
       runAsAdmin: settings.terminals.defaultRunAsAdmin,
+      // 076 FR-025 — Terminal notifications seeds from its default too.
+      notifications: settings.terminals.defaultNotifications,
     }),
     [
       settings.terminals.defaultRememberCommand,
       settings.terminals.defaultRememberDirectory,
       settings.terminals.defaultRunAsAdmin,
+      settings.terminals.defaultNotifications,
     ],
   );
   /*

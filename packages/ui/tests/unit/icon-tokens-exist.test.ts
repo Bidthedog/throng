@@ -115,6 +115,8 @@ describe('every icon key has a render site, and every render site names a key (0
     'notice/entry-look.ts',
     'panel-type/default-registry.ts',
     'find-in-files/panel-type.ts',
+    // 076 — the terminal status-bar toggles' icons, drawn by `terminal-status-bar.tsx` from this table.
+    'terminal/panel-toggles.ts',
   ].map((rel) => fileURLToPath(new URL(`../../../core/src/${rel}`, import.meta.url)));
   const known = new Set<string>(ICON_KEYS);
   const siteSources = [...walk(RENDERER), ...CORE_SITES].map((f) => code(f));

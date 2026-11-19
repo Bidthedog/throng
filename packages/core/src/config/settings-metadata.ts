@@ -1063,6 +1063,16 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
   },
   {
+    // 076 FR-025 — not gated on `terminals.attention.enabled`: a panel's Terminal notifications is still shown and
+    // stored while attention is off, and takes effect again when it is turned back on.
+    key: 'terminals.defaultNotifications',
+    label: 'Terminal notifications by default',
+    description:
+      'Tick “Terminal notifications” on new terminal panels, so a terminal can raise attention marks, pop-ups and desktop notifications. Off, a terminal that has not chosen for itself stays silent — terminals you already have included. Each terminal’s own toggle, on its status bar or in its menu, overrides this for that terminal. This ships on.',
+    group: 'Terminal',
+    control: 'toggle',
+  },
+  {
     // 062 FR-008: Linux has no elevated terminal to default to.
     onlyOn: 'windows',
     key: 'terminals.defaultRunAsAdmin',
