@@ -13,8 +13,8 @@
 | File | Save |
 | Navigate | Open in Editor / Go to Editor (044 FR-015) |
 
-**Row header (gutter)**: Insert Row Above · Insert Row Below · Cut (removes the rows) · Copy · Paste · Reset Size · Select Row.
-**Column header**: Insert Column Left · Insert Column Right · Cut (clears values) · Copy · Paste · Column Width… · Reset Size · Select Column.
+**Row header (gutter)**: Insert Row Above · Insert Row Below · Cut (removes the rows) · Copy · Paste · Reset Row Height (FR-006b). No Select Row (FR-037h).
+**Column header**: Insert Column Left · Insert Column Right · Cut (clears values) · Copy · Paste · Column Width… · Reset Column Width (FR-006b). No Select Column (FR-037h).
 *(Amended 2026-11-19: FR-037e, FR-006a.)*
 
 **Spreadsheet preview**: cell menu with Copy · Copy as Rich Text · Copy as Plain Text · Select All; column

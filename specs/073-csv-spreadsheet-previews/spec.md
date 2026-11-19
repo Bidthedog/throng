@@ -139,6 +139,9 @@ the feedback, the code and precedent rather than stated by the maintainer.
 - Q22: What does the corner cell above the row numbers do? → A: Clicking it selects every row and column, as
   Select All does. *(derived)* It never scrolls (FR-008a); it is a named control ("Select all") with a pointer
   cursor; right-clicking it selects everything and opens the selection's menu. Both grids. (FR-008b)
+- Q23: Should a row number's menu offer Select Row? → A: No — clicking or right-clicking the row number has
+  already selected the row, so the item is removed. *(derived)* The column letter's **Select Column** goes for the
+  same reason. Both grids. Supersedes scenario 20's "Select Row / Column". (FR-037h)
 
 ## Terminology
 
@@ -290,7 +293,7 @@ expected bytes: only the edited field differs.
     **Then** the menu offers **Reset Column Width** (no Reset Size), and the row number's menu offers
     **Reset Row Height**, each doing what Reset Size did (FR-006b).
 20. **Given** any grid menu, **When** it opens, **Then** Cut, Copy, Paste, Save, Save As, the Insert items,
-    Select Row / Column / All, Edit in Dialog…, Go to Row… and the Reset items each show an icon in the
+    Select All, Edit in Dialog…, Go to Row… and the Reset items each show an icon in the
     theme's colours (FR-037g).
 21. **Given** a 1,200-row CSV with the active cell in column C, **When** the user presses Ctrl+G, **Then** a
     dialog reads "Row 1 of 1,200"; typing a letter or 1300 changes nothing in its field; typing 900 and Enter
@@ -531,6 +534,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-037g** *(Q20, 2026-11-19)*: Every grid menu item with a sensible picture MUST show a themeable icon
   in the menu's icon column, as the File Explorer's menus do: an existing icon key where one fits, a new
   drawn key otherwise. Items with no sensible picture keep the empty icon column. Both grids.
+- **FR-037h** *(Q23, 2026-11-19)*: The row header and column header menus MUST NOT offer **Select Row** or
+  **Select Column**: opening either menu has already selected the row or column. Both grids.
 - **FR-038**: A row header's right-click menu MUST offer **Insert Row Above** and **Insert Row Below**; a
   column header's MUST offer **Insert Column Left** and **Insert Column Right**. Each MUST also be a
   bindable command acting on the active cell (every panel action has a menu item, and the reverse).
