@@ -10,6 +10,7 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 | MT-04 | Clipboard and column widths in the grid | needs retest | | | failed: If I mouse-over a column or row and double click, I would like the column or row to expand / collapse to fit the text that is in it. |
 | MT-05 | Workbook previews | untested | | | |
 | MT-06 | Open-in settings and turning a provider off | needs retest | | | failed: Open a CSV, customise column sizes, open another CSV: it replaces the first. Open the original again: it opens a new panel. CSV panels should reuse like Markdown previews. |
+| MT-07 | Go to Row, Line and Page | untested | | | |
 
 ## MT-01: A CSV opens as a grid
 
@@ -73,7 +74,7 @@ Paths: `packages/ui/src/main/editor-coordinator.ts`, `packages/ui/src/main/csv-g
 
 ## MT-04: Clipboard and column widths in the grid
 
-Covers: FR-006, FR-006a, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
+Covers: FR-006, FR-006a, FR-006b, FR-037g, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
 Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/column-widths.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/daemon/src/document-service.ts`, `packages/persistence/src/**`
 
 ### Steps
@@ -89,8 +90,9 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 10. Copy a 2×2 block from another CSV. In this grid drag a selection from C3 up to B2 and press Ctrl+V: B2:C3 now hold the copied values and nothing to the right or below C3 changed. Undo, select the same block with the mouse, right-click it and choose Paste: same result.
 11. Copy a single value, select B2:C3, paste. All four cells hold that value.
 12. Select whole rows 2–3 by their numbers, paste a 2-row block: it lands from column A of row 2.
-13. Right-click a resized column's letter, **Reset Size**: back to the default width; close and reopen the file, still default. Expand a row, right-click its number, **Reset Size**: one line high again.
+13. Right-click a resized column's letter, **Reset Column Width**: back to the default width; close and reopen the file, still default. Expand a row, right-click its number, **Reset Row Height**: one line high again. No menu says Reset Size.
 14. Select rows 2–3 by their numbers and copy. Right-click row 6's number: **Insert Copied Rows Above** and **Insert Copied Rows Below** are there beside **Insert Row Above/Below**. Choose Above: two rows with the copied values appear above row 6; one Ctrl+Z removes both. Copy columns B–C by their letters and use **Insert Copied Columns Right** on column E the same way. Copy text from another app: the Insert Copied items are gone; the blank inserts remain.
+15. Open the menus of a cell, a selection, a row number and a column letter, in a CSV and in a workbook preview. Cut, Copy, Paste, Save, Save As, the Insert items, Select Row / Column / All, Edit in Dialog…, Go to Row… and the Reset items each show an icon; switch theme and the icons follow it.
 
 ### Negative cases
 - Cut a selection of whole rows: the rows are removed and on the clipboard; Ctrl+Z brings them back.
@@ -129,3 +131,21 @@ Paths: `packages/core/src/preview/providers/**`, `packages/core/src/config/previ
 
 ### Negative cases
 - Turning **Spreadsheet: Enabled** off closes every spreadsheet preview with no prompt.
+
+## MT-07: Go to Row, Line and Page
+
+Covers: FR-043a, FR-043b
+Paths: `packages/ui/src/renderer/navigate/**`, `packages/core/src/editor/goto-line.ts`, `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/ui/src/renderer/preview/preview-panel.tsx`
+
+### Steps
+1. Open a CSV of over 1,000 rows, click a cell in column C and press Ctrl+G. A dialog opens reading "Row <that row> of <row count>", the count digit-grouped.
+2. Type 900 and press Enter. C900 is the active cell, its row at the top of the grid, and arrow keys move from it.
+3. Right-click a cell, then a row number: both menus offer **Go to Row…**, which opens the same dialog.
+4. In a workbook preview, Ctrl+G and Go to Row… do the same on the shown sheet.
+5. In a text editor on a 300-line file, put the caret on line 40 and press Ctrl+G. The dialog looks the same and reads "Line 40 of 300". Type 120, Enter: the caret is at the start of line 120.
+6. With **Remember Go to Line number** on, press Ctrl+G again: 120 is in the field, selected.
+
+### Negative cases
+- In the row and line dialogs, typing a letter, a minus sign, 0 as the first digit, or a number past the count leaves the field as it was.
+- Escape, or a click outside the dialog, closes it; focus is back in the grid or the editor and nothing moved.
+- Enter on an empty field does nothing and the dialog stays.
