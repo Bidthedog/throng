@@ -10,7 +10,7 @@
  *      instead of waiting for the file watcher to round-trip it — which is what left the next edit
  *      building on a pre-edit snapshot in the first place.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cancelWrite,
   onConfigWritten,
@@ -269,6 +269,30 @@ describe('the config drain module API (019 FR-010, C22-C26)', () => {
     await settleConfigWrites();
 
     expect(landed).toEqual(['{"unsaved":true}']);
+  });
+
+  it('settleConfigWrites disarms the timer of the write it fires, so it is written ONCE', async () => {
+    // Firing an armed write early must also take back its timer. Left armed, the timer fired the same
+    // write a second time at its original deadline — after a mid-session settle (the icon-set actions)
+    // that is a stale document written back over whatever main wrote since, and in a test it fired
+    // long after the file had ended, into a worker with no `window` (v1.0.0-beta1 macOS unit stage).
+    vi.useFakeTimers();
+    try {
+      const landed: string[] = [];
+      installBridge((_id, json) => {
+        landed.push(json);
+        return Promise.resolve({ ok: true });
+      });
+
+      scheduleWrite({ kind: 'settings' }, () => '{"once":true}', 60_000);
+      await settleConfigWrites();
+      expect(vi.getTimerCount(), 'the fired write must leave no timer behind').toBe(0);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(landed).toEqual(['{"once":true}']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('settleConfigWrites awaits a write that is already IN FLIGHT', async () => {

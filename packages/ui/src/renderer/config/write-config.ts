@@ -221,12 +221,16 @@ export function scheduleWrite(id: ConfigDocId, produce: () => string | null, ms:
   const armed = armedWrites.get(key);
   if (armed) clearTimeout(armed.timer);
 
+  // `fire` disarms its own timer: the drain calls it ahead of the deadline, and a timer left armed would
+  // fire the same write a second time — a stale document written back over whatever landed since.
   const fire = (): void => {
+    clearTimeout(timer);
     armedWrites.delete(key);
     const json = produce();
     if (json !== null) void writeConfig(id, json);
   };
-  armedWrites.set(key, { timer: setTimeout(fire, ms), fire });
+  const timer = setTimeout(fire, ms);
+  armedWrites.set(key, { timer, fire });
 }
 
 /**
