@@ -47,6 +47,17 @@ describe('the grid header cursors (FR-008c)', () => {
     });
   }
 
+  it('a drag pins its starting pointer over the whole grid, resize edges included (FR-008e)', () => {
+    const pinned = (mode: string): string => {
+      const m = new RegExp(`\\.data-grid\\[data-drag='${mode}'\\],\\s*\\.data-grid\\[data-drag='${mode}'\\] \\*\\s*\\{([^}]*)\\}`).exec(css);
+      if (!m) throw new Error(`no drag rule for ${mode}`);
+      return m[1]!;
+    };
+    expect(pinned('cols')).toMatch(/url\('\.\/cursors\/column-select\.svg\?no-inline'\) 12 19, pointer !important;/);
+    expect(pinned('rows')).toMatch(/url\('\.\/cursors\/row-select\.svg\?no-inline'\) 19 12, pointer !important;/);
+    expect(pinned('cells')).toMatch(/cursor:\s*default !important;/);
+  });
+
   it('the column resize edge keeps col-resize, which wins over the column letter\'s arrow', () => {
     expect(rule('.data-grid__resize')).toMatch(/cursor:\s*col-resize;/);
     expect(css.indexOf('.data-grid__resize {')).toBeGreaterThan(css.indexOf('.data-grid__colhead {'));

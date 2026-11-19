@@ -304,3 +304,24 @@
   width: 6em;
   margin-left: 6px;
 }
+
+/*
+ * 073 FR-008e — while a selection drag is under way the pointer stays the one it began with, everywhere in the grid:
+ * crossing another header, a cell or a column's resize edge must not swap it. `data-drag` is on the grid root only
+ * for the drag's life. `!important` because the per-element cursors above (the resize edge's in particular) are
+ * more specific than any rule written for the whole grid.
+ */
+.data-grid[data-drag='cols'],
+.data-grid[data-drag='cols'] * {
+  cursor: url('./cursors/column-select.svg?no-inline') 12 19, pointer !important;
+}
+
+.data-grid[data-drag='rows'],
+.data-grid[data-drag='rows'] * {
+  cursor: url('./cursors/row-select.svg?no-inline') 19 12, pointer !important;
+}
+
+.data-grid[data-drag='cells'],
+.data-grid[data-drag='cells'] * {
+  cursor: default !important;
+}

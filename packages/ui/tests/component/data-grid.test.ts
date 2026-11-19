@@ -183,6 +183,22 @@ describe('DataGrid mouse', () => {
     expect(g.ref.current!.selectedRange()).toEqual({ top: 0, left: 3, bottom: 49, right: 3 });
   });
 
+  it('marks the grid with the drag under way, and clears it on release (FR-008e)', () => {
+    const g = setup();
+    expect(g.root.getAttribute('data-drag')).toBeNull();
+    fireEvent.mouseDown(g.root.querySelector('[role="columnheader"][data-col="1"]')!, { button: 0 });
+    expect(g.root.getAttribute('data-drag')).toBe('cols');
+    fireEvent.mouseUp(window);
+    expect(g.root.getAttribute('data-drag')).toBeNull();
+    fireEvent.mouseDown(g.root.querySelector('[role="rowheader"][data-row="2"]')!, { button: 0 });
+    expect(g.root.getAttribute('data-drag')).toBe('rows');
+    fireEvent.mouseUp(window);
+    fireEvent.mouseDown(g.cellAt(1, 1), { button: 0 });
+    expect(g.root.getAttribute('data-drag')).toBe('cells');
+    fireEvent.mouseUp(window);
+    expect(g.root.getAttribute('data-drag')).toBeNull();
+  });
+
   describe('the corner cell selects everything (FR-008b)', () => {
     const corner = (g: ReturnType<typeof setup>): HTMLElement => g.root.querySelector<HTMLElement>('.data-grid__corner')!;
 

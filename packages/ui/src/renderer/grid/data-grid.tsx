@@ -956,6 +956,9 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     <div
       ref={rootRef}
       className="data-grid"
+      // FR-008e — a selection drag pins its pointer over the whole grid (grid.css), so crossing a header or a
+      // resize edge does not flicker it.
+      data-drag={dragging?.mode}
       data-testid={testId}
       role="grid"
       tabIndex={0}
