@@ -748,19 +748,37 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
   const onContextMenuEvent = (e: ReactMouseEvent<HTMLDivElement>): void => {
     const target = e.target as HTMLElement;
     if (target.tagName === 'TEXTAREA' || !onContextMenu) return;
-    e.preventDefault();
+    // The grid's menu is THE menu wherever the grid opens one: a panel around it (the preview body's own
+    // menu) must not open its menu over this one, which is what hid Cut, Copy and Paste (073 FR-037e). Empty
+    // grid space opens nothing here, so the panel's menu still answers there.
+    const handled = (): void => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
     // The native contextmenu a keyboard chord raises right after keydown must not open a second menu.
-    if (Date.now() - lastKeyboardMenu.current < 500) return;
+    if (Date.now() - lastKeyboardMenu.current < 500) {
+      handled();
+      return;
+    }
     const point = { x: e.clientX, y: e.clientY };
     const cellEl = target.closest('[data-grid-cell]');
     const rowEl = target.closest('[data-grid-rowheader]');
     const colEl = target.closest('[data-grid-colheader]');
     const row = numAttr(cellEl ?? rowEl, 'data-row');
     const col = numAttr(cellEl ?? colEl, 'data-col');
-    if (cellEl && row !== null && col !== null) openMenu({ kind: 'cell', row, col }, point);
-    else if (rowEl && row !== null) openMenu({ kind: 'row', row }, point);
-    else if (colEl && col !== null) openMenu({ kind: 'column', col }, point);
-    else if (target === rootRef.current) openKeyboardMenu();
+    if (cellEl && row !== null && col !== null) {
+      handled();
+      openMenu({ kind: 'cell', row, col }, point);
+    } else if (rowEl && row !== null) {
+      handled();
+      openMenu({ kind: 'row', row }, point);
+    } else if (colEl && col !== null) {
+      handled();
+      openMenu({ kind: 'column', col }, point);
+    } else if (target === rootRef.current) {
+      handled();
+      openKeyboardMenu();
+    }
   };
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────────────────────────────

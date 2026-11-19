@@ -346,6 +346,34 @@ describe('DataGrid context menu', () => {
     expect(g.ref.current!.selectedRange()).toEqual({ top: 0, left: 2, bottom: 49, right: 2 });
   });
 
+  it('a right-click the grid handles never reaches the panel around it, whose own menu would replace the grid’s (FR-037e)', () => {
+    const outer = vi.fn();
+    const onContextMenu = vi.fn();
+    render(
+      createElement(
+        'div',
+        { onContextMenu: outer },
+        createElement(DataGrid, {
+          testId: 'wrapped',
+          rowCount: 5,
+          colCount: 3,
+          getCell: () => 'v',
+          editable: true,
+          columnWidths: {},
+          zoom: 1,
+          onColumnWidthChange: vi.fn(),
+          onContextMenu,
+        }),
+      ),
+    );
+    const root = screen.getByTestId('wrapped');
+    fireEvent.contextMenu(root.querySelector('[data-grid-cell][data-row="1"][data-col="1"]')!);
+    fireEvent.contextMenu(root.querySelector('[role="rowheader"][data-row="2"]')!);
+    fireEvent.contextMenu(root.querySelector('[role="columnheader"][data-col="0"]')!);
+    expect(onContextMenu).toHaveBeenCalledTimes(3);
+    expect(outer).not.toHaveBeenCalled();
+  });
+
   it('Shift+F10 and the ContextMenu key open it on the active cell, once', () => {
     const g = setup();
     g.key('ArrowDown');
