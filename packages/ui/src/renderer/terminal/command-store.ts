@@ -34,6 +34,8 @@ const memoryCommands = new Map<string, string>();
 const promptTitles = new Map<string, string>();
 /** The session each panel's title and prompt title were learned from — see {@link adoptTerminalSession}. */
 const titledSessions = new Map<string, number>();
+/** When a line was last entered in each panel (epoch ms) — see {@link noteTerminalLineEntered}. */
+const linesEnteredAt = new Map<string, number>();
 const listeners = new Set<() => void>();
 
 /**
@@ -83,6 +85,8 @@ function record(panelId: string, command: string | null, arch: string | undefine
     const arrivedAfterReading = observedAt !== undefined && (getTerminalTitleSetAt(panelId) ?? 0) > observedAt;
     if (atPrompt === undefined) promptTitles.delete(panelId);
     else if (!arrivedAfterReading) promptTitles.set(panelId, atPrompt);
+  } else if (typeof commands.get(panelId) !== 'string' && observedAt !== undefined) {
+    snapshotTitleShownAtEntry(panelId, observedAt);
   }
   commands.set(panelId, command);
   if (arch === undefined) archs.delete(panelId);
@@ -90,6 +94,33 @@ function record(panelId: string, command: string | null, arch: string | undefine
   if (memoryCommand === undefined) memoryCommands.delete(panelId);
   else memoryCommands.set(panelId, memoryCommand);
   emit();
+}
+
+/**
+ * 053 FR-003 — a command was first seen running by a reading that began at `observedAt`. A title the panel already
+ * showed when the line that started it was entered was set at the prompt, by the shell: no program from that line
+ * existed yet. It is snapshotted as the prompt's title, so it is not named as the command's.
+ *
+ * The snapshot an observation of "nothing running" takes is not enough on its own. The daemon publishes an
+ * observation only when it changes, and a new shell's one observation of nothing running can be read before its
+ * first prompt titled the window; that title then arrived after the reading and is rightly not taken (see
+ * {@link record}), and no later observation of nothing running came to take it. A line entered after the reading
+ * began proves nothing about the command it saw, so only a line entered before it counts.
+ */
+function snapshotTitleShownAtEntry(panelId: string, observedAt: number): void {
+  const enteredAt = linesEnteredAt.get(panelId);
+  const title = getTerminalTitle(panelId);
+  const titleSetAt = getTerminalTitleSetAt(panelId);
+  if (enteredAt === undefined || enteredAt > observedAt || title === undefined || titleSetAt === undefined) return;
+  if (titleSetAt <= enteredAt) promptTitles.set(panelId, title);
+}
+
+/**
+ * 053 FR-003 — the user entered a line in `panelId`'s terminal (typed input carrying a newline). See
+ * {@link snapshotTitleShownAtEntry}.
+ */
+export function noteTerminalLineEntered(panelId: string): void {
+  linesEnteredAt.set(panelId, Date.now());
 }
 
 /**
@@ -189,6 +220,7 @@ export function adoptTerminalSession(panelId: string, sessionId: number): void {
   titledSessions.set(panelId, sessionId);
   if (previous === undefined || previous === sessionId) return;
   promptTitles.delete(panelId);
+  linesEnteredAt.delete(panelId);
   clearTerminalTitle(panelId);
 }
 

@@ -65,7 +65,7 @@ import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
 import { parseOsc52 } from './osc52.js';
 import { reportTerminalCwd } from './cwd-store.js';
 import { setTerminalTitle, clearTerminalTitle } from './title-store.js';
-import { adoptTerminalSession, reportTerminalCommand } from './command-store.js';
+import { adoptTerminalSession, noteTerminalLineEntered, reportTerminalCommand } from './command-store.js';
 import { TerminalOutputGate } from './output-gate.js';
 import { consumeExplicitRetype } from './explicit-retype.js';
 import { clearKeyboardMode, peekKeyboardMode, saveKeyboardMode } from './keyboard-mode-store.js';
@@ -1596,6 +1596,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
       countInputWritten(panelId);
       recordKeyBytes(panelId, data);
       recordWrite(panelId, data); // what the PROGRAM got, next to what throng decided
+      // 053 FR-003 — a title shown before a line was entered is the prompt's, not the command's it starts.
+      if (!answer && /[\r\n]/.test(data)) noteTerminalLineEntered(panelId);
       void (answer ? bridge.write(panelId, data, viewId) : bridge.write(panelId, data))
         .then(() => countInputAcked(panelId, true))
         .catch((error: unknown) => {
