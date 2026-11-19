@@ -150,6 +150,9 @@ the feedback, the code and precedent rather than stated by the maintainer.
   the panel, an untouched panel following the setting (as FR-036b); a wrapped row has no line cap; the
   toggle is keyboard-reachable and shows its state; Wrap is on the panel menu too. CSV only: a workbook
   preview fits or truncates. (FR-013, FR-012a, FR-006c, FR-060b)
+- Q25: Which cells open in the dialog? → A: Any cell holding a line break, as well as any longer than the
+  threshold. *(derived)* Only while the dialog is available for the panel (FR-036b); typing still edits in
+  place. (FR-036c, refining FR-036a)
 
 ## Terminology
 
@@ -320,6 +323,8 @@ expected bytes: only the edited field differs.
 25. **Given** Wrap cells on in Preferences, **When** the user opens a CSV, **Then** it opens wrapped; a
     row-number double-click changes nothing and the row-number menu has no Reset Row Height (FR-012a,
     FR-006c, FR-060b).
+26. **Given** a 10-character cell holding a line break, **When** the user double-clicks it, **Then** it opens
+    in the cell dialog with the break shown (FR-036c).
 
 ---
 
@@ -533,6 +538,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
   for any other text, each line break becomes one space and the rest is kept. The flattened value is
   written as one grid edit (one undo step), and nothing is written when the dialog's text is unchanged from
   what it opened with. Esc and Cancel close it without writing. *(Refines FR-036 for long cells.)*
+- **FR-036c** *(Q25, 2026-11-19)*: A cell whose value holds a line break MUST open in the cell dialog on
+  double-click, F2 and Enter, whatever its length, wherever FR-036a sends a long cell there. *(Refines FR-036a.)*
 - **FR-036b** *(Q18, 2026-11-19)*: Whether the cell dialog is available MUST be decided per panel: the
   panel's own choice when it has one, else **Edit long cells in a dialog**. When it is unavailable there is
   no cell dialog at all — no threshold routing and no **Edit in Dialog…** menu item. *(Supersedes FR-036a's

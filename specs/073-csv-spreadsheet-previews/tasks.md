@@ -94,6 +94,7 @@ its failing test at the layer R10 names.
 - [x] T055 [US2] FR-008b: the corner cell selects every cell on click without scrolling; named "Select all", pointer cursor; right-click selects all and opens the selection menu; both grids — component tests in data-grid.test.ts
 - [x] T056 [US2] FR-012a, FR-006c: remove row expand (row-number double-click) and Reset Row Height from both grids, with its grid handle, state and tests
 - [x] T057 [US2] FR-013, FR-060b: Wrap cells CSV setting (ships off, docs/preferences.md); per-panel Wrap toggle in the CSV status bar and a checked panel-menu item, persisted with the panel config, untouched panels following the setting; wrapped grid rows as tall as their tallest cell, no cap, virtualised (SC-009) — component tests
+- [x] T058 [US2] FR-036c: a value holding a line break routes to the cell dialog like a long one (core `isLongCell`, used by `data-grid.tsx`)
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies
