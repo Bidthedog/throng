@@ -16,6 +16,8 @@ import { utf16, concat, BOM_UTF16LE } from '../fixtures/text-formats.js';
 const LINE = 'The quick brown fox jumps over the lazy dog, 0123456789 — café £5.\n';
 const TEXT = LINE.repeat(Math.ceil((5 * 1024 * 1024) / LINE.length));
 const ROUNDS = 15;
+/** Reads per sample when only wall time is available; see {@link time}. */
+const WALL_TRIES = 3;
 
 const threadCpu = (process as { threadCpuUsage?: () => { user: number; system: number } }).threadCpuUsage;
 
@@ -46,9 +48,17 @@ const CPU_CLOCK_IS_FINE = cpuClockStep() < 1;
  */
 function time(fn: () => void): number {
   if (!CPU_CLOCK_IS_FINE) {
-    const t = performance.now();
-    fn();
-    return performance.now() - t;
+    // Wall time counts every preemption, so a side's sample is the fastest of WALL_TRIES back-to-back reads: a read
+    // the scheduler interrupted is discarded rather than deciding its round, and a cost the read always pays is still
+    // in every try. One preempted read was enough to put UTF-16 BE, whose ICU decode sits nearest the bound, at 2.14×
+    // in a parallel Windows unit run.
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < WALL_TRIES; i++) {
+      const t = performance.now();
+      fn();
+      best = Math.min(best, performance.now() - t);
+    }
+    return best;
   }
   const before = cpuNow()!;
   fn();
