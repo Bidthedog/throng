@@ -79,17 +79,27 @@ export function yieldFloatingWindows(): void {
 /** Wire the layering for `win`, and hand back the teardown (which drops the flag). */
 export function wireFloatingLayering(win: FloatingWindow, seam: LayeringSeam = electronLayeringSeam()): () => void {
   let yielded = false;
+  // What this rule last asked for. `isAlwaysOnTop()` alone cannot answer "is it already set?": on X11
+  // it is Chromium's cache of `_NET_WM_STATE_ABOVE`, re-read on EVERY `_NET_WM_STATE` change — one
+  // for an unrelated atom (the window manager clearing `_NET_WM_STATE_FOCUSED` on blur) can report
+  // `true` after a `setAlwaysOnTop(false)` the window manager has not applied yet. Trusting it skipped
+  // the re-raise, and the drop then landed with nothing left to undo it: the monitor stayed below throng.
+  let requested: boolean | null = null;
+  const apply = (want: boolean): void => {
+    if (requested === want && win.isAlwaysOnTop() === want) return;
+    requested = want;
+    win.setAlwaysOnTop(want);
+  };
   const sync = (): void =>
     seam.defer(() => {
       if (win.isDestroyed()) return;
       const throngHasFocus = seam.throngHasFocus();
       if (!throngHasFocus) yielded = false;
-      const want = throngHasFocus && !yielded;
-      if (win.isAlwaysOnTop() !== want) win.setAlwaysOnTop(want);
+      apply(throngHasFocus && !yielded);
     });
   const yieldNow = (): void => {
     yielded = true;
-    if (!win.isDestroyed() && win.isAlwaysOnTop()) win.setAlwaysOnTop(false);
+    if (!win.isDestroyed()) apply(false);
   };
   yields.add(yieldNow);
   const off = seam.onFocusChange(sync);

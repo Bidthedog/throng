@@ -59,6 +59,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **The first command you run in a new terminal is named by its command**, not by the shell prompt's own title (such as `ping: user@host: ~`), however soon the prompt appeared.
 - **Opening a tab whose files went missing raises its "Couldn't open" notice** on a slow machine too. An editor that took a moment to start was left out, so after you dismissed the notice for one tab, opening the next could show nothing at all.
 - **Undo straight after a paste in File Explorer undoes it.** Pressed while the paste was still being recorded, Undo did nothing and left the files where they had been pasted.
+- **On Linux, the Resource Monitor and Preferences stay above throng** when you move between throng's windows, such as going to a panel from the Resource Monitor. Either could drop behind throng's main window and stay there until throng next lost and regained focus.
 - **The Resource Monitor window opens faster**: each window now loads only its own code, and the bundled themes are worked out when first used rather than as every window starts.
 
 ## 1.0.0-alpha17 — 2026-11-17
