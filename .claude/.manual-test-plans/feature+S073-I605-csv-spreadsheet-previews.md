@@ -31,7 +31,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 
 ## MT-02: Editing and saving a CSV in the grid
 
-Covers: FR-033, FR-035, FR-036, FR-037, FR-038, FR-040, FR-043
+Covers: FR-033, FR-035, FR-035a, FR-036, FR-037, FR-038, FR-040, FR-043
 Paths: `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/ui/src/main/csv-grid-service.ts`, `packages/ui/src/main/editor-coordinator.ts`, `packages/core/src/csv/**`, `packages/core/src/config/keybindings.ts`
 
 ### Steps
@@ -43,6 +43,7 @@ Paths: `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/
 6. Select several cells and press Delete. They empty in one undo step.
 7. Turn **Editor: Auto save** on, edit a cell, wait. The file saves itself and the marker clears.
 8. Assign a chord to **Insert Row Below** in Key Bindings (group **CSV grid**). In the grid it inserts a row.
+8a. The CSV preview's title bar shows the Save and Save As icons, as an editor's does; narrowing the panel hides Save As, then Save. Edit a cell and click Save: the marker clears. Click Save As, choose `copy.csv`: `copy.csv` holds the edited table, the original is unchanged, and the panel's title now names `copy.csv`. Save As is also on the grid's right-click menu and on Ctrl+Shift+S.
 9. Double-click a cell holding `hello world`. The cell editor opens with all of `hello world` selected. Press Home, then End, then Left and Right: the caret moves within the text and the active cell does not change. Press Shift+Home: the text from the caret to the start is selected. Escape leaves the cell unchanged.
 10. Double-click the cell again and type `x`. The whole value is replaced by `x`; Enter commits it.
 

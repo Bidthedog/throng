@@ -95,6 +95,10 @@ the feedback, the code and precedent rather than stated by the maintainer.
   a cell, a drag or a right-click — never scrolls; the reported fault was a column click jumping to the
   file's last row. Only keyboard movement brings the active cell into view. *(derived)* A selected
   column's active cell is its top row, so the next arrow key moves from there. (FR-008a)
+- Q15: Does the CSV Preview Editor get Save and Save As like an editor? → A: Yes: the Save and Save As icons in
+  its title bar, as an editor panel has them (067 FR-069 – FR-074), and Save As on its right-click menu and
+  chord. *(derived)* Save As writes through the editor's one save path and the preview follows the file to
+  its new location. This supersedes the Assumption that Save As is reached only from a text editor. (FR-035a)
 
 ## Terminology
 
@@ -226,6 +230,9 @@ expected bytes: only the edited field differs.
     it returns to the default width, and stays so after reopening the file (FR-006a).
 13. **Given** the grid scrolled to its top, **When** the user clicks a column letter, **Then** the whole
     column is selected and the grid does not move; pressing Down then moves to row 2 (FR-008a).
+14. **Given** a CSV Preview Editor, **When** the user clicks the Save As icon in its title bar and chooses
+    `copy.csv`, **Then** `copy.csv` holds the document, the original file is unchanged, and the panel shows
+    `copy.csv` (FR-035a).
 
 ---
 
@@ -404,6 +411,12 @@ Markdown and Mermaid pattern, each setting working as labelled.
   shared undo history. **Undo**, **Redo** and **Save** MUST work in the CSV Preview Editor by their
   editor chords and from its right-click menu, and Auto Save (`editor.autoSave`) MUST save grid edits as
   it saves text edits. *(Supersedes 044 FR-021 for these three commands on the CSV provider.)*
+- **FR-035a** *(Q15, 2026-11-19)*: The CSV Preview Editor's title bar MUST show the **Save** and **Save As**
+  icon controls as an editor panel's does (067 FR-069 – FR-074, narrow-header hiding included). **Save As**
+  MUST also be on the grid's right-click menu and on the `editor.saveAs` chord; it asks for a location with
+  the editor's Save As dialog, writes the document there through the editor's save path (FR-045), and the
+  preview then shows the file at its new path. *(Supersedes the Assumption "Save As and Revert are reached
+  from a text editor" for Save As; Revert still is.)*
 - **FR-036**: Editing a cell: typing on a selected cell or pressing F2 or Enter MUST open an in-cell
   editor; Enter commits and moves down, Tab commits and moves right, Esc cancels. Delete on a cell
   selection MUST clear their values.
@@ -563,7 +576,7 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - Find within a grid (047's find bar) is not offered; search is a later viewing tool per #605 and #604.
 - Deleting a column from the grid is not in #323's agreed list; a column can be removed in the text
   editor. Cutting whole rows removes them (FR-037b).
-- Save As and Revert are reached from a text editor of the same document (Open in Editor); the CSV
+- *(Superseded for Save As by FR-035a, 2026-11-19.)* Save As and Revert are reached from a text editor of the same document (Open in Editor); the CSV
   Preview Editor offers Save, Undo and Redo, which Q3 names.
 
 ## Out of Scope
