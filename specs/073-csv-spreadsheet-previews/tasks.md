@@ -84,6 +84,7 @@ its failing test at the layer R10 names.
 - [x] T045 Docs for T042–T044 in `docs/key-bindings.md` CSV grid section — `throng-docs` audit
 - [x] T046 [US2] FR-008a: pointer selections never scroll; a column selection's active cell is its top row — tests in `packages/ui/tests/component/data-grid.test.ts`, `packages/ui/tests/unit/grid-selection.test.ts`; code in `packages/ui/src/renderer/grid/data-grid.tsx`, `packages/ui/src/renderer/grid/grid-selection.ts`
 - [ ] T047 [US2] FR-035a: Save and Save As icons in the CSV Preview Editor's title bar (generalised `packages/ui/src/renderer/workspace/panel-header-save-icons.tsx`, wired in `panel-placeholder.tsx`), Save As on the grid menu and the `editor.saveAs` chord; main `CsvGridService.save(panelId, absPath?)` and `throng:preview:gridSave` with a path; the preview follows the new path. Integration test over the coordinator (new file written, original unchanged, run re-pointed, clean); component tests for the icons and menu item
+- [ ] T048 [US2] FR-038a: Insert Copied Rows Above/Below and Insert Copied Columns Left/Right on the header menus while the clipboard holds whole rows/columns last copied or cut from a CSV grid; one grid operation (one undo step) that inserts rows/columns with values — core `packages/core/src/csv/grid-operation.ts` / `csv-edit.ts` with unit tests, `csv-grid-service` integration, `csv-body.tsx` menus with component tests
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies

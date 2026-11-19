@@ -99,6 +99,12 @@ the feedback, the code and precedent rather than stated by the maintainer.
   its title bar, as an editor panel has them (067 FR-069 – FR-074), and Save As on its right-click menu and
   chord. *(derived)* Save As writes through the editor's one save path and the preview follows the file to
   its new location. This supersedes the Assumption that Save As is reached only from a text editor. (FR-035a)
+- Q16: Can copied rows or columns be inserted, not pasted over? → A: Yes. With whole rows or columns on the
+  clipboard, the row and column menus offer inserting them above or below (left or right of) the clicked
+  header, alongside the blank Insert Row / Insert Column items, which stay. *(derived)* "On the clipboard"
+  means the clipboard still holds the whole rows or columns this grid (any CSV grid) last copied or cut;
+  the items are named **Insert Copied Rows Above** / **Below** and **Insert Copied Columns Left** /
+  **Right**, and one insertion is one undo step. (FR-038a)
 
 ## Terminology
 
@@ -233,6 +239,9 @@ expected bytes: only the edited field differs.
 14. **Given** a CSV Preview Editor, **When** the user clicks the Save As icon in its title bar and chooses
     `copy.csv`, **Then** `copy.csv` holds the document, the original file is unchanged, and the panel shows
     `copy.csv` (FR-035a).
+15. **Given** rows 2–3 copied by their row numbers, **When** the user right-clicks row 6's number and
+    chooses **Insert Copied Rows Above**, **Then** two rows holding the copied values appear above row 6,
+    and one Undo removes both; likewise columns with **Insert Copied Columns Left/Right** (FR-038a).
 
 ---
 
@@ -441,6 +450,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-038**: A row header's right-click menu MUST offer **Insert Row Above** and **Insert Row Below**; a
   column header's MUST offer **Insert Column Left** and **Insert Column Right**. Each MUST also be a
   bindable command acting on the active cell (every panel action has a menu item, and the reverse).
+- **FR-038a** *(Q16, 2026-11-19)*: While the clipboard holds whole rows or whole columns last copied or cut
+  from a CSV grid, a row header's menu MUST also offer **Insert Copied Rows Above** and **Insert Copied
+  Rows Below**, and a column header's **Insert Copied Columns Left** and **Insert Copied Columns Right**,
+  inserting that many rows or columns holding the copied values at that place, as one undo step, with the
+  document's delimiter and line ending (FR-047). The blank inserts of FR-038 stay.
 - **FR-039**: The grid MUST offer no sort, filter, reorder, formula, cell type, formatting or frozen pane
   control (#323, maintainer agreement).
 - **FR-040**: Column widths MUST be stored per file, as document state alongside the document's other

@@ -68,7 +68,7 @@ Paths: `packages/ui/src/main/editor-coordinator.ts`, `packages/ui/src/main/csv-g
 
 ## MT-04: Clipboard and column widths in the grid
 
-Covers: FR-006, FR-006a, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f
+Covers: FR-006, FR-006a, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
 Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/column-widths.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/daemon/src/document-service.ts`, `packages/persistence/src/**`
 
 ### Steps
@@ -85,6 +85,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 11. Copy a single value, select B2:C3, paste. All four cells hold that value.
 12. Select whole rows 2–3 by their numbers, paste a 2-row block: it lands from column A of row 2.
 13. Right-click a resized column's letter, **Reset Size**: back to the default width; close and reopen the file, still default. Expand a row, right-click its number, **Reset Size**: one line high again.
+14. Select rows 2–3 by their numbers and copy. Right-click row 6's number: **Insert Copied Rows Above** and **Insert Copied Rows Below** are there beside **Insert Row Above/Below**. Choose Above: two rows with the copied values appear above row 6; one Ctrl+Z removes both. Copy columns B–C by their letters and use **Insert Copied Columns Right** on column E the same way. Copy text from another app: the Insert Copied items are gone; the blank inserts remain.
 
 ### Negative cases
 - Cut a selection of whole rows: the rows are removed and on the clipboard; Ctrl+Z brings them back.
