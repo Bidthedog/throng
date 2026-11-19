@@ -77,7 +77,7 @@ Paths: `packages/ui/src/main/editor-coordinator.ts`, `packages/ui/src/main/csv-g
 
 ## MT-04: Clipboard and column widths in the grid
 
-Covers: FR-006, FR-006a, FR-006b, FR-006c, FR-012a, FR-008b, FR-008c, FR-008e, FR-037g, FR-037h, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
+Covers: FR-006, FR-006a, FR-006b, FR-006c, FR-012a, FR-008b, FR-008c, FR-008e, FR-008f, FR-037g, FR-037h, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
 Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/column-widths.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/daemon/src/document-service.ts`, `packages/persistence/src/**`
 
 ### Steps
@@ -97,6 +97,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 14. Select rows 2–3 by their numbers and copy. Right-click row 6's number: **Insert Copied Rows Above** and **Insert Copied Rows Below** are there beside **Insert Row Above/Below**. Choose Above: two rows with the copied values appear above row 6; one Ctrl+Z removes both. Copy columns B–C by their letters and use **Insert Copied Columns Right** on column E the same way. Copy text from another app: the Insert Copied items are gone; the blank inserts remain.
 15. Open the menus of a cell, a selection, a row number and a column letter, in a CSV and in a workbook preview. Cut, Copy, Paste, Save, Save As, the Insert items, Select All, Edit in Dialog…, Go to Row… and Reset Column Width each show an icon; switch theme and the icons follow it. No row-number or column-letter menu offers Select Row or Select Column.
 15a. Rest the pointer on a row number, a column letter and the corner cell: it shows a right arrow, a down arrow and a diagonal arrow. On a column's right edge it shows the resize pointer. Same in a workbook preview. Press on a column letter and drag across five others: the down arrow stays steady the whole way, with no flicker at the column edges. Do the same down the row numbers and across cells.
+15b. Select some text in another app (Linux primary selection) and copy something else. In a wide, long CSV, middle-click a cell: nothing is pasted and the selection does not move. Press the middle button and drag up and left: the pointer is the move hand and the table follows it; release ends it. Ctrl+middle-click still resets the zoom. Same in a workbook preview.
 16. Scroll a long CSV to the middle and click the empty corner cell above the row numbers. Every row and column is selected and the grid does not move; Ctrl+C copies the whole table. Right-click the corner: everything is selected and the selection menu opens. Same in a workbook preview.
 
 ### Negative cases
