@@ -777,14 +777,11 @@ function makeTheme(name: string, p: Palette): Theme {
   };
 }
 
-/**
- * The 14 bundled default themes. `VI/VIM` is stored as `VI-VIM` because a `/` is
- * not a valid file-name segment (themes are one file per name).
- */
-export const DEFAULT_THEMES: Record<string, Theme> = {
+/** How each bundled default theme is derived; published as {@link DEFAULT_THEMES}. */
+const DEFAULT_THEME_DEFINITIONS: Record<string, () => Theme> = {
   // A light theme needs DARK syntax hues — the one place a dark theme's palette cannot simply be
   // reused, and the reason no single built-in highlight style could ever serve both.
-  Light: makeTheme('Light', {
+  Light: () => makeTheme('Light', {
     bg: '#f5f6f8', sidebar: '#eceef2', surface: '#ffffff', surfaceActive: '#e4e8ef',
     text: '#1a1d23', textMuted: '#5b6470', accent: '#2563eb', border: '#d5dae2',
     statusBar: '#e4e8ef', terminalBg: '#ffffff', terminalFg: '#1a1d23', editorBg: '#ffffff',
@@ -796,7 +793,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
   // Snake's olive/moss character: greens against a warm khaki, kept apart by warmth not hue.
-  Snake: makeTheme('Snake', {
+  Snake: () => makeTheme('Snake', {
     bg: '#1a1e14', sidebar: '#141810', surface: '#242a1c', surfaceActive: '#323a28',
     text: '#c8d0b0', textMuted: '#8b936f', accent: '#8a9a5b', border: '#39412a',
     terminalBg: '#12160c', terminalFg: '#c8d0b0', selection: '#3a4426',
@@ -807,7 +804,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
   // Gothic: crimson and dusty violet on near-black plum.
-  Gothic: makeTheme('Gothic', {
+  Gothic: () => makeTheme('Gothic', {
     bg: '#140f16', sidebar: '#0e0a10', surface: '#211a24', surfaceActive: '#2f2434',
     text: '#d8c8d0', textMuted: '#8b7d86', accent: '#8b1a2f', danger: '#c0392b',
     border: '#332738', terminalBg: '#0f0b11', selection: '#3a2540',
@@ -818,7 +815,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
   // Windows Terminal: the classic console 16-colour family — steel blue, olive, brick.
-  'Windows Terminal': makeTheme('Windows Terminal', {
+  'Windows Terminal': () => makeTheme('Windows Terminal', {
     bg: '#0c0c0c', sidebar: '#0c0c0c', surface: '#1b1b1b', surfaceActive: '#2a2a2a',
     text: '#cccccc', textMuted: '#8a8a8a', accent: '#3a96dd', border: '#2a2a2a',
     terminalBg: '#0c0c0c', terminalFg: '#cccccc', selection: '#264f78', fontFamily: MONO,
@@ -831,7 +828,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
   // Multi-hue Git Bash prompt on black (009, FR-001): light-grey text with green
   // (user@host), magenta (shell tag), yellow (path), teal and cyan (git branch)
   // accents — deliberately far from Matrix's mono-green identity.
-  Bash: makeTheme('Bash', {
+  Bash: () => makeTheme('Bash', {
     bg: '#000000', sidebar: '#000000', surface: '#101010', surfaceActive: '#1c1c1c',
     text: '#d7d7d7', textMuted: '#8a8a8a', accent: '#2bd4ee', danger: '#d160c9',
     success: '#2ecc71', border: '#1aa08a', statusBar: '#000000',
@@ -848,7 +845,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
   // SUBNET brand palette (009, FR-003/004): Deep Space Blue base, Neon Core Green
   // + Neon Cyan reserved for accents/active states (never large blocks), Burnt
   // Amber callouts, Gunmetal Grey chrome, Midnight Slate as the secondary surface.
-  SUBNET: ((): Theme => {
+  SUBNET: (): Theme => {
     const t = makeTheme('SUBNET', {
       bg: '#001B40', sidebar: '#001330', surface: '#303841', surfaceActive: '#3b4753',
       text: '#d6e6f5', textMuted: '#9fb0c2', accent: '#39FF14', danger: '#FF6F32',
@@ -870,9 +867,9 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     t.colours.terminalCursor = '#00EFFF';
     t.colours.editorCursor = '#00EFFF';
     return t;
-  })(),
+  },
   // The Dark+ family it is named for: blue keywords, terracotta strings, olive comments.
-  VSCode: makeTheme('VSCode', {
+  VSCode: () => makeTheme('VSCode', {
     bg: '#1e1e1e', sidebar: '#252526', surface: '#2d2d2d', surfaceActive: '#37373d',
     text: '#d4d4d4', textMuted: '#858585', accent: '#007acc', border: '#333333',
     terminalBg: '#1e1e1e', terminalFg: '#d4d4d4', editorBg: '#1e1e1e', selection: '#264f78',
@@ -883,7 +880,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
   // VI/VIM's muted terminal palette: moss green, mustard, and a restrained slate.
-  'VI-VIM': makeTheme('VI-VIM', {
+  'VI-VIM': () => makeTheme('VI-VIM', {
     bg: '#1c1c1c', sidebar: '#161616', surface: '#262626', surfaceActive: '#303030',
     text: '#cccccc', textMuted: '#808080', accent: '#5f875f', border: '#303030',
     terminalBg: '#1c1c1c', selection: '#5f5f00', fontFamily: MONO,
@@ -894,7 +891,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
   // A light theme: dark, botanical hues on a pale green ground.
-  'English Garden': makeTheme('English Garden', {
+  'English Garden': () => makeTheme('English Garden', {
     bg: '#f0f4e8', sidebar: '#e5ecd6', surface: '#ffffff', surfaceActive: '#dfe8cd',
     text: '#2a3a1a', textMuted: '#5f6f4a', accent: '#6a8a3a', danger: '#a3502f',
     border: '#cdd9b5', terminalBg: '#f7faf0', terminalFg: '#2a3a1a', selection: '#cfe0a8',
@@ -910,7 +907,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
   // recognisably one hue while still telling ten token types apart. It does it with LUMINANCE
   // — bright phosphor for keywords down to dim green for punctuation — plus a single amber
   // for what is broken, because an error that is also green is an error you do not see.
-  Matrix: makeTheme('Matrix', {
+  Matrix: () => makeTheme('Matrix', {
     bg: '#000000', sidebar: '#020402', surface: '#031003', surfaceActive: '#052205',
     text: '#00ff41', textMuted: '#0aa028', accent: '#00ff41', border: '#0a3a0a',
     terminalBg: '#000000', terminalFg: '#00ff41', selection: '#0f4f0f', fontFamily: MONO,
@@ -923,7 +920,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
   // Cyberpunk reference palette (009, FR-005): near-black base, crimson + deep
   // maroon structure, bright-yellow highlights, pale-teal accents.
   // Cyberpunk: bright yellow highlights and pale teal against crimson-on-black.
-  Cyberpunk: makeTheme('Cyberpunk', {
+  Cyberpunk: () => makeTheme('Cyberpunk', {
     bg: '#000000', sidebar: '#000000', surface: '#1a0209', surfaceActive: '#2a0410',
     text: '#f3e9ec', textMuted: '#b78a93', accent: '#55ead4', danger: '#c5003c',
     success: '#55ead4', border: '#880425', statusBar: '#000000',
@@ -936,7 +933,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
   // Claude: warm terracotta on toasted brown — earthy, low-glare, no neon anywhere.
-  Claude: makeTheme('Claude', {
+  Claude: () => makeTheme('Claude', {
     bg: '#1a1613', sidebar: '#14100d', surface: '#262019', surfaceActive: '#332a20',
     text: '#e8e0d5', textMuted: '#a89b8a', accent: '#d97757', danger: '#c15f3c',
     border: '#332a20', terminalBg: '#161210', terminalFg: '#e8e0d5', selection: '#3d3020',
@@ -947,7 +944,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
   // Debian: its crimson-swirl red, with cool complements so code does not read as all-error.
-  Debian: makeTheme('Debian', {
+  Debian: () => makeTheme('Debian', {
     bg: '#1a1a1a', sidebar: '#141414', surface: '#242424', surfaceActive: '#2f2020',
     text: '#cccccc', textMuted: '#888888', accent: '#d70a53', danger: '#d70a53',
     border: '#2f2020', terminalBg: '#1a1a1a', selection: '#4a1226',
@@ -958,7 +955,7 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
   // Ubuntu: the aubergine-and-orange house palette.
-  Ubuntu: makeTheme('Ubuntu', {
+  Ubuntu: () => makeTheme('Ubuntu', {
     bg: '#2c001e', sidebar: '#24001a', surface: '#3d0a2c', surfaceActive: '#4d1339',
     text: '#eeeeec', textMuted: '#b8a0b0', accent: '#e95420', danger: '#e95420',
     border: '#4d1339', terminalBg: '#300a24', terminalFg: '#eeeeec', selection: '#5c1a44',
@@ -969,6 +966,33 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     },
   }),
 };
+
+/**
+ * A record whose every entry is derived on its first read and kept — the same object on every read after,
+ * as an eagerly built record would give, so `DEFAULT_THEMES.Light === DEFAULT_THEMES.Light` still holds.
+ *
+ * Why not derive them at import: each theme's search and selection colours are searched for, not written
+ * down (`searchHighlights`, `inactiveSelection` — thousands of ΔE00 measurements each), and all fourteen
+ * cost ~65 ms at import on a fast Linux machine. `@throng/core` is imported by every renderer window before
+ * its first paint, so every window paid that for themes it never shows — and the Resource Monitor's cold
+ * open, which must show its loading state within 1 s of the click (055 SC-002), crossed the second on a
+ * hosted macOS runner. Reading an entry, enumerating the record (`Object.entries`, a spread, `JSON.stringify`)
+ * derives what it reads, so every caller that wants all of them still gets all of them.
+ */
+function derivedOnRead<T>(entries: readonly (readonly [string, () => T])[]): Record<string, T> {
+  const record: Record<string, T> = {};
+  for (const [name, derive] of entries) {
+    let value: T | undefined;
+    Object.defineProperty(record, name, { enumerable: true, get: () => (value ??= derive()) });
+  }
+  return record;
+}
+
+/**
+ * The 14 bundled default themes, each derived on first read ({@link derivedOnRead}). `VI/VIM` is stored as
+ * `VI-VIM` because a `/` is not a valid file-name segment (themes are one file per name).
+ */
+export const DEFAULT_THEMES: Record<string, Theme> = derivedOnRead(Object.entries(DEFAULT_THEME_DEFINITIONS));
 
 /** All installable default themes, including the built-in `throng` (restore source). */
 
@@ -1009,7 +1033,7 @@ function readableOn(surface: string, preferred: string): string {
   return ratio(surface, '#ffffff') >= ratio(surface, '#000000') ? '#ffffff' : '#000000';
 }
 
-export const ALL_DEFAULT_THEMES: Record<string, Theme> = {
-  throng: THRONG_THEME,
-  ...DEFAULT_THEMES,
-};
+export const ALL_DEFAULT_THEMES: Record<string, Theme> = derivedOnRead([
+  ['throng', () => THRONG_THEME],
+  ...Object.keys(DEFAULT_THEME_DEFINITIONS).map((name) => [name, () => DEFAULT_THEMES[name]!] as const),
+]);

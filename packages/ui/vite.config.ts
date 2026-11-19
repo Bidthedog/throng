@@ -113,6 +113,67 @@ function failOnEagerPreview(): Plugin {
 }
 
 /**
+ * What only the main window draws: its app and the libraries behind its panels. None of it may load in the
+ * Resource Monitor window before that window's first paint — see {@link failOnHeavyMonitor}.
+ *
+ * CodeMirror is not on the list, though only the editor draws with it: `@throng/core`'s search models use
+ * its `SearchQuery` and `Text`, and the package's one barrel re-exports them, so every window that uses
+ * `@throng/core` loads CodeMirror (~0.4 MB with the lezer runtime). Taking that off the monitor needs core's
+ * search models behind an entry of their own, which is a change to the package's surface, not to chunking.
+ */
+const MAIN_WINDOW_ONLY =
+  /\/src\/renderer\/(composition-root\.tsx|app\.tsx|subworkspace-app\.tsx|terminal\/|editor\/|preview\/|explorer\/)|\/node_modules\/(@xterm|@dnd-kit|react-arborist)\//;
+
+/**
+ * 055 SC-002 — the monitor window is shown with its loading state within 1 s of the click. Its cold open is
+ * almost all script loading and evaluation, so what its chunk statically imports IS the budget: a chunk rule
+ * that puts one main-window module beside a monitor module makes the monitor load the whole workspace before
+ * it paints (it did, through `use-estimates-reporter.ts` in `app-resources`, and through `@throng/core`
+ * importing `picomatch` from a `vendor` chunk that also held CodeMirror and react-arborist). The source graph
+ * is pinned in `monitor-window-first-paint.test.ts`; this pins the chunk graph, which only the build can see.
+ */
+function failOnHeavyMonitor(): Plugin {
+  return {
+    name: 'throng:fail-on-heavy-monitor',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const chunks = new Map(
+        Object.values(bundle)
+          .filter((out) => out.type === 'chunk')
+          .map((chunk) => [chunk.fileName, chunk]),
+      );
+      const holds = (name: string, pattern: RegExp): boolean =>
+        chunks.get(name)!.moduleIds.some((id) => pattern.test(id.replace(/\\/g, '/')));
+      const start = [...chunks.keys()].filter((name) => holds(name, /\/src\/renderer\/(main|resources\/monitor-app)\.tsx$/));
+      if (start.length < 2) this.error(`the renderer entry or the monitor app is missing from the bundle (found ${start.join(', ')})`);
+      // Breadth first, remembering who imported each chunk, so the error can name the path that leaked.
+      const via = new Map<string, string | null>(start.map((name) => [name, null]));
+      const queue = [...start];
+      while (queue.length > 0) {
+        const name = queue.shift()!;
+        for (const next of chunks.get(name)?.imports ?? []) {
+          if (via.has(next)) continue;
+          via.set(next, name);
+          queue.push(next);
+        }
+      }
+      const path = (name: string): string => {
+        const steps = [name];
+        for (let at = via.get(name); at != null; at = via.get(at)) steps.unshift(at);
+        return steps.join(' → ');
+      };
+      const offenders = [...via.keys()].filter((name) => holds(name, MAIN_WINDOW_ONLY));
+      if (offenders.length > 0) {
+        this.error(
+          `the Resource Monitor window loads the main window's code before its first paint (055 SC-002): ` +
+            `${offenders.map(path).join('; ')}. Keep main-window modules out of the chunks the monitor imports, in chunkFor.`,
+        );
+      }
+    },
+  };
+}
+
+/**
  * The `@lezer/*` packages that are the parser RUNTIME rather than a language: the LR engine, the
  * syntax-tree model and the highlight tags. Every grammar depends on them, so they stay in one
  * shared chunk; everything else under `@lezer/` is a language's parse tables and rides with it.
@@ -126,7 +187,7 @@ const SHARED_LEZER = new Set(['common', 'lr', 'highlight']);
 export default defineConfig({
   root: fileURLToPath(new URL('./src/renderer', import.meta.url)),
   base: './',
-  plugins: [react(), failOnOversizedChunks(), failOnEagerPreview()],
+  plugins: [react(), failOnOversizedChunks(), failOnEagerPreview(), failOnHeavyMonitor()],
   // Force a single React/ReactDOM instance regardless of how npm hoists the
   // workspace tree. Without this, a stale nested `react` in a package's
   // node_modules bundles a second React copy, leaving hook consumers (e.g.
@@ -197,11 +258,20 @@ function chunkFor(rawId: string): string | null {
   if (/\/src\/renderer\/editor\//.test(id)) return 'app-editor';
   // The Resource Monitor's renderer — its window, and the status bar figures and popover it shares them
   // with. Split for the same reason (055 on top of 060 and 059 took the app chunk to 501 kB).
+  // …except the main window's half of it: the reporters that read the workspace to tell UI main each
+  // panel's share. They import the workspace stores, so in `app-resources` they made the monitor window —
+  // which loads that chunk — load the whole main-window app before its first paint (055 SC-002,
+  // `failOnHeavyMonitor`). They ride with the app that mounts them.
+  if (/\/src\/renderer\/resources\/(use-estimates-reporter|estimates-sources)\.ts$/.test(id)) return null;
   if (/\/src\/renderer\/resources\//.test(id)) return 'app-resources';
   if (!id.includes('node_modules')) return null;
   if (id.includes('@xterm')) return 'xterm';
   if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';
   if (id.includes('@dnd-kit')) return 'dnd';
+  // The explorer tree and its drag-and-drop stack. Its own chunk, out of `vendor`: `@throng/core` imports
+  // `picomatch` from `vendor`, so whatever else `vendor` holds loads in EVERY window, the monitor included
+  // (055 SC-002, `failOnHeavyMonitor`).
+  if (/\/node_modules\/(react-arborist|react-dnd|react-dnd-html5-backend|dnd-core|@react-dnd\/[^/]+|redux|react-window|memoize-one|fast-deep-equal)\//.test(id)) return 'arborist';
   // One chunk per language grammar (016, FR-008). The grammars are imported
   // lazily by id, so a document only ever pays for the language it is in —
   // but only if each stays a separately-fetchable chunk. Folded into
@@ -209,6 +279,8 @@ function chunkFor(rawId: string): string | null {
   const grammar = /\/node_modules\/@codemirror\/(lang-[a-z]+)\//.exec(id);
   if (grammar) return `grammar-${grammar[1]}`;
   if (id.includes('@codemirror/legacy-modes')) return 'grammar-legacy';
+  // The editor's runtime — out of `vendor` for the reason given for `arborist` above.
+  if (/\/node_modules\/(@codemirror\/[^/]+|style-mod|w3c-keyname|@marijn\/find-cluster-break|crelt)\//.test(id)) return 'codemirror';
   /*
    * A LANGUAGE'S PARSER BELONGS WITH ITS LANGUAGE.
    *
