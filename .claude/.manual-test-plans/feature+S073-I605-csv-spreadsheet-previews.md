@@ -33,7 +33,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 
 ## MT-02: Editing and saving a CSV in the grid
 
-Covers: FR-033, FR-035, FR-035a, FR-036, FR-036a, FR-036b, FR-037, FR-038, FR-040, FR-043, FR-060a
+Covers: FR-033, FR-035, FR-035a, FR-036, FR-036a, FR-036b, FR-037, FR-038, FR-040, FR-043, FR-060a, FR-036d
 Paths: `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/ui/src/main/csv-grid-service.ts`, `packages/ui/src/main/editor-coordinator.ts`, `packages/core/src/csv/**`, `packages/core/src/config/keybindings.ts`
 
 ### Steps
@@ -51,6 +51,7 @@ Paths: `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/
 11. Put `{"id":1,"tags":["alpha","beta"],"note":"long enough to pass fifty"}` in a cell. Double-click it: a dialog opens with the JSON indented and highlighted. Change `alpha` to `gamma`, save: the cell shows the JSON on one line, `{ "id": 1, "tags": [ ...`. Ctrl+Z restores the original in one step.
 12. Double-click the same cell, change nothing, save: the file stays clean (no unsaved marker). Press F2 and Enter on it: the dialog again. Select it and type a letter: the in-cell editor replaces the value instead.
 13. Right-click a short cell, **Edit in Dialog…**, type `first`, Enter, `  second`, save: the cell holds `first   second` (the line break became one space, the indent kept). Open the dialog and press Esc: nothing changes.
+12a. Select a block of cells and right-click it: **Edit in Dialog…** is greyed out. Select one cell: it is enabled. The same for whole rows or columns.
 13a. Double-click a short cell that holds a line break (e.g. two words on two lines): it opens in the dialog, not in the cell. Turn off **Edit multi-line cells in a dialog** in Preferences: the same double-click edits in the cell.
 14. Preferences › Editor › Previews › CSV: **Edit long cells in a dialog** (on) and **Long cell threshold** (50). Set the threshold to 10: a 20-character cell opens the dialog. Turn the setting off: double-click on a long cell opens the in-cell editor, and no menu offers Edit in Dialog….
 15. With the setting still off, find the cell-dialog toggle at the bottom right of a CSV panel's status bar; it shows off. Turn it on (mouse, then Tab to it and Space): this panel offers the dialog again; another open CSV panel does not. Restart throng: the panel's toggle is still on. Turn the setting back on: a panel whose toggle you never touched follows it.
@@ -76,7 +77,7 @@ Paths: `packages/ui/src/main/editor-coordinator.ts`, `packages/ui/src/main/csv-g
 
 ## MT-04: Clipboard and column widths in the grid
 
-Covers: FR-006, FR-006a, FR-006b, FR-006c, FR-012a, FR-008b, FR-037g, FR-037h, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
+Covers: FR-006, FR-006a, FR-006b, FR-006c, FR-012a, FR-008b, FR-008c, FR-037g, FR-037h, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
 Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/column-widths.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/daemon/src/document-service.ts`, `packages/persistence/src/**`
 
 ### Steps
@@ -95,6 +96,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 13. Right-click a resized column's letter, **Reset Column Width**: back to the default width; close and reopen the file, still default. No menu says Reset Size or Reset Row Height.
 14. Select rows 2–3 by their numbers and copy. Right-click row 6's number: **Insert Copied Rows Above** and **Insert Copied Rows Below** are there beside **Insert Row Above/Below**. Choose Above: two rows with the copied values appear above row 6; one Ctrl+Z removes both. Copy columns B–C by their letters and use **Insert Copied Columns Right** on column E the same way. Copy text from another app: the Insert Copied items are gone; the blank inserts remain.
 15. Open the menus of a cell, a selection, a row number and a column letter, in a CSV and in a workbook preview. Cut, Copy, Paste, Save, Save As, the Insert items, Select All, Edit in Dialog…, Go to Row… and Reset Column Width each show an icon; switch theme and the icons follow it. No row-number or column-letter menu offers Select Row or Select Column.
+15a. Rest the pointer on a row number, a column letter and the corner cell: it shows a right arrow, a down arrow and a diagonal arrow. On a column's right edge it shows the resize pointer. Same in a workbook preview.
 16. Scroll a long CSV to the middle and click the empty corner cell above the row numbers. Every row and column is selected and the grid does not move; Ctrl+C copies the whole table. Right-click the corner: everything is selected and the selection menu opens. Same in a workbook preview.
 
 ### Negative cases
@@ -120,7 +122,7 @@ Paths: `packages/ui/src/renderer/preview/providers/spreadsheet/**`, `packages/co
 
 ## MT-06: Open-in settings and turning a provider off
 
-Covers: FR-020, FR-033a, FR-063, FR-064, Q1, Q2, Q5, Q10
+Covers: FR-020, FR-033a, FR-033b, FR-008d, FR-063, FR-064, Q1, Q2, Q5, Q10
 Paths: `packages/core/src/preview/providers/**`, `packages/core/src/config/preview-settings.ts`, `packages/ui/src/renderer/preview/preview-provider-sync.tsx`, `packages/ui/src/renderer/preview/open-preview.ts`, `packages/ui/src/main/preview-service.ts`, `packages/ui/src/main/csv-grid-service.ts`, `packages/ui/src/renderer/preview/preview-link-notice.tsx`
 
 ### Steps
@@ -129,7 +131,8 @@ Paths: `packages/core/src/preview/providers/**`, `packages/core/src/config/previ
 3. Spreadsheet: **Open spreadsheets in** offers Throng Preview and Default OS Program only.
 4. With a CSV grid holding unsaved edits that no editor shows, turn **CSV: Enabled** off. The unsaved prompt appears; Cancel keeps the panel, Save saves and closes it.
 5. With **CSV: Open previews in** = Last Preview Panel, open `a.csv`, resize a column, then open `b.csv`: it replaces `a.csv` in the same panel. Open `a.csv` again: it replaces `b.csv` in that panel, with its resized column; no second panel opens. Edit a cell in `a.csv`, save, open `b.csv`: still the same panel.
-6. Edit a cell in `a.csv` and do NOT save; open `b.csv`. It opens in a new panel and `a.csv` keeps its unsaved edit and marker. With unsaved edits, Back in that panel shows a notice: "This grid has unsaved changes. Save them to go back or forward."
+6. Edit a cell in `a.csv` and do NOT save; open `b.csv`. The unsaved-changes prompt names both files. **Cancel**: nothing opens. **Open in new preview**: `b.csv` opens in a new panel and `a.csv` keeps its edit and marker. Repeat with **Discard & open**: the panel shows `b.csv` and `a.csv` reopens unedited. Repeat with **Save & open**: `a.csv` is saved and the panel shows `b.csv`. Drop `b.csv` from File Explorer onto the dirty grid: the same prompt. With unsaved edits, Back in that panel shows a notice: "This grid has unsaved changes. Save them to go back or forward."
+7. In one panel, select C7 in `a.csv`, then open `b.csv`: it starts at A1. Select B3, reopen `a.csv`: C7 is selected and in view. Back: B3. Forward: C7. Restart throng and reopen both: each starts at A1.
 
 ### Negative cases
 - Turning **Spreadsheet: Enabled** off closes every spreadsheet preview with no prompt.
