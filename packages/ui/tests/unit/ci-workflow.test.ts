@@ -6,7 +6,8 @@ import { parse } from 'yaml';
 
 /**
  * 072 contracts/ci-verdict.md: PR CI runs only on pull requests, only on Linux, with no E2E, never fails fast, and ends
- * in one `CI verdict` check, the only required check on master (FR-001 to FR-009).
+ * in one `CI verdict` check, the only required check on master (FR-001 to FR-009). A pull request that changes only files no
+ * job reads skips the work jobs and passes the verdict (FR-004a).
  *
  * Layer: unit. Reads `.github/workflows/ci.yml`; nothing runs.
  */
@@ -15,12 +16,16 @@ const ROOT = process.cwd();
 
 interface Step {
   name?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
+  id?: string;
   if?: string;
   run?: string;
   env?: Record<string, string>;
 }
 interface Job {
   name?: string;
+  outputs?: Record<string, string>;
   needs?: string | string[];
   if?: string;
   'runs-on'?: unknown;
@@ -38,6 +43,8 @@ const ci = parse(text) as Workflow;
 const needsOf = (job: Job): string[] => [job.needs ?? []].flat();
 const ids = Object.keys(ci.jobs);
 const runs = (job: Job): string => (job.steps ?? []).map((s) => s.run ?? '').join('\n');
+/** The jobs that run a layer: everything but the change check and the verdict. */
+const WORK = ids.filter((i) => i !== 'verdict' && i !== 'changes');
 
 describe('the trigger (FR-001, FR-009, FR-010)', () => {
   it('is exactly pull_request, with the four types, and nothing else', () => {
@@ -72,12 +79,13 @@ describe('Linux only, no E2E (FR-006, FR-007)', () => {
 });
 
 describe('the jobs (FR-002, FR-003, FR-005)', () => {
-  it('are lint, unit, component, contract, integration and the verdict', () => {
-    expect(ids.slice().sort()).toEqual(['component', 'contract', 'integration', 'lint', 'unit', 'verdict']);
+  it('are the change check, lint, unit, component, contract, integration and the verdict', () => {
+    expect(ids.slice().sort()).toEqual(['changes', 'component', 'contract', 'integration', 'lint', 'unit', 'verdict']);
   });
 
-  it('run in parallel: nothing but the verdict waits on anything', () => {
-    for (const id of ids.filter((i) => i !== 'verdict')) expect(needsOf(ci.jobs[id] as Job), id).toEqual([]);
+  it('run in parallel: the work jobs wait only on the change check, which reads a list and waits on nothing', () => {
+    expect(needsOf(ci.jobs.changes as Job)).toEqual([]);
+    for (const id of WORK) expect(needsOf(ci.jobs[id] as Job), id).toEqual(['changes']);
   });
 
   it('lint and typecheck run once, in one job', () => {
@@ -104,13 +112,33 @@ describe('the jobs (FR-002, FR-003, FR-005)', () => {
   });
 
   it('every layer runs in its own job, with the npm cache on', () => {
-    for (const id of ids.filter((i) => i !== 'verdict')) {
+    for (const id of WORK) {
       expect(JSON.stringify(ci.jobs[id]?.steps), id).toContain('"cache":"npm"');
     }
   });
 
   it('never passes with no tests', () => {
     expect(text).not.toMatch(/pass-with-no-tests|passWithNoTests/i);
+  });
+});
+
+describe('the change check (FR-004a)', () => {
+  const changes = ci.jobs.changes as Job;
+
+  it('diffs the merge commit against its first parent, the base it would land on', () => {
+    const checkout = (changes.steps ?? []).find((s) => s.uses?.startsWith('actions/checkout@'));
+    expect(checkout?.with?.['fetch-depth']).toBe(2);
+    expect(runs(changes)).toMatch(/git diff --name-only HEAD\^1 HEAD/);
+  });
+
+  it('answers through scripts/ci-changes.mjs, with no install', () => {
+    expect(runs(changes)).toContain('node scripts/ci-changes.mjs');
+    expect(runs(changes)).not.toContain('npm ci');
+    expect(changes.outputs?.code).toMatch(/steps\.\w+\.outputs\.code/);
+  });
+
+  it('gates every work job, which runs only when a changed file can affect it', () => {
+    for (const id of WORK) expect(ci.jobs[id]?.if, id).toBe("needs.changes.outputs.code == 'true'");
   });
 });
 
@@ -129,6 +157,14 @@ describe('the CI verdict (FR-004)', () => {
     expect(JSON.stringify(verdict.steps)).toContain('toJSON(needs)');
     expect(script).toMatch(/!= "success"|!= 'success'/);
     expect(script).toMatch(/exit 1/);
+  });
+
+  it('passes over skipped work jobs only when the change check succeeded and found nothing they read (FR-004a)', () => {
+    const script = runs(verdict);
+    expect(script).toMatch(/\.changes\.result/);
+    expect(script).toMatch(/\.changes\.outputs\.code/);
+    // The skip is answered by the change check alone: a failed check never reads as "nothing to run".
+    expect(script.indexOf('.changes.result')).toBeLessThan(script.indexOf('.changes.outputs.code'));
   });
 });
 

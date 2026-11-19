@@ -60,6 +60,12 @@ unchanged.
 
 ## Clarifications
 
+### Session 2026-11-19
+
+- Q: Must a pull request that changes only files no job reads (a constitution amendment, a spec, a manual test plan) wait
+  for PR CI? → A: No (maintainer: "If the build can't fail, we shouldn't have to wait"). FR-004a: the work jobs skip and
+  the verdict passes. Docs are not in that set, because `docs-currency.test.ts` reads them.
+
 ### Session 2026-11-17
 
 - Q: When should each pipeline run? → A: PR CI on every push to a pull request, nothing else. Nothing on a merge to
@@ -248,6 +254,11 @@ already prove.
 - **FR-003**: Lint and typecheck MUST run once per PR run, not once per platform.
 - **FR-004**: PR CI MUST end with one verdict check that passes only when every other PR CI job passed. Master's branch
   protection MUST require that check (and only checks that exist in PR CI).
+- **FR-004a** *(2026-11-19)*: When every file a pull request changes is one no PR CI job reads — no lint, typecheck, test
+  or build input — PR CI MUST skip its work jobs and the verdict MUST pass on that answer alone. The inert paths MUST be
+  declared in one list (`scripts/ci-changes.mjs`), and a path the list does not name MUST run every job. A change check that
+  fails MUST fail the verdict, never read as "nothing to run". FR-004's "every other job passed" holds for every other
+  pull request.
 - **FR-005**: PR CI MUST run, each as its own job: every unit test, every component test, every
   contract test and the integration subset (FR-008). It MUST NOT run integration tests outside the subset.
 - **FR-006**: PR CI MUST NOT run any E2E test. Every E2E test runs in the full pipeline only (FR-011). The `@core` /
