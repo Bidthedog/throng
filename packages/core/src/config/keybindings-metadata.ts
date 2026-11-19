@@ -568,4 +568,23 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Refresh / redraw terminal',
     'Ask the running program to redraw its screen. Changes no content, scrollback, selection or layout.',
   ),
+  // 076 FR-006 — the status-bar toggles, named as the toggles and their menu items name them.
+  chord(
+    'terminal.toggleRememberCommand',
+    'Terminal',
+    'Remember the last running command',
+    "Turn on or off whether the focused terminal saves the command running when it ends as its startup command. The terminal keeps running. Unbound by default.",
+  ),
+  chord(
+    'terminal.toggleRememberDirectory',
+    'Terminal',
+    'Reopen in the last directory',
+    "Turn on or off whether the focused terminal reopens in the folder it was last working in. Unbound by default.",
+  ),
+  chord(
+    'terminal.toggleNotifications',
+    'Terminal',
+    'Terminal notifications',
+    "Turn on or off whether the focused terminal can raise attention marks, pop-ups and desktop notifications. Unbound by default.",
+  ),
 ];

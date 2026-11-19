@@ -129,6 +129,10 @@ export type ActionId =
    * they arranged. This is that nudge, asked for on purpose.
    */
   | 'terminal.redraw'
+  // 076 FR-006 — the terminal status-bar toggles as commands: unbound by default, window-handled.
+  | 'terminal.toggleRememberCommand'
+  | 'terminal.toggleRememberDirectory'
+  | 'terminal.toggleNotifications'
   // Editor text-editing commands (016, FR-017a/FR-025a). Live ONLY while an editor
   // panel is active — which is what lets `editor.cutLine` share Ctrl+X with the
   // Explorer's `file.cut` (their scopes are disjoint). Cut/Copy/Paste/Select All/
@@ -450,6 +454,10 @@ export const COMMAND_SCOPES: CommandScopes = {
   // TERMINAL_ONLY, not PANELS: a redraw has no meaning in an editor or the file tree, and a chord
   // throng consumes never reaches the shell — so the shadow is kept to the one surface that earns it.
   'terminal.redraw': TERMINAL_ONLY,
+  // 076 FR-006 — each acts on the focused terminal panel's own setting; meaningless anywhere else.
+  'terminal.toggleRememberCommand': TERMINAL_ONLY,
+  'terminal.toggleRememberDirectory': TERMINAL_ONLY,
+  'terminal.toggleNotifications': TERMINAL_ONLY,
   // The seven new editor commands (016). Editor-only is what makes Ctrl+X unambiguous.
   'editor.cutLine': EDITOR_ONLY,
   'editor.indentLines': EDITOR_ONLY,
@@ -717,6 +725,10 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      * is recorded as a shadowable exception (Principle IV) rather than taken silently.
      */
     'terminal.redraw': ['Ctrl+F5'],
+    // 076 FR-006 — no default chord: the status bar and the content menu are the routes.
+    'terminal.toggleRememberCommand': [],
+    'terminal.toggleRememberDirectory': [],
+    'terminal.toggleNotifications': [],
     // Editor text editing (016). `Ctrl+X` coexists with `file.cut` — the scopes are disjoint,
     // and the scope-aware collision rule permits exactly this.
     'editor.cutLine': ['Ctrl+X'],
@@ -1380,6 +1392,9 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'app.settings',
   'app.installCommandLine',
   'app.uninstallCommandLine',
+  'terminal.toggleRememberCommand',
+  'terminal.toggleRememberDirectory',
+  'terminal.toggleNotifications',
 ]);
 
 /**

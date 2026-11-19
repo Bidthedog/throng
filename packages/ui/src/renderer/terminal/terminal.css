@@ -101,8 +101,81 @@
    (`link-target-readout.css`), exactly as FR-167 and 040 FR-022 have it. */
 .terminal-status-bar__flavour {
   opacity: 0.85;
-  flex: 0 0 auto;
+  /* 076 FR-007 — it may give way now, but only AFTER the readout (shrink 1 against the readout's 1000), and
+     only by clipping: `nowrap` keeps it one line, so T280's height loop cannot come back. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 076 FR-007 — the readout is the first thing to give way: far more willing to shrink than the label. */
+.terminal-status-bar .link-target-readout {
+  flex: 0 1000 auto;
+}
+
+/* 076 FR-001 — the per-panel toggles, pinned to the right and never shrinking. */
+.terminal-status-bar__toggles {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.terminal-status-bar__toggle {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  /* The containing block for the off state's line. */
+  position: relative;
+}
+
+/* 076 FR-002 — on and off must differ at a glance, and neither may read as the other. On is the theme's
+   full-contrast text colour on the strip's pressed background; off is the muted text colour with a line
+   struck through the glyph, as Lucide draws its "-off" icons. The glyph ships plain (a bell, not a crossed
+   bell) and the line is drawn here, so a user's own icon set gets the same treatment. Colours from theme
+   tokens only. */
+.terminal-status-bar__toggle:hover,
+.terminal-status-bar__toggle[aria-pressed='true'] {
+  background: var(--throng-colour-editorStatusStripHover);
+}
+
+.terminal-status-bar__toggle[aria-pressed='true'] .icon {
+  color: var(--throng-colour-text);
+}
+
+.terminal-status-bar__toggle[aria-pressed='false'] .icon {
+  color: var(--throng-colour-textMuted);
+}
+
+/* The line runs top left to bottom right across the glyph, at Lucide's own length and stroke weight (20 and
+   2 units of 24). Its outline in the strip's background cuts a gap into the strokes it crosses, so it reads
+   as a line through the icon rather than a scratch on it. */
+.terminal-status-bar__toggle[aria-pressed='false']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--throng-size-icon, 16px) * 1.18);
+  height: calc(var(--throng-size-icon, 16px) / 12);
+  border-radius: 1px;
+  background: var(--throng-colour-textMuted);
+  box-shadow: 0 0 0 1px var(--throng-colour-editorStatusStripBg, #151a23);
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+
+.terminal-status-bar__toggle[aria-pressed='false']:hover::after {
+  box-shadow: 0 0 0 1px var(--throng-colour-editorStatusStripHover);
 }
 
 /* Non-fatal "still starting" state: a small themed notice with a retry action, layered

@@ -47,6 +47,13 @@ export type TerminalPanelConfig = {
   /** Run this terminal elevated ("as administrator") — one flag per Panel (FR-025). */
   runAsAdmin?: boolean;
   /**
+   * 076 FR-020 — whether this terminal raises attention marks, toasts and OS notifications; `false` silences
+   * it. Absent resolves to
+   * `terminals.defaultNotifications`, read-side (039 FR-005a; 076 Clarifications Q4), so every panel saved
+   * before 076 follows the preference until its own toggle is flipped. The daemon decides on it (076 R3).
+   */
+  notifications?: boolean;
+  /**
    * Where this terminal was asked to START, absolute (033 FR-033, B5). Set only when the Panel was
    * created from a tree node — Open In → Terminal on a folder, or on a file's parent folder — and
    * absent for every Panel typed through the picker, which starts at the project root as before.
@@ -78,6 +85,7 @@ export const SHIPPED_TERMINAL_PANEL_DEFAULTS: TerminalPanelDefaults = {
   rememberCommand: false,
   rememberDirectory: true,
   runAsAdmin: false,
+  notifications: true,
 };
 
 /** A form value is a string; `undefined` memory means "not remembered", so take the seed. */
@@ -93,6 +101,7 @@ export function readTerminalPanelConfig(
   startupCommand: string;
   rememberCommand: boolean;
   rememberDirectory: boolean;
+  notifications: boolean;
 } {
   const shellArguments =
     typeof raw?.shellArguments === 'string'
@@ -129,6 +138,9 @@ export function readTerminalPanelConfig(
       typeof raw?.rememberDirectory === 'boolean'
         ? raw.rememberDirectory
         : defaults.rememberDirectory,
+    // 076 FR-020 — the same rule as the two above: only a real boolean is the panel's own answer.
+    notifications:
+      typeof raw?.notifications === 'boolean' ? raw.notifications : defaults.notifications,
   };
 }
 
@@ -148,6 +160,8 @@ export interface TerminalValues {
   rememberDirectory: string;
   /** `'true'`/`'false'` — converted to boolean in the built config. */
   runAsAdmin: string;
+  /** `'true'`/`'false'` — converted to boolean in the built config (076 FR-020). */
+  notifications: string;
   [key: string]: string;
 }
 
@@ -167,6 +181,8 @@ export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
     { key: 'startupCommand', label: 'Startup Command', control: 'text' },
     { key: 'rememberCommand', label: 'Remember the last running command', control: 'checkbox' },
     { key: 'rememberDirectory', label: 'Reopen in the last directory', control: 'checkbox' },
+    // 076 FR-020 — the third per-panel toggle; the status bar and the content menu flip the same value.
+    { key: 'notifications', label: 'Terminal notifications', control: 'checkbox' },
   ],
   defaults: (ctx: PanelTypeContext): TerminalValues => {
     const first = ctx.flavours[0];
@@ -195,6 +211,7 @@ export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
        */
       rememberCommand: boolValue(memory?.rememberCommand, seeds.rememberCommand),
       rememberDirectory: boolValue(memory?.rememberDirectory, seeds.rememberDirectory),
+      notifications: boolValue(memory?.notifications, seeds.notifications),
       /*
        * 039 FR-008a — the SEED half of the elevation gate, and the reason it is here.
        *
@@ -233,5 +250,6 @@ export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
     rememberCommand: values.rememberCommand !== 'false',
     rememberDirectory: values.rememberDirectory !== 'false',
     runAsAdmin: values.runAsAdmin === 'true',
+    notifications: values.notifications === 'true',
   }),
 };

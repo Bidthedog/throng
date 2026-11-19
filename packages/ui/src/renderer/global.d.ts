@@ -470,6 +470,8 @@ declare global {
         }) => void;
         /** 057 FR-007 (#541) — panels a route ended for good: their marks and stored flags go too. */
         panelsDestroyed?: (panelIds: string[]) => void;
+        /** 076 FR-022 — this panel's own notifications turned off and that was saved. */
+        panelIgnored?: (panelId: string) => void;
         /** The current mark set, for a window that attaches after marks were raised (057 T068). */
         getMarks?: () => Promise<{ marks: import('@throng/core').AttentionMark[] }>;
         /** The callback returns the PNG data URL; the preload correlates the reply. */

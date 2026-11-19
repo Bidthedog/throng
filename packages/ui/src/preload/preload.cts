@@ -1230,6 +1230,8 @@ contextBridge.exposeInMainWorld('throng', {
      * panel ✕ reaches main through `panel.notifyDestroyed` instead, which also cascades the destroy.
      */
     panelsDestroyed: (panelIds: string[]) => ipcRenderer.send('throng:attention:panelsDestroyed', { panelIds }),
+    /** 076 FR-022: this panel's own notifications turned off and that is saved — main withdraws its terminal mark. */
+    panelIgnored: (panelId: string) => ipcRenderer.send('throng:attention:panelIgnored', { panelId }),
     /**
      * Main asks the renderer to draw the taskbar badge (R13, so it uses the theme's colours). The
      * callback returns the PNG data URL; this wrapper correlates the reply by `requestId` on the same

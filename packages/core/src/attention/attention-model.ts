@@ -193,6 +193,11 @@ export class AttentionModel {
     this.removeWhere((m) => m.producer === producer);
   }
 
+  /** 076 FR-022: the panel is ignored now — clear its terminal mark, never a user Flag (FR-128). */
+  withdrawPanel(panelId: string): void {
+    this.removeWhere((m) => m.panelId === panelId && m.producer === 'terminal');
+  }
+
   /** FR-007: the panel is gone. */
   panelDestroyed(panelId: string): void {
     this.removeWhere((m) => m.panelId === panelId);

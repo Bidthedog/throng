@@ -135,6 +135,7 @@ export {
   TERMINAL_ATTENTION_LEDGER_METHOD,
   TERMINAL_ATTENTION_SYNC_METHOD,
   TERMINAL_ATTENTION_FOCUS_METHOD,
+  TERMINAL_ATTENTION_IGNORED_METHOD,
 } from './terminal.js';
 export type {
   LaunchSpecDto,
@@ -168,6 +169,8 @@ export type {
   TerminalAttentionLedgerResult,
   TerminalAttentionSyncParams,
   TerminalAttentionFocusParams,
+  TerminalAttentionIgnoredParams,
+  TerminalAttentionIgnoredResult,
   JsonRpcNotification,
 } from './terminal.js';
 

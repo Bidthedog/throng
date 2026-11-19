@@ -477,6 +477,12 @@ export const TERMINAL_ATTENTION_SYNC_METHOD = 'terminal.attentionSync';
  * The daemon tells each focus-reporting program (DEC 1004) when its panel enters or leaves it (FR-099).
  */
 export const TERMINAL_ATTENTION_FOCUS_METHOD = 'terminal.attentionFocus';
+/**
+ * 076 FR-022 (contracts/attention-ignore.md) — which of these panels are ignored now: each panel's own stored
+ * `notifications`, else the pushed `notifyByDefault`. Main asks after the default turns off, for the panels
+ * holding a terminal mark, and withdraws each one returned.
+ */
+export const TERMINAL_ATTENTION_IGNORED_METHOD = 'terminal.attentionIgnored';
 
 export type TerminalAttentionNotification = AttentionSignal;
 export type TerminalAttentionConfigParams = AttentionProducerConfig;
@@ -488,6 +494,12 @@ export interface TerminalAttentionSyncParams {
 }
 export interface TerminalAttentionFocusParams {
   attended: string[];
+}
+export interface TerminalAttentionIgnoredParams {
+  panels: { panelId: string; projectId: string }[];
+}
+export interface TerminalAttentionIgnoredResult {
+  ignored: string[];
 }
 
 /** A JSON-RPC 2.0 notification frame (no `id`) — the daemon→UI streaming shape. */

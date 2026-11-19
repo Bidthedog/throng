@@ -22,6 +22,8 @@ import {
   ATTENTION_FLAG_SET_METHOD,
   type AttentionFlagListResult,
   TERMINAL_ATTENTION_CONFIG_METHOD,
+  TERMINAL_ATTENTION_IGNORED_METHOD,
+  type TerminalAttentionIgnoredResult,
   TERMINAL_ATTENTION_LEDGER_METHOD,
   TERMINAL_ATTENTION_SYNC_METHOD,
   TERMINAL_ATTENTION_FOCUS_METHOD,
@@ -52,7 +54,7 @@ const BADGE_MAX_RETRIES = 4;
 
 /** The slice of AppSettings the service reads. */
 export type AttentionSettingsSource = Pick<AppSettings, 'attention' | 'notifications'> & {
-  terminals: Pick<AppSettings['terminals'], 'attention'>;
+  terminals: Pick<AppSettings['terminals'], 'attention' | 'defaultNotifications'>;
 };
 
 export interface AttentionWindows {
@@ -250,6 +252,35 @@ export class AttentionService {
     return (this.lastAttendedEnd.get(panelId) ?? Number.NEGATIVE_INFINITY) <= at;
   }
 
+  /**
+   * 076 FR-022 — a panel's own toggle, menu item or command turned its notifications off, and the layout save carrying it has
+   * landed. Its terminal mark goes now, with the toast and the OS notification (057 FR-036); a user Flag stays.
+   */
+  panelIgnored(panelId: string): void {
+    this.model.withdrawPanel(panelId);
+  }
+
+  /**
+   * 076 FR-022, Clarifications Q4 — the ignore DEFAULT turned on. Only the daemon knows which panels hold no value
+   * of their own, so it is asked about every panel holding a terminal mark, once the new default has reached it.
+   */
+  private async withdrawIgnoredByDefault(): Promise<void> {
+    const panels = this.model
+      .marks()
+      .filter((m) => m.producer === 'terminal')
+      .map((m) => ({ panelId: m.panelId, projectId: m.projectId }));
+    if (panels.length === 0) return;
+    try {
+      const { ignored } = await this.deps.daemon.call<TerminalAttentionIgnoredResult>(
+        TERMINAL_ATTENTION_IGNORED_METHOD,
+        { panels },
+      );
+      for (const panelId of ignored) this.model.withdrawPanel(panelId);
+    } catch (err) {
+      this.log('[attention] asking which panels are ignored failed:', err);
+    }
+  }
+
   onPanelDestroyed(panelId: string): void {
     this.model.panelDestroyed(panelId);
   }
@@ -321,7 +352,13 @@ export class AttentionService {
     if (previous.terminals.attention.enabled && !next.terminals.attention.enabled) {
       this.model.withdraw('terminal');
     }
-    if (JSON.stringify(previous.terminals.attention) !== JSON.stringify(next.terminals.attention)) {
+    if (previous.terminals.defaultNotifications && !next.terminals.defaultNotifications) {
+      // 076: the daemon must hold the new default before it is asked which panels it now silences.
+      void this.pushConfig().then(() => this.withdrawIgnoredByDefault());
+    } else if (
+      JSON.stringify(previous.terminals.attention) !== JSON.stringify(next.terminals.attention) ||
+      previous.terminals.defaultNotifications !== next.terminals.defaultNotifications
+    ) {
       void this.pushConfig();
     }
     if (previous.attention.taskbarBadge !== next.attention.taskbarBadge) {
@@ -546,11 +583,13 @@ export class AttentionService {
   }
 
   private async pushConfig(): Promise<void> {
-    const t = this.deps.settings().terminals.attention;
+    const terminals = this.deps.settings().terminals;
+    const t = terminals.attention;
     const config: AttentionProducerConfig = {
       enabled: t.enabled,
       signals: { ...t.signals },
       quietMs: t.quietSeconds * 1000,
+      notifyByDefault: terminals.defaultNotifications,
     };
     try {
       await this.deps.daemon.call(TERMINAL_ATTENTION_CONFIG_METHOD, config);

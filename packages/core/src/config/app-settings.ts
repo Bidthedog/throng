@@ -215,6 +215,10 @@ export interface TerminalSettings {
    *  `canRunAsAdmin()` remains the sole elevation gate, so a preference of `true` never forces,
    *  implies or grants elevation (FR-008). */
   defaultRunAsAdmin: boolean;
+  /** 076 FR-025: seeds "Terminal notifications", and is what a terminal panel with no `notifications` of its
+   *  own resolves to, read-side, panels saved before 076 included (Clarifications Q4). Ships **ON**. Main
+   *  pushes it to the daemon as the producer config's `notifyByDefault`, and the daemon decides. */
+  defaultNotifications: boolean;
   /**
    * 070 FR-031 (research R22): whether Option sends Meta (ESC-prefixed) to a terminal on macOS, read into xterm's own
    * `macOptionIsMeta`. Ships **OFF**, so Option types the characters the keyboard layout puts on it. macOS only.
@@ -882,6 +886,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultRememberCommand: false,
     defaultRememberDirectory: true,
     defaultRunAsAdmin: false,
+    // 076 FR-025: ships on — no terminal is silenced until the user asks.
+    defaultNotifications: true,
     // 070 FR-031: Option types the layout's characters unless the user asks for Meta.
     macOptionIsMeta: false,
     // 039 FR-021: the default is exactly what throng does today, so this setting is a no-op until
@@ -1352,6 +1358,7 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
       : fallback.defaultRememberDirectory;
   const defaultRunAsAdmin =
     typeof v.defaultRunAsAdmin === 'boolean' ? v.defaultRunAsAdmin : fallback.defaultRunAsAdmin;
+  const defaultNotifications = boolOr(v.defaultNotifications, fallback.defaultNotifications);
   const macOptionIsMeta = boolOr(v.macOptionIsMeta, fallback.macOptionIsMeta);
   // A value outside the closed set falls back rather than throwing, which is this parser's contract
   // everywhere else. Checked against TERMINAL_RELOAD_MODES so the parser and the descriptor cannot
@@ -1378,6 +1385,7 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     defaultRememberCommand,
     defaultRememberDirectory,
     defaultRunAsAdmin,
+    defaultNotifications,
     macOptionIsMeta,
     reloadMode,
     titleTemplate,
@@ -1454,6 +1462,7 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     defaultRememberCommand: t.defaultRememberCommand,
     defaultRememberDirectory: t.defaultRememberDirectory,
     defaultRunAsAdmin: t.defaultRunAsAdmin,
+    defaultNotifications: t.defaultNotifications,
     // 070 FR-031 — the same note applies.
     macOptionIsMeta: t.macOptionIsMeta,
     reloadMode: t.reloadMode,

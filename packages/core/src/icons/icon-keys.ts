@@ -156,6 +156,9 @@ export const ICON_KEYS = [
   'dragHandle',
   'menuChecked',
   'overrideIcon',
+  'rememberCommand',
+  'rememberDirectory',
+  'terminalNotifications',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -464,6 +467,12 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on a menu row whose option is switched on.',
   overrideIcon:
     'The icon on the Icons row control that copies the default icon into your icon set, ready for you to replace with your own file.',
+  rememberCommand:
+    'The icon on the terminal status bar toggle that keeps a terminal’s startup command up to date with the command running when it ends, so it runs again next time. Draw it plain: throng greys it out and draws a line through it while the toggle is off.',
+  rememberDirectory:
+    'The icon on the terminal status bar toggle that reopens a terminal in the folder it was last working in, rather than where it first started. Draw it plain: throng greys it out and draws a line through it while the toggle is off.',
+  terminalNotifications:
+    'The icon on the terminal status bar toggle that lets that one terminal raise attention marks, pop-ups and desktop notifications, or silences it. Draw it plain: throng greys it out and draws a line through it while the toggle is off.',
 };
 
 /** Is `value` one of the icon keys? */

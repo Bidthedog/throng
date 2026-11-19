@@ -134,6 +134,21 @@ export function TerminalInputs({
         />
         <span>Reopen in the last directory</span>
       </label>
+      {/* 076 FR-020 — the third per-panel setting; the status-bar toggle and the content menu flip the same value. */}
+      <label
+        className="panel-type-form__check"
+        title="Let this terminal raise attention marks, pop-ups and desktop notifications. Untick it to silence them; the terminal's own exit is still shown in the panel."
+      >
+        <input
+          type="checkbox"
+          data-testid="terminal-notifications"
+          checked={values.notifications === 'true'}
+          onChange={(e) =>
+            onChange({ ...values, notifications: e.target.checked ? 'true' : 'false' })
+          }
+        />
+        <span>Terminal notifications</span>
+      </label>
       {/* 062 FR-008: elevation is a Windows concept; on Linux, sudo inside the terminal is the route. */}
       {hostTraits().os === 'windows' && (
         <label
