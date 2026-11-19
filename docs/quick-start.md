@@ -97,6 +97,12 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
 - **Remember the last running command** on a terminal panel to run it again when the terminal next
   starts. For Claude Code it remembers the command that resumes the exact session that was running,
   keeping your other options, so the conversation picks up where it left off.
+- **Change a running terminal's settings from its status bar.** The three toggles at its bottom
+  right switch **Remember the last running command**, **Reopen in the last directory** and **Terminal
+  notifications** for that panel alone, without stopping it. A toggle that is on is drawn bright; one
+  that is off is greyed out with a line through it. Each is saved to the panel and
+  is also in the terminal's right-click menu, so hiding the status bar loses none of them
+  ([commands](key-bindings.md#terminal)).
 - **Paths and links are clickable.** A compiler's `src/foo.ts:42:7`, Claude Code's
   `src/foo.ts:42-50`, a URL, a hyperlink a program prints — **Ctrl+click** follows it (a project file opens in throng at that line; a web address in
   your browser), and **right-click** offers every other place it could open. Nothing is ever run by
@@ -109,7 +115,8 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
   Click a notification to go straight to its panel. Click into the panel and, a moment later, the mark
   goes, or press **Ctrl+Shift+Alt+G** to jump to the next marked panel in any project. To remind
   yourself to come back to any panel, right-click it and choose **Flag**: it is marked the same way,
-  with no notification, until you have left it and come back. To
+  with no notification, until you have left it and come back. To silence one noisy terminal without
+  the others, turn off its **Terminal notifications** toggle: its marks go, and it raises none. To
   have a program such as Claude Code ring the bell or send a notification when it needs you, see
   [its own documentation](https://code.claude.com/docs). Claude Code sends its "waiting for your input"
   notification only after a minute idle; for one as soon as it finishes, lower its
