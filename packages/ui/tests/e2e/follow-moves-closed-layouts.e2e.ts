@@ -337,6 +337,32 @@ test('a preview in an inactive project whose file is cut into another project sa
 const norm = (p: string): string => p.replace(/\\/g, '/').toLowerCase();
 
 /** Wait until `project`'s persisted layout names `path` (by identity, any separator). */
+/** Poll the stored layout until its active tab is the one at `index`. */
+async function expectLayoutActiveTabIndex(dataDir: string, project: string, index: number): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json FROM workspace_layout w JOIN projects p ON p.id = w.project_id WHERE p.name = ?`,
+            )
+            .get(project) as { json?: string } | undefined;
+          const layout = JSON.parse(row?.json ?? '{}') as { tabs?: { id: string }[]; activeTabId?: string };
+          return layout.tabs?.findIndex((t) => t.id === layout.activeTabId) ?? -1;
+        } catch {
+          return -1;
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 15_000, message: `the layout for "${project}" never made tab ${index} active` },
+    )
+    .toBe(index);
+}
+
 async function expectLayoutHasPath(dataDir: string, project: string, path: string): Promise<void> {
   await expect
     .poll(
@@ -383,6 +409,9 @@ test('a tab not shown since launch follows a rename across a restart (FR-007, FR
       await win.locator('.tab-chip').first().click();
       await expect(win.getByTestId(`editor-${pid}`)).toHaveCount(0);
       await expectLayoutHasPath(dataDir, 'Unshown', join(root, 'a.md'));
+      // The relaunch opens whichever tab the stored layout names, and the switch to T1 is saved after the click: end the
+      // session only once it is, or session 2 can open on T2 with the editor showing (hosted macOS read 1 editor).
+      await expectLayoutActiveTabIndex(dataDir, 'Unshown', 0);
     }, session);
 
     // Session 2: launched on T1; without visiting T2, rename a.md → b.md.
