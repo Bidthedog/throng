@@ -173,6 +173,11 @@ the feedback, the code and precedent rather than stated by the maintainer.
 - Q31: What does the pointer show while dragging across rows or columns? → A: The select arrow the drag began
   with, steadily: crossing another header or a column's resize edge must not change it. *(derived)* A drag
   across cells keeps the ordinary arrow the same way. (FR-008e)
+- Q32: What does the middle mouse button do in a grid? → A: It never pastes. Pressing it puts the grid in move
+  mode: dragging moves the table under the pointer, as a Mermaid diagram pans (054 FR-046e). *(derived)* The move
+  cursor shows for the drag's life, pinned over the whole grid; the selection does not change; Chromium's
+  autoscroll does not start; Linux's middle-click paste of the primary selection is suppressed; Ctrl+middle-click
+  stays the zoom reset. Both grids. (FR-008f)
 
 ## Terminology
 
@@ -351,6 +356,9 @@ expected bytes: only the edited field differs.
     **Then** it shows a right arrow, a down arrow and a diagonal arrow; on a column's edge it shows the
     resize pointer (FR-008c). **When** they drag across several column letters, **Then** the down arrow stays
     steady as it crosses each column's edge (FR-008e).
+32. **Given** a CSV with text on the clipboard and in the primary selection, **When** the user presses the middle
+    button over a cell and drags up and left, **Then** nothing is pasted, the selection is unchanged, the pointer
+    is the move cursor, and the table moves with the pointer; releasing ends it (FR-008f).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -503,6 +511,10 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-008e** *(Q31, 2026-11-19)*: While a selection drag is under way, the pointer MUST stay the one it began
   with — the row select arrow for a row drag, the column select arrow for a column drag, the ordinary arrow for a
   cell drag — over every part of the grid, resize edges included, until the button is released. Both grids.
+- **FR-008f** *(Q32, 2026-11-19)*: A middle-button press in a grid MUST NOT paste, select, or start the
+  platform's autoscroll. While the middle button is held, dragging MUST scroll the grid so the table follows the
+  pointer, both ways, with the **move** cursor shown over the whole grid until release. Ctrl+middle-click remains
+  the zoom reset (Cmd on macOS). Both grids.
 - **FR-008d** *(Q30, 2026-11-19)*: A grid's selection MUST belong to the file it shows. When a panel shows
   another file (Last Preview Panel reuse, Back, Forward), the file it leaves keeps its selection in that
   history entry, and the file it shows gets back its own last selection, or A1 when it has none. Selections
