@@ -49,6 +49,7 @@ import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
 import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
+import { useFilePlaces } from '../../../grid/use-file-places.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
 import { CellDialog } from '../../../grid/cell-dialog.js';
 import { copiedBlockFor, hasCopiedBlock, recordCopy, type CopiedBlock } from '../../../grid/copied-block.js';
@@ -114,7 +115,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, registerGoTo, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, registerGoTo, navigationSeq, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -147,6 +148,9 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   useEffect(() => {
     if (parsed !== null) onDrawnRef.current(filePath);
   }, [parsed, filePath]);
+
+  // FR-008d — the selection and scroll belong to the file: a move to another CSV shows its own, A1 on a first visit.
+  useFilePlaces(gridRef, filePath, navigationSeq, parsed !== null && parsed.text === text);
 
   // FR-025 — the place is the grid's scroll, kept across updates by the grid itself; this captures it for
   // the chrome's history entries.
@@ -480,7 +484,18 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           { label: 'Paste', icon: 'paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
           { label: 'Clear Cells', section: 'content', group: 'clipboard', onClick: () => clearRange(range) },
           ...(cellDialogAvailable
-            ? [{ label: 'Edit in Dialog…', icon: 'cellDialog' as const, section: 'content' as const, onClick: () => openCellDialog(target.row, target.col) }]
+            ? [
+                {
+                  label: 'Edit in Dialog…',
+                  icon: 'cellDialog' as const,
+                  section: 'content' as const,
+                  // FR-036d — the dialog edits one cell: a block, whole rows or whole columns disable it, and say why.
+                  ...(sel.rows === true || range.top !== range.bottom || range.left !== range.right
+                    ? { disabled: true, title: 'Select one cell to edit it in a dialog' }
+                    : {}),
+                  onClick: () => openCellDialog(target.row, target.col),
+                },
+              ]
             : []),
           { label: 'Select All', icon: 'selectAll', section: 'content', group: 'clipboard', onClick: () => grid.selectAll() },
           { label: 'Save', icon: 'save', section: 'content', group: 'file', onClick: () => void save(), shortcut: chord('editor.save') },

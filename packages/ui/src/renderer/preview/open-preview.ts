@@ -25,6 +25,7 @@
  * how to open for its window and everyone asks through `requestPreviewOpen` — the arrangement
  * `find-in-files/open-find-in-files.ts` documents for the identical problem.
  */
+import { promptUnsavedOpen, type UnsavedOpenChoice } from '../editor/unsaved-open-store.js';
 import {
   PREVIEW_KIND,
   SHIPPED_PREVIEW_PROVIDERS,
@@ -121,9 +122,13 @@ export type OpenPreviewOutcome =
   /** 047 US2 (R8) — main navigated an existing standalone run to this file instead of placing a new one. */
   | { kind: 'navigated'; panelId: string }
   | { kind: 'placedElsewhere' }
+  /** 073 FR-033b — the panel held unsaved grid edits and the reader cancelled the prompt: nothing was opened. */
+  | { kind: 'cancelled' }
   | { kind: 'refused'; reason: Extract<PreviewOpenResponse, { kind: 'refused' }>['reason'] }
   /** No preview bridge (a test, the preferences window), or main answered with something unplaceable. */
   | { kind: 'unavailable' };
+
+const basenameOf = (path: string): string => path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
 
 const panelsOf = (layout: WorkspaceLayout): Panel[] =>
   layout.tabs.flatMap((t) => collectPanels(t.root) as Panel[]);
@@ -274,6 +279,11 @@ export interface OpenPreviewArgs {
    * and a placed preview records that type. Omitted: the shipped registry.
    */
   registry?: PreviewProviderRegistry;
+  /**
+   * 073 FR-033b — the unsaved-on-open prompt, asked when main answers `unsavedGrid`. Default: the editor's own
+   * (`promptUnsavedOpen`), so one dialog serves both.
+   */
+  prompt?: (fileName: string, panelName: string, opts?: { newLabel?: string }) => Promise<UnsavedOpenChoice>;
 }
 
 /**
@@ -316,6 +326,7 @@ export async function openPreview({
   intent,
   defaultOpenTarget = 'lastActive',
   registry = SHIPPED_PREVIEW_PROVIDERS,
+  prompt = promptUnsavedOpen,
 }: OpenPreviewArgs): Promise<OpenPreviewOutcome> {
   if (bridge === undefined) return { kind: 'unavailable' };
   const current = (): PreviewPlacementWorkspace => (typeof wsOrGetter === 'function' ? wsOrGetter() : wsOrGetter);
@@ -355,7 +366,22 @@ export async function openPreview({
     // 047 FR-081 — main echoes it on the `focus`/`place` message this open may send.
     ...(intent.keepFocus === true ? { keepFocus: true as const } : {}),
   };
-  const answer = await bridge.open(request);
+  let answer = await bridge.open(request);
+  /*
+   * 073 FR-033b — the panel Last Active would reuse holds unsaved grid edits that only it shows. Main moved nothing and
+   * answers `unsavedGrid`; the reader is asked with the editor's own unsaved-on-open prompt (the dialog the editor
+   * raises when a file opens into a dirty editor), and main is asked again with the answer. Main, not this window, is
+   * asked because the dirty grid document is main's: it saves or releases it as part of the same move.
+   * Asked once: a second `unsavedGrid` (the edits changed in between) is unavailable rather than a second prompt.
+   */
+  if (answer.kind === 'unsavedGrid') {
+    const reused = answer.panelId;
+    const name = (current().layout === null ? undefined : panelsOf(current().layout as WorkspaceLayout).find((p) => p.id === reused)?.title) ?? 'This preview';
+    const choice = await prompt(basenameOf(intent.absPath), name, { newLabel: 'Open in new preview' });
+    // Dismissal is Cancel, never a discard: the safe answer loses no work.
+    if (choice === 'cancel') return { kind: 'cancelled' };
+    answer = await bridge.open({ ...request, unsavedChoice: choice });
+  }
   // From here on, the workspace as it is NOW — main's answer may have taken several renders to arrive.
   const ws = current();
   // 047 FR-083 — only a panel this window shows can flash; one in another window is raised by main.

@@ -562,6 +562,51 @@ describe('CsvBody cell dialog (FR-036a, FR-036b, FR-060a)', () => {
     );
   });
 
+  describe('Edit in Dialog… needs exactly one cell (FR-036d)', () => {
+    const item = (): HTMLElement => screen.getByTestId('menu-item-Edit in Dialog…');
+    const menuAt = (r: number, c: number): void => {
+      fireEvent.contextMenu(cellAt(r, c), { clientX: 5, clientY: 5 });
+    };
+
+    it('is enabled for one cell, and says why it is disabled once the selection is wider', () => {
+      open();
+      select(1, 0);
+      menuAt(1, 0);
+      expect(item()).toHaveAttribute('aria-disabled', 'false');
+    });
+
+    it('is disabled for a block of cells', () => {
+      open();
+      select(0, 0);
+      fireEvent.keyDown(grid(), { key: 'ArrowRight', shiftKey: true });
+      menuAt(0, 0);
+      expect(item()).toHaveAttribute('aria-disabled', 'true');
+      expect(item().getAttribute('title')).toMatch(/one cell/i);
+    });
+
+    it('is disabled for whole rows and for whole columns', () => {
+      open();
+      fireEvent.mouseDown(document.querySelector('[role="rowheader"][data-row="1"]')!, { button: 0 });
+      fireEvent.mouseUp(window);
+      menuAt(1, 0);
+      expect(item()).toHaveAttribute('aria-disabled', 'true');
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      fireEvent.mouseDown(document.querySelector('[role="columnheader"][data-col="1"]')!, { button: 0 });
+      fireEvent.mouseUp(window);
+      menuAt(0, 1);
+      expect(item()).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('a disabled item does nothing when clicked', () => {
+      open();
+      select(0, 0);
+      fireEvent.keyDown(grid(), { key: 'ArrowRight', shiftKey: true });
+      menuAt(0, 0);
+      fireEvent.click(item());
+      expect(dialog()).toBeNull();
+    });
+  });
+
   describe('availability — the panel\'s own choice, else the setting', () => {
     it('with the setting off and no choice: no routing and no menu item', () => {
       open({ providerSettings: settings({ editLongCellsInDialog: false }) });

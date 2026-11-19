@@ -2217,6 +2217,8 @@ if (isPrimaryInstance)
     runEnded: (panelId) => csvGridRef.current?.release(panelId),
     // 073 T035 — the run moved off the file its own clean grid document held: release that document (FR-060).
     gridDocumentLeft: (panelId) => csvGridRef.current?.release(panelId),
+    // 073 FR-033b — the unsaved-on-open prompt's "Save & open" saves the panel's grid document first.
+    saveGridDocument: async (panelId) => (await csvGridRef.current?.save(panelId))?.ok === true,
   });
   previewService = previews;
   const csvGrid = new CsvGridService(editorCoordinator, previews);

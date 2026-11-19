@@ -16,6 +16,7 @@ import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange } from '../../../grid/grid-selection.js';
 import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
+import { useFilePlaces } from '../../../grid/use-file-places.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
 import { useAppSettings } from '../../../config/config-store.js';
@@ -58,13 +59,15 @@ function parseOffThread(bytes: ArrayBuffer, id: number): Promise<WorkbookRead> {
 }
 
 export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, providerSettings, registerGoTo, onDrawn, onBodyFailure, onViewStateCapture, zoom = 1 } = props;
+  const { panelId, content, filePath, providerSettings, registerGoTo, navigationSeq, onDrawn, onBodyFailure, onViewStateCapture, zoom = 1 } = props;
   const source = content.kind === 'resource' ? content.url : '';
   const firstRowHeader = providerSettings.firstRowHeader === true;
   const settings = useAppSettings();
   const { openMenu } = useContextMenu();
   const gridRef = useRef<DataGridHandle | null>(null);
   const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' });
+  // The source revision `loaded` was read from, so a navigation knows when the arriving workbook is the one on screen.
+  const [loadedFor, setLoadedFor] = useState('');
   const [sheetName, setSheetName] = useState<string | null>(null);
   const [widths, setWidths] = useState<Record<string, Record<number, number>>>({});
   const [widthPrompt, setWidthPrompt] = useState<{ col: number; value: string } | null>(null);
@@ -97,12 +100,14 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
         if (!answer.ok) {
           logExpected('spreadsheet-body: read the workbook', `the source route answered ${answer.status}`, new Error(String(answer.status)));
           setLoaded({ state: 'unreadable', status: answer.status });
+          setLoadedFor(source);
           return;
         }
         const result = await parseOffThread(answer.bytes, id);
         if (!live || seq.current !== id) return;
         if (!result.ok) logExpected('spreadsheet-body: parse the workbook', `the workbook was refused (${result.reason}): ${result.detail}`, new Error(result.reason));
         setLoaded({ state: 'read', read: result });
+        setLoadedFor(source);
       })
       .catch((error: unknown) => {
         logCaught('spreadsheet-body: read the workbook', error);
@@ -117,6 +122,9 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
   // FR-051, FR-058 — keep the chosen sheet while one of that name exists; else the first visible one.
   const sheet =
     sheets.find((s) => s.name === sheetName) ?? sheets.find((s) => !s.hidden) ?? sheets[0] ?? null;
+
+  // FR-008d — the selection and scroll belong to the file: a move to another workbook shows its own, A1 on a first visit.
+  useFilePlaces(gridRef, filePath, navigationSeq, loaded.state !== 'loading' && loadedFor === source);
 
   useEffect(() => {
     if (loaded.state !== 'loading') onDrawnRef.current(filePath);

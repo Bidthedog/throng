@@ -234,7 +234,7 @@ the CSV under a new name, as in the text editor. A cell longer than the
 [Long cell threshold](preferences.md#csv) opens in a dialog on double-click, F2 or Enter — a JSON value
 pretty-printed — and **Edit in Dialog…** on the cell menu opens any cell there; Ctrl+Enter saves it as one
 line and Esc cancels. The cell-dialog toggle at the bottom right of the status bar turns this on or off for
-one panel.
+one panel. **Edit in Dialog…** is greyed while more than one cell is selected. Opening another CSV in a preview that holds unsaved edits asks first — Save & open, Discard & open, Open in new preview or Cancel. Each file keeps its own selection while the preview moves between files, and the pointer over a row number, column letter or the corner shows a select arrow.
 
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|

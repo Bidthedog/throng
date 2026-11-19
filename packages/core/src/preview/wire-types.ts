@@ -86,6 +86,12 @@ export interface PreviewOpenRequest {
    * the window acts on those as well as on this answer. Absent means the preview takes the keyboard.
    */
   keepFocus?: true;
+  /**
+   * 073 FR-033b — the reader's answer to the unsaved-on-open prompt, sent on the SECOND request after main answered
+   * `unsavedGrid`: `save` saves the panel's grid document and reuses the panel, `discard` drops it and reuses the panel,
+   * `new` keeps it where it is and places a new panel. (Cancel sends nothing.) Absent on the first request.
+   */
+  unsavedChoice?: 'save' | 'discard' | 'new';
 }
 
 export type PreviewOpenResponse =
@@ -103,6 +109,12 @@ export type PreviewOpenResponse =
    * renderer focuses that panel (it is already in the visible tab, so no tab-to-front is needed).
    */
   | { kind: 'navigated'; panelId: string }
+  /**
+   * 073 FR-033b — the panel `reusePanelId` names holds unsaved grid edits that only it shows, so reusing it would hide
+   * them. Nothing was moved: the renderer asks the reader (the unsaved-on-open prompt) and requests again with
+   * `unsavedChoice`.
+   */
+  | { kind: 'unsavedGrid'; panelId: string }
   | { kind: 'refused'; reason: 'no-provider' | 'disabled' | 'outside-project' | 'no-file' };
 
 export interface PreviewAttachRequest {

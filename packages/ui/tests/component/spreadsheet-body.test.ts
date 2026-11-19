@@ -102,6 +102,34 @@ describe('SpreadsheetBody', () => {
     expect(readSource).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the selection per workbook: a move to another file starts at A1, and coming back finds it (FR-008d)', async () => {
+    const rowsOf = (tag: string): string[][] => Array.from({ length: 20 }, (_, i) => [`${tag}${i}`, 'x', 'y']);
+    const active = (): string | null => {
+      const el = document.querySelector('[data-grid-cell].data-grid__cell--active');
+      return el === null ? null : `${el.getAttribute('data-row')},${el.getAttribute('data-col')}`;
+    };
+    const at = (n: number, seq: number, file: string) =>
+      createElement(ContextMenuProvider, {
+        children: createElement(SpreadsheetBody, props(`throng-preview://source/s1?rev=${n}`, { filePath: file, navigationSeq: seq })),
+      });
+    bytes = book({ Data: rowsOf('a') });
+    const view = render(at(1, 1, 'D:/proj/a.xlsx'));
+    await waitFor(() => expect(cell(0, 0)).toBe('a0'));
+    fireEvent.mouseDown(document.querySelector('[data-grid-cell][data-row="4"][data-col="2"]')!, { button: 0 });
+    fireEvent.mouseUp(window);
+    expect(active()).toBe('4,2');
+
+    bytes = book({ Data: rowsOf('b') });
+    view.rerender(at(2, 2, 'D:/proj/b.xlsx'));
+    await waitFor(() => expect(cell(0, 0)).toBe('b0'));
+    await waitFor(() => expect(active()).toBe('0,0'));
+
+    bytes = book({ Data: rowsOf('a') });
+    view.rerender(at(3, 3, 'D:/proj/a.xlsx'));
+    await waitFor(() => expect(cell(0, 0)).toBe('a0'));
+    await waitFor(() => expect(active()).toBe('4,2'));
+  });
+
   it('says in one inline notice when the file is not a workbook it can read (FR-056)', async () => {
     bytes = new TextEncoder().encode('PK\u0003\u0004 not a zip').buffer;
     mount('throng-preview://source/s1?rev=1');

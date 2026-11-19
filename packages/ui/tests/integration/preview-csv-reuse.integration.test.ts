@@ -46,12 +46,13 @@ async function file(name: string, text: string): Promise<string> {
   return path;
 }
 
-const open = (absPath: string, reusePanelId: string | null) =>
+const open = (absPath: string, reusePanelId: string | null, unsavedChoice?: 'save' | 'discard' | 'new') =>
   previews.open(REQUESTER, {
     absPath,
     projectId: 'P',
     hasParentLocally: false,
     target: { mode: 'lastActive', reusePanelId },
+    ...(unsavedChoice !== undefined ? { unsavedChoice } : {}),
   });
 
 async function attach(panelId: string, filePath: string): Promise<void> {
@@ -85,6 +86,7 @@ beforeEach(async () => {
     history,
     runEnded: (panelId: string) => gridRef.current?.release(panelId),
     gridDocumentLeft: (panelId: string) => gridRef.current?.release(panelId),
+    saveGridDocument: async (panelId: string) => (await gridRef.current?.save(panelId))?.ok === true,
   } as ConstructorParameters<typeof PreviewService>[0]);
   relay.bind(previews);
   grid = new CsvGridService(coord, previews);
@@ -124,15 +126,53 @@ describe('Last Preview Panel reuse for a CSV (073 T035, FR-060)', () => {
     expect(previews.run('v1')?.filePath).toBe(a);
   });
 
-  it('never moves unsaved grid edits out of sight: the open places a new panel and the edits stay (FR-033)', async () => {
-    const a = await file('a.csv', 'x,y\n1,2\n');
-    const b = await file('b.csv', 'p,q\n3,4\n');
-    await attach('v1', a);
-    expect(await grid.edit({ panelId: 'v1', filePath: a, operation: setB2('two') })).toEqual({ ok: true, dirty: true });
+  describe('opening another CSV over unsaved grid edits asks first (FR-033b)', () => {
+    const dirtyA = async () => {
+      const a = await file('a.csv', 'x,y\n1,2\n');
+      const b = await file('b.csv', 'p,q\n3,4\n');
+      await attach('v1', a);
+      expect(await grid.edit({ panelId: 'v1', filePath: a, operation: setB2('two') })).toEqual({ ok: true, dirty: true });
+      return { a, b };
+    };
 
-    expect(await open(b, 'v1')).toMatchObject({ kind: 'placeLocally', besidePanelId: null });
-    expect(previews.run('v1')?.filePath).toBe(a);
-    expect(coord.getContent(gridDocumentIdFor('v1'))).toMatchObject({ text: 'x,y\n1,two\n', dirty: true });
+    it('answers with the decision to take, and moves nothing and loses nothing until it is taken', async () => {
+      const { a, b } = await dirtyA();
+      expect(await open(b, 'v1')).toEqual({ kind: 'unsavedGrid', panelId: 'v1' });
+      expect(previews.run('v1')?.filePath).toBe(a);
+      expect(coord.getContent(gridDocumentIdFor('v1'))).toMatchObject({ text: 'x,y\n1,two\n', dirty: true });
+      expect(await readFile(a, 'utf8')).toBe('x,y\n1,2\n');
+    });
+
+    it('Open in new preview: the edits stay in their panel and the open places a new one', async () => {
+      const { a, b } = await dirtyA();
+      expect(await open(b, 'v1', 'new')).toMatchObject({ kind: 'placeLocally', besidePanelId: null });
+      expect(previews.run('v1')?.filePath).toBe(a);
+      expect(coord.getContent(gridDocumentIdFor('v1'))).toMatchObject({ text: 'x,y\n1,two\n', dirty: true });
+    });
+
+    it('Save & open: saves the edits to a.csv, then moves the same panel to b.csv', async () => {
+      const { a, b } = await dirtyA();
+      expect(await open(b, 'v1', 'save')).toEqual({ kind: 'navigated', panelId: 'v1' });
+      expect(await readFile(a, 'utf8')).toBe('x,y\n1,two\n');
+      expect(previews.run('v1')?.filePath).toBe(b);
+      expect(coord.documentFor(a)).toBeNull();
+    });
+
+    it('Discard & open: drops the edits, leaves a.csv as it was, and moves the same panel to b.csv', async () => {
+      const { a, b } = await dirtyA();
+      expect(await open(b, 'v1', 'discard')).toEqual({ kind: 'navigated', panelId: 'v1' });
+      expect(await readFile(a, 'utf8')).toBe('x,y\n1,2\n');
+      expect(previews.run('v1')?.filePath).toBe(b);
+      expect(coord.documentFor(a)).toBeNull();
+    });
+
+    it('a clean panel is still reused without asking', async () => {
+      const a = await file('a.csv', 'x,y\n1,2\n');
+      const b = await file('b.csv', 'p,q\n3,4\n');
+      await attach('v1', a);
+      expect(await open(b, 'v1')).toEqual({ kind: 'navigated', panelId: 'v1' });
+    });
+
   });
 
   it('a link or drop onto unsaved grid edits is handed back for an ordinary open (FR-033)', async () => {

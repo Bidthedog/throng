@@ -198,6 +198,8 @@ export interface PreviewServiceDeps {
    * document, so reopening the file finds no stale "document" and reuses the panel (FR-060).
    */
   gridDocumentLeft?: (panelId: string) => void;
+  /** 073 FR-033b — save the run's own grid document (the prompt's "Save & open"); `false` when the save did not complete. */
+  saveGridDocument?: (panelId: string) => Promise<boolean>;
 }
 
 type RunSource = { kind: 'document'; documentPanelId: string } | { kind: 'disk'; watch: Disposable };
@@ -551,16 +553,27 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // parented placement is exactly what it was before this spec.
     if (req.target?.mode === 'lastActive' && req.target.reusePanelId) {
       const reuse = this.runs.get(req.target.reusePanelId);
-      // 073 T035 (FR-033) — a CSV Preview Editor holding unsaved grid edits is not reused: moving it would
-      // hide them. The open places a new panel instead, as an editor with unsaved changes stays open.
-      if (reuse && reuse.viewers.has(fromWebContentsId) && !this.holdsUnsavedGridDocument(reuse)) {
+      // 073 T035 (FR-033, FR-033b) — a CSV Preview Editor holding unsaved grid edits is not reused until the reader has
+      // said what becomes of them: moving it would hide them. Main answers `unsavedGrid` and the renderer asks, as
+      // the editor's unsaved-on-open prompt does, then asks again with the choice. `new` keeps them where they are
+      // and places a new panel (falls through); `save` and `discard` free the panel to move.
+      const unsaved = reuse !== undefined && reuse.viewers.has(fromWebContentsId) && this.holdsUnsavedGridDocument(reuse);
+      if (reuse && unsaved && req.unsavedChoice === undefined) return { kind: 'unsavedGrid', panelId: reuse.panelId };
+      if (reuse && unsaved && req.unsavedChoice === 'save') {
+        // A save that did not complete leaves the panel, its edits and the file as they were: the reader is back at it.
+        if (!(await (this.deps.saveGridDocument?.(reuse.panelId) ?? Promise.resolve(false)))) {
+          return { kind: 'focused', panelId: reuse.panelId };
+        }
+      }
+      if (reuse && reuse.viewers.has(fromWebContentsId) && (!unsaved || req.unsavedChoice === 'save' || req.unsavedChoice === 'discard')) {
         // The SAME move a followed link makes (moveRun, history append, FR-103; unbind FR-090a/FR-016)
-        // — `navigate`'s generic branch already treats `open` exactly like `link`.
-        const moved = await this.navigate(fromWebContentsId, {
-          panelId: reuse.panelId,
-          target: { absPath },
-          intent: { kind: 'open' },
-        });
+        // — `navigate`'s generic branch already treats `open` exactly like `link`. A `discard` is the one move over
+        // unsaved edits: leaving the file releases the grid document with them (`gridDocumentLeft`).
+        const moved = await this.navigate(
+          fromWebContentsId,
+          { panelId: reuse.panelId, target: { absPath }, intent: { kind: 'open' } },
+          unsaved && req.unsavedChoice === 'discard',
+        );
         if (moved.kind === 'shown') return { kind: 'navigated', panelId: reuse.panelId };
         // Every precondition for a move was already checked above (provider, containment, a real
         // file) — a refusal here is not expected, but this is not the place to surface one the
@@ -817,7 +830,12 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
    * The HISTORY intent is {@link navigateHistory}; the HEADING intent is {@link navigateHeading}, decided
    * before the "already shown" short-circuit below, which would otherwise swallow it.
    */
-  async navigate(_fromWebContentsId: number, req: PreviewNavigateRequest): Promise<PreviewNavigateResponse> {
+  async navigate(
+    _fromWebContentsId: number,
+    req: PreviewNavigateRequest,
+    /** 073 FR-033b — the reader chose to discard the run's unsaved grid edits: the move goes ahead over them. */
+    discardUnsaved = false,
+  ): Promise<PreviewNavigateResponse> {
     const target = req.target.absPath;
     if (req.intent.kind === 'heading') return this.navigateHeading(req);
     if (req.intent.kind === 'history') return this.navigateHistory(req, req.intent.index);
@@ -856,7 +874,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     if (provider.id !== run.providerId) return { kind: 'reroute' };
     // 073 T035 (FR-033) — unsaved grid edits are never moved out of sight: an ordinary open places the
     // target in a panel of its own (`open` does not reuse this run while they are unsaved).
-    if (this.holdsUnsavedGridDocument(run)) return { kind: 'reroute' };
+    if (!discardUnsaved && this.holdsUnsavedGridDocument(run)) return { kind: 'reroute' };
 
     // 5. In place — but READ FIRST, and change nothing until the read has answered (fix round 1).
     //

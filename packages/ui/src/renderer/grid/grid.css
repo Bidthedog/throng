@@ -47,7 +47,8 @@
 .data-grid__corner {
   position: sticky;
   left: 0;
-  cursor: pointer;
+  /* FR-008c — a diagonal select arrow; no CSS keyword draws one, so it is an image (CSP: a file, never data:). */
+  cursor: url('./cursors/corner-select.svg?no-inline') 18 18, pointer;
   z-index: 4;
   box-sizing: border-box;
   background: var(--throng-colour-editorGutterBg);
@@ -63,6 +64,8 @@
 .data-grid__colhead {
   position: absolute;
   top: 0;
+  /* FR-008c — a down-pointing select arrow; the resize edge inside keeps col-resize. */
+  cursor: url('./cursors/column-select.svg?no-inline') 12 19, pointer;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -123,6 +126,8 @@
   position: absolute;
   left: 0;
   right: 0;
+  /* FR-008c — a right-pointing select arrow. */
+  cursor: url('./cursors/row-select.svg?no-inline') 19 12, pointer;
   box-sizing: border-box;
   display: flex;
   align-items: center;

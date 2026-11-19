@@ -98,6 +98,8 @@ function asOpen(payload: unknown): PreviewOpenRequest | null {
   if (target !== undefined) req.target = target;
   // 047 FR-081 — only a literal `true` counts; anything else is the ordinary open that takes the keyboard.
   if (p.keepFocus === true) req.keepFocus = true;
+  // 073 FR-033b — the reader's answer to the unsaved-on-open prompt; anything else is no answer (the first request).
+  if (p.unsavedChoice === 'save' || p.unsavedChoice === 'discard' || p.unsavedChoice === 'new') req.unsavedChoice = p.unsavedChoice;
   return req;
 }
 
