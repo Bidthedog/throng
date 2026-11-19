@@ -35,6 +35,12 @@ describe.skipIf(skipUnlessLinux('the stdio holders are read from /proc, which on
       const identities = stdioIdentities(parent.pid!);
       expect(identities).toHaveLength(4);
 
+      // `$!` is known as soon as the shell forks, before that child has run `setsid` and exec'd Node, so wait for the
+      // child to be in its own session (a hosted Linux runner read it still in the parent's).
+      await expect
+        .poll(() => stdioHolders(identities).find((l) => l.startsWith(`${childPid} `)) ?? '', { timeout: 10_000 })
+        .toMatch(new RegExp(`sid=${childPid} `));
+
       // Every holder while both live: the parent has all four, the detached child the two Node did not replace.
       const before = stdioHolders(identities);
       expect(before.find((l) => l.startsWith(`${parent.pid} `))).toMatch(/fd1=.*fd2=.*fd3=.*fd4=/);
