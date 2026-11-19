@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+import { skipUnlessLinux } from '@throng/core/testing';
 import { stdioHolders, stdioIdentities } from '../e2e/process-tree.js';
 
 /**
@@ -15,7 +16,7 @@ import { stdioHolders, stdioIdentities } from '../e2e/process-tree.js';
  * ANTI-VACUITY: make `stdioHolders` return `[]` and the holder assertions fail; drop the detached child's spawn and
  * the "close is held" assertion fails. Linux only — `/proc` is what the helpers read, and they return `[]` elsewhere.
  */
-describe.runIf(process.platform === 'linux')('stdioHolders — who keeps a dead app from closing', () => {
+describe.skipIf(skipUnlessLinux('the stdio holders are read from /proc, which only Linux has'))('stdioHolders — who keeps a dead app from closing', () => {
   it('names a detached child holding the parent’s piped fd 3/4, which alone holds the parent’s close', async () => {
     // The parent is a shell rather than Node: a standalone Node marks what it inherited close-on-exec, the Electron
     // main process measurably does not, and a shell — like Electron's main — passes 3 and 4 straight through.
