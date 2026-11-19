@@ -210,12 +210,21 @@ describe('T280 — the status bar is one line high whatever the readout says (FR
     render(createElement(TerminalStatusBar, { panelId: PANEL, flavourLabel: 'Windows PowerShell' }));
   };
 
-  it('the flavour label neither wraps nor shrinks', () => {
+  /*
+   * 076 FR-007 moved this from "never shrinks" to "never wraps, and gives way only after the readout": the bar now
+   * also carries the panel's toggles, which must never be pushed off it, so a very narrow panel needs the label to
+   * clip as a last resort. What T280 guarded — the label breaking onto a second line — is still impossible: it
+   * cannot wrap, it clips with an ellipsis, and it shrinks a thousand times less readily than the readout.
+   */
+  it('the flavour label never wraps, and gives way only after the readout', () => {
     mount();
     const label = screen.getByText('Windows PowerShell');
     const style = window.getComputedStyle(label);
     expect(style.whiteSpace, 'the label wrapped, which is what grew the bar').toBe('nowrap');
-    expect(style.flexShrink, 'a shrinking label breaks onto a second line').toBe('0');
+    expect(style.textOverflow, 'a label that gives way clips rather than breaking').toBe('ellipsis');
+    expect(style.overflow).toBe('hidden');
+    const readout = window.getComputedStyle(screen.getByTestId(`terminal-status-link-readout-${PANEL}`));
+    expect(Number(style.flexShrink), 'the readout gives way first').toBeLessThan(Number(readout.flexShrink));
   });
 
   it('the readout clips itself, on every surface, without the preview stylesheet', () => {

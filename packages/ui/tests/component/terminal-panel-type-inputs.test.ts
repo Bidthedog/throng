@@ -211,6 +211,22 @@ describe('the Terminal type form offers its three configuration controls (025 FR
   });
 
   /*
+   * 076 FR-020 — Terminal notifications is the third per-panel setting on the form, after the two memory
+   * flags, and edits the same value the status-bar toggle flips. Its seed (memory, else the preference) is the
+   * descriptor's, asserted in `panel-type-descriptor.test.ts`; this asserts the control shows and writes it.
+   */
+  it('offers "Terminal notifications", showing the value it is handed and writing it back', async () => {
+    stubBridge();
+    const { user } = await renderForm({ notifications: 'true' });
+
+    const notifications = control('terminal-notifications');
+    expect(notifications).toBeChecked();
+    expect(notifications.closest('label')?.textContent).toBe('Terminal notifications');
+    await user.click(notifications);
+    expect(notifications).not.toBeChecked();
+  });
+
+  /*
    * 039 FR-008 — the elevation gate is NOT a preference.
    *
    * `terminals.defaultRunAsAdmin` seeds the checkbox, and #223 is explicit that a seed of "on"
