@@ -1,6 +1,30 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 7.0.0 → 7.1.0
+Bump rationale: MINOR — two additive rules from the maintainer's spec 076 review (2026-11-19). Development Workflow
+                & Quality Gates › Action controls gains "Setting toggles": on is the full-contrast text colour on the
+                pressed background, off is the muted text colour with a diagonal line struck through a plain glyph,
+                titled "<setting>: enabled|disabled". Principle VI gains "A setting MUST be named for the behaviour it
+                turns on" (076 replaced "Ignore terminal notifications" with "Terminal notifications", on by default).
+                Both expand existing guidance; no guarantee is withdrawn.
+Modified principles: VI (new bullet before its rationale).
+Modified sections: Development Workflow & Quality Gates › Action controls (new "Setting toggles" sub-rule).
+Added sections: none. Removed sections: none.
+Audit (2026-11-19): the terminal status bar's three toggles (076) already comply. Four setting toggles do not and are
+                listed in the rule as known gaps: View Whitespace and Word Wrap on the editor status bar, and
+                Synchronise Scrolling on the editor and preview status bars. One setting is negatively named, "Quick
+                Open hides excluded files", listed in Principle VI. Search modes (Match Case, Whole Word, the Find in
+                Files exclusion switch), the Resource Monitor's view filters and order choice, and disclosures are
+                outside the toggle rule by its own terms.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no control styling; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks registered.
+Deferred: the five known gaps, each fixed before its control's or setting's next change.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.9.0 → 7.0.0
 Bump rationale: MAJOR — the quality gates no longer run every Principle V layer on every pull request. Pull requests
                 run lint, type-check, unit, component, contract and a declared critical-path integration subset, on
@@ -2935,6 +2959,14 @@ a third over a status figure tells the user these are three kinds of thing when 
 
 - The selected project's colour MUST be visually dominant so the active context
   is unambiguous at a glance.
+- **A setting MUST be named for the behaviour it turns on**, so that on, ticked or enabled always
+  means the behaviour happens: **Terminal notifications**, never *Ignore terminal notifications*. A
+  name that negates a behaviour (*Ignore*, *Disable*, *Suppress*, *Hide*, *Don't*) makes on mean off,
+  and the user must invert every state they read, in the preference editor, on a checkbox, on a
+  toggle and in its title alike. This holds for preferences, per-panel settings and the controls and
+  commands that flip them; its stored key follows the name, so a stored `true` means the behaviour
+  happens. Known gap: *Quick Open hides excluded files* (`editor.navigation.quickOpenExcludeHidden`),
+  which predates this rule and is renamed before its next change (v7.1.0).
 
 Rationale: The user has rejected tools that are too cumbersome. Configurable
 tabbed, tiled layouts are a primary workflow requirement, and clear context
@@ -3427,6 +3459,21 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
     be placed in the notice's content (its message or body), where it would land wherever the text
     happens to end and in a different place on every card. A link in the content is not a button and
     follows the link rule (Principle VI).
+  - **Setting toggles.** An icon control whose pressed state *is* an on/off setting — a panel's own
+    value or a preference, such as a terminal's Remember the last running command — MUST read its state
+    at a glance and never invert it. **On**: the glyph in the theme's full-contrast text colour, on the
+    surface's pressed background. **Off**: the glyph in the theme's muted text colour with a diagonal
+    line struck through it, top left to bottom right. The glyph ships plain and the line is the off
+    state's, drawn by the control, so a user's own icon set gets the same treatment and an icon never
+    carries a slash of its own that the off state would double. Its hover title and accessible name
+    are **"<setting>: enabled"** or **"<setting>: disabled"**, followed by the bound chord in
+    parentheses when there is one. The rule does not cover a mode of the current search (Match Case),
+    a view filter, a choice among several, or a disclosure: those keep their pressed state alone.
+    Known gaps, setting toggles that predate this rule and use the accent colour with no line, titled
+    with the action rather than the state: the editor status bar's View Whitespace and Word Wrap
+    (`packages/ui/src/renderer/editor/status-strip.tsx`) and Synchronise Scrolling on the editor and
+    preview status bars (`packages/ui/src/renderer/preview/sync-scroll-button.tsx`). Each is brought
+    into line before that control's next change (v7.1.0).
   A change that adds or alters an action control MUST NOT be considered complete, and a PR MUST NOT be
   merged, while that control uses a text label outside the stated exception, or takes its icon or
   colours from anywhere but the theme.
@@ -3461,7 +3508,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 7.0.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-17
+**Version**: 7.1.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-19
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
