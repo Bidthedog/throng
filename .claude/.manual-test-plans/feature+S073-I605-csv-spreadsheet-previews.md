@@ -11,6 +11,7 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 | MT-05 | Workbook previews | untested | | | |
 | MT-06 | Open-in settings and turning a provider off | needs retest | | | failed: Open a CSV, customise column sizes, open another CSV: it replaces the first. Open the original again: it opens a new panel. CSV panels should reuse like Markdown previews. |
 | MT-07 | Go to Row, Line and Page | untested | | | |
+| MT-08 | Wrapping cells | untested | | | |
 
 ## MT-01: A CSV opens as a grid
 
@@ -74,7 +75,7 @@ Paths: `packages/ui/src/main/editor-coordinator.ts`, `packages/ui/src/main/csv-g
 
 ## MT-04: Clipboard and column widths in the grid
 
-Covers: FR-006, FR-006a, FR-006b, FR-008b, FR-037g, FR-037h, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
+Covers: FR-006, FR-006a, FR-006b, FR-006c, FR-012a, FR-008b, FR-037g, FR-037h, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
 Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/column-widths.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/daemon/src/document-service.ts`, `packages/persistence/src/**`
 
 ### Steps
@@ -84,21 +85,20 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 4. Drag a column's right edge wider. Close and reopen the file, then restart throng. The width is kept.
 5. Right-click a column letter, **Column Width…**, enter `300`. The column is 300 pixels.
 6. Double-click the letter of a column holding values wider than it. It widens to fit its widest value. Double-click it again: it returns to the width it had. Fit it once more, close and reopen the file: the fitted width is kept.
-7. Double-click the row number of a row holding a long value and a value with a line break. The row grows so both show in full, wrapped and on separate lines. Double-click it again: one line high.
-8. In a workbook preview, double-click a column letter and a row number. They fit and expand the same way.
+7. Double-click a row number: nothing changes. Its right-click menu has no Reset Row Height.
+8. In a workbook preview, double-click a column letter: it fits the same way. A row-number double-click does nothing.
 9. Right-click a cell, a dragged selection, a row number and a column letter in turn. Each menu offers Cut, Copy and Paste (a workbook preview: Copy).
 10. Copy a 2×2 block from another CSV. In this grid drag a selection from C3 up to B2 and press Ctrl+V: B2:C3 now hold the copied values and nothing to the right or below C3 changed. Undo, select the same block with the mouse, right-click it and choose Paste: same result.
 11. Copy a single value, select B2:C3, paste. All four cells hold that value.
 12. Select whole rows 2–3 by their numbers, paste a 2-row block: it lands from column A of row 2.
-13. Right-click a resized column's letter, **Reset Column Width**: back to the default width; close and reopen the file, still default. Expand a row, right-click its number, **Reset Row Height**: one line high again. No menu says Reset Size.
+13. Right-click a resized column's letter, **Reset Column Width**: back to the default width; close and reopen the file, still default. No menu says Reset Size or Reset Row Height.
 14. Select rows 2–3 by their numbers and copy. Right-click row 6's number: **Insert Copied Rows Above** and **Insert Copied Rows Below** are there beside **Insert Row Above/Below**. Choose Above: two rows with the copied values appear above row 6; one Ctrl+Z removes both. Copy columns B–C by their letters and use **Insert Copied Columns Right** on column E the same way. Copy text from another app: the Insert Copied items are gone; the blank inserts remain.
-15. Open the menus of a cell, a selection, a row number and a column letter, in a CSV and in a workbook preview. Cut, Copy, Paste, Save, Save As, the Insert items, Select All, Edit in Dialog…, Go to Row… and the Reset items each show an icon; switch theme and the icons follow it. No row-number or column-letter menu offers Select Row or Select Column.
+15. Open the menus of a cell, a selection, a row number and a column letter, in a CSV and in a workbook preview. Cut, Copy, Paste, Save, Save As, the Insert items, Select All, Edit in Dialog…, Go to Row… and Reset Column Width each show an icon; switch theme and the icons follow it. No row-number or column-letter menu offers Select Row or Select Column.
 16. Scroll a long CSV to the middle and click the empty corner cell above the row numbers. Every row and column is selected and the grid does not move; Ctrl+C copies the whole table. Right-click the corner: everything is selected and the selection menu opens. Same in a workbook preview.
 
 ### Negative cases
 - Cut a selection of whole rows: the rows are removed and on the clipboard; Ctrl+Z brings them back.
 - A column holding only short values double-clicked does not shrink below 40 pixels; one holding a very long value stops at 2,000 pixels.
-- A row with a value longer than 20 lines expands to 20 lines; the cell scrolls to show the rest.
 
 ## MT-05: Workbook previews
 
@@ -150,3 +150,22 @@ Paths: `packages/ui/src/renderer/navigate/**`, `packages/core/src/editor/goto-li
 - In the row and line dialogs, typing a letter, a minus sign, 0 as the first digit, or a number past the count leaves the field as it was.
 - Escape, or a click outside the dialog, closes it; focus is back in the grid or the editor and nothing moved.
 - Enter on an empty field does nothing and the dialog stays.
+
+## MT-08: Wrapping cells
+
+Covers: FR-013, FR-060b, FR-004
+Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/workspace/model.ts`
+
+### Steps
+1. Preferences › Editor › Previews › CSV: **Wrap cells** is there and off.
+2. Open a CSV holding a 300-character value and a value with line breaks. Cells are one line, truncated. The status bar shows a Wrap toggle, off.
+3. Turn Wrap on (click it; then Tab to it and press Space). Every row grows to show its cells in full, wrapped within their columns and broken at the line breaks; nothing is cut off however long.
+4. Widen a column: its wrapped cells re-flow and the rows get shorter. Scroll quickly through a 100,000-row CSV with Wrap on: no stutter, no blank areas.
+5. The panel's title-bar menu has a checked **Wrap** item; unchecking it turns wrapping off.
+6. Another open CSV is unaffected. Restart throng: the panel is still wrapped.
+7. Turn **Wrap cells** on in Preferences and open a different CSV: it opens wrapped. A panel you turned Wrap off in stays off.
+
+### Negative cases
+- A workbook preview has no Wrap toggle.
+- Wrap changes nothing in the file: no unsaved marker appears.
+
