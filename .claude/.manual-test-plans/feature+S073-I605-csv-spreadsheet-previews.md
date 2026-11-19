@@ -12,6 +12,7 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 | MT-06 | Open-in settings and turning a provider off | needs retest | | | failed: Open a CSV, customise column sizes, open another CSV: it replaces the first. Open the original again: it opens a new panel. CSV panels should reuse like Markdown previews. |
 | MT-07 | Go to Row, Line and Page | untested | | | |
 | MT-08 | Wrapping cells | untested | | | |
+| MT-09 | Locking the first row and column | untested | | | |
 
 ## MT-01: A CSV opens as a grid
 
@@ -175,3 +176,21 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 - A workbook preview has no Wrap toggle.
 - Wrap changes nothing in the file: no unsaved marker appears.
 
+## MT-09: Locking the first row and column
+
+Covers: FR-039a, FR-060d
+Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/workspace/model.ts`
+
+### Steps
+1. Preferences › Editor › Previews › CSV: **Lock first row** and **Lock first column** are there, both off.
+2. Open a CSV of about 1,000 rows and 40 columns. The status bar shows Lock first row and Lock first column toggles, both off.
+3. Turn on Lock first row (click it; then Tab to it and press Space). Scroll down with the wheel, the scrollbar and Page Down: row 1 stays under the column letters, set apart from the rows scrolling beneath it.
+4. Turn on Lock first column. Scroll right with Shift+wheel, the scrollbar and the arrow keys: column A stays beside the row numbers. Scroll diagonally: A1 stays in the corner.
+5. Click, edit and right-click a locked cell: it behaves like any other cell. Turn Wrap on: locked cells wrap too.
+6. The panel's title-bar menu has checked **Lock First Row** and **Lock First Column** items; unchecking one unlocks it.
+7. Another open CSV is unaffected. Restart throng: the panel keeps both locks.
+8. Turn **Lock first row** on in Preferences and open a different CSV: row 1 is locked there. A panel you turned it off in stays off.
+
+### Negative cases
+- A workbook preview has no lock toggles.
+- Locking changes nothing in the file: no unsaved marker appears.
