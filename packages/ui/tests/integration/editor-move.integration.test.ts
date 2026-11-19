@@ -149,6 +149,7 @@ describe('markMoved re-points the document — it does not reload it (FR-002)', 
     await expect(coord.openInto(from)).resolves.toEqual({ action: 'open' });
     // The watch is per-FOLDER, so a cross-folder move must re-watch or the document stops
     // noticing external edits to the file it now points at (FR-028).
+    await watchStarted(); // the re-watch is a new watch, so macOS misses a change in its first instant
     await writeFile(to, 'edited by another program\n');
     const reset = await until(() =>
       msgs().find((m) => m.panelId === 'p1' && m.reset?.text === 'edited by another program\n'),
@@ -316,6 +317,9 @@ describe('the move bracket (FR-004) opens and closes exactly', () => {
 
     // AC7's property: a file that vanishes behind throng's back is still kept, dirtied and
     // recoverable. A flag left set would have suppressed that for the rest of the session.
+    // The delete comes from someone else, seconds after the open — not in the instant before macOS's
+    // FSEvents stream for the watch `load` just opened is live, where it is never reported at all.
+    await watchStarted();
     await rm(other, { force: true });
     await until(() => (coord.getContent('p1')?.fileMissing ? true : undefined));
     expect(coord.getContent('p1')).toMatchObject({ text: 'body\n', dirty: true, fileMissing: true });
@@ -382,6 +386,7 @@ describe('a file moved by ANOTHER program is not followed (FR-099/AC7)', () => {
     await mkdir(join(root, 'dest'), { recursive: true });
     await writeFile(from, 'MOVE-ME-BODY' + String.fromCharCode(10));
     await coord.load(meta('p1', from));
+    await watchStarted();
     await rename(from, away);
     await until(() => (coord.getContent('p1')?.fileMissing ? true : undefined));
     expect(existsSync(from), 'precondition: the original path is empty').toBe(false);
@@ -401,6 +406,7 @@ describe('a file moved by ANOTHER program is not followed (FR-099/AC7)', () => {
     await mkdir(join(root, 'dest'), { recursive: true });
     await writeFile(from, 'MOVE-ME-BODY' + String.fromCharCode(10));
     await coord.load(meta('p1', from));
+    await watchStarted();
     await rename(from, away);
     await until(() => (coord.getContent('p1')?.fileMissing ? true : undefined));
     /*
