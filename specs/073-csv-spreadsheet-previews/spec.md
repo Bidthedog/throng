@@ -187,6 +187,16 @@ the feedback, the code and precedent rather than stated by the maintainer.
   column A, held under the column letters and beside the row numbers; per panel, saved with the panel, an untouched
   panel following its setting (as FR-013); each toggle shows its state, is reachable by keyboard and has a checked
   panel-menu item; CSV only, as Wrap. This supersedes FR-039's "no frozen pane" for these two. (FR-039a, FR-060d)
+- Q35: Do a CSV Preview Editor and the CSV's text editor link and scroll together? → A: Yes, as a Markdown preview and
+  its editor do: the preview opened from the editor is linked to it, and **Synchronise Scrolling** keeps them in step,
+  its button on both status bars. *(derived)* In step means the grid's top visible row and the editor's top visible
+  line name the same record (a record spanning several lines maps to its first); the shared Synchronise Scrolling
+  setting (054) governs both. Select All stays the grid's own, and Go to Heading stays absent. (FR-033c)
+- Q36: How do the CSV status bar's toggles show off? → A: As the terminal's do (constitution v7.1.0, *Setting
+  toggles*): off is the muted glyph with a diagonal line struck through it; on is the full-contrast glyph on the
+  pressed background; each is titled "<setting>: enabled" or "<setting>: disabled". *(derived)* That covers Edit long
+  cells in a dialog, Wrap cells, Lock first row, Lock first column and Synchronise Scrolling, which the constitution
+  lists as a known gap to bring into line at its next change, on the editor's status bar too. (FR-007a)
 
 ## Terminology
 
@@ -376,6 +386,12 @@ expected bytes: only the edited field differs.
     row numbers, and A1 stays in the corner; another CSV panel is unaffected, and the panel keeps both after a
     restart (FR-039a). **Given** Lock first row on in Preferences, **When** they open a CSV, **Then** row 1 is locked
     (FR-060d).
+35. **Given** a CSV open in a text editor, **When** the user opens its preview from the editor with Synchronise
+    Scrolling on, **Then** the preview is linked to the editor; scrolling the editor to line 500 brings that record's
+    row to the top of the grid, and scrolling the grid brings the editor back in step (FR-033c).
+36. **Given** the CSV status bar, **When** a toggle is off, **Then** its icon is muted with a diagonal line through it
+    and its title reads "Wrap cells: disabled"; turned on, the line goes, the icon is full-contrast on the pressed
+    background and the title reads "Wrap cells: enabled" (FR-007a).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -505,6 +521,12 @@ Markdown and Mermaid pattern, each setting working as labelled.
   Width** stays. *(Supersedes FR-006a and FR-006b for rows.)*
 - **FR-007**: The grid MUST take its colours, fonts and selection highlight from the active theme's
   tokens, and MUST follow the panel's zoom (044 FR-034).
+- **FR-007a** *(Q36, 2026-11-19)*: Every on/off toggle on the CSV Preview Editor's status bar — Edit long cells in a
+  dialog, Wrap cells, Lock first row, Lock first column and Synchronise Scrolling — MUST follow the constitution's
+  *Setting toggles* rule (v7.1.0): off is the muted glyph with a diagonal line drawn through it by the control, on is
+  the full-contrast glyph on the pressed background, and its title and accessible name read "<setting>: enabled" or
+  "<setting>: disabled", with the chord in parentheses where there is one. Synchronise Scrolling follows it on the
+  editor's status bar too.
 - **FR-008**: The grid MUST be navigable from the keyboard: arrows, Page Up/Down, Home/End,
   Ctrl+Home/End, and Shift with any of them to extend a selection.
 - **FR-008a** *(Q14, 2026-11-19)*: Selecting with the pointer (a cell, a drag, a row number, a column letter,
@@ -587,6 +609,12 @@ Markdown and Mermaid pattern, each setting working as labelled.
   CSV moves the panel to it, and reopening the first moves it back, never adding a panel. A CSV Preview
   Editor whose document has unsaved edits only it shows MUST NOT be moved — by an open, a drop or
   Back/Forward: the other CSV opens in a new panel instead. *(Superseded for an open or a drop by FR-033b.)*
+- **FR-033c** *(Q35, 2026-11-19)*: A CSV Preview Editor opened from a CSV's text editor MUST be linked to that editor
+  as a Markdown preview is (044), and **Synchronise Scrolling** (054) MUST apply between them, its button on the
+  CSV Preview Editor's status bar and on the CSV editor's: scrolling either brings the other to the same record —
+  the grid's top visible row and the editor's top visible line, a multi-line record mapped to its first line. The
+  grid's Select All is unaffected and Go to Heading stays absent. *(Supersedes the CSV provider's "not a flowing
+  document" exclusion of Synchronise Scrolling, 054's Mermaid rule, for CSV only.)*
 - **FR-033b** *(Q29, 2026-11-19)*: Opening or dropping another CSV onto a CSV Preview Editor whose document has
   unsaved edits only it shows MUST raise the editor's unsaved-changes prompt (006 US9), naming the grid's file
   and the arriving one, with **Save & open**, **Discard & open**, **Open in new preview** and **Cancel**. Save and
