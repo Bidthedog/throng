@@ -10,7 +10,7 @@ import {
   writeConfigPatch,
 } from '../config/config-store.js';
 import { ContextMenuProvider } from '../context-menu-provider.js';
-import { useNoDropNavigation } from '../composition-root.js';
+import { useNoDropNavigation } from '../common/no-drop-navigation.js';
 import { ConfirmProvider, useConfirm } from '../confirm-dialog.js';
 // `useNotify` is gone from this file with the toast it raised: an invalid JSON document is reported
 // by the editor that holds it, once, and not by every caller that bounced off it (032).

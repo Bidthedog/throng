@@ -32,7 +32,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactElement } from 'react';
 import { ConfigProvider, useActiveTheme } from '../config/config-store.js';
 import { ContextMenuProvider } from '../context-menu-provider.js';
-import { useNoDropNavigation } from '../composition-root.js';
+import { useNoDropNavigation } from '../common/no-drop-navigation.js';
 import { ConfirmProvider } from '../confirm-dialog.js';
 import { NotificationProvider } from '../common/notification.js';
 import { ThemeProvider } from '../theme/theme-provider.js';

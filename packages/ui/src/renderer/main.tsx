@@ -1,11 +1,7 @@
 import './configure-host.js';
-import { StrictMode } from 'react';
+import { StrictMode, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CompositionRoot, SubWorkspaceCompositionRoot } from './composition-root.js';
 import { parseWindowIdentity } from './window-identity.js';
-import { PreferencesApp, isPreferencesTab } from './preferences/preferences-app.js';
-import { AboutApp } from './about/about-app.js';
-import { MonitorApp } from './resources/monitor-app.js';
 import { settleConfigWrites } from './config/write-config.js';
 import { settleLayoutSaves } from './state/layout-saves.js';
 import { installWindowErrorListeners, rootErrorOptions } from './error-hooks.js';
@@ -62,23 +58,46 @@ registerShutdownDrain();
 // the window listeners for what no boundary sees, the root callbacks for what React tore down.
 installWindowErrorListeners();
 
-createRoot(container, rootErrorOptions).render(
-  <StrictMode>
-    {prefsTab !== null ? (
+/**
+ * Each window kind's app, loaded by dynamic import so a window evaluates only its own (055 SC-002).
+ *
+ * This entry serves every window. Imported statically, every app came with every window: the Resource
+ * Monitor, which must be shown with its loading state within a second of the click, first loaded and ran
+ * the whole workspace — xterm, CodeMirror, the panels, ~2.3 MB — that it never draws. That was nine tenths
+ * of its cold open on Linux, and on a hosted macOS runner enough to cross the second. The branch is
+ * decided from the URL before anything loads, so each window still mounts exactly one app.
+ */
+function loadWindowApp(): Promise<ReactElement> {
+  if (prefsTab !== null) {
+    return import('./preferences/preferences-app.js').then(({ PreferencesApp, isPreferencesTab }) => (
       <PreferencesApp
         initialTab={isPreferencesTab(prefsTab) ? prefsTab : 'settings'}
         initialSection={search.get('section') ?? undefined}
       />
-    ) : monitorParam ? (
-      <MonitorApp />
-    ) : aboutParam !== null ? (
-      <AboutApp />
-    ) : identity.kind === 'subworkspace' ? (
-      <SubWorkspaceCompositionRoot id={identity.id} />
-    ) : (
-      <CompositionRoot />
-    )}
-    {/* The title tooltip — one in every window kind. */}
-    <WindowPopups />
-  </StrictMode>,
+    ));
+  }
+  if (monitorParam) return import('./resources/monitor-app.js').then(({ MonitorApp }) => <MonitorApp />);
+  if (aboutParam !== null) return import('./about/about-app.js').then(({ AboutApp }) => <AboutApp />);
+  if (identity.kind === 'subworkspace') {
+    const { id } = identity;
+    return import('./composition-root.js').then(({ SubWorkspaceCompositionRoot }) => <SubWorkspaceCompositionRoot id={id} />);
+  }
+  return import('./composition-root.js').then(({ CompositionRoot }) => <CompositionRoot />);
+}
+
+const root = createRoot(container, rootErrorOptions);
+loadWindowApp().then(
+  (app) =>
+    root.render(
+      <StrictMode>
+        {app}
+        {/* The title tooltip — one in every window kind. */}
+        <WindowPopups />
+      </StrictMode>,
+    ),
+  (error: unknown) => {
+    // A window whose app cannot load has nothing to show; say why in the log rather than paint nothing silently.
+    logCaught('main: load this window’s app', error);
+    throw error;
+  },
 );

@@ -55,6 +55,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **On macOS, quitting with Preferences open now quits.** It saved your edits and then left throng running.
 - **A shell loop that runs one short command after another**, such as `while …; do sleep 1; done`, no longer raises a "Command finished" mark while it is still running: throng now waits for a second check that still finds nothing running.
 - **On macOS, Cmd+Home, Cmd+End, Shift+Cmd+Up and Shift+Cmd+Down scroll the terminal** even while a program such as Claude Code has asked for enhanced key reporting. Cmd+Home and Cmd+End left `HF` on the shell's command line, and Shift+Cmd+Up and Shift+Cmd+Down did nothing. A scroll command you bind to a Cmd chord behaves the same.
+- **The Resource Monitor window opens faster**: each window now loads only its own code, and the bundled themes are worked out when first used rather than as every window starts.
 
 ## 1.0.0-alpha17 — 2026-11-17
 

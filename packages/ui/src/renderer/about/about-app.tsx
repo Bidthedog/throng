@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent, type ReactElement } from 'react';
 import { ConfigProvider, useActiveTheme } from '../config/config-store.js';
-import { useNoDropNavigation } from '../composition-root.js';
+import { useNoDropNavigation } from '../common/no-drop-navigation.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { TitleBar } from '../title-bar/title-bar.js';
 import './about.css';
