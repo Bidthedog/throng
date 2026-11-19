@@ -4,11 +4,11 @@ Spec: `specs/076-terminal-status-bar-toggles/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Remember command and reopen directory from the status bar | untested | | | |
-| MT-02 | Silence one terminal's notifications | untested | | | |
-| MT-03 | Terminal notifications by default | untested | | | |
-| MT-04 | The toggle row's look, keyboard and width | untested | | | |
-| MT-05 | The toggles with the status bar hidden, and as commands | untested | | | |
+| MT-01 | Remember command and reopen directory from the status bar | signed off | efd22b9ea010 | 2026-11-19 | |
+| MT-02 | Silence one terminal's notifications | signed off | efd22b9ea010 | 2026-11-19 | |
+| MT-03 | Terminal notifications by default | signed off | efd22b9ea010 | 2026-11-19 | |
+| MT-04 | The toggle row's look, keyboard and width | signed off | efd22b9ea010 | 2026-11-19 | |
+| MT-05 | The toggles with the status bar hidden, and as commands | signed off | efd22b9ea010 | 2026-11-19 | |
 
 ## MT-01: Remember command and reopen directory from the status bar
 
