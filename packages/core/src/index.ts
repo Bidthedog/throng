@@ -1104,7 +1104,6 @@ export {
 export {
   TERMINAL_PANEL_TOGGLES,
   resolveTerminalToggles,
-  terminalToggleTitle,
   type TerminalPanelToggle,
   type TerminalToggleId,
   type TerminalToggleValues,
@@ -1355,7 +1354,8 @@ export type {
   PreviewProviderDescriptor,
   PreviewProviderRegistry,
 } from './preview/provider.js';
-export { isFlowingDocument } from './preview/provider.js';
+export { isFlowingDocument, supportsScrollSync } from './preview/provider.js';
+export { recordAtLine, recordStartLines } from './csv/record-lines.js';
 export type {
   PreviewCopyFormat,
   DefaultOpenAction,
@@ -1602,3 +1602,6 @@ export {
   longCellThresholdOf,
 } from './csv/cell-text.js';
 export { columnLabel, gridToHtmlTable, gridToTsv, parseTsv } from './csv/grid-clipboard.js';
+
+// 073 FR-007a — the title of every on/off setting toggle (076 FR-002 first drew it for the terminal's).
+export { settingToggleTitle } from './config/setting-toggle.js';

@@ -10,6 +10,7 @@ import {
   previewSettingsDescriptors,
 } from '../../src/config/preview-settings.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../../src/preview/providers/index.js';
+import { isFlowingDocument, supportsScrollSync } from '../../src/preview/provider.js';
 
 describe('the CSV provider (the CSV Preview Editor)', () => {
   it('is an editable text provider for .csv that is not a flowing document', () => {
@@ -138,6 +139,27 @@ describe('the CSV lock settings (FR-060d)', () => {
   it('only the CSV provider offers the per-panel lock toggles', () => {
     expect(SHIPPED_PREVIEW_PROVIDERS.get('csv')?.lockToggles).toBe(true);
     expect(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')?.lockToggles).toBeUndefined();
+  });
+});
+
+describe('scroll sync is its own capability (FR-033c)', () => {
+  it('the CSV provider takes part though it is not a flowing document', () => {
+    const csv = SHIPPED_PREVIEW_PROVIDERS.get('csv');
+    expect(isFlowingDocument(csv)).toBe(false);
+    expect(supportsScrollSync(csv)).toBe(true);
+  });
+
+  it('absent, it follows isFlowingDocument: Markdown does, Mermaid and a binary provider do not', () => {
+    expect(supportsScrollSync(SHIPPED_PREVIEW_PROVIDERS.get('markdown'))).toBe(true);
+    expect(supportsScrollSync(SHIPPED_PREVIEW_PROVIDERS.get('mermaid'))).toBe(false);
+    expect(supportsScrollSync(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet'))).toBe(false);
+    expect(supportsScrollSync(undefined)).toBe(false);
+  });
+
+  it('an explicit false opts out, and an explicit true never reaches a non-text provider', () => {
+    const base = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
+    expect(supportsScrollSync({ ...base, scrollSync: false })).toBe(false);
+    expect(supportsScrollSync({ ...SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')!, scrollSync: true })).toBe(false);
   });
 });
 

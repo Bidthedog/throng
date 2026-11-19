@@ -40,6 +40,7 @@ import type { PreviewProviderKind } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
 import { SyncScrollButton } from './sync-scroll-button.js';
+import { SettingToggleButton } from '../common/setting-toggle-button.js';
 import { BAR_GAP, readoutText, type Readout } from '../editor/status-strip.js';
 import { fitReadouts, labelShortens, type LabelForm, type ReadoutId, type SegmentId, type SegmentWidth } from '../editor/status-strip-fit.js';
 import { useStripMeasure } from '../editor/status-strip-measure.js';
@@ -196,47 +197,43 @@ export function PreviewStatusBar({
         {/* 073 FR-039a — the grid's two lock switches, beside Wrap: pressed while the first row / column is locked for this
             panel. Accelerators over the header menu's checked *Lock First Row* / *Lock First Column* items (Principle VI). */}
         {lockFirstRow !== undefined ? (
-          <IconButton
+          <SettingToggleButton
             token="lockFirstRow"
-            className="editor-status-strip__preview"
+            label={LOCK_ROW_LABEL}
+            on={lockFirstRow.on}
+            onToggle={lockFirstRow.onToggle}
             testId={`preview-lock-row-${panelId}`}
-            title={LOCK_ROW_LABEL}
-            ariaLabel={LOCK_ROW_LABEL}
-            ariaPressed={lockFirstRow.on}
-            onClick={lockFirstRow.onToggle}
+            className="editor-status-strip__preview"
           />
         ) : null}
         {lockFirstColumn !== undefined ? (
-          <IconButton
+          <SettingToggleButton
             token="lockFirstColumn"
-            className="editor-status-strip__preview"
+            label={LOCK_COLUMN_LABEL}
+            on={lockFirstColumn.on}
+            onToggle={lockFirstColumn.onToggle}
             testId={`preview-lock-column-${panelId}`}
-            title={LOCK_COLUMN_LABEL}
-            ariaLabel={LOCK_COLUMN_LABEL}
-            ariaPressed={lockFirstColumn.on}
-            onClick={lockFirstColumn.onToggle}
+            className="editor-status-strip__preview"
           />
         ) : null}
         {wrap !== undefined ? (
-          <IconButton
+          <SettingToggleButton
             token="wrapCells"
-            className="editor-status-strip__preview"
+            label={WRAP_LABEL}
+            on={wrap.on}
+            onToggle={wrap.onToggle}
             testId={`preview-wrap-${panelId}`}
-            title={WRAP_LABEL}
-            ariaLabel={WRAP_LABEL}
-            ariaPressed={wrap.on}
-            onClick={wrap.onToggle}
+            className="editor-status-strip__preview"
           />
         ) : null}
         {cellDialog !== undefined ? (
-          <IconButton
+          <SettingToggleButton
             token="cellDialog"
-            className="editor-status-strip__preview"
+            label={CELL_DIALOG_LABEL}
+            on={cellDialog.on}
+            onToggle={cellDialog.onToggle}
             testId={`preview-cell-dialog-${panelId}`}
-            title={CELL_DIALOG_LABEL}
-            ariaLabel={CELL_DIALOG_LABEL}
-            ariaPressed={cellDialog.on}
-            onClick={cellDialog.onToggle}
+            className="editor-status-strip__preview"
           />
         ) : null}
       </div>

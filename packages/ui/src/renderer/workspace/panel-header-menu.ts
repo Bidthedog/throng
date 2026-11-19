@@ -56,7 +56,7 @@ import {
   type PreviewAffordance,
   type PreviewProviderKind,
   type SplitDirection,
-  isFlowingDocument,
+  supportsScrollSync,
 } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
 import { splitSubmenu } from './split-menu.js';
@@ -186,6 +186,8 @@ export interface PanelHeaderPreviewState {
   parented: boolean;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no Synchronise Scrolling. Absent reads `true`. */
   flowingDocument?: boolean;
+  /** 073 FR-033c — the provider's preview scrolls in step with its editor (Synchronise Scrolling). Absent reads `flowingDocument`. */
+  scrollSync?: boolean;
   /** 073 FR-036b — the provider has a cell dialog; `on` is whether it is on for this panel (its own choice, else the setting). */
   cellDialog?: { on: boolean };
   /** 073 FR-013 — the provider wraps cells; `on` is whether it does for this panel (its own choice, else the setting). */
@@ -565,7 +567,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
 
     // 044 FR-122a/b — Synchronise Scrolling, exactly where Open Preview is drawn, disabled or not.
     // 054 — none for a source whose preview is one picture (a Mermaid file).
-    if (openPreview !== undefined && openPreview.state !== 'absent' && isFlowingDocument(openPreview.provider)) {
+    if (openPreview !== undefined && openPreview.state !== 'absent' && supportsScrollSync(openPreview.provider)) {
       items.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
     }
 
@@ -574,7 +576,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
 
   // 044 FR-122a/b — a text preview's Synchronise Scrolling, after its Zoom; a binary provider has no editor to
   // keep in step with, so none.
-  if (isPreview && args.preview?.providerKind === 'text' && args.preview.flowingDocument !== false) {
+  if (isPreview && args.preview?.providerKind === 'text' && (args.preview.scrollSync ?? args.preview.flowingDocument !== false)) {
     items.push({ ...syncScrollItem(args.syncScroll ?? false, keybindings, actions), ...documentCovered });
   }
 

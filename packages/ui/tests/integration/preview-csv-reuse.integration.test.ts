@@ -188,6 +188,35 @@ describe('Last Preview Panel reuse for a CSV (073 T035, FR-060)', () => {
   });
 });
 
+describe('a CSV preview is linked to its text editor (073 FR-033c, 044 FR-013)', () => {
+  it('opened from a CSV editor it is placed beside it and attaches as its child, so the two can scroll in step', async () => {
+    const a = await file('a.csv', 'x,y\n1,2\n');
+    await coord.load({
+      panelId: 'ed1',
+      windowId: String(REQUESTER),
+      ownerKind: 'project',
+      ownerProjectId: 'P',
+      ownerRoot: root,
+      allProjectRoots: [root],
+      tabId: 't1',
+      absPath: a,
+      encoding: 'utf8',
+      hasBom: false,
+      lineEnding: 'lf',
+    });
+    const res = await previews.open(REQUESTER, { absPath: a, projectId: 'P', hasParentLocally: true });
+    expect(res).toMatchObject({ kind: 'placeLocally', besidePanelId: 'ed1' });
+    const attached = await previews.attach(REQUESTER, {
+      panelId: 'v1',
+      projectId: 'P',
+      filePath: a,
+      ...(res.kind === 'placeLocally' ? { reservation: res.reservation } : {}),
+    });
+    expect(attached).toMatchObject({ ok: true, update: { parent: { panelId: 'ed1' } } });
+    coord.destroy('ed1');
+  });
+});
+
 describe('Save As from the CSV Preview Editor (073 FR-035a)', () => {
   const setB2 = (value: string) => ({ kind: 'setCells', cells: [{ row: 1, col: 1, value }] });
 

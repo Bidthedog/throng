@@ -110,6 +110,13 @@ export interface DataGridHandle {
   beginEdit(initial?: string, selectAllText?: boolean): void;
   /** Goes to a row (0-based): its cell in the active column becomes the active cell and the row scrolls to the top (FR-043a). */
   goToRow(row: number): void;
+  /**
+   * 073 FR-033c — the first row a reader can see in full at the top: the row under the locked one when the first row is
+   * locked, read from each row's own height (wrap). 0 at the very top of the grid.
+   */
+  topRow(): number;
+  /** 073 FR-033c — scrolls `row` to the top (below the locked row) WITHOUT touching the selection; scroll sync's. */
+  scrollRowToTop(row: number): void;
 }
 
 export interface DataGridProps {
@@ -668,6 +675,18 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         commitSel(single(target, selRef.current.active.col), false);
         const el = scrollRef.current;
         // FR-039a — with the first row locked, the row lands just below it rather than under it.
+        const locked = lockFirstRow && target > 0 ? (rowV.measurementsCache[0]?.size ?? rowH) : 0;
+        if (el) el.scrollTop = Math.max(0, (rowV.measurementsCache[target]?.start ?? target * rowH) - locked);
+      },
+      topRow: () => {
+        const el = scrollRef.current;
+        if (!el || el.scrollTop <= 0) return 0;
+        const locked = lockFirstRow ? (rowV.measurementsCache[0]?.size ?? rowH) : 0;
+        return Math.min(rows - 1, indexAtOffset(rowV.measurementsCache, el.scrollTop + locked));
+      },
+      scrollRowToTop: (row) => {
+        const target = Math.min(rows - 1, Math.max(0, Math.floor(row)));
+        const el = scrollRef.current;
         const locked = lockFirstRow && target > 0 ? (rowV.measurementsCache[0]?.size ?? rowH) : 0;
         if (el) el.scrollTop = Math.max(0, (rowV.measurementsCache[target]?.start ?? target * rowH) - locked);
       },

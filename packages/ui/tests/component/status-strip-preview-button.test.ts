@@ -346,11 +346,12 @@ describe('the scroll-sync toggle (FR-122c)', () => {
 
   it('is titled Synchronise Scrolling, with the chord only when one is bound', async () => {
     await strip({ filePath: FILE });
-    expect(toggle()).toHaveAttribute('title', 'Synchronise Scrolling');
-    expect(toggle()).toHaveAccessibleName('Synchronise Scrolling');
+    expect(toggle()).toHaveAttribute('title', 'Synchronise Scrolling: enabled');
+    expect(toggle()).toHaveAccessibleName('Synchronise Scrolling: enabled');
+    expect(toggle()).toHaveClass('setting-toggle');
     cleanupStrip();
     await strip({ filePath: FILE, keybindings: { 'preview.toggleSyncScroll': ['Ctrl+Alt+F8'] } });
-    await waitFor(() => expect(toggle()).toHaveAttribute('title', 'Synchronise Scrolling (Ctrl+Alt+F8)'));
+    await waitFor(() => expect(toggle()).toHaveAttribute('title', 'Synchronise Scrolling: enabled (Ctrl+Alt+F8)'));
   });
 
   it('is absent wherever the preview button is (FR-122a)', async () => {
@@ -360,6 +361,11 @@ describe('the scroll-sync toggle (FR-122c)', () => {
     cleanupStrip();
     await strip({ filePath: FILE, projectRoot: null });
     expect(toggle()).toBeNull();
+  });
+
+  it('is drawn for a CSV editor too, though a CSV preview is not a flowing document (073 FR-033c)', async () => {
+    await strip({ filePath: `${ROOT}/data.csv` });
+    expect(toggle()).not.toBeNull();
   });
 
   it('is ENABLED while the preview button is disabled for a switched-off provider (FR-122a)', async () => {

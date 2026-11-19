@@ -84,7 +84,8 @@ describe('the status-bar toggle (FR-036b)', () => {
     const button = toggle(win.id)!;
     expect(button).not.toBeNull();
     expect(button.tagName).toBe('BUTTON');
-    expect(button.getAttribute('title')).toContain('Edit long cells in a dialog');
+    expect(button.getAttribute('title')).toMatch(/^Edit long cells in a dialog: (enabled|disabled)$/);
+    expect(button).toHaveClass('setting-toggle');
     expect(drawnIcon(button)).toBe(iconMarkup('cellDialog'));
   });
 
@@ -125,6 +126,7 @@ describe('the status-bar toggle (FR-036b)', () => {
     fireEvent.click(toggle(win.id)!);
     await waitFor(() => expect(toggle(win.id)).toHaveAttribute('aria-pressed', 'false'));
     expect(panelConfig(win)).toMatchObject({ cellDialog: false, filePath: GRID_FILE });
+    expect(toggle(win.id)).toHaveAttribute('title', 'Edit long cells in a dialog: disabled');
     fireEvent.click(toggle(win.id)!);
     await waitFor(() => expect(toggle(win.id)).toHaveAttribute('aria-pressed', 'true'));
     expect(panelConfig(win)).toMatchObject({ cellDialog: true });

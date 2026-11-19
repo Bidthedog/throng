@@ -50,6 +50,7 @@ import {
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
+import { useCsvScrollSync } from './use-csv-scroll-sync.js';
 import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { useFilePlaces } from '../../../grid/use-file-places.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
@@ -117,7 +118,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -435,6 +436,8 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   };
 
   // FR-043a — Ctrl+G and the menus' Go to Row… open the shared Go to dialog for rows.
+  // 073 FR-033c — scroll in step with the linked text editor, as a Markdown preview does.
+  const onGridScroll = useCsvScrollSync(gridRef, parsed, { syncLine, syncEcho, onTopLineChange, onTopLineRead });
   const goTo = useGridGoTo(panelId, gridRef, rowCount, registerGoTo);
 
   /* ── Menus (contracts/grid-ui.md) ────────────────────────────────────────────────────────────── */
@@ -606,6 +609,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         onHistory={history}
         onEscape={escapeCut}
         onContextMenu={onContextMenu}
+        onScrollChange={onGridScroll}
       />
       {goTo.dialog}
       {cellDialog !== null ? (

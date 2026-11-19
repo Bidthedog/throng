@@ -7,7 +7,7 @@ import {
   firstBinding,
   formatGrouped,
   isCodePageId,
-  isFlowingDocument,
+  supportsScrollSync,
   languageName,
   lineEndingLabel,
 } from '@throng/core';
@@ -308,8 +308,8 @@ function PreviewButton({
     <>
       {/* 044 FR-122c — the scroll-sync toggle, immediately before this button and present exactly when it
           is; never disabled, whatever the preview button's state (FR-122a). */}
-      {/* 054 — none for a source whose preview is one picture (`isFlowingDocument`): nothing to keep in step. */}
-      {isFlowingDocument(affordance.provider) ? (
+      {/* 054 — none for a source whose preview is one picture (`supportsScrollSync`): nothing to keep in step. */}
+      {supportsScrollSync(affordance.provider) ? (
         <SyncScrollButton
           testId={`editor-sync-scroll-${panelId}`}
           on={syncScroll}

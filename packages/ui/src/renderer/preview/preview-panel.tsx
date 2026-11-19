@@ -138,6 +138,7 @@ import {
   countCharacters,
   expandWithin,
   isFlowingDocument,
+  supportsScrollSync,
 } from '@throng/core';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -1922,7 +1923,9 @@ export function PreviewPanel({
    * (`requestEditorTopLine`), never a write into the store; a sync scroll records no history (FR-101).
    */
   const parentId = state?.parent?.panelId ?? null;
-  const syncing = settings.editor.previews.syncScroll && flowing && parentId !== null;
+  // 073 FR-033c — scroll sync is its own capability: a CSV grid takes part though it is not a flowing document.
+  const scrollSyncs = supportsScrollSync((state ? registry.get(state.providerId) : undefined) ?? registry.forPath(mountFile.current));
+  const syncing = settings.editor.previews.syncScroll && scrollSyncs && parentId !== null;
   const parentTop = useEditorTopLine(syncing ? parentId : null);
   const parentDocLines = useEditorDocLines(syncing ? parentId : null);
   const syncingRef = useRef(syncing);
@@ -2591,7 +2594,7 @@ export function PreviewPanel({
           onEditorRoute={onEditorRoute}
           editorRouteDisabled={movedOutTo !== null}
           syncScroll={settings.editor.previews.syncScroll}
-          showSyncScroll={flowing}
+          showSyncScroll={scrollSyncs}
           cellDialog={hasCellDialog ? { on: cellDialogEffective, onToggle: onToggleCellDialog } : undefined}
           wrap={hasWrapToggle ? { on: wrapEffective, onToggle: onToggleWrap } : undefined}
           lockFirstRow={hasLockToggles ? { on: lockRowEffective, onToggle: onToggleLockRow } : undefined}

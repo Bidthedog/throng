@@ -25,6 +25,8 @@ export const csvProvider: PreviewProviderDescriptor = {
   filesNoun: 'CSVs',
   previewOptionLabel: 'Throng Preview Editor',
   flowingDocument: false,
+  // FR-033c — no headings and no text selection (flowingDocument), but it scrolls in step with its text editor.
+  scrollSync: true,
   cellDialog: true,
   wrapToggle: true,
   lockToggles: true,

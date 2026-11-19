@@ -76,8 +76,9 @@ describe('the Wrap status-bar toggle (FR-013)', () => {
     const button = toggle(win.id)!;
     expect(button).not.toBeNull();
     expect(button.tagName).toBe('BUTTON');
-    expect(button.getAttribute('title')).toBe('Wrap cells');
-    expect(button.getAttribute('aria-label')).toBe('Wrap cells');
+    expect(button.getAttribute('title')).toBe('Wrap cells: disabled');
+    expect(button.getAttribute('aria-label')).toBe('Wrap cells: disabled');
+    expect(button).toHaveClass('setting-toggle');
     expect(drawnIcon(button)).toBe(iconMarkup('wrapCells'));
   });
 
@@ -125,6 +126,8 @@ describe('the Wrap status-bar toggle (FR-013)', () => {
     fireEvent.click(toggle(win.id)!);
     await waitFor(() => expect(toggle(win.id)).toHaveAttribute('aria-pressed', 'true'));
     expect(panelConfig(win)).toMatchObject({ wrapCells: true, filePath: GRID_FILE });
+    expect(toggle(win.id)).toHaveAttribute('title', 'Wrap cells: enabled');
+    expect(toggle(win.id)).toHaveAccessibleName('Wrap cells: enabled');
     fireEvent.click(toggle(win.id)!);
     await waitFor(() => expect(toggle(win.id)).toHaveAttribute('aria-pressed', 'false'));
     expect(panelConfig(win)).toMatchObject({ wrapCells: false });

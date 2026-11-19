@@ -31,6 +31,7 @@ import {
   type Panel,
   type PreviewPanelConfig,
   isFlowingDocument,
+  supportsScrollSync,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
 import { PanelErrorBoundary } from './panel-error-boundary.js';
@@ -712,6 +713,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                       'text',
                     parented: previewUi?.parent != null,
                     flowingDocument: isFlowingDocument(
+                      (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
+                        previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
+                    ),
+                    scrollSync: supportsScrollSync(
                       (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
                         previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
                     ),

@@ -87,8 +87,9 @@ for (const k of KINDS) {
       const button = toggle(win.id)!;
       expect(button).not.toBeNull();
       expect(button.tagName).toBe('BUTTON');
-      expect(button.getAttribute('title')).toBe(k.name);
-      expect(button.getAttribute('aria-label')).toBe(k.name);
+      expect(button.getAttribute('title')).toBe(`${k.name}: disabled`);
+      expect(button.getAttribute('aria-label')).toBe(`${k.name}: disabled`);
+      expect(button).toHaveClass('setting-toggle');
       expect(drawnIcon(button)).toBe(iconMarkup(k.icon));
     });
 
@@ -130,6 +131,7 @@ for (const k of KINDS) {
       fireEvent.click(toggle(win.id)!);
       await waitFor(() => expect(toggle(win.id)).toHaveAttribute('aria-pressed', 'true'));
       expect(panelConfig(win)).toMatchObject({ [k.key]: true, filePath: GRID_FILE });
+      expect(toggle(win.id)).toHaveAttribute('title', `${k.name}: enabled`);
       fireEvent.click(toggle(win.id)!);
       await waitFor(() => expect(toggle(win.id)).toHaveAttribute('aria-pressed', 'false'));
       expect(panelConfig(win)).toMatchObject({ [k.key]: false });

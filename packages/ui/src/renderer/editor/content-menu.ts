@@ -3,7 +3,7 @@ import type { EditorView } from '@codemirror/view';
 import {
   ENCODING_CHOICES,
   encodingLabel,
-  isFlowingDocument,
+  supportsScrollSync,
   lineEndingLabel,
   type EncodingId,
   type HeadingRecord,
@@ -475,7 +475,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
     args.openPreview !== undefined &&
     args.openPreview.affordance.state !== 'absent' &&
     // 054 — none for a source whose preview is one picture (a Mermaid file).
-    isFlowingDocument(args.openPreview.affordance.provider)
+    supportsScrollSync(args.openPreview.affordance.provider)
       ? [
           {
             label: 'Synchronise Scrolling',

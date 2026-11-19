@@ -77,6 +77,14 @@ export interface PreviewProviderDescriptor {
    * 2026-10-12). Opening the preview and going to the editor are unaffected.
    */
   flowingDocument?: boolean;
+  /**
+   * 073 FR-033c — text providers only: whether the preview scrolls in step with its linked text editor (the Synchronise
+   * Scrolling toggle and menu rows). Absent reads `isFlowingDocument`, as before: Markdown and the other flowing
+   * documents do, a one-picture provider does not. A provider sets it `true` to take part in scroll sync WITHOUT being a
+   * flowing document — the CSV grid has rows, not headings or a text selection, so Go to Heading stays absent and Select
+   * All stays the grid's own — or `false` to opt out.
+   */
+  scrollSync?: boolean;
   /** 073 FR-036b — the provider's editable grid has a cell dialog, with a per-panel toggle on its status bar. */
   cellDialog?: boolean;
   /** 073 FR-013 — the provider's grid can wrap its cells, with a per-panel toggle on its status bar and in its panel menu. */
@@ -100,6 +108,15 @@ export interface PreviewProviderDescriptor {
 /** Whether `provider` previews a flowing document (`flowingDocument`, absent = `true`); `false` for none. */
 export function isFlowingDocument(provider: PreviewProviderDescriptor | undefined): boolean {
   return provider !== undefined && provider.kind === 'text' && provider.flowingDocument !== false;
+}
+
+/**
+ * Whether `provider`'s preview scrolls in step with its linked editor (`scrollSync`, absent = `isFlowingDocument`).
+ * Decides where Synchronise Scrolling is drawn; a provider that does not draw text has none.
+ */
+export function supportsScrollSync(provider: PreviewProviderDescriptor | undefined): boolean {
+  if (provider === undefined || provider.kind !== 'text') return false;
+  return provider.scrollSync ?? isFlowingDocument(provider);
 }
 
 /** Every registered provider, looked up by id or by a file's extension. */

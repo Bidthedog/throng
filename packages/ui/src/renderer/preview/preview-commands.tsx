@@ -32,7 +32,7 @@ import {
   type Panel,
   type PreviewProviderRegistry,
   type PreviewSettings,
-  isFlowingDocument,
+  supportsScrollSync,
 } from '@throng/core';
 import { followFocusedPreviewLink, openPreviewHeadingOutline } from './preview-panel-handles.js';
 import { isGridCommand, runCsvGridCommand } from '../grid/grid-commands.js';
@@ -73,13 +73,13 @@ function showsSyncToggle(panel: Panel, registry: PreviewProviderRegistry, settin
       filePath: editor.filePath,
       projectRoot: editor.ownerKind === 'subworkspace' ? null : editor.ownerRoot,
     });
-    return affordance.state !== 'absent' && isFlowingDocument(affordance.provider);
+    return affordance.state !== 'absent' && supportsScrollSync(affordance.provider);
   }
   if (panel.kind === PREVIEW_KIND) {
     const state = getPreviewState(panel.id);
     const filePath = state?.filePath ?? (panel.config as { filePath?: string } | undefined)?.filePath;
     const provider = (state ? registry.get(state.providerId) : undefined) ?? (filePath ? registry.forPath(filePath) : undefined);
-    return isFlowingDocument(provider);
+    return supportsScrollSync(provider);
   }
   return false;
 }
