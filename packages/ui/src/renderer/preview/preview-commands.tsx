@@ -35,6 +35,7 @@ import {
   isFlowingDocument,
 } from '@throng/core';
 import { followFocusedPreviewLink, openPreviewHeadingOutline } from './preview-panel-handles.js';
+import { isGridCommand, runCsvGridCommand } from '../grid/grid-commands.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { currentEditorPreviewAffordance } from '../editor/editor-preview.js';
 import { getPreviewState } from './preview-store.js';
@@ -162,7 +163,8 @@ export function PreviewCommands(): null {
         (action !== 'preview.open' &&
           action !== 'preview.followLink' &&
           action !== 'preview.toggleSyncScroll' &&
-          action !== 'preview.goToHeading') ||
+          action !== 'preview.goToHeading' &&
+          !isGridCommand(action)) ||
         !layout ||
         getActivePane() !== 'workspace'
       ) {
@@ -192,6 +194,11 @@ export function PreviewCommands(): null {
         // 5 — FR-096c: Ctrl+click for the keyboard, on the link focused in the active preview. The key is
         // taken only when a link was followed, so Ctrl+Enter anywhere else in the preview is untouched.
         if (panel?.kind === PREVIEW_KIND && followFocusedPreviewLink(panel.id)) e.preventDefault();
+        return;
+      }
+      if (isGridCommand(action)) {
+        // 073 FR-038 — the focused CSV Preview Editor's insert commands; elsewhere the key is left alone.
+        if (panel?.kind === PREVIEW_KIND && runCsvGridCommand(panel.id, action)) e.preventDefault();
         return;
       }
       if (action === 'preview.goToHeading') {

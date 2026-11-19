@@ -11,6 +11,7 @@ import { applyMigrationV9, MIGRATION_V9_VERSION } from './migrations/v9-project-
 import { applyMigrationV10, MIGRATION_V10_VERSION } from './migrations/v10-category-position.js';
 import { applyMigrationV11, MIGRATION_V11_VERSION } from './migrations/v11-attention-flags.js';
 import { applyMigrationV12, MIGRATION_V12_VERSION } from './migrations/v12-project-search-excludes.js';
+import { applyMigrationV13, MIGRATION_V13_VERSION } from './migrations/v13-grid-column-widths.js';
 
 /** The baseline schema version (no domain tables — only a `_meta` marker). */
 export const BASELINE_VERSION = 1;
@@ -75,6 +76,10 @@ const MIGRATIONS: readonly Migration[] = [
   {
     version: MIGRATION_V12_VERSION,
     up: applyMigrationV12,
+  },
+  {
+    version: MIGRATION_V13_VERSION,
+    up: applyMigrationV13,
   },
 ];
 

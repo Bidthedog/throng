@@ -67,7 +67,8 @@ function pathOfFileUrl(url: string): string | null {
 
 /**
  * The MIME type the protocol serves a file as, by extension. Only what a preview can display: the
- * image formats Chromium renders in `<img>`, and PDF for a binary provider (#388). The ALLOWLIST the
+ * image formats Chromium renders in `<img>`, PDF for a binary provider (#388), and the workbook formats
+ * (073). The ALLOWLIST the
  * caller passes decides what is actually served; this table only names the type.
  */
 const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
@@ -82,6 +83,14 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   '.bmp': 'image/bmp',
   '.ico': 'image/x-icon',
   '.pdf': 'application/pdf',
+  // 073 FR-050 — the Spreadsheet provider's workbooks, served only to its own source route.
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  '.xlsb': 'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+  '.xls': 'application/vnd.ms-excel',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.fods': 'application/vnd.oasis.opendocument.spreadsheet-flat-xml',
+  '.numbers': 'application/vnd.apple.numbers',
 };
 
 function mimeOf(path: string): string | undefined {

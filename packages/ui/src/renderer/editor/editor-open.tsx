@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
+  PREVIEW_KIND,
   collectPanels,
   defaultOpenActionFor,
   effectiveActivePanelId,
@@ -225,7 +226,9 @@ type Ws = ReturnType<typeof useWorkspace>;
 /** Editor panelIds present in the given tab (in document order). */
 function editorPanelsInTab(root: LayoutNode): string[] {
   return collectPanels(root)
-    .filter((p) => getEditorState(p.id) !== undefined || (isPanel(p) && p.kind === 'editor'))
+    // 073 — a CSV Preview Editor publishes editor state while it holds its document, but it is a preview: an
+    // editor open never reuses or replaces it.
+    .filter((p) => (isPanel(p) && p.kind === 'editor') || (getEditorState(p.id) !== undefined && !(isPanel(p) && p.kind === PREVIEW_KIND)))
     .map((p) => p.id);
 }
 

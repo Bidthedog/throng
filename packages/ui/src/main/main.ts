@@ -107,12 +107,13 @@ import { ICON_SETS_CHANNELS, registerIconSetsIpc } from './icon-sets-ipc.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { installNavigationGuards, installRendererRequestFilter } from './renderer-request-filter.js';
-import { createPreviewProtocolHandler, PREVIEW_SCHEME } from './preview-protocol.js';
+import { createPreviewProtocolHandler, PREVIEW_SCHEME, readPreviewSource } from './preview-protocol.js';
 import { PreviewService } from './preview-service.js';
 import { previewPurgePredicate, purgeUnloadedPreviews } from './preview-purge.js';
 import { heldRecords, walkMovedLayouts } from './moved-layout-walk.js';
 import { createPreviewPush, registerPreviewIpc } from './preview-ipc.js';
 import { TaskToggleService } from './task-toggle-service.js';
+import { CsvGridService } from './csv-grid-service.js';
 import { NavigationHistoryService } from './navigation-history-service.js';
 import { createHistoryPush, registerNavigationHistoryIpc } from './navigation-history-ipc.js';
 import { PanelStateHandoff } from './panel-state-handoff.js';
@@ -2177,6 +2178,8 @@ if (isPrimaryInstance)
    * `settings` is the live getter: the update delay, maximum wait, size limit and provider toggles all
    * apply to the next use. Project roots are main's own, from the daemon cache, never the renderer's.
    */
+  // 073 R1 — set just below, once the preview service it reads runs from exists.
+  const csvGridRef: { current?: CsvGridService } = {};
   const previews = new PreviewService({
     documents: editorCoordinator,
     reader: editorService,
@@ -2210,8 +2213,25 @@ if (isPrimaryInstance)
       read: (key) => editorCoordinator.readFold(key),
       restore: (key, state) => editorCoordinator.setFoldState(key, state, -1),
     },
+    // 073 — a CSV Preview Editor that closes for good releases its grid document (or hands it to an editor).
+    runEnded: (panelId) => csvGridRef.current?.release(panelId),
+    // 073 T035 — the run moved off the file its own clean grid document held: release that document (FR-060).
+    gridDocumentLeft: (panelId) => csvGridRef.current?.release(panelId),
   });
   previewService = previews;
+  const csvGrid = new CsvGridService(editorCoordinator, previews);
+  csvGridRef.current = csvGrid;
+  /*
+   * 044 — the `throng-preview:` protocol handler. The project root and document for a request come from the
+   * preview run `previews` holds for the panel id in the URL, never from the URL itself. 073 R7 reads a
+   * binary provider's bytes through this same handler, so the route's containment is decided once.
+   */
+  const previewProtocol = createPreviewProtocolHandler({
+    fs: fileSystem,
+    previews,
+    settings: () => currentSettings,
+    registry: SHIPPED_PREVIEW_PROVIDERS,
+  });
   // 054 US2 — a task checkbox in a preview edits its source through the editor authority (FR-024).
   registerPreviewIpc(
     ipcMain,
@@ -2222,6 +2242,7 @@ if (isPrimaryInstance)
       (panelId) => previews.run(panelId),
       () => currentSettings.editor.fallbackEncoding,
     ),
+    { grid: csvGrid, readSource: (panelId) => readPreviewSource(previewProtocol, panelId) },
   );
   // A window that has gone views no preview any more; the runs themselves live until `destroyed`.
   app.on('web-contents-created', (_event, contents) => {
@@ -2235,12 +2256,7 @@ if (isPrimaryInstance)
    */
   protocol.handle(
     PREVIEW_SCHEME,
-    createPreviewProtocolHandler({
-      fs: fileSystem,
-      previews,
-      settings: () => currentSettings,
-      registry: SHIPPED_PREVIEW_PROVIDERS,
-    }),
+    previewProtocol,
   );
   /*
    * 043 US4 — the replace commit, and the whole of `throng:fileSearch:*` (T086, T094).

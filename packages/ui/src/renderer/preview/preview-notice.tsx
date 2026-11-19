@@ -38,7 +38,7 @@
  * what the reader may not do. The file's path is shown under it, as every panel's banner shows it.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { refusalMessage, toDisplayPath, type NoticeSubject, type OsName, type PreviewNotice } from '@throng/core';
+import { formatGrouped, refusalMessage, toDisplayPath, type NoticeSubject, type OsName, type PreviewNotice } from '@throng/core';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import type { PreviewFailure, PreviewPanelState } from './preview-store.js';
 
@@ -81,6 +81,11 @@ export function isMovedOutNotice(
   return notice !== null && notice !== undefined && notice.kind === 'moved-out';
 }
 
+/** Bytes as megabytes for display: one decimal place, digit-grouped (constitution 4.5.0). */
+function megabytes(bytes: number): string {
+  return formatGrouped(Math.round((bytes / (1024 * 1024)) * 10) / 10);
+}
+
 /** The one sentence a file notice says (030 FR-040, FR-026). */
 export function previewNoticeMessage(notice: FileNotice): string {
   switch (notice.kind) {
@@ -89,6 +94,11 @@ export function previewNoticeMessage(notice: FileNotice): string {
     case 'unreadable':
       return 'This file could not be read.';
     case 'too-large':
+      // 073 FR-062 — a provider with its own limit names the file's size and that limit, so the reader knows
+      // how far to raise it; the wording without them stays for the editor's limit (044 FR-026).
+      if (notice.size !== undefined && notice.limit !== undefined) {
+        return `This file is ${megabytes(notice.size)} MB, over the preview size limit of ${megabytes(notice.limit)} MB.`;
+      }
       return 'This file is too large to preview.';
     // 059 FR-053 — core's one wording, which the editor says too.
     case 'not-text':

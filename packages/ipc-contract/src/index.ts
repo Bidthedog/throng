@@ -180,6 +180,7 @@ export {
   DOCUMENT_SET_STATE_METHOD,
   DOCUMENT_MOVE_PATH_METHOD,
   DOCUMENT_PRUNE_METHOD,
+  DOCUMENT_SET_GRID_COLUMN_WIDTHS_METHOD,
 } from './document.js';
 export type {
   DocumentStateDto,
@@ -191,6 +192,8 @@ export type {
   DocumentMovePathResult,
   DocumentPruneParams,
   DocumentPruneResult,
+  DocumentSetGridColumnWidthsParams,
+  DocumentSetGridColumnWidthsResult,
 } from './document.js';
 // fileopUndo.* (024 US3, #85) — the per-project file-operation undo/redo stack.
 export {

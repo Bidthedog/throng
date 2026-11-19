@@ -1,0 +1,291 @@
+/*
+ * The shared data grid (073 FR-001 – FR-007). Theme tokens only: every colour is a `--throng-colour-*`
+ * custom property, and the text size follows the pane text size times the grid's own zoom factor
+ * (`--throng-grid-zoom`, published inline by data-grid.tsx from its `zoom` prop).
+ *
+ * Layout: one scroller holds a canvas. The header strip is `position: sticky; top: 0`, the row-number
+ * gutter `position: sticky; left: 0`, and the corner cell sticks both ways. Rows and cells are absolutely
+ * positioned by the virtualiser, so only the visible window is in the DOM.
+ */
+
+.data-grid {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--throng-colour-editorBg);
+  color: var(--throng-colour-editorFg);
+  font-size: calc(var(--throng-font-paneText-size) * var(--throng-grid-zoom, 1));
+  outline: none;
+  user-select: none;
+}
+
+.data-grid:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--throng-colour-accent);
+}
+
+.data-grid__scroller {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.data-grid__canvas {
+  position: relative;
+}
+
+/* ── Header strip ─────────────────────────────────────────────────────────────────────────────────── */
+
+.data-grid__header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--throng-colour-editorGutterBg);
+}
+
+.data-grid__corner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  box-sizing: border-box;
+  background: var(--throng-colour-editorGutterBg);
+  border-right: 1px solid var(--throng-colour-border);
+  border-bottom: 1px solid var(--throng-colour-border);
+}
+
+.data-grid__header-cells {
+  position: absolute;
+  top: 0;
+}
+
+.data-grid__colhead {
+  position: absolute;
+  top: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--throng-colour-editorGutterBg);
+  color: var(--throng-colour-textMuted);
+  border-right: 1px solid var(--throng-colour-border);
+  border-bottom: 1px solid var(--throng-colour-border);
+}
+
+.data-grid__colhead-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.data-grid__colhead--in-range {
+  background: var(--throng-colour-surfaceActive);
+}
+
+.data-grid__colhead--active {
+  color: var(--throng-colour-text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--throng-colour-accent);
+}
+
+/* The drag handle on a header cell's right edge. */
+.data-grid__resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.data-grid__resize:hover {
+  background: var(--throng-colour-accent);
+  opacity: 0.5;
+}
+
+/* ── Body ─────────────────────────────────────────────────────────────────────────────────────────── */
+
+.data-grid__body {
+  position: relative;
+}
+
+.data-grid__gutter {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--throng-colour-editorGutterBg);
+}
+
+.data-grid__rowhead {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 6px;
+  overflow: hidden;
+  background: var(--throng-colour-editorGutterBg);
+  color: var(--throng-colour-textMuted);
+  border-right: 1px solid var(--throng-colour-border);
+  border-bottom: 1px solid var(--throng-colour-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.data-grid__rowhead--in-range {
+  background: var(--throng-colour-surfaceActive);
+}
+
+.data-grid__rowhead--active {
+  color: var(--throng-colour-text);
+  font-weight: 600;
+  box-shadow: inset -2px 0 0 var(--throng-colour-accent);
+}
+
+.data-grid__cells {
+  position: absolute;
+  top: 0;
+}
+
+.data-grid__row {
+  position: absolute;
+  left: 0;
+  /* A row's cells never affect layout outside it, so a scroll step restyles only the rows that changed. */
+  contain: layout style;
+}
+
+.data-grid__cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  border-right: 1px solid var(--throng-colour-border);
+  border-bottom: 1px solid var(--throng-colour-border);
+}
+
+/* FR-012 — an expanded row shows each value in full: line breaks kept, wrapped to the column's width, and a
+   cell taller than the row's 20-line cap scrolls inside itself. The line height is set inline (row height). */
+.data-grid__cell--expanded {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+  overflow-y: auto;
+  text-overflow: clip;
+}
+
+.data-grid__cell--selected {
+  background: color-mix(in srgb, var(--throng-colour-accent) 22%, transparent);
+}
+
+.data-grid__cell--active {
+  background: var(--throng-colour-editorBg);
+  box-shadow: inset 0 0 0 2px var(--throng-colour-accent);
+}
+
+/* ── In-cell editor ───────────────────────────────────────────────────────────────────────────────── */
+
+.data-grid__editor {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 6px;
+  resize: none;
+  overflow: hidden;
+  border: 2px solid var(--throng-colour-accent);
+  outline: none;
+  background: var(--throng-colour-inputSurface);
+  color: var(--throng-colour-text);
+  font: inherit;
+  line-height: 1.2;
+  white-space: pre;
+  user-select: text;
+}
+
+/* ── The two grid bodies (073): the CSV Preview Editor and the spreadsheet preview ──────────────────── */
+
+.preview-grid-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.preview-grid-body > .data-grid {
+  flex: 1 1 auto;
+}
+
+/* FR-051 — the sheet switcher: named tabs along the foot of the grid, like a workbook's own. */
+.preview-grid-sheets {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  overflow-x: auto;
+  border-top: 1px solid var(--throng-colour-border);
+  background: var(--throng-colour-editorGutterBg);
+}
+
+.preview-grid-sheet {
+  padding: 2px 10px;
+  border: none;
+  background: transparent;
+  color: var(--throng-colour-text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.preview-grid-sheet[aria-selected='true'] {
+  background: var(--throng-colour-surfaceActive);
+  box-shadow: inset 0 -2px 0 var(--throng-colour-accent);
+}
+
+.preview-grid-sheet-hidden {
+  color: var(--throng-colour-textMuted);
+  font-style: italic;
+}
+
+/* FR-046, FR-056 — the body's one inline notice. */
+.preview-grid-notice {
+  padding: 12px 16px;
+  color: var(--throng-colour-text);
+}
+
+.preview-grid-notice-action {
+  font: inherit;
+}
+
+.preview-grid-loading {
+  height: 100%;
+}
+
+/* FR-006 — Column Width…, a small form over the grid's top edge. */
+.preview-grid-width {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--throng-colour-border);
+  background: var(--throng-colour-inputSurface);
+  color: var(--throng-colour-text);
+  z-index: 3;
+}
+
+.preview-grid-width input {
+  width: 6em;
+  margin-left: 6px;
+}

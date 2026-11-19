@@ -51,6 +51,18 @@ function validate(provider: PreviewProviderDescriptor): void {
     }
   }
 
+  if (provider.editable === true && provider.kind !== 'text') {
+    throw new Error(`Preview provider "${id}" is a binary provider and cannot be editable`);
+  }
+  if (provider.sizeLimitSetting !== undefined) {
+    const named = provider.settings?.find((s) => s.leaf === provider.sizeLimitSetting);
+    if (named?.control !== 'number') {
+      throw new Error(
+        `Preview provider "${id}" names "${provider.sizeLimitSetting}" as its size limit setting, which is not one of its numbers`,
+      );
+    }
+  }
+
   if (provider.kind === 'text' && provider.sourceMimeTypes !== undefined) {
     throw new Error(`Preview provider "${id}" is a text provider and must not declare sourceMimeTypes`);
   }

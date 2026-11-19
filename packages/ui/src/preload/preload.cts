@@ -984,6 +984,13 @@ contextBridge.exposeInMainWorld('throng', {
     readEmbeds: (panelId: string, refs: string[]) => ipcRenderer.invoke('throng:preview:readEmbeds', { panelId, refs }),
     /** 054 (contracts/preview-ipc-054.md) — toggle a task-list checkbox in the source; main validates. */
     toggleTask: (request: unknown) => ipcRenderer.invoke('throng:preview:toggleTask', request),
+    /** 073 (contracts/preview-ipc-073.md) — the CSV Preview Editor's edits, resolved and applied by main. */
+    gridEdit: (request: unknown) => ipcRenderer.invoke('throng:preview:gridEdit', request),
+    gridUndo: (panelId: string) => ipcRenderer.invoke('throng:preview:gridUndo', { panelId }),
+    gridRedo: (panelId: string) => ipcRenderer.invoke('throng:preview:gridRedo', { panelId }),
+    gridSave: (panelId: string) => ipcRenderer.invoke('throng:preview:gridSave', { panelId }),
+    /** 073 R7 — a binary provider's bytes, through the source route's own containment and size cap. */
+    readSource: (panelId: string) => ipcRenderer.invoke('throng:preview:readSource', { panelId }),
     publishEditorTitle: (panelId: string, title: string) =>
       ipcRenderer.send('throng:preview:publishEditorTitle', { panelId, title }),
     placeDeclined: (requestId: string) => ipcRenderer.send('throng:preview:placeDeclined', { requestId }),

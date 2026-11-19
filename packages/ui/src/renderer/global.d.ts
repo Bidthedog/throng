@@ -810,6 +810,24 @@ declare global {
         toggleTask: (
           request: import('@throng/core').TaskToggleRequest,
         ) => Promise<import('@throng/core').TaskToggleResponse>;
+        /**
+         * 073 (contracts/preview-ipc-073.md) — a CSV Preview Editor's grid operation, resolved by main against
+         * the document's current text and applied as one undo step. Optional: an older preload has none.
+         */
+        gridEdit?: (request: {
+          panelId: string;
+          filePath: string;
+          operation: import('@throng/core').CsvGridOperation;
+        }) => Promise<
+          | { ok: true; dirty: boolean }
+          | { ok: false; reason: 'changed' | 'invalid' | 'unavailable' }
+          | { ok: false; reason: 'malformed'; line: number }
+        >;
+        gridUndo?: (panelId: string) => Promise<{ ok: boolean }>;
+        gridRedo?: (panelId: string) => Promise<{ ok: boolean }>;
+        gridSave?: (panelId: string) => Promise<{ ok: true } | { ok: false; reason: string; error: string }>;
+        /** 073 R7 — a binary provider's file, read through the confined source route. */
+        readSource?: (panelId: string) => Promise<{ ok: true; bytes: ArrayBuffer } | { ok: false; status: number }>;
         /** FR-031 — an editor panel's display title, forwarded as its previews' `parent.title`. */
         publishEditorTitle: (panelId: string, title: string) => void;
         /** FR-010 — this window's layout does not hold the parent a `place` named. */

@@ -1569,3 +1569,23 @@ export {
   deriveFileIconColours,
   type FileIconCategory,
 } from './config/file-icon-colours.js';
+// 073 — the CSV grid model, its minimal-change writer, grid operations and clipboard formats.
+export {
+  cellValue,
+  detectDelimiter,
+  parseCsv,
+  recordFieldCount,
+  type CsvDelimiter,
+  type CsvLineEnding,
+  type CsvModel,
+} from './csv/csv-model.js';
+export { applyCsvChanges, encodeCsvField, type CsvCellEdit, type CsvTextChange } from './csv/csv-edit.js';
+export {
+  GRID_MAX_CELLS,
+  GRID_MAX_ROW_COUNT,
+  resolveGridOperation,
+  validateGridOperation,
+  type CsvGridOperation,
+  type GridOperationResolution,
+} from './csv/grid-operation.js';
+export { columnLabel, gridToHtmlTable, gridToTsv, parseTsv } from './csv/grid-clipboard.js';

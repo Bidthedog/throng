@@ -1864,6 +1864,8 @@ export function PreviewPanel({
   // 054 — a provider that draws one picture (Mermaid) has no Select All, Go to Heading or scroll sync.
   const flowing = isFlowingDocument((state ? registry.get(state.providerId) : undefined) ?? registry.forPath(mountFile.current));
   flowingRef.current = flowing;
+  // 073 FR-037 — an editable provider's body (the CSV Preview Editor) owns paste and cut, its cell editor's included.
+  const editableBody = (state ? registry.get(state.providerId) : undefined)?.editable === true;
   const parented = state?.parent != null;
 
   /*
@@ -2443,8 +2445,8 @@ export function PreviewPanel({
             // Covered, not hidden — see the note on the `inert` effect above.
             style={bodyCovered ? { visibility: 'hidden' } : undefined}
             onContextMenu={onHostContextMenu}
-            onCut={refuse}
-            onPaste={refuse}
+            onCut={editableBody ? undefined : refuse}
+            onPaste={editableBody ? undefined : refuse}
             // 047 US5 — narrowed to non-file drops (FR-021): a file drag is handled by the drop
             // targets WRAPPING this body, whose own onDrop stops the event before it bubbles here;
             // anything else (a browser text/HTML drag) still lands here and is refused as before.
@@ -2498,6 +2500,9 @@ export function PreviewPanel({
             }}
             // 054 FR-022 — a task box clicked or Space-pressed; main changes the marker (R4).
             onToggleTask={onToggleTask}
+            // 073 — the grid lays out in JS, so it takes the factor itself; its notice and menu offer the editor route.
+            zoom={zoomFactor(panelZoomLevel(panel))}
+            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute } : {})}
           />
         ) : null}
         {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a

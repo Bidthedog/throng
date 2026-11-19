@@ -11,9 +11,14 @@
 import type { PreviewProviderView } from '../provider-view.js';
 import { markdownView } from './markdown/view.js';
 import { mermaidView } from './mermaid/view.js';
+import { csvView } from './csv/view.js';
+import { spreadsheetView } from './spreadsheet/view.js';
 
 export const PREVIEW_PROVIDER_VIEWS: Readonly<Record<string, PreviewProviderView>> = {
   [markdownView.id]: markdownView,
   // 054 FR-042 — `.mmd` / `.mermaid`, drawn through the same diagram renderer as an embedded fence.
   [mermaidView.id]: mermaidView,
+  // 073 — the CSV Preview Editor and the read-only workbook preview, both on the shared grid.
+  [csvView.id]: csvView,
+  [spreadsheetView.id]: spreadsheetView,
 };

@@ -64,6 +64,12 @@ export interface EditorUiState {
    */
   movedOut?: boolean;
   /**
+   * 073 FR-033 — the entry is a CSV Preview Editor's, published while it holds its document alone so the
+   * unsaved markers and prompts count it. It is not a text editor: nothing that looks for an editor to
+   * focus or reuse may find it.
+   */
+  preview?: boolean;
+  /**
    * A Replace landed on this DIRTY document's path (052 FR-012): the buffer is kept, the path is another
    * document's now, and the panel shows ONE replaced notice — Save As or Discard. Plain Save is refused.
    */
@@ -154,7 +160,7 @@ export function findEditorPanelByPath(absPath: string): string | null {
   const norm = pathCompareKey;
   const target = norm(absPath);
   for (const s of states.values()) {
-    if (s.filePath != null && norm(s.filePath) === target) return s.panelId;
+    if (s.preview !== true && s.filePath != null && norm(s.filePath) === target) return s.panelId;
   }
   return null;
 }

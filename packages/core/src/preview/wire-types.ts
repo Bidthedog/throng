@@ -22,7 +22,9 @@ export type PreviewContent =
  */
 export type PreviewNotice = (
   // `utf32` — 059 FR-006: named, rather than called not text.
-  | { kind: 'unreadable' | 'deleted' | 'too-large' | 'not-text' | 'utf32' }
+  | { kind: 'unreadable' | 'deleted' | 'not-text' | 'utf32' }
+  /** 073 FR-062 — `size` and `limit` in bytes, when the provider's own limit refused it (absent for the editor's). */
+  | { kind: 'too-large'; size?: number; limit?: number }
   // 059 FR-014, FR-053 — the editor's wording, which names the encoding the file claims.
   | { kind: 'not-decodable'; encoding: EncodingId }
   | { kind: 'no-provider' }
@@ -60,6 +62,11 @@ export interface PreviewUpdate {
    * something older than this field) means every file change is read as a navigation, as it was.
    */
   navigationSeq?: number;
+  /**
+   * 073 data-model §3 — the run follows a document the preview itself opened (a CSV Preview Editor's grid
+   * document): `parent` is `null` because no editor holds it, and `dirty` is that document's. Absent = false.
+   */
+  ownsDocument?: boolean;
 }
 
 export interface PreviewOpenRequest {

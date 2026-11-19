@@ -302,6 +302,11 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Go to Heading…',
     'Open a searchable list of the preview’s headings and jump to one. Live in a preview only.',
   ),
+  // 073 FR-038 — the CSV Preview Editor's insert commands, each also on its row or column menu.
+  chord('grid.insertRowAbove', 'CSV grid', 'Insert Row Above', 'Insert an empty row above the active cell in the CSV Preview Editor.'),
+  chord('grid.insertRowBelow', 'CSV grid', 'Insert Row Below', 'Insert an empty row below the active cell in the CSV Preview Editor.'),
+  chord('grid.insertColumnLeft', 'CSV grid', 'Insert Column Left', 'Insert an empty column left of the active cell in the CSV Preview Editor.'),
+  chord('grid.insertColumnRight', 'CSV grid', 'Insert Column Right', 'Insert an empty column right of the active cell in the CSV Preview Editor.'),
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),

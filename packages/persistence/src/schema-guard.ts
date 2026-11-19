@@ -138,6 +138,12 @@ const ADDITIVE_COLUMNS: readonly AdditiveColumn[] = [
     column: 'search_exclude_globs',
     ddl: `ALTER TABLE projects ADD COLUMN search_exclude_globs TEXT NOT NULL DEFAULT '[]'`,
   },
+  // v13 — 073: a CSV's column widths in the CSV Preview Editor, per file ('' = none).
+  {
+    table: 'document_state',
+    column: 'grid_column_widths',
+    ddl: `ALTER TABLE document_state ADD COLUMN grid_column_widths TEXT NOT NULL DEFAULT ''`,
+  },
 ];
 
 function tableExists(db: ThrongDatabase, table: string): boolean {

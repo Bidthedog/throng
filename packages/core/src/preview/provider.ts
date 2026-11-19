@@ -77,6 +77,18 @@ export interface PreviewProviderDescriptor {
    * 2026-10-12). Opening the preview and going to the editor are unaffected.
    */
   flowingDocument?: boolean;
+  /**
+   * 073 FR-030 — text providers only: the preview EDITS its document (the CSV Preview Editor). Main shows
+   * its edits at once rather than after the update delay, the chrome lets its body own paste, cut and
+   * drop, and its run may open the file as a document of its own on the first edit (research R1).
+   * Supersedes 044 FR-020/FR-025 for such a provider only.
+   */
+  editable?: boolean;
+  /**
+   * 073 FR-061, FR-062 — names one of `settings` (a `number`, in MB) that caps what this provider's
+   * preview reads, in place of the editor's `editor.maxOpenFileBytes`.
+   */
+  sizeLimitSetting?: string;
 }
 
 /** Whether `provider` previews a flowing document (`flowingDocument`, absent = `true`); `false` for none. */

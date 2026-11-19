@@ -200,6 +200,17 @@ export interface PreviewBodyProps {
    * lists never calls it.
    */
   onToggleTask?(task: TaskToggle): void;
+
+  /**
+   * 073 — this panel's own zoom factor (044 FR-034), for a body that lays out in JavaScript (the grid's
+   * row heights and column widths) rather than through `--throng-zoom-preview`. Optional: absent reads 1.
+   */
+  zoom?: number;
+  /**
+   * 073 FR-046 — the chrome's Open in Editor / Go to Editor route (044 FR-015), for a body whose own
+   * notice or menu offers it. Optional: a body that offers no such route never calls it.
+   */
+  onOpenInEditor?(): void;
 }
 
 export type PreviewBody = ComponentType<PreviewBodyProps>;

@@ -83,6 +83,21 @@ import type { EditorRecovery, RecoveredDoc, RecoveredFormat, RecoverySnapshot } 
  */
 const BULK_EDIT_VIEW_ID = '__throng:bulk-edit__';
 
+/**
+ * 073 research R1 — the id prefix of a GRID DOCUMENT: the document a CSV Preview Editor opens for its
+ * file on the first grid edit when no editor holds it (`csv-grid-service.ts`). It is an ordinary
+ * document in every respect but one: no panel answers to its id. So "is this file open in an editor?"
+ * ignores it ({@link EditorCoordinator.isOpen}, {@link EditorCoordinator.openInto}) — an editor opened on
+ * the file is a new panel, whose `load` joins it as a linked panel — and it records no navigation
+ * history, because the preview panel has its own.
+ */
+export const GRID_DOCUMENT_PREFIX = 'csv-grid:';
+
+/** Whether `panelId` names a grid document rather than a panel. */
+export function isGridDocumentId(panelId: string): boolean {
+  return panelId.startsWith(GRID_DOCUMENT_PREFIX);
+}
+
 /** 052 FR-012 (data-model "Coordinator document state") — a plain Save of a replaced document. */
 const REPLACED_SAVE_REFUSAL = 'This file was replaced. Use Save As to keep your changes.';
 
@@ -1333,7 +1348,7 @@ export class EditorCoordinator {
    * refusing it here would delete 018's recovery path without a single failing test near the editor.
    */
   async openInto(absPath: string, ownership?: OpenOwnership): Promise<OpenDecision> {
-    const decision = openOrFocus(this.registry, absPath);
+    const decision = this.editorDecision(absPath);
     if (decision.action !== 'open') return decision;
 
     const refusal = await this.deps.refusalFor?.(absPath, ownership);
@@ -1341,7 +1356,21 @@ export class EditorCoordinator {
   }
 
   isOpen(absPath: string): boolean {
-    return isOpenAnywhere(this.registry, absPath);
+    if (!isOpenAnywhere(this.registry, absPath)) return false;
+    return this.editorDecision(absPath).action === 'focus';
+  }
+
+  /**
+   * `openOrFocus` as an EDITOR sees it (073 R1): a grid document is not an editor, so the panel to focus
+   * is the first editor linked to it, and with none the file opens in a new editor (which joins it).
+   */
+  private editorDecision(absPath: string): OpenDecision {
+    const decision = openOrFocus(this.registry, absPath);
+    if (decision.action !== 'focus' || !isGridDocumentId(decision.panelId)) return decision;
+    for (const [panelId, link] of this.links) {
+      if (link.owner === decision.panelId) return { action: 'focus', panelId, windowId: link.windowId };
+    }
+    return { action: 'open' };
   }
 
   /**
@@ -2188,6 +2217,8 @@ export class EditorCoordinator {
     navigation: EditorLoadNavigation | undefined,
     persisted: PersistedHistory | undefined,
   ): void {
+    // 073 R1 — a grid document is no panel, and its preview keeps its own history.
+    if (isGridDocumentId(panelId)) return;
     if (navigation?.kind !== 'history') {
       this.tellHistory('recordOpen', (h) => h.recordOpen(panelId, absPath, persisted));
       return;

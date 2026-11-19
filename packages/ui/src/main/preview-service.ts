@@ -78,11 +78,12 @@ import {
   type SettleScheduler,
   type WikiTarget,
 } from '@throng/core';
-import { fileKey, movedPathOf, type DocumentLifecycleListener } from './editor-coordinator.js';
+import { GRID_DOCUMENT_PREFIX, fileKey, isGridDocumentId, movedPathOf, type DocumentLifecycleListener } from './editor-coordinator.js';
 import type { EditorService, LoadResult } from './editor-service.js';
 import type { MovePair } from './files-service.js';
 import type { PreviewLookup, PreviewRunRef } from './preview-protocol.js';
 import { namesPath } from './shared-file-watcher.js';
+import { sourceSizeLimitBytes } from './preview-protocol.js';
 
 /**
  * How long an `open` holds a path for the panel it asked a window to place (contracts/preview-ipc.md
@@ -178,7 +179,7 @@ export interface PreviewServiceDeps {
   documents: PreviewDocuments;
   /** `EditorService.load` — the standalone read path (FR-025). */
   reader: Pick<EditorService, 'load'>;
-  fs: Pick<IFileSystem, 'exists' | 'stat' | 'realpath'>;
+  fs: Pick<IFileSystem, 'exists' | 'stat' | 'realpath'> & Partial<Pick<IFileSystem, 'size'>>;
   fileWatcher: IFileWatcher;
   /** Read live: a changed delay, max wait, size limit or provider toggle applies to the next use. */
   settings: () => AppSettings;
@@ -190,6 +191,13 @@ export interface PreviewServiceDeps {
   clock?: SettleClock;
   history?: PreviewHistoryHooks;
   foldRekey?: PreviewFoldHooks;
+  /** 073 — a preview panel is gone for good: `CsvGridService` releases the grid document it may hold. */
+  runEnded?: (panelId: string) => void;
+  /**
+   * 073 T035 — a run moved off the file its own (clean) grid document holds: `CsvGridService` releases that
+   * document, so reopening the file finds no stale "document" and reuses the panel (FR-060).
+   */
+  gridDocumentLeft?: (panelId: string) => void;
 }
 
 type RunSource = { kind: 'document'; documentPanelId: string } | { kind: 'disk'; watch: Disposable };
@@ -543,7 +551,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // parented placement is exactly what it was before this spec.
     if (req.target?.mode === 'lastActive' && req.target.reusePanelId) {
       const reuse = this.runs.get(req.target.reusePanelId);
-      if (reuse && reuse.viewers.has(fromWebContentsId)) {
+      // 073 T035 (FR-033) — a CSV Preview Editor holding unsaved grid edits is not reused: moving it would
+      // hide them. The open places a new panel instead, as an editor with unsaved changes stays open.
+      if (reuse && reuse.viewers.has(fromWebContentsId) && !this.holdsUnsavedGridDocument(reuse)) {
         // The SAME move a followed link makes (moveRun, history append, FR-103; unbind FR-090a/FR-016)
         // — `navigate`'s generic branch already treats `open` exactly like `link`.
         const moved = await this.navigate(fromWebContentsId, {
@@ -674,6 +684,65 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     this.tellHistory('purge', (h) => h.purge(panelId));
     const run = this.runs.get(panelId);
     if (run) this.dropRun(run);
+    if (this.deps.runEnded !== undefined) {
+      try {
+        this.deps.runEnded(panelId);
+      } catch (error) {
+        logCaught('preview-service: release a grid document', error);
+      }
+    }
+  }
+
+  /**
+   * 073 (research R1) — the run behind a CSV Preview Editor, as `CsvGridService` needs it: where the
+   * file is, who owns it, which window last viewed it, and the document it follows, if any.
+   */
+  /** 073 — the grid document a CSV Preview Editor's own edits opened (`csv-grid:<panelId>`), if the run follows it. */
+  private ownGridDocument(run: PreviewRun): string | null {
+    if (run.source.kind !== 'document') return null;
+    const id = run.source.documentPanelId;
+    return id === `${GRID_DOCUMENT_PREFIX}${run.panelId}` ? id : null;
+  }
+
+  /** 073 T035 — the run follows its own grid document and that document has unsaved edits. */
+  private holdsUnsavedGridDocument(run: PreviewRun): boolean {
+    const id = this.ownGridDocument(run);
+    return id !== null && this.deps.documents.getContent(id)?.dirty === true;
+  }
+
+  gridRun(panelId: string):
+    | {
+        projectId: string;
+        projectRoot: string;
+        filePath: string;
+        editable: boolean;
+        movedOut: boolean;
+        windowId: string;
+        documentPanelId: string | null;
+      }
+    | undefined {
+    const run = this.runs.get(panelId);
+    if (run === undefined) return undefined;
+    return {
+      projectId: run.projectId,
+      projectRoot: run.projectRoot,
+      filePath: run.filePath,
+      editable: this.deps.registry.get(run.providerId)?.editable === true,
+      movedOut: run.movedOut,
+      windowId: String(run.lastViewer),
+      documentPanelId: run.source.kind === 'document' ? run.source.documentPanelId : null,
+    };
+  }
+
+  /**
+   * 073 contracts/preview-ipc-073.md — show the run's document NOW, skipping the update delay: the grid's
+   * own edit must appear in the grid at once. A run on the disk has nothing pending.
+   */
+  flush(panelId: string): void {
+    const run = this.runs.get(panelId);
+    if (run === undefined || run.source.kind !== 'document') return;
+    run.scheduler?.cancel();
+    this.settleDocument(run);
   }
 
   /** FR-063 — every run of a provider that was just turned off. */
@@ -785,6 +854,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // 054 FR-007, FR-008 — a preview never becomes another preview TYPE. A target of another provider is
     // handed back for an ordinary open, which reuses or places a preview of its own type.
     if (provider.id !== run.providerId) return { kind: 'reroute' };
+    // 073 T035 (FR-033) — unsaved grid edits are never moved out of sight: an ordinary open places the
+    // target in a panel of its own (`open` does not reuse this run while they are unsaved).
+    if (this.holdsUnsavedGridDocument(run)) return { kind: 'reroute' };
 
     // 5. In place — but READ FIRST, and change nothing until the read has answered (fix round 1).
     //
@@ -919,6 +991,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
 
     const other = this.runForPath(canon(target));
     if (other && other !== run) return this.focusOtherPreview(other, undefined);
+    // 073 T035 (FR-033) — Back/Forward never moves unsaved grid edits out of sight.
+    if (this.holdsUnsavedGridDocument(run)) return refused('unsaved');
 
     const token = ++run.navigateSeq;
     // A document for the target makes the run parented even when the file is gone (FR-013): the FR-106d
@@ -977,6 +1051,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     leavingIndex: number | undefined,
   ): void {
     this.snapshotFoldOnLeave(run, leavingIndex);
+    // 073 T035 — the run's own grid document (clean: a dirty one never moves, see `holdsUnsavedGridDocument`)
+    // is released once the run has left it, so the file it held reads as having no document again (FR-060).
+    const leftGridDocument = this.ownGridDocument(run);
     run.scheduler?.cancel();
     run.scheduler = null;
     run.timing = null;
@@ -1007,6 +1084,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     } else {
       run.lastSent = CLEARED_CONTENT;
       run.notice = read.notice;
+    }
+    if (leftGridDocument !== null && leftGridDocument !== this.ownGridDocument(run)) {
+      this.deps.gridDocumentLeft?.(run.panelId);
     }
   }
 
@@ -1539,6 +1619,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private parentOf(run: PreviewRun): PreviewUpdate['parent'] {
     if (run.source.kind !== 'document') return null;
     const id = run.source.documentPanelId;
+    // 073 R1 — a grid document is no editor: there is nothing to go to (FR-015), so the run reads as standalone.
+    if (isGridDocumentId(id)) return null;
     return { panelId: id, title: this.editorTitles.get(id) ?? editorAutoTitle(run.filePath) };
   }
 
@@ -1565,6 +1647,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       // 044 T177 — on EVERY update, so a renderer that misses one still learns the count from the next.
       navigationSeq: run.navigationSeq,
     };
+    if (run.source.kind === 'document' && isGridDocumentId(run.source.documentPanelId)) update.ownsDocument = true;
     if (viewState !== undefined) update.viewState = viewState;
     return update;
   }
@@ -1746,6 +1829,18 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     const provider = this.deps.registry.get(providerId);
     if (provider?.kind === 'binary') {
       if (!(await this.isFile(path))) return { ok: false, notice: { kind: 'deleted' } };
+      // 073 FR-062 — over the provider's own limit: one notice naming both sizes, and nothing for the body to load.
+      if (provider.sizeLimitSetting !== undefined && this.deps.fs.size !== undefined) {
+        const limit = sourceSizeLimitBytes(provider, this.deps.settings());
+        const size = await this.deps.fs.size(path).catch((error: unknown) => {
+          logCaught('preview-service: size a binary document', error);
+          return 0;
+        });
+        if (size > limit) {
+          logExpected('preview-service: read a binary document', `the file is ${size} bytes, over the provider limit of ${limit}`, new Error('too large'));
+          return { ok: false, notice: { kind: 'too-large', size, limit } };
+        }
+      }
       const url = `throng-preview://source/${encodeURIComponent(run.panelId)}?rev=${run.revision + 1}`;
       return { ok: true, content: { kind: 'resource', url } };
     }

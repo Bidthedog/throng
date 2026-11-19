@@ -237,6 +237,14 @@ export type ActionId =
    */
   | 'preview.goToHeading'
   /*
+   * 073 FR-038 — the CSV Preview Editor's insert commands, acting on the focused grid's active cell. Each is
+   * also on the grid's row or column menu (every panel action has a menu item, and the reverse).
+   */
+  | 'grid.insertRowAbove'
+  | 'grid.insertRowBelow'
+  | 'grid.insertColumnLeft'
+  | 'grid.insertColumnRight'
+  /*
    * 070 FR-027, FR-024a — the application commands the macOS app menu carries, each also in the key bindings list
    * (Principle VI): Settings opens Preferences; Install and Uninstall put the `throng` command on the PATH and take it
    * off (macOS only, where no installer does it).
@@ -326,6 +334,8 @@ const FIND_SURFACES = new Set<DispatchScope>(['editor', 'terminal', 'preview']);
 const MARKDOWN_SURFACES = new Set<DispatchScope>(['editor', 'preview']);
 /** 047 (research R7) — Go to Heading opens the preview's own pop-down; nowhere else. */
 const GO_TO_HEADING_SURFACES = new Set<DispatchScope>(['preview']);
+/** 073 FR-038 — where the grid's insert commands are live: a preview, the CSV Preview Editor's panel kind. */
+const GRID_SURFACES = new Set<DispatchScope>(['preview']);
 /**
  * The scope of every registered command (016, FR-017b0). Declared here, beside the chords, so a
  * new command cannot be added without answering "where is this live?" — the completeness test
@@ -487,6 +497,11 @@ export const COMMAND_SCOPES: CommandScopes = {
   'markdown.expandAllInside': MARKDOWN_SURFACES,
   // 047 (research R7) — the Go to Heading pop-down, preview-only.
   'preview.goToHeading': GO_TO_HEADING_SURFACES,
+  // 073 FR-038 — a preview only (the CSV Preview Editor); never a terminal, so no shell loses a key.
+  'grid.insertRowAbove': GRID_SURFACES,
+  'grid.insertRowBelow': GRID_SURFACES,
+  'grid.insertColumnLeft': GRID_SURFACES,
+  'grid.insertColumnRight': GRID_SURFACES,
 };
 
 /** The modifier held to drag a rectangular selection. Platform-keyed, like the chords (FR-017e). */
@@ -677,6 +692,11 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      * receiving `^G` in a terminal because neither scope includes it.
      */
     'preview.goToHeading': ['Ctrl+G'],
+    // 073 FR-038 — unbound: the grid's row and column menus carry all four, and no chord is free of collisions.
+    'grid.insertRowAbove': [],
+    'grid.insertRowBelow': [],
+    'grid.insertColumnLeft': [],
+    'grid.insertColumnRight': [],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],

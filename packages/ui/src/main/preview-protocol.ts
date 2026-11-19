@@ -28,6 +28,7 @@ import {
   resolvePreviewAsset,
   type AppSettings,
   type IFileSystem,
+  type PreviewProviderDescriptor,
   type PreviewProviderRegistry,
 } from '@throng/core';
 
@@ -118,6 +119,32 @@ function parseRoute(url: string): Route | null {
   return null;
 }
 
+/**
+ * 073 FR-061, FR-062 — the most a binary provider's source route serves: its own size-limit setting (in
+ * MB) where it declares one, else the editor's `editor.maxOpenFileBytes` as before.
+ */
+export function sourceSizeLimitBytes(provider: PreviewProviderDescriptor | undefined, settings: AppSettings): number {
+  const leaf = provider?.sizeLimitSetting;
+  if (provider === undefined || leaf === undefined) return settings.editor.maxOpenFileBytes;
+  const mb = settings.editor.previews.providers[provider.id]?.[leaf];
+  return typeof mb === 'number' && Number.isFinite(mb) && mb > 0 ? Math.round(mb * 1024 * 1024) : settings.editor.maxOpenFileBytes;
+}
+
+/**
+ * 073 R7 (contracts/preview-ipc-073.md `throng:preview:readSource`) — a binary provider's bytes, answered by
+ * the protocol handler ITSELF with a synthesised request, so containment, the MIME allowlist and the size
+ * cap are decided by the one route. The renderer's CSP keeps `connect-src` on 'self', so it cannot fetch
+ * the URL directly.
+ */
+export async function readPreviewSource(
+  handler: (request: Request) => Promise<Response>,
+  panelId: string,
+): Promise<{ ok: true; bytes: ArrayBuffer } | { ok: false; status: number }> {
+  const response = await handler(new Request(`${PREVIEW_SCHEME}://source/${encodeURIComponent(panelId)}`));
+  if (!response.ok) return { ok: false, status: response.status };
+  return { ok: true, bytes: await response.arrayBuffer() };
+}
+
 export function createPreviewProtocolHandler(
   deps: PreviewProtocolDeps,
 ): (request: Request) => Promise<Response> {
@@ -175,11 +202,12 @@ function serveWith(deps: PreviewProtocolDeps): (request: Request) => Promise<Res
 
     // Read the REAL path itself — the one the containment decision was made about — never a re-spelling.
     if ((await fs.stat(realPath)).kind !== 'file') return refuse(404);
-    if ((await fs.size(realPath)) > settings().editor.maxOpenFileBytes) return refuse(413);
+    const cap = route.kind === 'source' ? sourceSizeLimitBytes(provider, settings()) : settings().editor.maxOpenFileBytes;
+    if ((await fs.size(realPath)) > cap) return refuse(413);
     const bytes = await fs.readBytes(realPath);
     // The cap again, on what was actually read: a file that grew between the size check and the read
     // is refused rather than served past the limit.
-    if (bytes.byteLength > settings().editor.maxOpenFileBytes) return refuse(413);
+    if (bytes.byteLength > cap) return refuse(413);
 
     // A file read is backed by an ordinary ArrayBuffer, never a SharedArrayBuffer; `IFileSystem` types
     // it as the wider `ArrayBufferLike`, which `BodyInit` does not accept.
