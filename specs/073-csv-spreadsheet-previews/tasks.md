@@ -100,6 +100,7 @@ its failing test at the layer R10 names.
 - [x] T061 [US2] FR-036d: Edit in Dialog… disabled while more than one cell is selected
 - [x] T062 [US2] FR-033b: opening or dropping a CSV onto a dirty CSV Preview Editor raises the unsaved-changes prompt (Save & open, Discard & open, Open in new preview, Cancel) instead of opening a new panel; Back/Forward stay refused — integration over PreviewService plus the renderer prompt
 - [x] T063 [US2] FR-008d: per-file grid selection (and scroll) kept per panel history entry for the session, restored on reuse and Back/Forward, A1 for a first open; never persisted; both grids
+- [x] T064 [US2] FR-008e: a selection drag pins its starting pointer over the whole grid (root `data-drag`), resize edges included
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies

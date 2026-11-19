@@ -170,6 +170,9 @@ the feedback, the code and precedent rather than stated by the maintainer.
   last selection: reopening it, or going Back or Forward to it, restores that file's selection; a CSV opened
   for the first time starts at A1. Kept for the session only, never across a restart. *(derived)* Kept per
   panel history entry, alongside its scroll position; scroll is restored with it. Both grids. (FR-008d)
+- Q31: What does the pointer show while dragging across rows or columns? → A: The select arrow the drag began
+  with, steadily: crossing another header or a column's resize edge must not change it. *(derived)* A drag
+  across cells keeps the ordinary arrow the same way. (FR-008e)
 
 ## Terminology
 
@@ -346,7 +349,8 @@ expected bytes: only the edited field differs.
     in-cell editor opens (FR-060c).
 28. **Given** a grid, **When** the pointer rests on a row number, a column letter and the corner in turn,
     **Then** it shows a right arrow, a down arrow and a diagonal arrow; on a column's edge it shows the
-    resize pointer (FR-008c).
+    resize pointer (FR-008c). **When** they drag across several column letters, **Then** the down arrow stays
+    steady as it crosses each column's edge (FR-008e).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -496,6 +500,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-008c** *(Q27, 2026-11-19)*: Over a row number the pointer MUST be a right-pointing select arrow, over a
   column letter a down-pointing select arrow, and over the corner cell a diagonal select arrow; a column's
   resize edge keeps the resize pointer. Both grids. *(Refines FR-008b's pointer cursor.)*
+- **FR-008e** *(Q31, 2026-11-19)*: While a selection drag is under way, the pointer MUST stay the one it began
+  with — the row select arrow for a row drag, the column select arrow for a column drag, the ordinary arrow for a
+  cell drag — over every part of the grid, resize edges included, until the button is released. Both grids.
 - **FR-008d** *(Q30, 2026-11-19)*: A grid's selection MUST belong to the file it shows. When a panel shows
   another file (Last Preview Panel reuse, Back, Forward), the file it leaves keeps its selection in that
   history entry, and the file it shows gets back its own last selection, or A1 when it has none. Selections
