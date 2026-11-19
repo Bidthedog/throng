@@ -13,6 +13,7 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 | MT-07 | Go to Row, Line and Page | untested | | | |
 | MT-08 | Wrapping cells | untested | | | |
 | MT-09 | Locking the first row and column | untested | | | |
+| MT-10 | A CSV and its editor in step; toggle looks | untested | | | |
 
 ## MT-01: A CSV opens as a grid
 
@@ -194,3 +195,18 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 ### Negative cases
 - A workbook preview has no lock toggles.
 - Locking changes nothing in the file: no unsaved marker appears.
+
+## MT-10: A CSV and its editor in step; toggle looks
+
+Covers: FR-033c, FR-007a
+Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/editor/status-strip.tsx`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/preview/provider.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`
+
+### Steps
+1. Open a 2,000-row CSV in the text editor and choose Open Preview. The preview opens linked to the editor (its title bar shows the link as a Markdown preview's does).
+2. With Synchronise Scrolling on, scroll the editor to about line 500: the grid's top row is the same record. Scroll the grid: the editor follows. A record holding a line break maps to its first line.
+3. The Synchronise Scrolling button is on both status bars; turning it off on either stops both following.
+4. On the CSV status bar, with each toggle off — cell dialog, Wrap, Lock first row, Lock first column, Synchronise Scrolling — its icon is greyed with a diagonal line through it and its tooltip ends ": disabled". Turn each on: the line goes, the icon is bright on a highlighted background, and the tooltip ends ": enabled".
+5. The editor status bar's Synchronise Scrolling button looks and reads the same way.
+
+### Negative cases
+- A CSV preview has no Go to Heading; Ctrl+G still opens Go to Row.
