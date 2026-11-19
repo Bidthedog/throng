@@ -786,6 +786,16 @@ describe('DataGrid long-cell routing (FR-036a)', () => {
     expect(screen.queryByLabelText('Cell value')).toBeNull();
   });
 
+  it('sends a short cell holding a line break to the dialog too (FR-036c)', () => {
+    const { g, onEditInDialog } = routed({ getCell: (r, c) => (r === 2 && c === 1 ? 'a\nb' : `r${r}c${c}`) });
+    select(g, 2, 1);
+    g.key('F2');
+    fireEvent.doubleClick(g.cellAt(2, 1));
+    expect(onEditInDialog).toHaveBeenCalledTimes(2);
+    expect(onEditInDialog).toHaveBeenLastCalledWith(2, 1);
+    expect(screen.queryByLabelText('Cell value')).toBeNull();
+  });
+
   it('keeps the in-cell editor for a value at or under the threshold', () => {
     const { g, onEditInDialog } = routed();
     select(g, 0, 0);

@@ -26,7 +26,7 @@
  * Scrolling is native: a `position: sticky` header strip and gutter sit inside one scroller, and
  * `@tanstack/react-virtual` supplies the window of rows and columns to draw.
  */
-import { columnLabel, formatGrouped, logExpected } from '@throng/core';
+import { columnLabel, formatGrouped, isLongCell, logExpected } from '@throng/core';
 import {
   observeElementRect,
   useVirtualizer,
@@ -547,8 +547,9 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       const { row, col } = selRef.current.active;
       const original = getCell(row, col);
       ensureVisible(row, col);
-      // FR-036a — F2, Enter and a double-click (no typed character) on a long cell edit in the dialog instead.
-      if (initial === undefined && longCellThreshold !== undefined && onEditInDialog !== undefined && original.length > longCellThreshold) {
+      // FR-036a, FR-036c — F2, Enter and a double-click (no typed character) on a long or multi-line cell edit in the
+      // dialog instead.
+      if (initial === undefined && longCellThreshold !== undefined && onEditInDialog !== undefined && isLongCell(original, longCellThreshold)) {
         onEditInDialog(row, col);
         return;
       }

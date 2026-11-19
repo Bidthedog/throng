@@ -61,9 +61,9 @@ export function longCellThresholdOf(raw: unknown): number {
   return Math.max(1, Math.round(raw));
 }
 
-/** A value is long when it has MORE characters than `threshold`. */
+/** A value goes to the dialog when it has MORE characters than `threshold` (FR-036a), or holds a line break (FR-036c). */
 export function isLongCell(value: string, threshold: number): boolean {
-  return value.length > threshold;
+  return value.length > threshold || /[\r\n]/.test(value);
 }
 
 /** FR-060a — the shipped Long cell threshold, in characters. */

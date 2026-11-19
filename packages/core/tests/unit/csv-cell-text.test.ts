@@ -91,6 +91,13 @@ describe('the long-cell threshold', () => {
     expect(isLongCell('x'.repeat(50), 50)).toBe(false);
     expect(isLongCell('x'.repeat(51), 50)).toBe(true);
   });
+
+  it('calls any value holding a line break long, however short (FR-036c)', () => {
+    expect(isLongCell('a\nb', 50)).toBe(true);
+    expect(isLongCell('a\r\nb', 50)).toBe(true);
+    expect(isLongCell('a\rb', 50)).toBe(true);
+    expect(isLongCell('a b', 50)).toBe(false);
+  });
 });
 
 describe('wrapCellsOn (FR-013)', () => {
