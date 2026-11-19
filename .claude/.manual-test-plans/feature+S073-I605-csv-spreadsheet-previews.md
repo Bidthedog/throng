@@ -35,7 +35,7 @@ Covers: FR-033, FR-035, FR-035a, FR-036, FR-036a, FR-036b, FR-037, FR-038, FR-04
 Paths: `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/ui/src/main/csv-grid-service.ts`, `packages/ui/src/main/editor-coordinator.ts`, `packages/core/src/csv/**`, `packages/core/src/config/keybindings.ts`
 
 ### Steps
-1. In `people.csv`'s grid, click the cell holding `plain`, press Enter, type `now, with a comma`, press Enter. The cell shows the new text and the active cell moves down. The tab, the project and the file in File Explorer show the unsaved marker.
+1. In `people.csv`'s grid, click the cell holding `plain`, press Enter, type `now, with a comma`, press Enter. The cell shows the new text and the active cell moves down. The panel title bar, the tab, the project and the file in File Explorer show the unsaved marker, and all of them clear on save.
 2. Press Ctrl+S. The markers clear. Open the file in a text editor (Open In): only that field changed, now `"now, with a comma"`; line endings and every other line are as before.
 3. Type a character on any cell: the editor opens holding just that character. Escape cancels; the cell is unchanged.
 4. Press Ctrl+Z, then Ctrl+Y. The last edit undoes and redoes.
