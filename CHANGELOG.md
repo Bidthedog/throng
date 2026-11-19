@@ -29,7 +29,7 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
-## 1.0.0-beta1 — 2026-11-17
+## 1.0.0-beta1 — 2026-11-19
 
 ### Added
 
