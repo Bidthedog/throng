@@ -153,6 +153,9 @@ the feedback, the code and precedent rather than stated by the maintainer.
 - Q25: Which cells open in the dialog? → A: Any cell holding a line break, as well as any longer than the
   threshold. *(derived)* Only while the dialog is available for the panel (FR-036b); typing still edits in
   place. (FR-036c, refining FR-036a)
+- Q26: Can multi-line cells be kept out of the dialog? → A: Yes, by a CSV setting, on by default. *(derived)*
+  **Edit multi-line cells in a dialog**; off, a cell holding a line break opens in the dialog only when it is
+  also longer than the threshold. (FR-060c)
 
 ## Terminology
 
@@ -325,6 +328,8 @@ expected bytes: only the edited field differs.
     FR-006c, FR-060b).
 26. **Given** a 10-character cell holding a line break, **When** the user double-clicks it, **Then** it opens
     in the cell dialog with the break shown (FR-036c).
+27. **Given** Edit multi-line cells in a dialog off, **When** the user double-clicks that cell, **Then** the
+    in-cell editor opens (FR-060c).
 
 ---
 
@@ -657,6 +662,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
   (characters, a whole number of at least 1, ships **50**).
 - **FR-060b** *(Q24, 2026-11-19)*: The CSV provider MUST have a **Wrap cells** setting (on/off, ships **off**),
   rendered and documented as FR-060 requires: the Wrap state of every CSV panel that has not chosen its own.
+- **FR-060c** *(Q26, 2026-11-19)*: The CSV provider MUST have an **Edit multi-line cells in a dialog** setting
+  (on/off, ships **on**), rendered and documented as FR-060 requires. Off, FR-036c does not apply: a cell
+  holding a line break opens in the dialog only when it is longer than the threshold.
 - **FR-061**: **Preview size limit** MUST be a Spreadsheet provider setting, shipping at **25 MB**.
 - **FR-062**: A workbook above the preview size limit MUST show one inline notice naming the file's size
   and the limit, with Refresh retrying under the current limit. This **supersedes 044 FR-026**'s "the size
