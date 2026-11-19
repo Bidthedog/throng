@@ -67,9 +67,14 @@ const DIAGRAM_VENDOR =
   /\/node_modules\/(mermaid|@mermaid-js\/[^/]+|@braintree\/sanitize-url|@iconify\/[^/]+|@upsetjs\/venn\.js|chevrotain|@chevrotain\/[^/]+|langium|vscode-[a-z-]+|cose-base|cytoscape[a-z-]*|d3|d3-[a-z-]+|dagre-d3-es|dayjs|delaunator|elkjs|es-toolkit|hachure-fill|internmap|katex|khroma|layout-base|lodash-es|marked|path-data-parser|points-on-curve|points-on-path|robust-predicates|roughjs|rw|stylis|ts-dedent|uuid)\//;
 
 /** Both lazily-loaded vendor sets, as the eager guard below checks them. */
+/** 073 — the grid previews' libraries: the virtualiser (lazy, with the body) and SheetJS (worker-only). */
+const GRID_VENDOR = /\/node_modules\/(@tanstack\/react-virtual|@tanstack\/virtual-core|xlsx)\//;
+
 const LAZY_VENDOR = [
   { pattern: PREVIEW_VENDOR, what: 'the Markdown preview pipeline loads with the app (R21)' },
   { pattern: DIAGRAM_VENDOR, what: 'the Mermaid diagram renderer loads with the app (054 FR-047)' },
+  // 073 FR-009 — the grid's virtualiser arrives with the first grid preview; SheetJS only inside its worker.
+  { pattern: GRID_VENDOR, what: 'the data grid or the workbook reader loads with the app (073 FR-009)' },
 ];
 
 /**
@@ -249,6 +254,10 @@ function chunkFor(rawId: string): string | null {
   // are reached only by the block registry's `import()`, so they get a chunk of their own. The diagram's
   // React components and the rasteriser import neither and ride with whatever imports them.
   if (/\/src\/renderer\/preview\/diagram\/(mermaid-renderer|svg-sanitise)\.ts$/.test(id)) return 'app-preview-diagram';
+  // 073 FR-009 — the two grid providers' bodies and the shared grid, behind their views' dynamic imports. The
+  // grid's command registry is the one grid module the window imports eagerly (the key handler), so it stays out.
+  if (/\/src\/renderer\/preview\/providers\/(csv|spreadsheet)\/(?!view\.ts$)/.test(id)) return 'app-preview-grid';
+  if (/\/src\/renderer\/grid\/(?!grid-commands\.ts$)/.test(id)) return 'app-preview-grid';
   if (/\/src\/renderer\/preview\//.test(id)) return 'app-preview';
   // The terminal panel and its stores — the next largest self-contained area, split for the same
   // reason (053's title templates took the app chunk to 501 kB).
@@ -272,6 +281,7 @@ function chunkFor(rawId: string): string | null {
   // `picomatch` from `vendor`, so whatever else `vendor` holds loads in EVERY window, the monitor included
   // (055 SC-002, `failOnHeavyMonitor`).
   if (/\/node_modules\/(react-arborist|react-dnd|react-dnd-html5-backend|dnd-core|@react-dnd\/[^/]+|redux|react-window|memoize-one|fast-deep-equal)\//.test(id)) return 'arborist';
+  if (id.includes('@tanstack/')) return 'app-preview-grid';
   // One chunk per language grammar (016, FR-008). The grammars are imported
   // lazily by id, so a document only ever pays for the language it is in —
   // but only if each stays a separately-fetchable chunk. Folded into
