@@ -157,8 +157,15 @@ test('Manual starts NO shell and no conhost, and offers Reload on each panel (03
         await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
 
         const daemon = await daemonPid(ctx.pipeName);
-        const baseline = conhostChildren(daemon);
-        expect(baseline.length).toBeGreaterThan(0); // the shell we just started
+        // The panel is shown when its view mounts, which can be before the daemon has forked the shell: read the process
+        // table until the shell we just started is in it, rather than once (a slow hosted Linux runner read 0 twice).
+        let baseline: number[] = [];
+        await expect
+          .poll(() => (baseline = conhostChildren(daemon)).length, {
+            timeout: 15_000,
+            message: 'the shell this panel started never appeared under the daemon',
+          })
+          .toBeGreaterThan(0);
 
         // ── Leave the project and come back. THAT is the project open the preference governs.
         await createProject(win, 'Elsewhere', other);
