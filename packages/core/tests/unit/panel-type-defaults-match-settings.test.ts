@@ -23,6 +23,8 @@ describe('the panel-type fallback seeds match the shipped settings (039)', () =>
       rememberCommand: DEFAULT_APP_SETTINGS.terminals.defaultRememberCommand,
       rememberDirectory: DEFAULT_APP_SETTINGS.terminals.defaultRememberDirectory,
       runAsAdmin: DEFAULT_APP_SETTINGS.terminals.defaultRunAsAdmin,
+      // 076 FR-025 — the ignore default lives with the attention settings it governs.
+      notifications: DEFAULT_APP_SETTINGS.terminals.defaultNotifications,
     });
   });
 

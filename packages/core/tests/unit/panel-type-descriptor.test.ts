@@ -25,6 +25,8 @@ describe('Terminal descriptor — metadata', () => {
       'startupCommand',
       'rememberCommand',
       'rememberDirectory',
+      // 076 FR-020 — the third per-panel toggle, on the setup form too.
+      'notifications',
     ]);
     const flavour = terminalPanelType.inputs.find((i) => i.key === 'flavourId')!;
     expect(flavour.control).toBe('dropdown');
@@ -52,6 +54,7 @@ describe('Terminal descriptor — defaults', () => {
       rememberCommand: 'false',
       rememberDirectory: 'true',
       runAsAdmin: 'false',
+      notifications: 'true',
     });
   });
 
@@ -63,6 +66,7 @@ describe('Terminal descriptor — defaults', () => {
       rememberCommand: 'false',
       rememberDirectory: 'true',
       runAsAdmin: 'false',
+      notifications: 'true',
     });
   });
 });
@@ -78,8 +82,8 @@ describe('Terminal descriptor — defaults', () => {
  * Step 2 used to be a hard-coded literal, which is the whole of #223.
  */
 describe('Terminal descriptor — defaults seed from the preferences (039 FR-004)', () => {
-  const ALL_ON = { rememberCommand: true, rememberDirectory: true, runAsAdmin: true };
-  const ALL_OFF = { rememberCommand: false, rememberDirectory: false, runAsAdmin: false };
+  const ALL_ON = { rememberCommand: true, rememberDirectory: true, runAsAdmin: true, notifications: true };
+  const ALL_OFF = { rememberCommand: false, rememberDirectory: false, runAsAdmin: false, notifications: false };
 
   it('takes each checkbox from the preference when the Panel has no memory', () => {
     // `daemonElevated` because `runAsAdmin` is now gated on it (FR-008a, asserted below). This
@@ -89,11 +93,13 @@ describe('Terminal descriptor — defaults seed from the preferences (039 FR-004
     expect(on.rememberCommand).toBe('true');
     expect(on.rememberDirectory).toBe('true');
     expect(on.runAsAdmin).toBe('true');
+    expect(on.notifications).toBe('true');
 
     const off = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_OFF, daemonElevated: true }));
     expect(off.rememberCommand).toBe('false');
     expect(off.rememberDirectory).toBe('false');
     expect(off.runAsAdmin).toBe('false');
+    expect(off.notifications).toBe('false');
   });
 
   /*
@@ -209,7 +215,7 @@ describe('Terminal descriptor — buildConfig', () => {
   it('captures the chosen flavour, shell arguments, startup command and memory flag', () => {
     expect(
       terminalPanelType.buildConfig(
-        { flavourId: 'pwsh', shellArguments: '-NoLogo -X', startupCommand: 'npm run dev', rememberCommand: 'true', rememberDirectory: 'true', runAsAdmin: 'false' },
+        { flavourId: 'pwsh', shellArguments: '-NoLogo -X', startupCommand: 'npm run dev', rememberCommand: 'true', rememberDirectory: 'true', runAsAdmin: 'false', notifications: 'true' },
         ctx(),
       ),
     ).toEqual({
@@ -220,6 +226,23 @@ describe('Terminal descriptor — buildConfig', () => {
       rememberCommand: true,
       rememberDirectory: true,
       runAsAdmin: false,
+      notifications: true,
     });
+  });
+
+  it('writes Terminal notifications as an explicit boolean (076 FR-020)', () => {
+    const base = { flavourId: 'pwsh', shellArguments: '', startupCommand: '', rememberCommand: 'false', rememberDirectory: 'true', runAsAdmin: 'false' };
+    expect(terminalPanelType.buildConfig({ ...base, notifications: 'false' }, ctx()).notifications).toBe(false);
+    expect(terminalPanelType.buildConfig({ ...base, notifications: 'true' }, ctx()).notifications).toBe(true);
+  });
+
+  it('seeds Ignore from what a closed panel remembered, over the preference (025 FR-007a)', () => {
+    const seeded = terminalPanelType.defaults(
+      ctx({
+        terminalDefaults: { rememberCommand: false, rememberDirectory: true, runAsAdmin: false, notifications: true },
+        terminalMemory: { notifications: false },
+      }),
+    );
+    expect(seeded.notifications).toBe('false');
   });
 });

@@ -57,6 +57,7 @@ describe('panel-type form reducer', () => {
       rememberCommand: 'false',
       rememberDirectory: 'true',
       runAsAdmin: 'false',
+      notifications: 'true',
     });
     expect(canConfirm(s, d)).toBe(true);
   });
@@ -74,6 +75,7 @@ describe('panel-type form reducer', () => {
         rememberCommand: false,
         rememberDirectory: true,
         runAsAdmin: false,
+        notifications: true,
       },
     });
   });
@@ -100,6 +102,7 @@ describe('panel-type form reducer', () => {
         rememberCommand: false,
         rememberDirectory: true,
         runAsAdmin: false,
+        notifications: true,
       },
     });
   });

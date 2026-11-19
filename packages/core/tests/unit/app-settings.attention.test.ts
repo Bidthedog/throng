@@ -106,3 +106,18 @@ describe('AppSettings attention settings (057)', () => {
     expect(s.terminals.attention.signals).not.toBe(DEFAULT_APP_SETTINGS.terminals.attention.signals);
   });
 });
+
+// 076 FR-025 — Terminal notifications by default: the value a terminal panel holding none resolves to.
+describe('terminals.defaultNotifications (076)', () => {
+  it('ships on: no terminal is silenced until the user asks', () => {
+    expect(DEFAULT_APP_SETTINGS.terminals.defaultNotifications).toBe(true);
+  });
+
+  it('reads a boolean, and keeps the fallback for anything else', () => {
+    const read = (v: unknown) => parseAppSettings({ terminals: { defaultNotifications: v } }).terminals.defaultNotifications;
+    expect(read(true)).toBe(true);
+    expect(read(false)).toBe(false);
+    expect(read('false')).toBe(true);
+    expect(read(0)).toBe(true);
+  });
+});
