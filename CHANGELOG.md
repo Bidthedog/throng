@@ -34,6 +34,7 @@ What changed in each release of throng, written for someone deciding whether to 
 ### Added
 
 - **The throng website** at [throng-ide.com](https://throng-ide.com): what throng does, with screenshots, and install steps for Windows, Linux and macOS. ([#554](https://github.com/Bidthedog/throng/issues/554))
+- **Terminal status-bar toggles**: each terminal's status bar can switch remembering its last command, reopening in its last directory, and its attention notifications on or off, and each has a panel menu item. The new `terminals.defaultNotifications` preference sets notifications for a new terminal. ([#669](https://github.com/Bidthedog/throng/issues/669), [#673](https://github.com/Bidthedog/throng/issues/673))
 
 ### Changed
 
