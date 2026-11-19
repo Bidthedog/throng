@@ -136,6 +136,9 @@ the feedback, the code and precedent rather than stated by the maintainer.
   (and a workbook sheet) **Go to Row…** is also on the cell and row menus; Enter moves the active cell to
   that row in the active column and scrolls the row to the top. Go to Line keeps its remembered number
   (033 FR-057 – FR-061), the seed clamped into range. (FR-043a, FR-043b)
+- Q22: What does the corner cell above the row numbers do? → A: Clicking it selects every row and column, as
+  Select All does. *(derived)* It never scrolls (FR-008a); it is a named control ("Select all") with a pointer
+  cursor; right-clicking it selects everything and opens the selection's menu. Both grids. (FR-008b)
 
 ## Terminology
 
@@ -295,6 +298,9 @@ expected bytes: only the edited field differs.
 22. **Given** an editor on a 300-line file, **When** the user presses Ctrl+G, **Then** the same dialog reads
     "Line <caret line> of 300" and refuses a letter or 301; Escape closes it with focus back in the editor
     (FR-043b).
+23. **Given** a grid scrolled to row 500, **When** the user clicks the corner cell above the row numbers,
+    **Then** every row and column is selected, the grid stays at row 500, and Ctrl+C copies the whole table
+    (FR-008b).
 
 ---
 
@@ -417,6 +423,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-008a** *(Q14, 2026-11-19)*: Selecting with the pointer (a cell, a drag, a row number, a column letter,
   a right-click) MUST NOT scroll the grid; only keyboard movement (FR-008) brings the active cell into view.
   A whole-column selection's active cell MUST be its top row. Both grids.
+- **FR-008b** *(Q22, 2026-11-19)*: Clicking the corner cell where the column letters meet the row numbers MUST
+  select every cell, exactly as Select All does, without scrolling. It MUST be a named control ("Select all")
+  showing a pointer cursor; a right-click on it selects every cell and opens the selection's menu. Both grids.
 - **FR-009**: The grid's code, the CSV parser and the workbook library MUST load only when a grid is
   first needed; application startup MUST load none of it (as 054 FR-047 does for diagrams).
 - **FR-010**: Every library this feature adds MUST meet #10's bar: actively maintained, under a licence

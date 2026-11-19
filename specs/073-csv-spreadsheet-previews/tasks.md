@@ -91,6 +91,7 @@ its failing test at the layer R10 names.
 - [x] T052 [US2] FR-037g: an icon on every grid menu item with a sensible picture, both grids — existing icon keys where one fits, new drawn keys (icon-keys.ts, default-set SVG, SOURCES.json, README, regenerated module) otherwise; component tests that each item carries its key
 - [x] T053 [US2] FR-043b: a shared Go to dialog component (`packages/ui/src/renderer/navigate/`) with a core whole-number rule; the editor's Go to Line rebuilt on it ("Line N of M", keystroke refusal, remembered seed clamped) — failing tests first, existing Go to Line tests updated where FR-043b supersedes 033 FR-022/FR-023
 - [x] T054 [US2] FR-043a: Ctrl+G (`preview.goToHeading`) and Go to Row… on the cell and row menus open the shared dialog for rows in both grids; Enter moves the active cell in the active column, scrolls the row to the top, focus back in the grid
+- [x] T055 [US2] FR-008b: the corner cell selects every cell on click without scrolling; named "Select all", pointer cursor; right-click selects all and opens the selection menu; both grids — component tests in data-grid.test.ts
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies
