@@ -98,6 +98,50 @@ describe('floating-window layering (055 FR-083)', () => {
     unwire();
   });
 
+  /**
+   * X11: `isAlwaysOnTop()` is Chromium's cache of `_NET_WM_STATE_ABOVE`, and every `_NET_WM_STATE`
+   * PropertyNotify re-reads it from the server — including one for an unrelated atom, such as
+   * xfwm4 clearing `_NET_WM_STATE_FOCUSED` on the window losing focus. So between a
+   * `setAlwaysOnTop(false)` and the window manager applying it, the cache can read `true` again;
+   * a re-raise that trusted it was skipped, and the drop then landed with nothing left to undo it.
+   * Seen as the monitor below throng after Activate (resource-monitor.e2e.ts, hosted Linux).
+   */
+  it('re-raises after a drop the window manager has not applied yet, whatever the cache says', () => {
+    const f = fakes(true);
+    let server = false; // _NET_WM_STATE_ABOVE as the window manager holds it
+    let cache = false; // Chromium's is_always_on_top_
+    const pending: boolean[] = []; // client messages the window manager has not processed
+    const propertyNotify = (): void => {
+      cache = server;
+    };
+    const wm = {
+      isDestroyed: () => false,
+      isAlwaysOnTop: () => cache,
+      setAlwaysOnTop: (v: boolean) => {
+        cache = v;
+        pending.push(v);
+      },
+    };
+    const applyPending = (): void => {
+      while (pending.length > 0) {
+        server = pending.shift()!;
+        propertyNotify();
+      }
+    };
+    wireFloatingLayering(wm, f.seam);
+    f.flush();
+    applyPending();
+    expect(server).toBe(true);
+
+    f.focusChanged(false); // the monitor's blur, before the main window's focus has arrived
+    propertyNotify(); // _NET_WM_STATE_FOCUSED cleared on the monitor: the cache re-reads ABOVE
+    f.focusChanged(true); // the main window's focus
+    applyPending();
+
+    expect(server, 'the window manager left the monitor below throng').toBe(true);
+    expect(wm.isAlwaysOnTop()).toBe(true);
+  });
+
   it('stops yielding once unwired', () => {
     const f = fakes(true);
     const unwire = wireFloatingLayering(f.win, f.seam);
