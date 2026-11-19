@@ -114,6 +114,12 @@ the feedback, the code and precedent rather than stated by the maintainer.
   settings: the dialog on or off (ships on), and the threshold in characters (ships **50**).
   *(derived)* Saving a dialog whose text is unchanged writes nothing; the dialog's save is one undo step;
   Esc cancels. (FR-036a, FR-060a)
+- Q18: Can the cell dialog be switched off completely, and per panel? → A: Yes. With the setting off there is
+  no cell dialog at all, the **Edit in Dialog…** menu item included (this replaces Q17's "whatever the
+  setting" for the menu item). A toggle at the bottom right of the CSV Preview Editor's status bar turns
+  the dialog on or off for that panel alone. *(derived)* A panel whose toggle was never used follows the
+  setting, as 076's terminal toggles follow theirs; a used toggle is saved with the panel and survives a
+  restart; the toggle is keyboard-reachable and shows its state. (FR-036b)
 
 ## Terminology
 
@@ -257,6 +263,10 @@ expected bytes: only the edited field differs.
     line break and its indent turned into one space, and one Undo restores the original (FR-036a).
 17. **Given** a short cell, **When** the user right-clicks it and chooses **Edit in Dialog…**, types two
     lines and saves, **Then** the cell holds the two lines joined by one space (FR-036a).
+18. **Given** Edit long cells in a dialog off, **When** the user double-clicks a long cell or right-clicks
+    any cell, **Then** the in-cell editor opens and the menu has no Edit in Dialog…; **When** they turn the
+    status-bar toggle on in that panel, **Then** that panel offers the dialog again and other CSV panels do
+    not (FR-036b).
 
 ---
 
@@ -454,6 +464,13 @@ Markdown and Mermaid pattern, each setting working as labelled.
   for any other text, each line break becomes one space and the rest is kept. The flattened value is
   written as one grid edit (one undo step), and nothing is written when the dialog's text is unchanged from
   what it opened with. Esc and Cancel close it without writing. *(Refines FR-036 for long cells.)*
+- **FR-036b** *(Q18, 2026-11-19)*: Whether the cell dialog is available MUST be decided per panel: the
+  panel's own choice when it has one, else **Edit long cells in a dialog**. When it is unavailable there is
+  no cell dialog at all — no threshold routing and no **Edit in Dialog…** menu item. *(Supersedes FR-036a's
+  "whatever the value's length or the setting" for the menu item.)* The CSV Preview Editor's status bar MUST
+  show, at its bottom right, a toggle for the cell dialog that shows the panel's current state, is
+  reachable by keyboard, and records the panel's choice with the panel's saved state, so it survives a
+  restart; a panel that has never used it follows the setting.
 - **FR-037**: Selection MUST cover text within a cell (while its editor is open), single cells, cell
   ranges and whole rows (by the row gutter). **Copy**, **Cut** and **Paste** MUST be offered on the
   grid's right-click menu and work by their chords.
