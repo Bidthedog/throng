@@ -545,6 +545,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     <div className="preview-grid-body" data-testid={`csv-body-${panelId}`}>
       <DataGrid
         longCellThreshold={cellDialogAvailable ? longCellThreshold : undefined}
+        multiLineInDialog={providerSettings.multiLineCellsInDialog !== false}
         onEditInDialog={openCellDialog}
         wrap={wrapCellsOn(wrapChoice, providerSettings.wrapCells)}
         ref={gridRef}

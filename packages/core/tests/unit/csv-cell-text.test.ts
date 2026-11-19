@@ -98,6 +98,11 @@ describe('the long-cell threshold', () => {
     expect(isLongCell('a\rb', 50)).toBe(true);
     expect(isLongCell('a b', 50)).toBe(false);
   });
+
+  it('leaves a short multi-line value alone when multi-line routing is off (FR-060c)', () => {
+    expect(isLongCell('a\nb', 50, false)).toBe(false);
+    expect(isLongCell(`${'x'.repeat(50)}\nb`, 50, false)).toBe(true);
+  });
 });
 
 describe('wrapCellsOn (FR-013)', () => {

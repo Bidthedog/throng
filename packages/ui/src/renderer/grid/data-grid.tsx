@@ -149,6 +149,8 @@ export interface DataGridProps {
    * `longCellThreshold` (the dialog is off for this panel) edits every cell in place.
    */
   longCellThreshold?: number;
+  /** 073 FR-036c, FR-060c — a cell holding a line break goes to the dialog too, whatever its length. Default true. */
+  multiLineInDialog?: boolean;
   onEditInDialog?(row: number, col: number): void;
   /**
    * 073 FR-013 — wrap cells: every cell shows its whole value, line breaks kept and wrapped to its column's width, and
@@ -388,6 +390,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     onSelectionChange,
     onScrollChange,
     longCellThreshold,
+    multiLineInDialog = true,
     onEditInDialog,
     wrap = false,
   } = props;
@@ -549,13 +552,13 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       ensureVisible(row, col);
       // FR-036a, FR-036c — F2, Enter and a double-click (no typed character) on a long or multi-line cell edit in the
       // dialog instead.
-      if (initial === undefined && longCellThreshold !== undefined && onEditInDialog !== undefined && isLongCell(original, longCellThreshold)) {
+      if (initial === undefined && longCellThreshold !== undefined && onEditInDialog !== undefined && isLongCell(original, longCellThreshold, multiLineInDialog)) {
         onEditInDialog(row, col);
         return;
       }
       setEditing({ row, col, original, text: initial ?? original, selectAll: selectAllText && initial === undefined });
     },
-    [editable, ensureVisible, getCell, longCellThreshold, onEditInDialog],
+    [editable, ensureVisible, getCell, longCellThreshold, multiLineInDialog, onEditInDialog],
   );
 
   const finishEdit = (value: string | null, move: 'down' | 'right' | 'none', refocus: boolean): void => {

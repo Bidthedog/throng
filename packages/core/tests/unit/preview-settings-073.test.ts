@@ -29,6 +29,7 @@ describe('the CSV provider (the CSV Preview Editor)', () => {
       openTarget: 'lastActive',
       editLongCellsInDialog: true,
       longCellThreshold: 50,
+      multiLineCellsInDialog: true,
       wrapCells: false,
     });
     expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, shipped, 'D:/p/data.csv')).toBe('preview');
@@ -44,6 +45,7 @@ describe('the CSV provider (the CSV Preview Editor)', () => {
       'editor.previews.providers.csv.openTarget',
       'editor.previews.providers.csv.editLongCellsInDialog',
       'editor.previews.providers.csv.longCellThreshold',
+      'editor.previews.providers.csv.multiLineCellsInDialog',
       'editor.previews.providers.csv.wrapCells',
     ]);
   });
@@ -78,6 +80,19 @@ describe('the CSV cell dialog settings (FR-060a)', () => {
     const threshold = rows.find((d) => d.key.endsWith('.longCellThreshold'));
     expect(dialog).toMatchObject({ label: 'CSV: Edit long cells in a dialog', control: 'toggle' });
     expect(threshold).toMatchObject({ label: 'CSV: Long cell threshold', min: 1 });
+  });
+});
+
+describe('the CSV Edit multi-line cells in a dialog setting (FR-060c)', () => {
+  it('ships on, keeps a stored value and falls back on a wrong type', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ multiLineCellsInDialog: true });
+    expect(parsePreviewSettings({ providers: { csv: { multiLineCellsInDialog: false } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ multiLineCellsInDialog: false });
+    expect(parsePreviewSettings({ providers: { csv: { multiLineCellsInDialog: 'no' } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ multiLineCellsInDialog: true });
+  });
+
+  it('is a toggle under the CSV subsection', () => {
+    const row = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).find((d) => d.key.endsWith('.csv.multiLineCellsInDialog'));
+    expect(row).toMatchObject({ label: 'CSV: Edit multi-line cells in a dialog', control: 'toggle', subsection: 'CSV' });
   });
 });
 

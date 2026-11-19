@@ -49,6 +49,15 @@ export const csvProvider: PreviewProviderDescriptor = {
       max: CSV_LONG_CELL_THRESHOLD.max,
       step: 10,
     },
+    // FR-036c, FR-060c — a cell holding a line break opens in the dialog too.
+    {
+      leaf: 'multiLineCellsInDialog',
+      label: 'Edit multi-line cells in a dialog',
+      description:
+        'Open a cell holding a line break in the cell dialog however short it is. When off, such a cell opens there only when it is longer than the threshold.',
+      control: 'toggle',
+      default: true,
+    },
     // FR-013, FR-060b — wrap cells.
     {
       leaf: 'wrapCells',
