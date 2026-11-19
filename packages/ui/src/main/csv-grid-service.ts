@@ -47,7 +47,7 @@ export interface CsvGridEditors {
     | null;
   undo(panelId: string, viewId: string): void;
   redo(panelId: string, viewId: string): void;
-  save(payload: { panelId: string }): Promise<SaveResult | { ok: false; reason: string; error: string }>;
+  save(payload: { panelId: string; absPath?: string }): Promise<SaveResult | { ok: false; reason: string; error: string }>;
   destroy(panelId: string): void;
   getContent(panelId: string): { dirty: boolean } | null;
 }
@@ -205,10 +205,24 @@ export class CsvGridService {
   }
 
   /** Save through the editor's one save path (FR-045). With no document there is nothing unsaved. */
-  async save(panelId: string): Promise<SaveResult | { ok: true } | { ok: false; reason: string; error: string }> {
-    const doc = this.documentOf(panelId);
-    if (doc === null) return { ok: true };
-    return this.editors.save({ panelId: doc });
+  async save(panelId: string, absPath?: string): Promise<SaveResult | { ok: true } | { ok: false; reason: string; error: string }> {
+    if (absPath === undefined) {
+      const doc = this.documentOf(panelId);
+      if (doc === null) return { ok: true };
+      return this.editors.save({ panelId: doc });
+    }
+    // Save As (FR-035a): serialised with the panel's edits, and with no document yet (nothing edited) the grid
+    // document is opened first, exactly as the first edit would, so the editor's one save path writes it.
+    return this.serial(panelId, async () => {
+      const run = this.runs.gridRun(panelId);
+      if (run === undefined || !run.editable) return { ok: false as const, reason: 'io', error: 'This preview cannot be saved.' };
+      if (this.editors.documentFor(run.filePath) === null && !(await this.openGridDocument(panelId, run))) {
+        return { ok: false as const, reason: 'io', error: 'The file could not be opened to save it.' };
+      }
+      const doc = this.documentOf(panelId);
+      if (doc === null) return { ok: false as const, reason: 'io', error: 'This preview cannot be saved.' };
+      return this.editors.save({ panelId: doc, absPath });
+    });
   }
 
   /**

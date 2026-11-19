@@ -210,7 +210,7 @@ export interface PreviewGridIpc {
   edit(req: { panelId: string; filePath: string; operation: unknown }): Promise<unknown>;
   undo(panelId: string): { ok: boolean };
   redo(panelId: string): { ok: boolean };
-  save(panelId: string): Promise<unknown>;
+  save(panelId: string, absPath?: string): Promise<unknown>;
 }
 
 /** 073 R7 — a binary provider's bytes, read through the source route itself. */
@@ -259,7 +259,9 @@ export function registerPreviewIpc(
     const panelId = panelIdOf(payload);
     if (grid === undefined || panelId === null) return { ok: false, reason: 'io', error: 'No preview to save.' };
     try {
-      return await grid.save(panelId);
+      // FR-035a — Save As: an optional absolute path the renderer's own dialog chose; main's save path confines it.
+      const target = record(payload).absPath;
+      return await grid.save(panelId, typeof target === 'string' && target.length > 0 ? target : undefined);
     } catch (error) {
       logCaught('preview-ipc: gridSave', error);
       return { ok: false, reason: 'io', error: error instanceof Error ? error.message : String(error) };

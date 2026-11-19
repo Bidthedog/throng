@@ -825,7 +825,7 @@ declare global {
         >;
         gridUndo?: (panelId: string) => Promise<{ ok: boolean }>;
         gridRedo?: (panelId: string) => Promise<{ ok: boolean }>;
-        gridSave?: (panelId: string) => Promise<{ ok: true } | { ok: false; reason: string; error: string }>;
+        gridSave?: (panelId: string, absPath?: string) => Promise<{ ok: true } | { ok: false; reason: string; error: string }>;
         /** 073 R7 — a binary provider's file, read through the confined source route. */
         readSource?: (panelId: string) => Promise<{ ok: true; bytes: ArrayBuffer } | { ok: false; status: number }>;
         /** FR-031 — an editor panel's display title, forwarded as its previews' `parent.title`. */

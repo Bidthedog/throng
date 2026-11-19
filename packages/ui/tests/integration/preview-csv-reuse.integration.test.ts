@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -145,5 +145,47 @@ describe('Last Preview Panel reuse for a CSV (073 T035, FR-060)', () => {
       kind: 'reroute',
     });
     expect(previews.run('v1')?.filePath).toBe(a);
+  });
+});
+
+describe('Save As from the CSV Preview Editor (073 FR-035a)', () => {
+  const setB2 = (value: string) => ({ kind: 'setCells', cells: [{ row: 1, col: 1, value }] });
+
+  it('writes the edited document to the new path, leaves the old file, and the preview follows', async () => {
+    const a = await file('a.csv', 'x,y\n1,2\n');
+    const target = join(root, 'copy.csv');
+    await attach('v1', a);
+    expect(await grid.edit({ panelId: 'v1', filePath: a, operation: setB2('two') })).toEqual({ ok: true, dirty: true });
+
+    expect(await grid.save('v1', target)).toMatchObject({ ok: true });
+
+    expect(await readFile(target, 'utf8')).toBe('x,y\n1,two\n');
+    expect(await readFile(a, 'utf8')).toBe('x,y\n1,2\n');
+    expect(previews.run('v1')?.filePath).toBe(target);
+    expect(coord.getContent(gridDocumentIdFor('v1'))).toMatchObject({ text: 'x,y\n1,two\n', dirty: false });
+  });
+
+  it('with nothing edited yet, opens the document and writes the file as it is to the new path', async () => {
+    const a = await file('a.csv', 'x,y\n1,2\n');
+    const target = join(root, 'plain-copy.csv');
+    await attach('v1', a);
+    expect(coord.documentFor(a)).toBeNull();
+
+    expect(await grid.save('v1', target)).toMatchObject({ ok: true });
+
+    expect(await readFile(target, 'utf8')).toBe('x,y\n1,2\n');
+    expect(previews.run('v1')?.filePath).toBe(target);
+    expect(coord.getContent(gridDocumentIdFor('v1'))).toMatchObject({ dirty: false });
+  });
+
+  it('a Save As onto a path outside the project is refused and changes nothing', async () => {
+    const a = await file('a.csv', 'x,y\n1,2\n');
+    await attach('v1', a);
+    await grid.edit({ panelId: 'v1', filePath: a, operation: setB2('two') });
+    const outside = join(recoveryDir, 'elsewhere.csv');
+
+    expect(await grid.save('v1', outside)).toMatchObject({ ok: false });
+    expect(previews.run('v1')?.filePath).toBe(a);
+    expect(coord.getContent(gridDocumentIdFor('v1'))).toMatchObject({ dirty: true });
   });
 });

@@ -28,6 +28,7 @@ import {
   cellValue,
   firstBinding,
   GRID_MAX_CELLS,
+  GRID_MAX_ROW_COUNT,
   logCaught,
   logExpected,
   parseCsv,
@@ -41,6 +42,7 @@ import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
+import { copiedBlockFor, hasCopiedBlock, recordCopy, type CopiedBlock } from '../../../grid/copied-block.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
 import { useAppSettings, useKeybindings } from '../../../config/config-store.js';
 import { useContextMenu } from '../../../context-menu-provider.js';
@@ -150,15 +152,38 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   /* ── Edits ───────────────────────────────────────────────────────────────────────────────────── */
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const save = useCallback(async (): Promise<boolean> => {
-    const answer = await window.throng?.preview?.gridSave?.(panelId);
-    if (answer === undefined) return false;
-    if (!answer.ok) {
-      logExpected('csv-body: save', `the save was refused (${answer.reason}): ${answer.error}`, new Error(answer.reason));
-      return false;
-    }
-    return true;
-  }, [panelId]);
+  // `target` is a Save As location (FR-035a); without one the document is saved where it is.
+  const writeDocument = useCallback(
+    async (target?: string): Promise<boolean> => {
+      const gridSave = window.throng?.preview?.gridSave;
+      const answer = await (target === undefined ? gridSave?.(panelId) : gridSave?.(panelId, target));
+      if (answer === undefined) return false;
+      if (!answer.ok) {
+        logExpected('csv-body: save', `the save was refused (${answer.reason}): ${answer.error}`, new Error(answer.reason));
+        return false;
+      }
+      return true;
+    },
+    [panelId],
+  );
+  const save = useCallback((): Promise<boolean> => writeDocument(), [writeDocument]);
+
+  // FR-035a — Save As asks with the editor's own dialog (`use-editor.ts` `chooseLocation`), then writes through
+  // the same one save path; main re-points the preview, which follows the file at its new path.
+  const filePathRef = useRef(filePath);
+  filePathRef.current = filePath;
+  const projectRootRef = useRef(projectRoot);
+  projectRootRef.current = projectRoot;
+  const saveAs = useCallback(async (): Promise<boolean> => {
+    const current = filePathRef.current;
+    const cut = Math.max(current.lastIndexOf('/'), current.lastIndexOf('\\'));
+    const chosen = await window.throng?.editor?.chooseSavePath?.({
+      defaultDir: cut > 0 ? current.slice(0, cut) : projectRootRef.current,
+      defaultName: current.slice(cut + 1),
+    });
+    if (chosen === undefined || chosen === null) return false;
+    return writeDocument(chosen);
+  }, [writeDocument]);
 
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -247,15 +272,23 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   }, [paste]);
 
   const copyFormat = settings.editor.previews.copyFormat;
+  // FR-038a — what a copy or cut held, when it was whole rows or whole columns, for Insert Copied Rows / Columns.
   const copy = useCallback(
-    (range: GridRange, format: PreviewCopyFormat = copyFormat) => void copyGridRange(range, getCell, format),
-    [copyFormat, getCell],
+    (range: GridRange, format: PreviewCopyFormat = copyFormat) => {
+      const sel = gridRef.current?.getSelection();
+      void copyGridRange(range, getCell, format).then((ok) => {
+        if (ok && sel !== undefined) recordCopy(sel, range, rowCount, getCell);
+      });
+    },
+    [copyFormat, getCell, rowCount],
   );
 
   const cut = useCallback(
     (sel: GridSelection, range: GridRange) => {
       void copyGridRange(range, getCell, copyFormat).then((ok) => {
         if (!ok) return;
+        // Recorded before the rows go: the record holds the values the cut took.
+        recordCopy(sel, range, rowCount, getCell);
         if (sel.rows === true) void send({ kind: 'deleteRows', from: range.top, count: Math.min(range.bottom, rowCount - 1) - range.top + 1 });
         else clearRange(range);
       });
@@ -269,8 +302,20 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   );
 
   const activeCell = useCallback(() => gridRef.current?.getSelection().active ?? { row: 0, col: 0 }, []);
-  const insertRows = useCallback((at: number) => void send({ kind: 'insertRows', at: Math.min(at, rowCount), count: 1 }), [send, rowCount]);
-  const insertColumn = useCallback((at: number) => void send({ kind: 'insertColumn', at }), [send]);
+  const insertRows = useCallback(
+    (at: number, values?: string[][]) =>
+      void send(
+        values === undefined
+          ? { kind: 'insertRows', at: Math.min(at, rowCount), count: 1 }
+          : { kind: 'insertRows', at: Math.min(at, rowCount), count: values.length, values },
+      ),
+    [send, rowCount],
+  );
+  const insertColumn = useCallback(
+    (at: number, columns?: string[][]) =>
+      void send(columns === undefined ? { kind: 'insertColumn', at } : { kind: 'insertColumn', at, count: columns.length, columns }),
+    [send],
+  );
 
   // FR-038 — the bindable commands act on the active cell of this panel.
   useEffect(() => {
@@ -294,7 +339,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   useEffect(() => {
     registerEditorActions(panelId, {
       save,
-      saveAs: save,
+      saveAs,
       saveForClose: save,
       isDirty: () => ownsRef.current && dirtyRef.current,
       openFile: async () => {},
@@ -302,7 +347,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       reloadFromDisk: async () => false,
     });
     return () => unregisterEditorActions(panelId);
-  }, [panelId, save]);
+  }, [panelId, save, saveAs]);
   useEffect(() => {
     if (!ownsDocument) return;
     return () => removeEditorState(panelId);
@@ -327,8 +372,8 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
 
   /* ── Menus (contracts/grid-ui.md) ────────────────────────────────────────────────────────────── */
 
-  const onContextMenu = useCallback(
-    (target: GridMenuTarget, point: { x: number; y: number }) => {
+  const buildMenu = useCallback(
+    (target: GridMenuTarget, point: { x: number; y: number }, copied: CopiedBlock | null) => {
       const grid = gridRef.current;
       if (grid === null) return;
       const sel = grid.getSelection();
@@ -353,10 +398,26 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         { label: 'Copy', section: 'content', group: 'clipboard', onClick: () => copy(range) },
         { label: 'Paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
       ];
+      // FR-038a — beside the blank inserts, never instead of them.
+      const insertCopied: MenuAction[] = [];
+      if (copied !== null && copied.kind === 'rows' && copied.values.length <= GRID_MAX_ROW_COUNT) {
+        const rows = copied.values;
+        insertCopied.push(
+          { label: 'Insert Copied Rows Above', section: 'create', onClick: () => insertRows(at.row, rows) },
+          { label: 'Insert Copied Rows Below', section: 'create', onClick: () => insertRows(at.row + 1, rows) },
+        );
+      } else if (copied !== null && copied.kind === 'columns' && copied.values.length <= GRID_MAX_ROW_COUNT) {
+        const columns = copied.values;
+        insertCopied.push(
+          { label: 'Insert Copied Columns Left', section: 'create', onClick: () => insertColumn(at.col, columns) },
+          { label: 'Insert Copied Columns Right', section: 'create', onClick: () => insertColumn(at.col + 1, columns) },
+        );
+      }
       if (target.kind === 'row') {
         items.push(
           insert[0]!,
           insert[1]!,
+          ...insertCopied,
           ...clipboard(true),
           { label: 'Reset Size', section: 'viewState', onClick: () => grid.collapseRow(target.row) },
         );
@@ -364,6 +425,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         items.push(
           insert[2]!,
           insert[3]!,
+          ...insertCopied,
           ...clipboard(false),
           width,
           { label: 'Reset Size', section: 'viewState', onClick: () => resetWidth(target.col) },
@@ -380,6 +442,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           { label: 'Clear Cells', section: 'content', group: 'clipboard', onClick: () => clearRange(range) },
           { label: 'Select All', section: 'content', group: 'clipboard', onClick: () => grid.selectAll() },
           { label: 'Save', section: 'content', group: 'file', onClick: () => void save(), shortcut: chord('editor.save') },
+          { label: 'Save As…', section: 'content', group: 'file', onClick: () => void saveAs(), shortcut: chord('editor.saveAs') },
           ...insert,
           width,
         );
@@ -387,7 +450,27 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       if (onOpenInEditor !== undefined) items.push({ label: 'Open in Editor', section: 'navigate', onClick: onOpenInEditor });
       openMenu(point.x, point.y, items);
     },
-    [clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openMenu, pasteFromMenu, resetWidth, save, widths],
+    [clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
+  );
+
+  // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard
+  // still holds. The clipboard is read as the menu opens, as Paste reads it; every other menu opens at once.
+  const onContextMenu = useCallback(
+    (target: GridMenuTarget, point: { x: number; y: number }) => {
+      const kind = target.kind === 'row' ? 'rows' : target.kind === 'column' ? 'columns' : null;
+      const readClipboard = window.throng?.clipboard?.paste;
+      if (kind === null || !hasCopiedBlock(kind) || readClipboard === undefined) {
+        buildMenu(target, point, null);
+        return;
+      }
+      void readClipboard()
+        .then((clip) => buildMenu(target, point, copiedBlockFor(kind, clip.text)))
+        .catch((error: unknown) => {
+          logCaught('csv-body: read the clipboard for the menu', error);
+          buildMenu(target, point, null);
+        });
+    },
+    [buildMenu],
   );
 
   const submitWidth = (e: FormEvent): void => {

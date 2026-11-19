@@ -988,7 +988,7 @@ contextBridge.exposeInMainWorld('throng', {
     gridEdit: (request: unknown) => ipcRenderer.invoke('throng:preview:gridEdit', request),
     gridUndo: (panelId: string) => ipcRenderer.invoke('throng:preview:gridUndo', { panelId }),
     gridRedo: (panelId: string) => ipcRenderer.invoke('throng:preview:gridRedo', { panelId }),
-    gridSave: (panelId: string) => ipcRenderer.invoke('throng:preview:gridSave', { panelId }),
+    gridSave: (panelId: string, absPath?: string) => ipcRenderer.invoke('throng:preview:gridSave', { panelId, absPath }),
     /** 073 R7 — a binary provider's bytes, through the source route's own containment and size cap. */
     readSource: (panelId: string) => ipcRenderer.invoke('throng:preview:readSource', { panelId }),
     publishEditorTitle: (panelId: string, title: string) =>

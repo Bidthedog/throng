@@ -1043,11 +1043,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         ) : null}
         <span className="panel-box__actions">
           {/* 067 FR-069 — an editor's Save and Save As, then the separator, before the common icons. */}
-          {panel.kind === 'editor' ? (
+          {/* 073 FR-035a — the CSV Preview Editor edits its document, so it carries the same two controls. They
+              run the actions its body registers (`getEditorActions`), exactly as an editor's do. The preview
+              does not report a moved-out file, so Save stays enabled: main refuses it there. */}
+          {panel.kind === 'editor' || (isPreview && previewUi?.providerId === 'csv') ? (
             <PanelHeaderSaveIcons
               panelId={panel.id}
               keybindings={keybindings}
-              movedOut={editorUi?.movedOut === true}
+              movedOut={panel.kind === 'editor' && editorUi?.movedOut === true}
             />
           ) : null}
           {/*
