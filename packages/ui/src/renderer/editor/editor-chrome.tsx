@@ -1,5 +1,12 @@
 import { useEffect, useRef, type ReactElement } from 'react';
-import { effectiveActivePanelId } from '@throng/core';
+import {
+  PREVIEW_KIND,
+  collectPanels,
+  effectiveActivePanelId,
+  previewProviderIdOf,
+  type Panel,
+  type PreviewPanelConfig,
+} from '@throng/core';
 import { resolveScoped } from '../keybindings/scope.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
@@ -21,6 +28,8 @@ import { PreviewProviderSync } from '../preview/preview-provider-sync.js';
 import { PreviewPathSync } from '../preview/preview-path-sync.js';
 import { HistoryMirrorSync } from '../navigation/history-mirror-sync.js';
 import { resolveKeydown } from '../config/chord-key.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
+import { getPreviewState } from '../preview/preview-store.js';
 
 /**
  * Editor window chrome (006): the editor keybindings (Ctrl+S / Ctrl+Shift+S,
@@ -70,8 +79,9 @@ export function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean 
   const ws = useWorkspace();
   const { activeProject } = useProjects();
   const settings = useAppSettings();
-  const ref = useRef({ ws, activeProject, settings, isSubWorkspace });
-  ref.current = { ws, activeProject, settings, isSubWorkspace };
+  const { registry } = usePreviewProviders();
+  const ref = useRef({ ws, activeProject, settings, isSubWorkspace, registry });
+  ref.current = { ws, activeProject, settings, isSubWorkspace, registry };
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -90,24 +100,33 @@ export function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean 
       if (action !== 'editor.save' && action !== 'editor.saveAll' && action !== 'editor.saveAs') return;
       // Panel-scoped: only when a workspace Panel — not the Files pane — is active.
       if (getActivePane() !== 'workspace') return;
-      e.preventDefault();
-      const { ws: w, activeProject: proj, settings: st, isSubWorkspace: sub } = ref.current;
-      if (action === 'editor.saveAll') {
-        void saveAllEditors({
-          layout: w.layout ?? null,
-          activeProjectId: proj?.id ?? null,
-          isSubWorkspace: sub,
-          scope: st.editor.saveAllScope,
-        });
+      const { ws: w, activeProject: proj, settings: st, isSubWorkspace: sub, registry: providers } = ref.current;
+      if (action !== 'editor.saveAll') {
+        const layout = w.layout;
+        const tab = layout?.tabs.find((t) => t.id === layout.activeTabId);
+        const panelId = tab ? effectiveActivePanelId(tab) : null;
+        const panel = tab && panelId ? (collectPanels(tab.root) as Panel[]).find((p) => p.id === panelId) : undefined;
+        // 073 FR-035 — a preview saves only when its provider is editable (the CSV Preview Editor); any other
+        // preview leaves the chord alone, default and all (044 FR-021).
+        if (panel?.kind === PREVIEW_KIND) {
+          const providerId =
+            getPreviewState(panel.id)?.providerId ?? previewProviderIdOf(panel.config as PreviewPanelConfig | undefined, providers);
+          if (providerId === undefined || providers.get(providerId)?.editable !== true) return;
+        }
+        e.preventDefault();
+        const actions = panelId ? getEditorActions(panelId) : undefined;
+        if (!actions) return;
+        if (action === 'editor.saveAs') void actions.saveAs();
+        else void actions.save();
         return;
       }
-      const layout = w.layout;
-      const tab = layout?.tabs.find((t) => t.id === layout.activeTabId);
-      const panelId = tab ? effectiveActivePanelId(tab) : null;
-      const actions = panelId ? getEditorActions(panelId) : undefined;
-      if (!actions) return;
-      if (action === 'editor.saveAs') void actions.saveAs();
-      else void actions.save();
+      e.preventDefault();
+      void saveAllEditors({
+        layout: w.layout ?? null,
+        activeProjectId: proj?.id ?? null,
+        isSubWorkspace: sub,
+        scope: st.editor.saveAllScope,
+      });
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

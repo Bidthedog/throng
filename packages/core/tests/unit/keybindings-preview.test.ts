@@ -128,10 +128,17 @@ describe("'preview' is a dispatch scope", () => {
     expect(scopeNames(COMMAND_SCOPES['preview.followLink'])).toEqual(['Editor', 'Preview']);
   });
 
-  it('leaves the file, save and rename commands dead in a preview (FR-021, FR-030)', () => {
-    for (const action of ['file.delete', 'file.rename', 'file.cut', 'file.copy', 'editor.save']) {
+  it('leaves the file and rename commands dead in a preview (FR-021, FR-030)', () => {
+    for (const action of ['file.delete', 'file.rename', 'file.cut', 'file.copy', 'editor.saveAll']) {
       expect(COMMAND_SCOPES[action as ActionId].has('preview'), action).toBe(false);
     }
+  });
+
+  // 073 FR-035, FR-035a supersede the above for Save and Save As: the CSV Preview Editor saves by the editor's
+  // chords. The dispatcher saves only an editable preview, so a read-only one still reaches nothing.
+  it('joins editor.save and editor.saveAs to the preview scope (073 FR-035, FR-035a)', () => {
+    expect(COMMAND_SCOPES['editor.save' as ActionId].has('preview')).toBe(true);
+    expect(COMMAND_SCOPES['editor.saveAs' as ActionId].has('preview')).toBe(true);
   });
 
   // 047 FR-004 (research R1) supersedes the ABOVE for `search.find`: a preview now has its own find

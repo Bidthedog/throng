@@ -164,7 +164,8 @@ describe('where a command is live (FR-017b0)', () => {
     // Joined into one, "Editor · Terminal" reads as a single exotic scope rather than two ordinary
     // ones.
     mountTab();
-    expect(scopes('editor.save').map((p) => p.textContent)).toEqual(['Editor', 'Terminal']);
+    // 073 FR-035 — Save is live in a preview too (the CSV Preview Editor saves by it).
+    expect(scopes('editor.save').map((p) => p.textContent)).toEqual(['Editor', 'Preview', 'Terminal']);
   });
 });
 

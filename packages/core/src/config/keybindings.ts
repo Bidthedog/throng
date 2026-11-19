@@ -318,6 +318,12 @@ const EXPLORER_ONLY = new Set<DispatchScope>(['explorer']);
 /** Panels, but not the file tree: a find bar and a save belong to whatever panel is showing. */
 const PANELS = new Set<DispatchScope>(['editor', 'terminal']);
 /**
+ * 073 FR-035, FR-035a — Save and Save As also resolve over a preview, so the CSV Preview Editor saves by the
+ * editor's chords. The dispatcher saves only a preview whose provider is editable; over any other preview
+ * the chord still reaches nothing (044 FR-021).
+ */
+const SAVE_PANELS = new Set<DispatchScope>(['editor', 'terminal', 'preview']);
+/**
  * 047 (research R1, FR-004) — `PANELS` widened by one surface for FOUR of the seven `search.*` bar
  * commands: a preview now mounts its own find bar (`PreviewSearchController`), so `search.find`,
  * `search.findNext`, `search.findPrevious` and `search.close` are live there too. The three replace
@@ -430,9 +436,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   'file.undo': EXPLORER_ONLY,
   'file.redo': EXPLORER_ONLY,
   // Save acts on the active panel's document; it is inert, not wrong, in a terminal.
-  'editor.save': PANELS,
+  'editor.save': SAVE_PANELS,
   'editor.saveAll': PANELS,
-  'editor.saveAs': PANELS,
+  'editor.saveAs': SAVE_PANELS,
   // One find bar, routed to the active panel (013): a terminal searches its scrollback. 047 widens
   // four of the seven to `FIND_SURFACES` — a preview mounts the same find bar (research R1) — while
   // the replace trio stays on `PANELS`, which has nothing for a preview to act on.

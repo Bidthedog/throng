@@ -145,6 +145,8 @@ describe('the CSV Preview Editor (073 FR-035a)', () => {
     const throng = window.throng as unknown as { editor?: Record<string, unknown>; preview?: Record<string, unknown> };
     throng.editor = { ...(throng.editor ?? {}), chooseSavePath: choose };
     throng.preview = { ...(throng.preview ?? {}), gridSave };
+    // The body is loaded lazily and registers the save actions when it mounts: wait for the grid first.
+    await screen.findByTestId(`csv-grid-${m.id}`, undefined, { timeout: 5000 });
     fireEvent.click(await screen.findByTestId(`panel-save-as-${m.id}`));
     await waitFor(() => expect(choose).toHaveBeenCalledWith({ defaultDir: 'D:/proj', defaultName: 'data.csv' }));
     expect(gridSave).not.toHaveBeenCalled();

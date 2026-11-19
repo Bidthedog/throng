@@ -159,7 +159,6 @@ describe('document commands are inert while a preview is active (FR-021)', () =>
   };
 
   it.each([
-    ['the save chord', 's', { ctrl: true }, 'editor', 'editor.save'],
     ['Delete', 'Delete', {}, 'explorer', 'file.delete'],
     ['F2', 'F2', {}, 'explorer', 'file.rename'],
     ['Ctrl+X', 'x', { ctrl: true }, 'explorer', 'file.cut'],
@@ -177,6 +176,17 @@ describe('document commands are inert while a preview is active (FR-021)', () =>
     const action = resolve(key, mods);
 
     expect(action === null || !/^(editor\.save|file\.|panel\.rename|search\.)/.test(action)).toBe(true);
+  });
+
+  /*
+   * 073 FR-035 (superseding 044 FR-021 for an EDITABLE provider) — the save chord now resolves in preview
+   * scope, so a CSV Preview Editor can save by it. A read-only preview still saves nothing: the dispatcher
+   * test below proves that through the real dispatcher.
+   */
+  it('the save chord resolves to editor.save in preview scope (073 FR-035)', async () => {
+    const { id } = await mountText();
+    expect(effectiveActivePanelId(m!.ws().layout!.tabs[0])).toBe(id);
+    expect(resolve('s', { ctrl: true })).toBe('editor.save');
   });
 
   /*
@@ -254,6 +264,45 @@ describe('document commands are inert while a preview is active (FR-021)', () =>
     } finally {
       unregisterEditorActions(id);
       unregisterEditorActions(editorId);
+    }
+  });
+
+  it('an EDITABLE preview (the CSV Preview Editor) saves by Ctrl+S and saves as by Ctrl+Alt+S (073 FR-035, FR-035a)', async () => {
+    const GRID_FILE = 'D:/proj/table.prvgrid';
+    const editableRegistry = createPreviewProviderRegistry([
+      { id: 'testGrid', displayName: 'Test grid', extensions: ['.prvgrid'], kind: 'text', editable: true },
+    ]);
+    const gridViews: Record<string, PreviewProviderView> = {
+      testGrid: { id: 'testGrid', textSelection: false, load: () => Promise.resolve(FakeBody) },
+    };
+    m = await mountMarkdownPreview('a,b', GRID_FILE, {
+      providers: { registry: editableRegistry, views: gridViews },
+      providerId: 'testGrid',
+      extras: [createElement(EditorKeybindings, { key: 'save-keys', isSubWorkspace: false })],
+    });
+    const id = m.id;
+    await screen.findByTestId(`fake-body-${id}`);
+    const actions: EditorActions & { save: ReturnType<typeof vi.fn>; saveAs: ReturnType<typeof vi.fn> } = {
+      save: vi.fn(() => Promise.resolve(true)),
+      saveAs: vi.fn(() => Promise.resolve(true)),
+      isDirty: () => true,
+      openFile: () => Promise.resolve(),
+      revert: () => {},
+      reloadFromDisk: () => Promise.resolve(true),
+    };
+    registerEditorActions(id, actions);
+    try {
+      setActivePane('workspace');
+      const host = screen.getByTestId(`preview-body-${id}`);
+      host.focus();
+      const save = fireEvent.keyDown(host, { key: 's', ctrlKey: true });
+      await waitFor(() => expect(actions.save).toHaveBeenCalledTimes(1));
+      expect(save).toBe(false); // claimed: the browser's own Save Page never runs
+      fireEvent.keyDown(host, { key: 's', ctrlKey: true, altKey: true });
+      await waitFor(() => expect(actions.saveAs).toHaveBeenCalledTimes(1));
+      expect(actions.save).toHaveBeenCalledTimes(1);
+    } finally {
+      unregisterEditorActions(id);
     }
   });
 });
