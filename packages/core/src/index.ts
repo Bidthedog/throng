@@ -1594,6 +1594,8 @@ export {
   cellDialogOn,
   cellDialogText,
   wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
   flattenCellText,
   isJsonContainer,
   isLongCell,

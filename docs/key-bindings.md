@@ -223,7 +223,7 @@ or column right-click menu. Inside the grid, the arrow keys, Page Up/Down, Home/
 move (with Shift to extend), Enter, F2 or a double-click edits a cell (a double-click selects its text;
 while a cell is being edited those keys move the caret in it), Delete clears, Ctrl+C, Ctrl+X and Ctrl+V copy, cut
 and paste tab-separated cells, Ctrl+Z and Ctrl+Y undo and redo as in the text editor, and
-[`editor.save`](#editor) saves. Double-clicking a column letter fits the column to its widest value (double-click again to undo); a row number does nothing, since rows are not resized. The **Wrap** toggle on a CSV preview's status bar (or its **Wrap** menu item) shows every cell in full, wrapped to its column, each row as tall as its tallest cell. Clicking the corner
+[`editor.save`](#editor) saves. Double-clicking a column letter fits the column to its widest value (double-click again to undo); a row number does nothing, since rows are not resized. The **Lock first row** and **Lock first column** toggles beside it (or the **Lock First Row** and **Lock First Column** menu items) hold the first row under the column letters and the first column beside the row numbers while the rest scrolls. The **Wrap** toggle on a CSV preview's status bar (or its **Wrap** menu item) shows every cell in full, wrapped to its column, each row as tall as its tallest cell. Clicking the corner
 above the row numbers selects every row and column. Every
 right-click menu in the grid — cell, selection, row number, column letter — offers Cut, Copy and Paste; a
 paste overwrites the selection from its top-left cell, and one value pasted onto several cells fills them.

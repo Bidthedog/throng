@@ -497,6 +497,12 @@
     },
     "wrapCells": {
       "throng": "Text lines with the last one wrapping back under itself: cells wrap onto further lines"
+    },
+    "lockFirstRow": {
+      "throng": "A table whose top row is drawn heavy: the first row is held in place"
+    },
+    "lockFirstColumn": {
+      "throng": "A table whose left column is drawn heavy: the first column is held in place"
     }
   }
 }

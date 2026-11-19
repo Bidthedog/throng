@@ -161,6 +161,13 @@ export interface DataGridProps {
    * window and cached until a width, the zoom or the content changes (SC-009). Absent or false: one line per row.
    */
   wrap?: boolean;
+  /**
+   * 073 FR-039a — lock the first row and/or the first column: row 0 stays directly under the header strip whatever the
+   * vertical scroll, column 0 stays beside the row numbers whatever the horizontal one, and A1 stays under both. They
+   * are ordinary cells (selection, editing, menus), set apart by a theme-token separator. Absent or false: no lock.
+   */
+  lockFirstRow?: boolean;
+  lockFirstColumn?: boolean;
 }
 
 interface EditingState {
@@ -301,6 +308,8 @@ interface CellProps {
   wrap: boolean;
   /** Line height of a wrapped cell, in px. */
   lineH: number;
+  /** FR-039a — the cell is the locked first column's: sticky beside the row numbers, at this `left`. Null: an ordinary cell. */
+  stickyLeft: number | null;
 }
 
 /** One cell. Memoised on primitives, so a scroll step rebuilds only the cells that entered the window (SC-009). */
@@ -317,10 +326,15 @@ const GridCell = memo(function GridCell(p: CellProps): ReactElement {
       className={
         'data-grid__cell' +
         (p.wrap ? ' data-grid__cell--wrap' : '') +
+        (p.stickyLeft !== null ? ' data-grid__cell--locked-col' : '') +
         (p.selected ? ' data-grid__cell--selected' : '') +
         (p.active ? ' data-grid__cell--active' : '')
       }
-      style={p.wrap ? { width: p.size, lineHeight: `${p.lineH}px` } : { width: p.size }}
+      style={{
+        width: p.size,
+        ...(p.wrap ? { lineHeight: `${p.lineH}px` } : {}),
+        ...(p.stickyLeft !== null ? { position: 'sticky' as const, left: p.stickyLeft, zIndex: 2 } : {}),
+      }}
       title={value === '' ? undefined : value}
     >
       {p.wrap ? (value.length > MAX_WRAP_CHARS ? value.slice(0, MAX_WRAP_CHARS) : value) : displayText(value)}
@@ -344,6 +358,13 @@ interface RowProps {
   activeCol: number;
   wrap: boolean;
   lineH: number;
+  /** FR-039a — this is the locked first row: sticky under the header strip, at this `top`. Null: an ordinary row. */
+  stickyTop: number | null;
+  /** FR-039a — the locked first column's `left` and width; null with no locked column. */
+  stickyLeft: number | null;
+  lockSize: number;
+  /** The cell editor, when it edits a locked cell and so lives inside the strip it stays with. */
+  editor: ReactElement | null;
 }
 
 /** One row of cells. A vertical scroll leaves every unchanged row's props equal, so those rows do not re-render. */
@@ -352,10 +373,37 @@ const GridRow = memo(function GridRow(p: RowProps): ReactElement {
     <div
       role="row"
       aria-rowindex={p.row + 2}
-      className="data-grid__row"
-      style={{ top: p.start, height: p.size, width: p.totalW }}
+      className={'data-grid__row' + (p.stickyTop !== null ? ' data-grid__row--locked' : '')}
+      style={
+        p.stickyTop !== null
+          ? { position: 'sticky', top: p.stickyTop, height: p.size, width: p.totalW }
+          : { top: p.start, height: p.size, width: p.totalW }
+      }
     >
-      <div className="data-grid__row-spacer" style={{ width: p.colItems[0]?.start ?? 0 }} aria-hidden="true" />
+      {p.stickyLeft !== null ? (
+        <>
+          {/* The locked first column: drawn first, in the row's flow, and held beside the row numbers by `sticky`. */}
+          {p.editor !== null && p.editor.key === 'sticky-col-editor' ? p.editor : null}
+          <GridCell
+            row={p.row}
+            col={0}
+            size={p.lockSize}
+            valid={p.row < p.rowCount && 0 < p.colCount}
+            getCell={p.getCell}
+            selected={0 >= p.selLeft && 0 <= p.selRight}
+            active={p.activeCol === 0}
+            wrap={p.wrap}
+            lineH={p.lineH}
+            stickyLeft={p.stickyLeft}
+          />
+        </>
+      ) : null}
+      {p.editor !== null && p.editor.key !== 'sticky-col-editor' ? p.editor : null}
+      <div
+        className="data-grid__row-spacer"
+        style={{ width: Math.max(0, (p.colItems[0]?.start ?? 0) - (p.stickyLeft !== null ? p.lockSize : 0)) }}
+        aria-hidden="true"
+      />
       {p.colItems.map((c) => (
         <GridCell
           key={c.key}
@@ -368,6 +416,7 @@ const GridRow = memo(function GridRow(p: RowProps): ReactElement {
           active={c.index === p.activeCol}
           wrap={p.wrap}
           lineH={p.lineH}
+          stickyLeft={null}
         />
       ))}
     </div>
@@ -399,6 +448,8 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     onEditInDialog,
     onEscape,
     wrap = false,
+    lockFirstRow = false,
+    lockFirstColumn = false,
   } = props;
 
   const rows = Math.max(1, rowCount);
@@ -487,7 +538,10 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     const root = rootRef.current;
     if (wrapCache === null || !root) return;
     let measure: MeasureText | null = null;
-    for (const item of rowV.getVirtualItems()) {
+    // FR-039a — a locked first row is drawn whatever the window holds, so it is sized whatever the window holds.
+    const laidOut = rowV.getVirtualItems();
+    const first = lockFirstRow && laidOut[0]?.index !== 0 ? rowV.measurementsCache[0] : undefined;
+    for (const item of first ? [first, ...laidOut] : laidOut) {
       let height = wrapCache.get(item.index);
       if (height === undefined) {
         measure ??= makeMeasure(root);
@@ -525,22 +579,28 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       const { w, h } = viewport();
       const bodyH = h - headerH;
       const bodyW = w - gutterW;
+      // FR-039a — a locked first row / column covers the first `lockedH` / `lockedW` px of the window, so a cell is only
+      // revealed once it is clear of them; the locked row and column themselves are always in view.
+      const lockedH = lockFirstRow ? (rowV.measurementsCache[0]?.size ?? rowH) : 0;
+      const lockedW = lockFirstColumn ? (colV.measurementsCache[0]?.size ?? widthOf(0)) : 0;
       const rm = rowV.measurementsCache[row];
       const top = rm ? rm.start : row * rowH;
       const bottom = rm ? rm.end : top + rowH;
       let st = el.scrollTop;
-      if (top < st) st = top;
-      else if (bottom > st + bodyH) st = bottom - bodyH;
+      if (!(lockFirstRow && row === 0)) {
+        if (top - lockedH < st) st = top - lockedH;
+        else if (bottom > st + bodyH) st = bottom - bodyH;
+      }
       const m = colV.measurementsCache[col];
       let sl = el.scrollLeft;
-      if (m) {
-        if (m.start < sl) sl = m.start;
+      if (m && !(lockFirstColumn && col === 0)) {
+        if (m.start - lockedW < sl) sl = m.start - lockedW;
         else if (m.end > sl + bodyW) sl = m.end - bodyW;
       }
       if (st !== el.scrollTop) el.scrollTop = Math.max(0, st);
       if (sl !== el.scrollLeft) el.scrollLeft = Math.max(0, sl);
     },
-    [colV, gutterW, headerH, rowH, rowV, viewport],
+    [colV, gutterW, headerH, lockFirstColumn, lockFirstRow, rowH, rowV, viewport, widthOf],
   );
 
   const commitSel = useCallback(
@@ -607,10 +667,12 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         const target = Math.min(rows - 1, Math.max(0, Math.floor(row)));
         commitSel(single(target, selRef.current.active.col), false);
         const el = scrollRef.current;
-        if (el) el.scrollTop = rowV.measurementsCache[target]?.start ?? target * rowH;
+        // FR-039a — with the first row locked, the row lands just below it rather than under it.
+        const locked = lockFirstRow && target > 0 ? (rowV.measurementsCache[0]?.size ?? rowH) : 0;
+        if (el) el.scrollTop = Math.max(0, (rowV.measurementsCache[target]?.start ?? target * rowH) - locked);
       },
     }),
-    [beginEdit, cols, commitSel, ensureVisible, rowH, rowV, rows],
+    [beginEdit, cols, commitSel, ensureVisible, lockFirstRow, rowH, rowV, rows],
   );
 
   // ── Pointer: cell / row / column selection, drag, resize ─────────────────────────────────────────────
@@ -619,12 +681,18 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     const el = scrollRef.current;
     if (!el) return mkCell(0, 0);
     const rect = el.getBoundingClientRect();
-    const x = clientX - rect.left + el.scrollLeft - gutterW;
-    const y = clientY - rect.top + el.scrollTop - headerH;
+    // Where the point is inside the window (past the header strip and the row numbers), before the scroll is added.
+    const xIn = clientX - rect.left - gutterW;
+    const yIn = clientY - rect.top - headerH;
+    const x = xIn + el.scrollLeft;
+    const y = yIn + el.scrollTop;
+    // FR-039a — the locked strip is drawn over whatever scrolled beneath it, so a point on it is row 0 / column 0.
+    const inLockedRow = lockFirstRow && yIn < (rowV.measurementsCache[0]?.size ?? rowH);
+    const inLockedCol = lockFirstColumn && xIn < (colV.measurementsCache[0]?.size ?? widthOf(0));
     // Rows can differ in height (FR-012), so a point maps through the virtualiser's measurements.
     return mkCell(
-      y <= 0 ? 0 : Math.min(rows - 1, indexAtOffset(rowV.measurementsCache, y)),
-      x <= 0 ? 0 : indexAtOffset(colV.measurementsCache, x),
+      inLockedRow || y <= 0 ? 0 : Math.min(rows - 1, indexAtOffset(rowV.measurementsCache, y)),
+      inLockedCol || x <= 0 ? 0 : indexAtOffset(colV.measurementsCache, x),
     );
   };
 
@@ -1008,7 +1076,13 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
 
   const range = rangeOf(sel, cols);
   const rowItems = rowV.getVirtualItems();
-  const colItems = colV.getVirtualItems();
+  const colItemsAll = colV.getVirtualItems();
+  // FR-039a — the locked first row and column are drawn on their own, so the windows leave them out. Memoised, so a
+  // scroll step that moves neither leaves every row's props equal (SC-009).
+  const colItems = useMemo(() => (lockFirstColumn ? colItemsAll.filter((c) => c.index > 0) : colItemsAll), [colItemsAll, lockFirstColumn]);
+  const rowItemsWindow = useMemo(() => (lockFirstRow ? rowItems.filter((r) => r.index > 0) : rowItems), [rowItems, lockFirstRow]);
+  const lockedColSize = colV.measurementsCache[0]?.size ?? widthOf(0);
+  const stickyLeft = lockFirstColumn ? gutterW : null;
   const totalW = colV.getTotalSize();
   const totalH = rowV.getTotalSize();
   const editM = editing ? colV.measurementsCache[editing.col] : undefined;
@@ -1017,6 +1091,109 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
   const editMinH = editRowM ? editRowM.size : rowH;
 
   const rootStyle = { ['--throng-grid-zoom']: String(zoom) } as CSSProperties;
+
+  // A column letter. The locked first column's is held beside the row numbers (FR-039a), the others are placed.
+  const colHeadOf = (c: VirtualItem, locked: boolean): ReactElement => (
+    <div
+      key={c.key}
+      role="columnheader"
+      aria-colindex={c.index + 1}
+      data-grid-colheader=""
+      data-col={c.index}
+      className={
+        'data-grid__colhead' +
+        (c.index === sel.active.col ? ' data-grid__colhead--active' : '') +
+        (c.index >= range.left && c.index <= range.right ? ' data-grid__colhead--in-range' : '')
+      }
+      style={
+        locked
+          ? { position: 'sticky', left: gutterW, zIndex: 2, width: c.size, height: headerH }
+          : { left: c.start, width: c.size, height: headerH }
+      }
+    >
+      <span className="data-grid__colhead-label">{columnHeader ? columnHeader(c.index) : columnLabel(c.index)}</span>
+      <span className="data-grid__resize" data-grid-resize="" data-col={c.index} aria-hidden="true" />
+    </div>
+  );
+  // A row number. The locked first row's is held under the header strip (FR-039a), the others are placed.
+  const rowHeadOf = (r: VirtualItem, locked: boolean): ReactElement => (
+    <div
+      key={r.key}
+      role="rowheader"
+      data-grid-rowheader=""
+      data-row={r.index}
+      className={
+        'data-grid__rowhead' +
+        (r.index === sel.active.row ? ' data-grid__rowhead--active' : '') +
+        (r.index >= range.top && r.index <= range.bottom ? ' data-grid__rowhead--in-range' : '')
+      }
+      style={
+        locked
+          ? { position: 'sticky', top: headerH, left: 'auto', right: 'auto', zIndex: 1, height: r.size }
+          : { top: r.start, height: r.size }
+      }
+    >
+      {formatGrouped(r.index + 1)}
+    </div>
+  );
+  // The cell editor. One that edits a locked cell lives inside the strip it stays with, so it is held there too.
+  const editorInStrip = editing !== null && editM !== undefined && ((lockFirstRow && editing.row === 0) || (lockFirstColumn && editing.col === 0));
+  const editorInLockedCol = editorInStrip && editing !== null && lockFirstColumn && editing.col === 0;
+  const cellEditor =
+    editing !== null && editM !== undefined ? (
+      <CellEditor
+        key={`${editing.row}:${editing.col}`}
+        initial={editing.text}
+        minHeight={editMinH}
+        selectAll={editing.selectAll}
+        style={{
+          left: editorInLockedCol ? 0 : editM.start,
+          top: editorInStrip ? 0 : editTop,
+          width: editM.size,
+          minHeight: editMinH,
+        }}
+        onDone={finishEdit}
+      />
+    ) : null;
+  const rowEditor =
+    editorInStrip && cellEditor !== null ? (
+      editorInLockedCol ? (
+        <div
+          key="sticky-col-editor"
+          style={{ position: 'sticky', left: gutterW, width: 0, height: 0, flex: '0 0 auto', zIndex: 5 }}
+        >
+          {cellEditor}
+        </div>
+      ) : (
+        cellEditor
+      )
+    ) : null;
+  // One row of cells; `locked` is the first row held under the header strip.
+  const rowOf = (r: VirtualItem, locked: boolean): ReactElement => {
+    const inRows = r.index >= range.top && r.index <= range.bottom;
+    return (
+      <GridRow
+        key={r.key}
+        row={r.index}
+        start={r.start}
+        size={r.size}
+        totalW={totalW}
+        colItems={colItems}
+        getCell={getCell}
+        rowCount={rowCount}
+        colCount={colCount}
+        selLeft={inRows ? range.left : 0}
+        selRight={inRows ? range.right : -1}
+        activeCol={r.index === sel.active.row ? sel.active.col : -1}
+        wrap={wrap}
+        lineH={rowH}
+        stickyTop={locked ? headerH : null}
+        stickyLeft={stickyLeft}
+        lockSize={lockedColSize}
+        editor={editing !== null && r.index === editing.row ? rowEditor : null}
+      />
+    );
+  };
 
   return (
     <div
@@ -1055,82 +1232,19 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
               style={{ width: gutterW, height: headerH }}
             />
             <div className="data-grid__header-cells" style={{ left: gutterW, width: totalW, height: headerH }}>
-              {colItems.map((c) => (
-                <div
-                  key={c.key}
-                  role="columnheader"
-                  aria-colindex={c.index + 1}
-                  data-grid-colheader=""
-                  data-col={c.index}
-                  className={
-                    'data-grid__colhead' +
-                    (c.index === sel.active.col ? ' data-grid__colhead--active' : '') +
-                    (c.index >= range.left && c.index <= range.right ? ' data-grid__colhead--in-range' : '')
-                  }
-                  style={{ left: c.start, width: c.size, height: headerH }}
-                >
-                  <span className="data-grid__colhead-label">{columnHeader ? columnHeader(c.index) : columnLabel(c.index)}</span>
-                  <span
-                    className="data-grid__resize"
-                    data-grid-resize=""
-                    data-col={c.index}
-                    aria-hidden="true"
-                  />
-                </div>
-              ))}
+              {lockFirstColumn && colV.measurementsCache[0] ? colHeadOf(colV.measurementsCache[0], true) : null}
+              {colItems.map((c) => colHeadOf(c, false))}
             </div>
           </div>
           <div className="data-grid__body" style={{ width: gutterW + totalW, height: totalH }}>
             <div className="data-grid__gutter" style={{ width: gutterW, height: totalH }}>
-              {rowItems.map((r) => (
-                <div
-                  key={r.key}
-                  role="rowheader"
-                  data-grid-rowheader=""
-                  data-row={r.index}
-                  className={
-                    'data-grid__rowhead' +
-                    (r.index === sel.active.row ? ' data-grid__rowhead--active' : '') +
-                    (r.index >= range.top && r.index <= range.bottom ? ' data-grid__rowhead--in-range' : '')
-                  }
-                  style={{ top: r.start, height: r.size }}
-                >
-                  {formatGrouped(r.index + 1)}
-                </div>
-              ))}
+              {lockFirstRow && rowV.measurementsCache[0] ? rowHeadOf(rowV.measurementsCache[0], true) : null}
+              {rowItemsWindow.map((r) => rowHeadOf(r, false))}
             </div>
             <div className="data-grid__cells" style={{ left: gutterW, width: totalW, height: totalH }}>
-              {rowItems.map((r) => {
-                const inRows = r.index >= range.top && r.index <= range.bottom;
-                return (
-                  <GridRow
-                    key={r.key}
-                    row={r.index}
-                    start={r.start}
-                    size={r.size}
-                    totalW={totalW}
-                    colItems={colItems}
-                    getCell={getCell}
-                    rowCount={rowCount}
-                    colCount={colCount}
-                    selLeft={inRows ? range.left : 0}
-                    selRight={inRows ? range.right : -1}
-                    activeCol={r.index === sel.active.row ? sel.active.col : -1}
-                    wrap={wrap}
-                    lineH={rowH}
-                  />
-                );
-              })}
-              {editing && editM ? (
-                <CellEditor
-                  key={`${editing.row}:${editing.col}`}
-                  initial={editing.text}
-                  minHeight={editMinH}
-                  selectAll={editing.selectAll}
-                  style={{ left: editM.start, top: editTop, width: editM.size, minHeight: editMinH }}
-                  onDone={finishEdit}
-                />
-              ) : null}
+              {lockFirstRow && rowV.measurementsCache[0] ? rowOf(rowV.measurementsCache[0], true) : null}
+              {rowItemsWindow.map((r) => rowOf(r, false))}
+              {!editorInStrip ? cellEditor : null}
             </div>
           </div>
         </div>

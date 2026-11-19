@@ -70,6 +70,9 @@ export interface PreviewStatusBarProps {
   cellDialog?: { on: boolean; onToggle: () => void };
   /** 073 FR-013 — a provider whose grid wraps its cells: whether wrapping is on for THIS panel, and the toggle's click. */
   wrap?: { on: boolean; onToggle: () => void };
+  /** 073 FR-039a — a provider whose grid locks its first row / column: whether each is on for THIS panel, and the toggle's click. */
+  lockFirstRow?: { on: boolean; onToggle: () => void };
+  lockFirstColumn?: { on: boolean; onToggle: () => void };
   /** FR-118 — the hovered or focused link's target; omitted, `null` or empty shows nothing. */
   readout?: string | null;
   /** FR-118a — the drawn document's counts, or `null` until they settle (no counts are drawn). */
@@ -91,6 +94,9 @@ const ALL_ON = { showCursorPosition: true, showCounts: true };
 const CELL_DIALOG_LABEL = 'Edit long cells in a dialog';
 /** The Wrap toggle's name (FR-013). */
 const WRAP_LABEL = 'Wrap cells';
+/** The two lock toggles' names (FR-039a). */
+const LOCK_ROW_LABEL = 'Lock first row';
+const LOCK_COLUMN_LABEL = 'Lock first column';
 
 export function PreviewStatusBar({
   panelId,
@@ -103,6 +109,8 @@ export function PreviewStatusBar({
   showSyncScroll = true,
   cellDialog,
   wrap,
+  lockFirstRow,
+  lockFirstColumn,
   readout,
   metrics = null,
   selection = null,
@@ -185,6 +193,30 @@ export function PreviewStatusBar({
             menu's checked *Edit Long Cells in Dialog* item (Principle VI). */}
         {/* 073 FR-013 — the grid's Wrap switch: pressed while this panel wraps its cells. An accelerator over the
             header menu's checked *Wrap* item (Principle VI). */}
+        {/* 073 FR-039a — the grid's two lock switches, beside Wrap: pressed while the first row / column is locked for this
+            panel. Accelerators over the header menu's checked *Lock First Row* / *Lock First Column* items (Principle VI). */}
+        {lockFirstRow !== undefined ? (
+          <IconButton
+            token="lockFirstRow"
+            className="editor-status-strip__preview"
+            testId={`preview-lock-row-${panelId}`}
+            title={LOCK_ROW_LABEL}
+            ariaLabel={LOCK_ROW_LABEL}
+            ariaPressed={lockFirstRow.on}
+            onClick={lockFirstRow.onToggle}
+          />
+        ) : null}
+        {lockFirstColumn !== undefined ? (
+          <IconButton
+            token="lockFirstColumn"
+            className="editor-status-strip__preview"
+            testId={`preview-lock-column-${panelId}`}
+            title={LOCK_COLUMN_LABEL}
+            ariaLabel={LOCK_COLUMN_LABEL}
+            ariaPressed={lockFirstColumn.on}
+            onClick={lockFirstColumn.onToggle}
+          />
+        ) : null}
         {wrap !== undefined ? (
           <IconButton
             token="wrapCells"

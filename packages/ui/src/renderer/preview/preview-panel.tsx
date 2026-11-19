@@ -101,6 +101,8 @@ import { diagramActionsAt } from './diagram/diagram-actions.js';
 import {
   cellDialogOn,
   wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
   collapseAll as foldCollapseAll,
   defaultOpenActionFor,
   enabledProviderFor,
@@ -1896,6 +1898,21 @@ export function PreviewPanel({
   const onToggleWrap = useCallback((): void => {
     ws.updatePanelConfig(panelId, { wrapCells: !wrapEffective });
   }, [ws, panelId, wrapEffective]);
+  // 073 FR-039a — a provider whose grid can lock its first row / column: each on for THIS panel by its own choice, else by the setting.
+  const hasLockToggles = (state ? registry.get(state.providerId) : undefined)?.lockToggles === true;
+  const lockFirstRowChoice = config?.lockFirstRow;
+  const lockFirstColumnChoice = config?.lockFirstColumn;
+  const lockRowEffective = lockFirstRowOn(lockFirstRowChoice, state ? settings.editor.previews.providers[state.providerId]?.lockFirstRow : undefined);
+  const lockColumnEffective = lockFirstColumnOn(
+    lockFirstColumnChoice,
+    state ? settings.editor.previews.providers[state.providerId]?.lockFirstColumn : undefined,
+  );
+  const onToggleLockRow = useCallback((): void => {
+    ws.updatePanelConfig(panelId, { lockFirstRow: !lockRowEffective });
+  }, [ws, panelId, lockRowEffective]);
+  const onToggleLockColumn = useCallback((): void => {
+    ws.updatePanelConfig(panelId, { lockFirstColumn: !lockColumnEffective });
+  }, [ws, panelId, lockColumnEffective]);
 
   /*
    * FR-113, FR-114, FR-121 — two-way scroll sync. The parent editor's top line, from the store its view in
@@ -2494,6 +2511,8 @@ export function PreviewPanel({
             providerSettings={settings.editor.previews.providers[state.providerId] ?? NO_PROVIDER_SETTINGS}
             cellDialogChoice={cellDialogChoice}
             wrapChoice={wrapChoice}
+            lockFirstRowChoice={lockFirstRowChoice}
+            lockFirstColumnChoice={lockFirstColumnChoice}
             registerGoTo={registerGoTo}
             linkWording={linkWording}
             initialViewState={state.viewState}
@@ -2575,6 +2594,8 @@ export function PreviewPanel({
           showSyncScroll={flowing}
           cellDialog={hasCellDialog ? { on: cellDialogEffective, onToggle: onToggleCellDialog } : undefined}
           wrap={hasWrapToggle ? { on: wrapEffective, onToggle: onToggleWrap } : undefined}
+          lockFirstRow={hasLockToggles ? { on: lockRowEffective, onToggle: onToggleLockRow } : undefined}
+          lockFirstColumn={hasLockToggles ? { on: lockColumnEffective, onToggle: onToggleLockColumn } : undefined}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}
           metrics={documentMetrics}

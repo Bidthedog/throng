@@ -171,6 +171,9 @@ export interface PanelHeaderMenuActions {
   toggleCellDialog: () => void;
   /** 073 FR-013 — flip this panel's own choice to wrap its cells (persisted with the panel). */
   toggleWrap: () => void;
+  /** 073 FR-039a — flip this panel's own choice to lock its first row / first column (persisted with the panel). */
+  toggleLockFirstRow: () => void;
+  toggleLockFirstColumn: () => void;
   /** 057 FR-125 — raise a user-flagged Attention mark on this panel (`attention.flag`). */
   flag: () => void;
 }
@@ -187,6 +190,9 @@ export interface PanelHeaderPreviewState {
   cellDialog?: { on: boolean };
   /** 073 FR-013 — the provider wraps cells; `on` is whether it does for this panel (its own choice, else the setting). */
   wrap?: { on: boolean };
+  /** 073 FR-039a — the provider locks its first row / column; `on` is whether it does for this panel (its own choice, else the setting). */
+  lockFirstRow?: { on: boolean };
+  lockFirstColumn?: { on: boolean };
 }
 
 /**
@@ -595,6 +601,29 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       icon: 'wrapCells' as const,
       section: 'viewState',
       onClick: () => actions.toggleWrap(),
+    });
+  }
+
+  // 073 FR-039a — a grid provider's two locks, each on or off for THIS panel: checked toggles in View & state, the menu
+  // route the status bar's toggles are accelerators over.
+  if (isPreview && args.preview?.lockFirstRow !== undefined) {
+    items.push({
+      label: 'Lock First Row',
+      checked: args.preview.lockFirstRow.on,
+      testId: 'menu-item-Lock First Row',
+      icon: 'lockFirstRow' as const,
+      section: 'viewState',
+      onClick: () => actions.toggleLockFirstRow(),
+    });
+  }
+  if (isPreview && args.preview?.lockFirstColumn !== undefined) {
+    items.push({
+      label: 'Lock First Column',
+      checked: args.preview.lockFirstColumn.on,
+      testId: 'menu-item-Lock First Column',
+      icon: 'lockFirstColumn' as const,
+      section: 'viewState',
+      onClick: () => actions.toggleLockFirstColumn(),
     });
   }
 

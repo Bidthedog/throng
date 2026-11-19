@@ -819,6 +819,48 @@ describe('CsvBody wrap (FR-013, FR-060b)', () => {
   });
 });
 
+describe('CsvBody lock first row and column (FR-039a, FR-060d)', () => {
+  const DOC = 'a,b\n1,2\n3,4\n';
+  const lockedRow = (): Element | null => document.querySelector('.data-grid__row--locked');
+  const lockedCol = (): Element | null => document.querySelector('.data-grid__cell--locked-col');
+
+  it('is off by default', () => {
+    mount(DOC);
+    expect(lockedRow()).toBeNull();
+    expect(lockedCol()).toBeNull();
+  });
+
+  it('locks what the panel chose', () => {
+    mount(DOC, { lockFirstRowChoice: true });
+    expect(lockedRow()).not.toBeNull();
+    expect(lockedCol()).toBeNull();
+    document.body.replaceChildren();
+    mount(DOC, { lockFirstColumnChoice: true });
+    expect(lockedRow()).toBeNull();
+    expect(lockedCol()).not.toBeNull();
+  });
+
+  it('locks what the settings say when the panel has not chosen, and the panel choice wins', () => {
+    mount(DOC, { providerSettings: { enabled: true, lockFirstRow: true, lockFirstColumn: true } });
+    expect(lockedRow()).not.toBeNull();
+    expect(lockedCol()).not.toBeNull();
+    document.body.replaceChildren();
+    mount(DOC, {
+      lockFirstRowChoice: false,
+      lockFirstColumnChoice: false,
+      providerSettings: { enabled: true, lockFirstRow: true, lockFirstColumn: true },
+    });
+    expect(lockedRow()).toBeNull();
+    expect(lockedCol()).toBeNull();
+  });
+
+  it('changes nothing in the document: no edit is sent', () => {
+    mount(DOC, { lockFirstRowChoice: true, lockFirstColumnChoice: true });
+    expect(bridge.gridEdit).not.toHaveBeenCalled();
+    expect(getEditorState('p1')?.dirty ?? false).toBe(false);
+  });
+});
+
 describe('CsvBody Go to Row (FR-043a, FR-043b)', () => {
   const rows = (n: number): string => `h1,h2,h3\n${Array.from({ length: n - 1 }, (_, i) => `a${i},b${i},c${i}`).join('\n')}\n`;
   const grid = (): HTMLElement => screen.getByTestId('csv-grid-p1');

@@ -55,6 +55,19 @@ export function wrapCellsOn(panelChoice: unknown, setting: unknown): boolean {
   return typeof setting === 'boolean' ? setting : false;
 }
 
+/**
+ * Whether a panel locks its first row / first column (FR-039a): the panel's own choice when it has made one, else the
+ * "Lock first row" / "Lock first column" setting, which ships off.
+ */
+export function lockFirstRowOn(panelChoice: unknown, setting: unknown): boolean {
+  if (typeof panelChoice === 'boolean') return panelChoice;
+  return typeof setting === 'boolean' ? setting : false;
+}
+export function lockFirstColumnOn(panelChoice: unknown, setting: unknown): boolean {
+  if (typeof panelChoice === 'boolean') return panelChoice;
+  return typeof setting === 'boolean' ? setting : false;
+}
+
 /** The Long cell threshold as a reader of the setting uses it: a whole number of at least 1, else the shipped 50. */
 export function longCellThresholdOf(raw: unknown): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return SHIPPED_THRESHOLD;

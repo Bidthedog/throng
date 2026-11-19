@@ -167,6 +167,8 @@ export const ICON_KEYS = [
   'resetColumnWidth',
   'goToRow',
   'wrapCells',
+  'lockFirstRow',
+  'lockFirstColumn',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -497,6 +499,10 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on the grid menu row that asks for a row number and goes to that row.',
   wrapCells:
     'The icon on the CSV Preview Editor status bar toggle and the panel menu item that wraps cells, so every row shows its whole content.',
+  lockFirstRow:
+    'The icon on the CSV Preview Editor status bar toggle and the panel menu item that locks the first row in place.',
+  lockFirstColumn:
+    'The icon on the CSV Preview Editor status bar toggle and the panel menu item that locks the first column in place.',
 };
 
 /** Is `value` one of the icon keys? */

@@ -241,6 +241,13 @@ describe('SpreadsheetBody', () => {
     expect(Number.parseFloat(document.querySelector<HTMLElement>('[role="rowheader"][data-row="1"]')!.style.height)).toBe(22);
   });
 
+  it('never locks: a workbook has no lock, whatever a stray choice says (FR-039a)', async () => {
+    mount('throng-preview://source/s1?rev=1', { lockFirstRowChoice: true, lockFirstColumnChoice: true });
+    await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+    expect(document.querySelector('.data-grid__row--locked')).toBeNull();
+    expect(document.querySelector('.data-grid__cell--locked-col')).toBeNull();
+  });
+
   it('never opens a cell editor (read-only, FR-001)', async () => {
     mount('throng-preview://source/s1?rev=1');
     await waitFor(() => expect(cell(0, 0)).toBe('h1'));

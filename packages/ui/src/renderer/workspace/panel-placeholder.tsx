@@ -20,6 +20,8 @@ import {
   effectiveActivePanelId,
   cellDialogOn,
   wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
   panelZoomLevel,
   zoomFactor,
   findPanelLocations,
@@ -733,6 +735,22 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                           },
                         }
                       : {}),
+                    ...((previewUi ? previewRegistry.get(previewUi.providerId) : undefined)?.lockToggles === true
+                      ? {
+                          lockFirstRow: {
+                            on: lockFirstRowOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.lockFirstRow,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstRow : undefined,
+                            ),
+                          },
+                          lockFirstColumn: {
+                            on: lockFirstColumnOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.lockFirstColumn,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstColumn : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
                   }
                 : null,
               // 044 FR-002 — an editor's Open Preview, from the same affordance its status-bar button uses.
@@ -958,6 +976,19 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   const held = (panel.config as PreviewPanelConfig | undefined)?.wrapCells;
                   const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.wrapCells : undefined;
                   if (provider?.wrapToggle === true) wsRef.current.updatePanelConfig(panel.id, { wrapCells: !wrapCellsOn(held, setting) });
+                },
+                // 073 FR-039a — the panel's own choices, saved with the panel; a panel that has not chosen reads the setting.
+                toggleLockFirstRow: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.lockFirstRow;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstRow : undefined;
+                  if (provider?.lockToggles === true) wsRef.current.updatePanelConfig(panel.id, { lockFirstRow: !lockFirstRowOn(held, setting) });
+                },
+                toggleLockFirstColumn: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.lockFirstColumn;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstColumn : undefined;
+                  if (provider?.lockToggles === true) wsRef.current.updatePanelConfig(panel.id, { lockFirstColumn: !lockFirstColumnOn(held, setting) });
                 },
               },
             }),

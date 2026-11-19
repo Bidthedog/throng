@@ -198,6 +198,30 @@
   text-overflow: clip;
 }
 
+/* FR-039a — the locked first row and column. They are held by `sticky` (data-grid.tsx sets the offsets), so they need an
+   opaque ground to cover what scrolls beneath, and a theme-token separator to set them apart from the rest. The row sits
+   under the row numbers (z 2) and the header strip (z 3); a locked cell sits above its row's other cells. */
+.data-grid__row--locked {
+  z-index: 1;
+  background: var(--throng-colour-editorBg);
+}
+
+.data-grid__row--locked .data-grid__cell {
+  border-bottom: 2px solid var(--throng-colour-border);
+}
+
+.data-grid__cell--locked-col {
+  background: var(--throng-colour-editorBg);
+  border-right: 2px solid var(--throng-colour-border);
+}
+
+/* A selected or active locked cell keeps its highlight ON the opaque ground, not over what scrolls beneath it. */
+.data-grid__cell--locked-col.data-grid__cell--selected {
+  background:
+    linear-gradient(color-mix(in srgb, var(--throng-colour-accent) 22%, transparent), color-mix(in srgb, var(--throng-colour-accent) 22%, transparent)),
+    var(--throng-colour-editorBg);
+}
+
 .data-grid__cell--selected {
   background: color-mix(in srgb, var(--throng-colour-accent) 22%, transparent);
 }

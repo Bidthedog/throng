@@ -27,6 +27,7 @@ export const csvProvider: PreviewProviderDescriptor = {
   flowingDocument: false,
   cellDialog: true,
   wrapToggle: true,
+  lockToggles: true,
   enabledDescription:
     'Offer the CSV Preview Editor, the editable grid for .csv files. When off, every CSV Preview Editor closes (asking first about unsaved changes) and the preview commands for these files are shown disabled; a CSV still opens in the text editor.',
   // FR-036a, FR-036b, FR-060a — the cell dialog for long values.
@@ -64,6 +65,23 @@ export const csvProvider: PreviewProviderDescriptor = {
       label: 'Wrap cells',
       description:
         'Show every cell in full: line breaks kept, each value wrapped to its column, and every row as tall as its tallest cell. Each CSV Preview Editor can turn wrapping on or off for itself from its status bar; a panel that has not follows this setting. Wrapping changes only how the grid draws and never edits the file.',
+      control: 'toggle',
+      default: false,
+    },
+    // FR-039a, FR-060d — lock the first row and first column.
+    {
+      leaf: 'lockFirstRow',
+      label: 'Lock first row',
+      description:
+        'Keep the first row directly under the column letters however far the table is scrolled down, set apart by a line. Each CSV Preview Editor can turn the lock on or off for itself from its status bar; a panel that has not follows this setting. Locking changes only how the grid draws and never edits the file.',
+      control: 'toggle',
+      default: false,
+    },
+    {
+      leaf: 'lockFirstColumn',
+      label: 'Lock first column',
+      description:
+        'Keep the first column beside the row numbers however far the table is scrolled across, set apart by a line. Each CSV Preview Editor can turn the lock on or off for itself from its status bar; a panel that has not follows this setting. Locking changes only how the grid draws and never edits the file.',
       control: 'toggle',
       default: false,
     },

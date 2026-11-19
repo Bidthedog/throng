@@ -12,6 +12,8 @@ import {
   isLongCell,
   longCellThresholdOf,
   wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
 } from '../../src/csv/cell-text.js';
 
 describe('isJsonContainer', () => {
@@ -121,4 +123,24 @@ describe('wrapCellsOn (FR-013)', () => {
     expect(wrapCellsOn('yes', 'no')).toBe(false);
     expect(wrapCellsOn(1, true)).toBe(true);
   });
+});
+
+describe('lockFirstRowOn / lockFirstColumnOn (FR-039a)', () => {
+  for (const [name, fn] of [
+    ['lockFirstRowOn', lockFirstRowOn],
+    ['lockFirstColumnOn', lockFirstColumnOn],
+  ] as const) {
+    it(`${name} follows the setting when the panel has no choice, which ships off`, () => {
+      expect(fn(undefined, undefined)).toBe(false);
+      expect(fn(undefined, true)).toBe(true);
+      expect(fn(undefined, false)).toBe(false);
+    });
+
+    it(`${name} takes the panel choice over the setting, either way, and ignores a non-boolean`, () => {
+      expect(fn(true, false)).toBe(true);
+      expect(fn(false, true)).toBe(false);
+      expect(fn('yes', 'no')).toBe(false);
+      expect(fn(1, true)).toBe(true);
+    });
+  }
 });

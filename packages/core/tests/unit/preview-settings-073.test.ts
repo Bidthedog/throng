@@ -31,6 +31,8 @@ describe('the CSV provider (the CSV Preview Editor)', () => {
       longCellThreshold: 50,
       multiLineCellsInDialog: true,
       wrapCells: false,
+      lockFirstRow: false,
+      lockFirstColumn: false,
     });
     expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, shipped, 'D:/p/data.csv')).toBe('preview');
   });
@@ -47,6 +49,8 @@ describe('the CSV provider (the CSV Preview Editor)', () => {
       'editor.previews.providers.csv.longCellThreshold',
       'editor.previews.providers.csv.multiLineCellsInDialog',
       'editor.previews.providers.csv.wrapCells',
+      'editor.previews.providers.csv.lockFirstRow',
+      'editor.previews.providers.csv.lockFirstColumn',
     ]);
   });
 });
@@ -111,6 +115,29 @@ describe('the CSV Wrap cells setting (FR-013)', () => {
   it('only the CSV provider offers the per-panel wrap toggle', () => {
     expect(SHIPPED_PREVIEW_PROVIDERS.get('csv')?.wrapToggle).toBe(true);
     expect(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')?.wrapToggle).toBeUndefined();
+  });
+});
+
+describe('the CSV lock settings (FR-060d)', () => {
+  it('ship off, keep a stored value and fall back on a wrong type', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ lockFirstRow: false, lockFirstColumn: false });
+    expect(
+      parsePreviewSettings({ providers: { csv: { lockFirstRow: true, lockFirstColumn: true } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv,
+    ).toMatchObject({ lockFirstRow: true, lockFirstColumn: true });
+    expect(
+      parsePreviewSettings({ providers: { csv: { lockFirstRow: 'yes', lockFirstColumn: 1 } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv,
+    ).toMatchObject({ lockFirstRow: false, lockFirstColumn: false });
+  });
+
+  it('are toggles under the CSV subsection, labelled CSV: Lock first row and CSV: Lock first column', () => {
+    const rows = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS);
+    expect(rows.find((d) => d.key.endsWith('.csv.lockFirstRow'))).toMatchObject({ label: 'CSV: Lock first row', control: 'toggle', subsection: 'CSV' });
+    expect(rows.find((d) => d.key.endsWith('.csv.lockFirstColumn'))).toMatchObject({ label: 'CSV: Lock first column', control: 'toggle', subsection: 'CSV' });
+  });
+
+  it('only the CSV provider offers the per-panel lock toggles', () => {
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('csv')?.lockToggles).toBe(true);
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')?.lockToggles).toBeUndefined();
   });
 });
 

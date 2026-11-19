@@ -1025,6 +1025,183 @@ describe('DataGrid middle button (FR-008f)', () => {
   });
 });
 
+describe('DataGrid lock first row and column (FR-039a)', () => {
+  /** Move the scroller the way the browser does: a new offset, then the scroll event. */
+  function scrollTo(root: HTMLElement, pos: { top: number; left: number }): void {
+    const scroller = root.querySelector<HTMLElement>('.data-grid__scroller')!;
+    let { top, left } = pos;
+    Object.defineProperty(scroller, 'scrollTop', { get: () => top, set: (v: number) => void (top = v), configurable: true });
+    Object.defineProperty(scroller, 'scrollLeft', { get: () => left, set: (v: number) => void (left = v), configurable: true });
+    act(() => {
+      fireEvent.scroll(scroller);
+    });
+  }
+  const scrollerOf = (g: ReturnType<typeof setup>): HTMLElement => g.root.querySelector<HTMLElement>('.data-grid__scroller')!;
+  const rowEl = (g: ReturnType<typeof setup>, r: number): HTMLElement | null =>
+    g.root.querySelector<HTMLElement>(`.data-grid__cells [role="row"][aria-rowindex="${r + 2}"]`);
+  const rowHead = (g: ReturnType<typeof setup>, r: number): HTMLElement | null =>
+    g.root.querySelector<HTMLElement>(`[role="rowheader"][data-row="${r}"]`);
+  const colHead = (g: ReturnType<typeof setup>, c: number): HTMLElement | null =>
+    g.root.querySelector<HTMLElement>(`[role="columnheader"][data-col="${c}"]`);
+  const HEADER = 24;
+  const GUTTER = 40;
+
+  it('is off by default: nothing is sticky and no cell is marked locked', () => {
+    const g = setup();
+    expect(g.root.querySelector('.data-grid__row--locked')).toBeNull();
+    expect(g.root.querySelector('.data-grid__cell--locked-col')).toBeNull();
+  });
+
+  it('the first row stays rendered, directly under the header strip, however far the table is scrolled', () => {
+    const g = setup({ rowCount: 100_000, lockFirstRow: true });
+    scrollTo(g.root, { top: 22 * 50_000, left: 0 });
+    const row = rowEl(g, 0)!;
+    expect(row).not.toBeNull();
+    expect(row).toHaveClass('data-grid__row--locked');
+    expect(row.style.position).toBe('sticky');
+    expect(row.style.top).toBe(`${HEADER}px`);
+    expect(g.cellAt(0, 2).textContent).toBe('r0c2');
+    // …and its row number goes with it.
+    expect(rowHead(g, 0)!.style.position).toBe('sticky');
+    expect(rowHead(g, 0)!.style.top).toBe(`${HEADER}px`);
+    // The rows around the scroll position are the ordinary ones, and row 0 is drawn once.
+    expect(g.root.querySelectorAll('[role="rowheader"][data-row="0"]')).toHaveLength(1);
+    expect(rowEl(g, 50_000)).not.toBeNull();
+    expect(rowEl(g, 50_000)).not.toHaveClass('data-grid__row--locked');
+  });
+
+  it('the first column stays rendered beside the row numbers, however far the table is scrolled sideways', () => {
+    const g = setup({ colCount: 200, lockFirstColumn: true });
+    scrollTo(g.root, { top: 0, left: 120 * 100 });
+    for (const r of [0, 1, 2]) {
+      const cell = g.cellAt(r, 0);
+      expect(cell).toHaveClass('data-grid__cell--locked-col');
+      expect(cell.style.position).toBe('sticky');
+      expect(cell.style.left).toBe(`${GUTTER}px`);
+      expect(cell.textContent).toBe(`r${r}c0`);
+    }
+    expect(colHead(g, 0)!.style.position).toBe('sticky');
+    expect(colHead(g, 0)!.style.left).toBe(`${GUTTER}px`);
+    expect(g.root.querySelectorAll('[data-grid-cell][data-row="1"][data-col="0"]')).toHaveLength(1);
+    expect(g.cellAt(1, 100)).not.toHaveClass('data-grid__cell--locked-col');
+  });
+
+  it('A1 is locked both ways, and sits above the locked row and the locked column', () => {
+    const g = setup({ rowCount: 5000, colCount: 200, lockFirstRow: true, lockFirstColumn: true });
+    scrollTo(g.root, { top: 22 * 2000, left: 120 * 100 });
+    const a1 = g.cellAt(0, 0);
+    expect(a1).toHaveClass('data-grid__cell--locked-col');
+    expect(rowEl(g, 0)).toHaveClass('data-grid__row--locked');
+    expect(a1.style.left).toBe(g.root.querySelector<HTMLElement>('.data-grid__gutter')!.style.width);
+    expect(Number(a1.style.zIndex)).toBeGreaterThan(Number(g.cellAt(0, 101).style.zIndex || 0));
+  });
+
+  it('locked cells are ordinary cells: they select, extend and show the active cell', () => {
+    const g = setup({ lockFirstRow: true, lockFirstColumn: true });
+    fireEvent.mouseDown(g.cellAt(0, 0), { button: 0 });
+    fireEvent.mouseUp(window);
+    expect(sel(g).active).toEqual({ row: 0, col: 0 });
+    fireEvent.mouseDown(g.cellAt(3, 0), { button: 0, shiftKey: true });
+    fireEvent.mouseUp(window);
+    expect(g.ref.current!.selectedRange()).toEqual({ top: 0, left: 0, bottom: 3, right: 0 });
+    expect(g.cellAt(3, 0)).toHaveClass('data-grid__cell--active');
+  });
+
+  it('a locked cell opens its editor on Enter, inside the locked strip so it stays with it, and commits', () => {
+    const g = setup({ lockFirstRow: true, lockFirstColumn: true });
+    fireEvent.mouseDown(g.cellAt(0, 2), { button: 0 });
+    fireEvent.mouseUp(window);
+    g.key('Enter');
+    const editor = screen.getByLabelText('Cell value') as HTMLTextAreaElement;
+    expect(rowEl(g, 0)!.contains(editor)).toBe(true);
+    fireEvent.change(editor, { target: { value: 'edited' } });
+    fireEvent.keyDown(editor, { key: 'Enter' });
+    expect(g.onCommitEdit).toHaveBeenCalledWith(0, 2, 'edited', 'down');
+  });
+
+  it('the editor of a locked-column cell in another row stays beside the row numbers', () => {
+    const g = setup({ lockFirstColumn: true });
+    fireEvent.mouseDown(g.cellAt(3, 0), { button: 0 });
+    fireEvent.mouseUp(window);
+    g.key('Enter');
+    const editor = screen.getByLabelText('Cell value');
+    const holder = editor.parentElement!;
+    expect(rowEl(g, 3)!.contains(editor)).toBe(true);
+    expect(holder.style.position).toBe('sticky');
+    expect(holder.style.left).toBe(`${GUTTER}px`);
+  });
+
+  it('a double-click on a locked cell edits it, and a double-click on its column letter still fits the column', () => {
+    const g = setup({ lockFirstRow: true, lockFirstColumn: true });
+    fireEvent.doubleClick(g.cellAt(0, 0));
+    expect(screen.getByLabelText('Cell value')).toBeTruthy();
+  });
+
+  it('keyboard navigation reveals a row that scrolled under the locked row, beyond it', () => {
+    const g = setup({ rowCount: 200, lockFirstRow: true });
+    scrollTo(g.root, { top: 660, left: 0 });
+    // Row 30 starts at 660, exactly under the locked row (22 px): it must come out below it.
+    act(() => g.ref.current!.scrollToCell(30, 0));
+    expect(scrollerOf(g).scrollTop).toBe(660 - 22);
+    // Row 0 itself is always in view: asking for it scrolls nothing.
+    act(() => g.ref.current!.scrollToCell(0, 0));
+    expect(scrollerOf(g).scrollTop).toBe(660 - 22);
+  });
+
+  it('keyboard navigation reveals a column that scrolled under the locked column, beyond it', () => {
+    const g = setup({ colCount: 50, lockFirstColumn: true });
+    scrollTo(g.root, { top: 0, left: 600 });
+    act(() => g.ref.current!.scrollToCell(0, 5));
+    expect(scrollerOf(g).scrollLeft).toBe(600 - 120);
+    act(() => g.ref.current!.scrollToCell(0, 0));
+    expect(scrollerOf(g).scrollLeft).toBe(600 - 120);
+  });
+
+  it('without a lock the same reveal does what it always did', () => {
+    const g = setup({ rowCount: 200 });
+    scrollTo(g.root, { top: 660, left: 0 });
+    act(() => g.ref.current!.scrollToCell(30, 0));
+    expect(scrollerOf(g).scrollTop).toBe(660);
+  });
+
+  it('dragging up over the locked row reaches row 0, not the row scrolled beneath it', () => {
+    const g = setup({ rowCount: 200, lockFirstRow: true });
+    scrollTo(g.root, { top: 660, left: 0 });
+    fireEvent.mouseDown(g.cellAt(35, 1), { button: 0 });
+    fireEvent.mouseMove(window, { clientX: GUTTER + 130, clientY: HEADER + 5 });
+    fireEvent.mouseUp(window);
+    expect(g.ref.current!.selectedRange()).toMatchObject({ top: 0, bottom: 35 });
+  });
+
+  it('a wrapped locked row keeps its height though it is far out of the window', () => {
+    stubCanvas();
+    const g = setup({
+      rowCount: 1000,
+      wrap: true,
+      lockFirstRow: true,
+      getCell: (r, c) => (r === 0 && c === 0 ? 'a\nb\nc' : `r${r}c${c}`),
+    });
+    scrollTo(g.root, { top: 22 * 500, left: 0 });
+    expect(Number.parseFloat(rowHead(g, 0)!.style.height)).toBe(66);
+    expect(Number.parseFloat(rowEl(g, 0)!.style.height)).toBe(66);
+  });
+
+  it('go to row puts the row just below the locked row', () => {
+    const g = setup({ rowCount: 200, lockFirstRow: true });
+    scrollTo(g.root, { top: 0, left: 0 });
+    act(() => g.ref.current!.goToRow(50));
+    expect(scrollerOf(g).scrollTop).toBe(50 * 22 - 22);
+  });
+
+  it('turning the lock off returns row 0 and column 0 to the ordinary window', () => {
+    const g = setup({ lockFirstRow: true, lockFirstColumn: true });
+    g.rerender({ lockFirstRow: false, lockFirstColumn: false });
+    expect(g.root.querySelector('.data-grid__row--locked')).toBeNull();
+    expect(g.root.querySelector('.data-grid__cell--locked-col')).toBeNull();
+    expect(g.cellAt(0, 0).style.position).toBe('');
+  });
+});
+
 describe('DataGrid scrolling cost (SC-009)', () => {
   /** Move the scroller the way the browser does: a new offset, then the scroll event. */
   function scrollTo(root: HTMLElement, pos: { top: number; left: number }): void {

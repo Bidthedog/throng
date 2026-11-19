@@ -27,6 +27,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactEle
 import {
   cellDialogOn,
   wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
   cellDialogText,
   cellValue,
   columnLabel,
@@ -115,7 +117,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, registerGoTo, navigationSeq, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -585,6 +587,8 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         multiLineInDialog={providerSettings.multiLineCellsInDialog !== false}
         onEditInDialog={openCellDialog}
         wrap={wrapCellsOn(wrapChoice, providerSettings.wrapCells)}
+        lockFirstRow={lockFirstRowOn(lockFirstRowChoice, providerSettings.lockFirstRow)}
+        lockFirstColumn={lockFirstColumnOn(lockFirstColumnChoice, providerSettings.lockFirstColumn)}
         ref={gridRef}
         testId={`csv-grid-${panelId}`}
         rowCount={rowCount}

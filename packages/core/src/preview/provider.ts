@@ -81,6 +81,8 @@ export interface PreviewProviderDescriptor {
   cellDialog?: boolean;
   /** 073 FR-013 — the provider's grid can wrap its cells, with a per-panel toggle on its status bar and in its panel menu. */
   wrapToggle?: boolean;
+  /** 073 FR-039a — the provider's grid can lock its first row and column, with per-panel toggles on its status bar and in its panel menu. */
+  lockToggles?: boolean;
   /**
    * 073 FR-030 — text providers only: the preview EDITS its document (the CSV Preview Editor). Main shows
    * its edits at once rather than after the update delay, the chrome lets its body own paste, cut and

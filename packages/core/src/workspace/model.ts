@@ -192,6 +192,13 @@ export type PreviewPanelConfig = {
    */
   wrapCells?: boolean;
   /**
+   * 073 FR-039a — the CSV Preview Editor's own choice to lock its first row / first column (on or off). Absent: the
+   * panel follows the "Lock first row" / "Lock first column" setting. Written by the status-bar toggles and the panel
+   * menu, so it survives a restart.
+   */
+  lockFirstRow?: boolean;
+  lockFirstColumn?: boolean;
+  /**
    * 054 FR-005, FR-009 — the preview panel TYPE: the id of the provider whose file it shows. Written when
    * the preview is placed, and whenever it comes to show a file of another provider. Absent on a layout
    * written before 054 — `previewProviderIdOf` derives it from the file, without writing it back.

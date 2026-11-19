@@ -34,6 +34,13 @@ export interface PreviewBodyProps {
    */
   wrapChoice?: boolean;
   /**
+   * 073 FR-039a — this panel's own choice to lock its first row / first column (the CSV Preview Editor's status-bar
+   * toggles, persisted with the panel). Absent: the panel follows the provider's "Lock first row" / "Lock first
+   * column" setting.
+   */
+  lockFirstRowChoice?: boolean;
+  lockFirstColumnChoice?: boolean;
+  /**
    * 073 FR-043a — a body that has a Go to (a grid: rows) hands the panel its opener, and takes it back with `null` on
    * unmount. `preview.goToHeading` (Ctrl+G) runs it in place of the heading pop-down. The chrome names no provider.
    */
