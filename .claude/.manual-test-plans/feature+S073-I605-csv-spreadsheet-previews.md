@@ -13,13 +13,14 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 
 ## MT-01: A CSV opens as a grid
 
-Covers: FR-001, FR-005, FR-022, FR-030, FR-042, FR-046, SC-009, #605
+Covers: FR-001, FR-005, FR-008a, FR-022, FR-030, FR-042, FR-046, SC-009, #605
 Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/**`, `packages/core/src/csv/**`, `packages/core/src/preview/providers/csv.ts`
 
 ### Steps
 1. In a project, create `people.csv` with three lines: `name,note`, `"Smith, J","said ""hi"""`, `Lee,plain`. Click it in File Explorer. A panel titled **people.csv - Preview** opens holding a grid.
 2. The header strip reads **A**, **B**; row 1 is `name | note`; row 2 shows `Smith, J` and `said "hi"` whole in their cells.
 3. Press the arrow keys, Page Down, Ctrl+End and Ctrl+Home. The active cell moves accordingly; Shift with them extends the selection.
+3a. In a long CSV scrolled to the top, click a column letter, then a row number, then right-click another column letter. Each selects without the grid moving. Press Down: the active cell moves to row 2 of the selected column.
 4. Open a CSV of about 10 MB (100,000 rows). The grid appears within about two seconds and scrolls to the last row smoothly; the app stays responsive while it loads.
 5. Zoom the panel with the panel zoom keys. Rows and text grow and shrink together.
 6. In a CSV of 100,000 rows and 50 columns, scroll sideways to the last column and back with the wheel (Shift+wheel) and the trackpad. The columns follow without stutter and no blank cells flash at the edges.
