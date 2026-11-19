@@ -178,6 +178,9 @@ the feedback, the code and precedent rather than stated by the maintainer.
   cursor shows for the drag's life, pinned over the whole grid; the selection does not change; Chromium's
   autoscroll does not start; Linux's middle-click paste of the primary selection is suppressed; Ctrl+middle-click
   stays the zoom reset. Both grids. (FR-008f)
+- Q33: What does Esc do after a Cut? → A: It puts back what the cut took, like one Undo; a second Esc does
+  nothing more. *(derived)* Only while the cut is the document's latest change: any later edit, undo or redo, in the
+  grid or in a text editor on the same file, disarms it. The clipboard keeps the cut values. (FR-037i)
 
 ## Terminology
 
@@ -359,6 +362,9 @@ expected bytes: only the edited field differs.
 32. **Given** a CSV with text on the clipboard and in the primary selection, **When** the user presses the middle
     button over a cell and drags up and left, **Then** nothing is pasted, the selection is unchanged, the pointer
     is the move cursor, and the table moves with the pointer; releasing ends it (FR-008f).
+33. **Given** B2:C3 cut, **When** the user presses Esc, **Then** the four values are back and still on the
+    clipboard; a second Esc changes nothing. **Given** a cut followed by typing in another cell, **When** they press
+    Esc, **Then** nothing is undone (FR-037i).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -622,6 +628,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
     text on a cell selection MUST overwrite cells from the active cell, extending the table where it runs
     past the last row or column.
   - **FR-037d**: One paste MUST be one undo step.
+  - **FR-037i** *(Q33, 2026-11-19)*: Pressing Esc in the grid straight after a Cut — the cut still the document's
+    latest change — MUST restore what it took, exactly as one Undo; Esc MUST then do nothing more until the next
+    Cut. A later edit, undo or redo, from any view, disarms it. The clipboard keeps the cut values.
   - **FR-037e** *(Q11, 2026-11-19)*: The right-click menu of a cell, a selection, a row header and a
     column header MUST each offer **Cut**, **Copy** and **Paste**, acting on the selection the right-click
     leaves (the read-only spreadsheet preview offers Copy only). Cutting whole columns MUST clear their
