@@ -489,12 +489,6 @@
     "insertColumnRight": {
       "throng": "A column outlined at the left with a plus to its right: inserts a column right of the chosen one"
     },
-    "selectRow": {
-      "throng": "A table with its middle row marked by a line: selects the whole row"
-    },
-    "selectColumn": {
-      "throng": "A table with its middle column marked by a line: selects the whole column"
-    },
     "resetColumnWidth": {
       "throng": "A two-headed horizontal arrow with a centre mark: puts a column back to its standard width"
     },

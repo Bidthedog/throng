@@ -164,8 +164,6 @@ export const ICON_KEYS = [
   'insertRowBelow',
   'insertColumnLeft',
   'insertColumnRight',
-  'selectRow',
-  'selectColumn',
   'resetColumnWidth',
   'resetRowHeight',
   'goToRow',
@@ -493,10 +491,6 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on the grid menu row that inserts an empty column to the left of the active column.',
   insertColumnRight:
     'The icon on the grid menu row that inserts an empty column to the right of the active column.',
-  selectRow:
-    'The icon on the grid menu row that selects the whole row.',
-  selectColumn:
-    'The icon on the grid menu row that selects the whole column.',
   resetColumnWidth:
     'The icon on the grid menu row that puts a column back to the default width.',
   resetRowHeight:

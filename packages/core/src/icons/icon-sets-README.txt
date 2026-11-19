@@ -259,8 +259,6 @@ insertRowAbove.svg - The icon on the grid menu row that inserts an empty row abo
 insertRowBelow.svg - The icon on the grid menu row that inserts an empty row below the active row.
 insertColumnLeft.svg - The icon on the grid menu row that inserts an empty column to the left of the active column.
 insertColumnRight.svg - The icon on the grid menu row that inserts an empty column to the right of the active column.
-selectRow.svg - The icon on the grid menu row that selects the whole row.
-selectColumn.svg - The icon on the grid menu row that selects the whole column.
 resetColumnWidth.svg - The icon on the grid menu row that puts a column back to the default width.
 resetRowHeight.svg - The icon on the grid menu row that puts a row back to one line high.
 goToRow.svg - The icon on the grid menu row that asks for a row number and goes to that row.

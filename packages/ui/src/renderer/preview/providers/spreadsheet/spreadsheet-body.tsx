@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { columnLabel, logCaught, logExpected, type PreviewCopyFormat } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
-import { rangeOf, selectColumn, selectRow, type GridRange } from '../../../grid/grid-selection.js';
+import { rangeOf, type GridRange } from '../../../grid/grid-selection.js';
 import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
@@ -194,7 +194,6 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
         target.kind === 'column'
           ? [
               ...copies,
-              { label: 'Select Column', icon: 'selectColumn', section: 'content', onClick: () => grid.setSelection(selectColumn(target.col, bodyRows.length)) },
               {
                 label: 'Column Width…',
                 section: 'viewState',
@@ -205,9 +204,6 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
           : [
               ...copies,
               { label: 'Select All', icon: 'selectAll', section: 'content', onClick: () => grid.selectAll() },
-              ...(target.kind === 'row'
-                ? [{ label: 'Select Row', icon: 'selectRow' as const, section: 'content' as const, onClick: () => grid.setSelection(selectRow(target.row)) }]
-                : []),
               { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open },
               ...(target.kind === 'row'
                 ? [{ label: 'Reset Row Height', icon: 'resetRowHeight' as const, section: 'viewState' as const, onClick: () => grid.collapseRow(target.row) }]
@@ -215,7 +211,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
             ];
       openMenu(point.x, point.y, items);
     },
-    [bodyRows.length, colCount, copy, goTo.open, openMenu, resetWidth, sheetWidths],
+    [colCount, copy, goTo.open, openMenu, resetWidth, sheetWidths],
   );
 
   const submitWidth = (e: FormEvent): void => {

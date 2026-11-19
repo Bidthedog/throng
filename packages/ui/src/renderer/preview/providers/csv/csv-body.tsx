@@ -46,7 +46,7 @@ import {
 } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
-import { rangeOf, selectColumn, selectRow, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
+import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
 import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
 import { CellDialog } from '../../../grid/cell-dialog.js';
@@ -457,7 +457,6 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           insert[1]!,
           ...insertCopied,
           ...clipboard(true),
-          { label: 'Select Row', icon: 'selectRow', section: 'content', onClick: () => grid.setSelection(selectRow(target.row)) },
           { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open, shortcut: chord('preview.goToHeading') },
           { label: 'Reset Row Height', icon: 'resetRowHeight', section: 'viewState', onClick: () => grid.collapseRow(target.row) },
         );
@@ -467,7 +466,6 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           insert[3]!,
           ...insertCopied,
           ...clipboard(false),
-          { label: 'Select Column', icon: 'selectColumn', section: 'content', onClick: () => grid.setSelection(selectColumn(target.col, rowCount)) },
           width,
           { label: 'Reset Column Width', icon: 'resetColumnWidth', section: 'viewState', onClick: () => resetWidth(target.col) },
         );
@@ -495,7 +493,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       if (onOpenInEditor !== undefined) items.push({ label: 'Open in Editor', section: 'navigate', onClick: onOpenInEditor });
       openMenu(point.x, point.y, items);
     },
-    [cellDialogAvailable, goTo.open, rowCount, clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
+    [cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard

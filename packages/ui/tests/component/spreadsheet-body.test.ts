@@ -139,11 +139,12 @@ describe('SpreadsheetBody', () => {
         }
       };
       fireEvent.contextMenu(colHead(0), { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Select Column': 'selectColumn', 'Reset Column Width': 'resetColumnWidth' });
+      expectIcons({ Copy: 'copy', 'Reset Column Width': 'resetColumnWidth' });
+      expect(screen.queryByTestId('menu-item-Select Column')).toBeNull();
       expect(iconOf('Column Width…')).toBeUndefined();
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       fireEvent.contextMenu(rowHead(0), { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Select Row': 'selectRow', 'Go to Row…': 'goToRow', 'Reset Row Height': 'resetRowHeight' });
+      expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow', 'Reset Row Height': 'resetRowHeight' });
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       fireEvent.contextMenu(document.querySelector('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
       expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });

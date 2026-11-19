@@ -642,6 +642,8 @@ describe('CsvBody menu icons (FR-037g)', () => {
       'Go to Row…': 'goToRow',
     });
     expect(iconOf('Column Width…')).toBeUndefined();
+    // FR-037h — a header's own menu offers no Select Row / Select Column: clicking the header already selected it.
+    expect(screen.queryByTestId('menu-item-Select Column')).toBeNull();
   });
 
   it('draws them on the row-header menu', () => {
@@ -653,7 +655,6 @@ describe('CsvBody menu icons (FR-037g)', () => {
       Cut: 'cut',
       Copy: 'copy',
       Paste: 'paste',
-      'Select Row': 'selectRow',
       'Go to Row…': 'goToRow',
       'Reset Row Height': 'resetRowHeight',
     });
@@ -668,7 +669,6 @@ describe('CsvBody menu icons (FR-037g)', () => {
       Cut: 'cut',
       Copy: 'copy',
       Paste: 'paste',
-      'Select Column': 'selectColumn',
       'Reset Column Width': 'resetColumnWidth',
     });
     expect(iconOf('Column Width…')).toBeUndefined();
