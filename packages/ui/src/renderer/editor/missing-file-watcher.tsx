@@ -145,13 +145,22 @@ export function MissingFileWatcher(): null {
        * So the sample partitions rather than filters, and the fix is to publish the third state
        * rather than to lengthen the delay — no constant is left here to be wrong on the next
        * machine.
+       *
+       * NO STATE AT ALL is the same third state, one step earlier. `use-editor` first publishes after
+       * its first IPC round trip, so an editor that has not mounted yet — or has mounted and is still
+       * waiting on `getContent` — has no entry in the store. Reading that as "nothing to report" put
+       * the deadline back, measured from mount instead of from the load: on hosted macOS a tab visited
+       * after its sibling notice was dismissed raised nothing at all (pipeline run 44475351379).
        */
       const pending = new Map<string, Panel>();
       for (const p of panels) {
         const st = getEditorState(p.id);
-        if (st?.movedOut) continue; // moved out in this session, whatever its persisted config says yet
-        if (st?.fileMissing || st?.unloadable) report(p, st);
-        else if (st?.openPending) pending.set(p.id, p);
+        if (!st || st.openPending) {
+          pending.set(p.id, p);
+          continue;
+        }
+        if (st.movedOut) continue; // moved out in this session, whatever its persisted config says yet
+        if (st.fileMissing || st.unloadable) report(p, st);
       }
       if (pending.size === 0) return;
 

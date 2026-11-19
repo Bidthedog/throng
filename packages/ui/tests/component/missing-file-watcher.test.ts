@@ -402,6 +402,40 @@ describe('a panel that had not answered yet is still reported when it does (#369
     expect(reported.calls.map((c) => c.panelId).sort()).toEqual(['a', 'b']);
   });
 
+  it('reports a panel that had published NOTHING yet when the scan sampled, once it answers', () => {
+    /*
+     * ══ THE SAME DEADLINE, ONE STEP EARLIER (hosted macOS, pipeline run 44475351379) ══
+     *
+     * `openPending` is the third state — but only once the editor has published it, and `use-editor`
+     * first publishes AFTER its first IPC round trip (`getContent`). Until then the store holds no
+     * entry at all for the panel, and the sample read "no entry" as "nothing to report": not pending,
+     * not watched, never reported. 300 ms was a verdict deadline again, just measured from mount
+     * instead of from the load.
+     *
+     * On the hosted macOS runner a tab visited after its sibling notice was dismissed raised NOTHING
+     * for 30 s (`notice-consolidation.e2e.ts:404`, expected 1 notice, received 0), while the panel
+     * showed its own banner — FR-037a's fresh notice for the newly discovered panel never came.
+     *
+     * An editor panel on the activated tab with no state yet has not answered; it is waited on like
+     * any other pending panel.
+     */
+    const t1 = tab('t1', [{ id: 'unmounted' }]);
+    removeEditorState('unmounted'); // the editor has not mounted, or has not published, yet
+    seeded.push('unmounted');
+    setLayout([t1], 't1');
+    mount();
+    runScan();
+    expect(reported.calls, 'nothing is known about it yet, so nothing is claimed').toEqual([]);
+
+    // The editor mounts and its open answers: the path could not be read.
+    setEditorState('unmounted', { openPending: true });
+    expect(reported.calls, 'still opening').toEqual([]);
+    setEditorState('unmounted', { openPending: false, unloadable: true });
+
+    expect(reported.calls.map((c) => c.panelId)).toEqual(['unmounted']);
+    expect(reported.calls[0].causeKind).toBe('path-missing');
+  });
+
   it('says nothing about a late panel that turns out to be fine', () => {
     setLayout([seed('t1', [{ id: 'slow', openPending: true }])], 't1');
     mount();
