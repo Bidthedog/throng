@@ -117,26 +117,39 @@ test('a delayed bell in project A, seen from project B, marks A’s row and rais
   // ── Leave: project B is now the one on screen, so A's terminal is not attended ─────────────────
   await createProject(win, nameB, rootB);
   await settleOnActiveProject(win, nameB);
+  // When the row is marked, by the page's own wall clock — the same clock the shell's bell time is read from. A
+  // test-side poll stamps the moment its round trip to the page came back, which on a loaded Windows runner added
+  // a few hundred ms the user never waited (1288 ms measured once against SC-002's 1000).
+  await win.evaluate((projectId) => {
+    const selector = `[data-testid="attention-project-${projectId}"]`;
+    const page = window as unknown as { __attentionMarkedAt?: number };
+    page.__attentionMarkedAt = undefined;
+    const observer = new MutationObserver(() => {
+      if (page.__attentionMarkedAt === undefined && document.querySelector(selector)) {
+        page.__attentionMarkedAt = Date.now();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+  }, idA);
   writeFileSync(flag, '1');
 
   // ── The row is marked, and when ─────────────────────────────────────────────────────────────────
   const rowMark = win.getByTestId(`attention-project-${idA}`);
-  let markedAt = 0;
   await expect
-    .poll(
-      async () => {
-        const present = (await rowMark.count()) > 0;
-        if (present && markedAt === 0) markedAt = Date.now();
-        return present;
-      },
-      { timeout: MARK_TIMEOUT_MS, intervals: [50], message: 'the bell never marked project A’s row' },
-    )
+    .poll(async () => (await rowMark.count()) > 0, {
+      timeout: MARK_TIMEOUT_MS,
+      intervals: [50],
+      message: 'the bell never marked project A’s row',
+    })
     .toBe(true);
+  const markedAt = await win.evaluate(() => (window as unknown as { __attentionMarkedAt?: number }).__attentionMarkedAt);
+  expect(markedAt, 'the page saw the row’s mark appear').toBeDefined();
   // The mark names the panel and the reason (FR-015), not just that something happened.
   await expect(rowMark).toHaveAttribute('aria-label', /Wants your attention/); // FR-101
 
   const bellAt = Number(readFileSync(join(rootA, 'bell-at.txt'), 'utf8'));
-  const latency = markedAt - bellAt;
+  const latency = markedAt! - bellAt;
   process.stderr.write(`attention-marks: bell -> row marked ${latency} ms (SC-002 allows ${SC_002_MS})\n`);
   expect(latency, 'the shell’s own clock says when it rang; the row must be marked within SC-002 of that').toBeLessThanOrEqual(SC_002_MS);
 
