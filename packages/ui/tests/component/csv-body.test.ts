@@ -510,6 +510,27 @@ describe('CsvBody cell dialog (FR-036a, FR-036b, FR-060a)', () => {
     expect(bridge.gridEdit).not.toHaveBeenCalled();
   });
 
+  // Reported 2026-11-19: after the dialog closed the grid looked focused but no shortcut reached it — focus was
+  // handed back while the dialog's focus trap was still mounted, which pulled it straight back into the closing
+  // dialog and left it on the page body.
+  it.each([
+    ['Escape', (): void => void fireEvent.keyDown(dialog()!, { key: 'Escape' })],
+    ['Cancel', (): void => void fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))],
+    ['Save', (): void => void fireEvent.click(screen.getByRole('button', { name: 'Save' }))],
+    ['Ctrl+Enter', (): void => void fireEvent.keyDown(dialog()!, { key: 'Enter', ctrlKey: true })],
+  ])('closing by %s puts DOM focus back on the grid, so its shortcuts work', async (_how, close) => {
+    open();
+    select(2, 0);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    expect(dialog()).not.toBeNull();
+    // Focus inside the dialog, as it is once the editor has taken the caret.
+    act(() => dialog()!.querySelector<HTMLElement>('.cm-content')!.focus());
+    act(() => close());
+    expect(dialog()).toBeNull();
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(document.activeElement).toBe(grid());
+  });
+
   it('Save with the text unchanged writes nothing', async () => {
     open();
     select(1, 1);

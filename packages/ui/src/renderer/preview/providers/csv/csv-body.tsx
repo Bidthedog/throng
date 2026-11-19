@@ -397,10 +397,11 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     },
     [getCell],
   );
+  // The dialog hands the keyboard back to the grid itself, once it has unmounted (`returnFocus`).
   const closeCellDialog = useCallback((): void => {
     setCellDialog(null);
-    gridRef.current?.focus();
   }, []);
+  const focusGrid = useCallback((): void => gridRef.current?.focus(), []);
   // Saving writes the flattened text as one edit (one undo step); text unchanged from what the dialog opened with
   // writes nothing.
   const saveCellDialog = (text: string): void => {
@@ -583,6 +584,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       {goTo.dialog}
       {cellDialog !== null ? (
         <CellDialog
+          returnFocus={focusGrid}
           cellLabel={`${columnLabel(cellDialog.col)}${cellDialog.row + 1}`}
           initial={cellDialog.initial}
           json={isJsonContainer(cellDialog.initial)}

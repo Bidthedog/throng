@@ -24,14 +24,26 @@ export interface CellDialogProps {
   /** Save, with the text as it stands; the caller flattens it and decides whether anything changed. */
   onSave(text: string): void;
   onCancel(): void;
+  /** Where the keyboard goes once the dialog has gone, saved or cancelled alike (the grid). */
+  returnFocus?(): void;
 }
 
-export function CellDialog({ cellLabel, initial, json, onSave, onCancel }: CellDialogProps): ReactElement {
+export function CellDialog({ cellLabel, initial, json, onSave, onCancel, returnFocus }: CellDialogProps): ReactElement {
   const [text, setText] = useState(initial);
   const textRef = useRef(text);
   textRef.current = text;
   const trap = useFocusTrap<HTMLDivElement>(true);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  /*
+   * Focus goes back as an UNMOUNT cleanup, declared after the trap. React runs unmount cleanups in declaration order,
+   * so the trap's focusin guard is gone first; focusing the grid while it was still installed pulled focus straight
+   * back into the closing dialog, which then left it on the page body — the grid looked focused and no shortcut
+   * reached it (reported 2026-11-19; the same order `goto-line.tsx` and `go-to-dialog.tsx` keep).
+   */
+  const returnTo = useRef(returnFocus);
+  returnTo.current = returnFocus;
+  useEffect(() => () => returnTo.current?.(), []);
 
   // Focus goes to the editor, caret in the text, so typing starts at once.
   useEffect(() => {
