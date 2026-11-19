@@ -2747,10 +2747,9 @@ export function useEditor(params: UseEditorParams): void {
 
     /*
      * THIS PANEL'S OPEN IS NOW IN FLIGHT (#369), and stays so until one of the routes below
-     * answers. Set before the first `await` so the flag is already published by the time anything
-     * can observe it — a scan that sampled between the mount and the first `publishState` would
-     * otherwise see a panel with three false flags and read it as healthy, which is the defect in
-     * miniature.
+     * answers. Set before the first `await` so the first `publishState` carries it. Until that first
+     * publish the store holds NO entry for this panel, which `missing-file-watcher` reads as pending
+     * too — an absent entry is not a healthy panel.
      */
     openPendingRef.current = true;
 
