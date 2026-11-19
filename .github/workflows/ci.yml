@@ -14,6 +14,10 @@ name: CI
 # GitHub-hosted runners only; that is what makes a `pull_request` trigger safe here, and it must stay true of every job
 # added to this file.
 #
+# A PULL REQUEST NO JOB CAN FAIL ON SKIPS THE WORK (FR-004a). When every file it changes is one no job reads (the
+# constitution, specs, manual test plans: scripts/ci-changes.mjs holds the list), the work jobs skip and the verdict passes
+# on the change check's answer. A path nobody declared inert runs everything.
+#
 # packages/ui/tests/unit/ci-workflow.test.ts holds the shape above.
 
 on:
@@ -34,8 +38,28 @@ env:
   npm_config_loglevel: error
 
 jobs:
+  # FR-004a: does any changed file reach a job? The merge commit's first parent is the base it lands on, so the diff is the
+  # pull request's own change against the base it would merge into. Node is on the runner image; the script needs no install.
+  changes:
+    name: Changed inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.decide.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - name: Decide whether any job reads a changed file
+        id: decide
+        run: |
+          set -euo pipefail
+          git diff --name-only HEAD^1 HEAD | node scripts/ci-changes.mjs >> "$GITHUB_OUTPUT"
+
   lint:
     name: Lint & type-check
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -55,6 +79,8 @@ jobs:
   # ci-linux-setup.sh takes the same one step a developer takes. The sandbox stays on throughout (062 FR-003).
   unit:
     name: Unit
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -74,6 +100,8 @@ jobs:
 
   component:
     name: Component (${{ matrix.shard }}/2)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -100,6 +128,8 @@ jobs:
   # built first: on a clean checkout there is no dist/.
   contract:
     name: Contract
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -128,6 +158,8 @@ jobs:
   # fails on that instead of falling back to every file.
   integration:
     name: Integration (critical path)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -153,10 +185,11 @@ jobs:
           npx vitest run --project integration --tags-filter=critical-path "${files[@]}"
 
   # THE ONE REQUIRED CHECK (FR-004). It runs whatever the others did, and passes only when every one of them succeeded: a
-  # failed, a cancelled or a skipped job all fail it.
+  # failed, a cancelled or a skipped job all fail it. The one exception is FR-004a's: the change check succeeded and found no
+  # changed file any job reads, so the work jobs were skipped on purpose.
   verdict:
     name: CI verdict
-    needs: [lint, unit, component, contract, integration]
+    needs: [changes, lint, unit, component, contract, integration]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -166,6 +199,10 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
+          if [ "$(jq -r '.changes.result' <<<"$NEEDS")" = success ] && [ "$(jq -r '.changes.outputs.code' <<<"$NEEDS")" = false ]; then
+            echo "No changed file is one any job reads (FR-004a); nothing to run."
+            exit 0
+          fi
           bad=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' <<<"$NEEDS")
           if [ -n "$bad" ]; then
             echo "::error::not green: $bad"

@@ -15,7 +15,8 @@ Three workflows, nothing else (spec 072; *The three pipelines* in `docs/testing.
 
 - **`ci.yml`** — every push to a PR, drafts included: lint, typecheck, unit, component, contract and
   the `critical-path` integration subset, on Linux, no E2E, every job to completion. One required
-  check, `CI verdict`. Target 5 minutes.
+  check, `CI verdict`. Target 5 minutes. A PR that changes only files no job reads skips the jobs and
+  passes the verdict (072 FR-004a; the list is `scripts/ci-changes.mjs`).
 - **`pipeline.yml`** — nightly on master and on dispatch: every layer on Windows, Linux and macOS,
   every E2E test sharded, `@admin`, calibration, every artifact built and verified. Never publishes.
   A dispatch fails fast unless `-f run_to_completion=true`; the nightly runs to completion and reports on one issue.

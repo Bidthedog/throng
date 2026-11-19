@@ -2,14 +2,18 @@
 SYNC IMPACT REPORT
 ==================
 Version change: 7.0.0 → 7.1.0
-Bump rationale: MINOR — two additive rules from the maintainer's spec 076 review (2026-11-19). Development Workflow
+Bump rationale: MINOR — two additive rules from the maintainer's spec 076 review (2026-11-19), and one bounded exception
+                to the PR-CI gate (Static analysis & linting): a pull request whose every changed file is one no gate reads
+                skips the runs and passes the verdict (072 FR-004a; maintainer: "If the build can't fail, we shouldn't have
+                to wait"). No guarantee is withdrawn: a run skipped this way is one whose result could only be green. Development Workflow
                 & Quality Gates › Action controls gains "Setting toggles": on is the full-contrast text colour on the
                 pressed background, off is the muted text colour with a diagonal line struck through a plain glyph,
                 titled "<setting>: enabled|disabled". Principle VI gains "A setting MUST be named for the behaviour it
                 turns on" (076 replaced "Ignore terminal notifications" with "Terminal notifications", on by default).
                 Both expand existing guidance; no guarantee is withdrawn.
 Modified principles: VI (new bullet before its rationale).
-Modified sections: Development Workflow & Quality Gates › Action controls (new "Setting toggles" sub-rule).
+Modified sections: Development Workflow & Quality Gates › Action controls (new "Setting toggles" sub-rule); Static
+                analysis & linting (the inert-change exception).
 Added sections: none. Removed sections: none.
 Audit (2026-11-19): the terminal status bar's three toggles (076) already comply. Four setting toggles do not and are
                 listed in the rule as known gaps: View Whitespace and Word Wrap on the editor status bar, and
@@ -3358,7 +3362,10 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
   master, on an agent's dispatch, and inside every release before anything publishes. A
   release MUST NOT publish unless the full pipeline in its own run is green. A lane that
   gates merge is worth only what it costs every contributor to wait for, so the expensive
-  remainder is paid by the nightly and by the release, not by every push (v7.0.0).
+  remainder is paid by the nightly and by the release, not by every push (v7.0.0). A pull request
+  whose every changed file is one no gate reads — no lint, type-check, test or build input, by a
+  declared list that runs everything for a path it does not name — MAY skip those runs, and its
+  verdict passes without them: a gate that cannot fail answers nothing worth waiting for (v7.1.0).
 - Changes that touch the OS abstraction boundary, the daemon/terminal process
   lifecycle, persisted edit/layout state, or **the state of a document presented in more
   than one Panel** MUST be reviewed with particular scrutiny against Principles II, III,
