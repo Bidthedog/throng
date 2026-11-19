@@ -29,6 +29,11 @@ export interface PreviewBodyProps {
    */
   cellDialogChoice?: boolean;
   /**
+   * 073 FR-043a — a body that has a Go to (a grid: rows) hands the panel its opener, and takes it back with `null` on
+   * unmount. `preview.goToHeading` (Ctrl+G) runs it in place of the heading pop-down. The chrome names no provider.
+   */
+  registerGoTo?(open: (() => void) | null): void;
+  /**
    * 045 FR-168 (review round four, editor M2) — what this window's settings make a link's Ctrl+click
    * DO, for the tooltip and the plain-click hint only. The chrome supplies it because judging it
    * needs the provider registry, which a body never sees (FR-074). Absent: every in-project file

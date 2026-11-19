@@ -160,6 +160,15 @@ export const ICON_KEYS = [
   'rememberDirectory',
   'terminalNotifications',
   'cellDialog',
+  'insertRowAbove',
+  'insertRowBelow',
+  'insertColumnLeft',
+  'insertColumnRight',
+  'selectRow',
+  'selectColumn',
+  'resetColumnWidth',
+  'resetRowHeight',
+  'goToRow',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -476,6 +485,24 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on the terminal status bar toggle that lets that one terminal raise attention marks, pop-ups and desktop notifications, or silences it. Draw it plain: throng greys it out and draws a line through it while the toggle is off.',
   cellDialog:
     'The icon on the CSV Preview Editor status bar toggle that turns the cell dialog, the editor long cells open in, on or off for that panel.',
+  insertRowAbove:
+    'The icon on the grid menu row that inserts an empty row above the active row.',
+  insertRowBelow:
+    'The icon on the grid menu row that inserts an empty row below the active row.',
+  insertColumnLeft:
+    'The icon on the grid menu row that inserts an empty column to the left of the active column.',
+  insertColumnRight:
+    'The icon on the grid menu row that inserts an empty column to the right of the active column.',
+  selectRow:
+    'The icon on the grid menu row that selects the whole row.',
+  selectColumn:
+    'The icon on the grid menu row that selects the whole column.',
+  resetColumnWidth:
+    'The icon on the grid menu row that puts a column back to the default width.',
+  resetRowHeight:
+    'The icon on the grid menu row that puts a row back to one line high.',
+  goToRow:
+    'The icon on the grid menu row that asks for a row number and goes to that row.',
 };
 
 /** Is `value` one of the icon keys? */

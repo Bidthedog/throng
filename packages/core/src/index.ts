@@ -1488,6 +1488,7 @@ export {
   serialiseHistory,
 } from './navigation/history.js';
 export type { NavigationEntry, NavigationHistory } from './navigation/history.js';
+export { isGotoInput, resolveGotoNumber } from './navigation/go-to-input.js';
 
 // 045 — clickable file links (#394 / #198). The grammar and every decision, pure and OS-free.
 // `core/src/links/**` names no operating system, extension or drive mapping; the OS facts arrive

@@ -46,7 +46,8 @@ import {
 } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
-import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
+import { rangeOf, selectColumn, selectRow, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
+import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
 import { CellDialog } from '../../../grid/cell-dialog.js';
 import { copiedBlockFor, hasCopiedBlock, recordCopy, type CopiedBlock } from '../../../grid/copied-block.js';
@@ -112,7 +113,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, registerGoTo, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -404,6 +405,9 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     setCells([{ row: open.row, col: open.col, value: flattenCellText(text) }]);
   };
 
+  // FR-043a — Ctrl+G and the menus' Go to Row… open the shared Go to dialog for rows.
+  const goTo = useGridGoTo(panelId, gridRef, rowCount, registerGoTo);
+
   /* ── Menus (contracts/grid-ui.md) ────────────────────────────────────────────────────────────── */
 
   const buildMenu = useCallback(
@@ -416,10 +420,10 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       const chord = (id: Parameters<typeof firstBinding>[1]): string | undefined => firstBinding(keybindings, id) ?? undefined;
       const items: MenuAction[] = [];
       const insert: MenuAction[] = [
-        { label: 'Insert Row Above', section: 'create', onClick: () => insertRows(at.row), shortcut: chord('grid.insertRowAbove') },
-        { label: 'Insert Row Below', section: 'create', onClick: () => insertRows(at.row + 1), shortcut: chord('grid.insertRowBelow') },
-        { label: 'Insert Column Left', section: 'create', onClick: () => insertColumn(at.col), shortcut: chord('grid.insertColumnLeft') },
-        { label: 'Insert Column Right', section: 'create', onClick: () => insertColumn(at.col + 1), shortcut: chord('grid.insertColumnRight') },
+        { label: 'Insert Row Above', icon: 'insertRowAbove', section: 'create', onClick: () => insertRows(at.row), shortcut: chord('grid.insertRowAbove') },
+        { label: 'Insert Row Below', icon: 'insertRowBelow', section: 'create', onClick: () => insertRows(at.row + 1), shortcut: chord('grid.insertRowBelow') },
+        { label: 'Insert Column Left', icon: 'insertColumnLeft', section: 'create', onClick: () => insertColumn(at.col), shortcut: chord('grid.insertColumnLeft') },
+        { label: 'Insert Column Right', icon: 'insertColumnRight', section: 'create', onClick: () => insertColumn(at.col + 1), shortcut: chord('grid.insertColumnRight') },
       ];
       const width: MenuAction = {
         label: 'Column Width…',
@@ -428,23 +432,23 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       };
       // FR-037e — every menu offers the clipboard for the selection the right-click leaves.
       const clipboard = (rows: boolean): MenuAction[] => [
-        { label: 'Cut', section: 'content', group: 'clipboard', onClick: () => cut(rows ? { ...sel, rows: true } : sel, range) },
-        { label: 'Copy', section: 'content', group: 'clipboard', onClick: () => copy(range) },
-        { label: 'Paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
+        { label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', onClick: () => cut(rows ? { ...sel, rows: true } : sel, range) },
+        { label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range) },
+        { label: 'Paste', icon: 'paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
       ];
       // FR-038a — beside the blank inserts, never instead of them.
       const insertCopied: MenuAction[] = [];
       if (copied !== null && copied.kind === 'rows' && copied.values.length <= GRID_MAX_ROW_COUNT) {
         const rows = copied.values;
         insertCopied.push(
-          { label: 'Insert Copied Rows Above', section: 'create', onClick: () => insertRows(at.row, rows) },
-          { label: 'Insert Copied Rows Below', section: 'create', onClick: () => insertRows(at.row + 1, rows) },
+          { label: 'Insert Copied Rows Above', icon: 'insertRowAbove', section: 'create', onClick: () => insertRows(at.row, rows) },
+          { label: 'Insert Copied Rows Below', icon: 'insertRowBelow', section: 'create', onClick: () => insertRows(at.row + 1, rows) },
         );
       } else if (copied !== null && copied.kind === 'columns' && copied.values.length <= GRID_MAX_ROW_COUNT) {
         const columns = copied.values;
         insertCopied.push(
-          { label: 'Insert Copied Columns Left', section: 'create', onClick: () => insertColumn(at.col, columns) },
-          { label: 'Insert Copied Columns Right', section: 'create', onClick: () => insertColumn(at.col + 1, columns) },
+          { label: 'Insert Copied Columns Left', icon: 'insertColumnLeft', section: 'create', onClick: () => insertColumn(at.col, columns) },
+          { label: 'Insert Copied Columns Right', icon: 'insertColumnRight', section: 'create', onClick: () => insertColumn(at.col + 1, columns) },
         );
       }
       if (target.kind === 'row') {
@@ -453,7 +457,9 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           insert[1]!,
           ...insertCopied,
           ...clipboard(true),
-          { label: 'Reset Size', section: 'viewState', onClick: () => grid.collapseRow(target.row) },
+          { label: 'Select Row', icon: 'selectRow', section: 'content', onClick: () => grid.setSelection(selectRow(target.row)) },
+          { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open, shortcut: chord('preview.goToHeading') },
+          { label: 'Reset Row Height', icon: 'resetRowHeight', section: 'viewState', onClick: () => grid.collapseRow(target.row) },
         );
       } else if (target.kind === 'column') {
         items.push(
@@ -461,25 +467,27 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           insert[3]!,
           ...insertCopied,
           ...clipboard(false),
+          { label: 'Select Column', icon: 'selectColumn', section: 'content', onClick: () => grid.setSelection(selectColumn(target.col, rowCount)) },
           width,
-          { label: 'Reset Size', section: 'viewState', onClick: () => resetWidth(target.col) },
+          { label: 'Reset Column Width', icon: 'resetColumnWidth', section: 'viewState', onClick: () => resetWidth(target.col) },
         );
       } else {
         items.push(
-          { label: 'Undo', section: 'content', group: 'history', onClick: () => history('undo') },
-          { label: 'Redo', section: 'content', group: 'history', onClick: () => history('redo') },
-          { label: 'Cut', section: 'content', group: 'clipboard', onClick: () => cut(sel, range) },
-          { label: 'Copy', section: 'content', group: 'clipboard', onClick: () => copy(range) },
+          { label: 'Undo', icon: 'undo', section: 'content', group: 'history', onClick: () => history('undo') },
+          { label: 'Redo', icon: 'redo', section: 'content', group: 'history', onClick: () => history('redo') },
+          { label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', onClick: () => cut(sel, range) },
+          { label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range) },
           { label: 'Copy as Rich Text', section: 'content', group: 'clipboard', onClick: () => copy(range, 'rich') },
           { label: 'Copy as Plain Text', section: 'content', group: 'clipboard', onClick: () => copy(range, 'plain') },
-          { label: 'Paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
+          { label: 'Paste', icon: 'paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
           { label: 'Clear Cells', section: 'content', group: 'clipboard', onClick: () => clearRange(range) },
           ...(cellDialogAvailable
-            ? [{ label: 'Edit in Dialog…', section: 'content' as const, onClick: () => openCellDialog(target.row, target.col) }]
+            ? [{ label: 'Edit in Dialog…', icon: 'cellDialog' as const, section: 'content' as const, onClick: () => openCellDialog(target.row, target.col) }]
             : []),
-          { label: 'Select All', section: 'content', group: 'clipboard', onClick: () => grid.selectAll() },
-          { label: 'Save', section: 'content', group: 'file', onClick: () => void save(), shortcut: chord('editor.save') },
-          { label: 'Save As…', section: 'content', group: 'file', onClick: () => void saveAs(), shortcut: chord('editor.saveAs') },
+          { label: 'Select All', icon: 'selectAll', section: 'content', group: 'clipboard', onClick: () => grid.selectAll() },
+          { label: 'Save', icon: 'save', section: 'content', group: 'file', onClick: () => void save(), shortcut: chord('editor.save') },
+          { label: 'Save As…', icon: 'saveAs', section: 'content', group: 'file', onClick: () => void saveAs(), shortcut: chord('editor.saveAs') },
+          { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open, shortcut: chord('preview.goToHeading') },
           ...insert,
           width,
         );
@@ -487,7 +495,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       if (onOpenInEditor !== undefined) items.push({ label: 'Open in Editor', section: 'navigate', onClick: onOpenInEditor });
       openMenu(point.x, point.y, items);
     },
-    [cellDialogAvailable, clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
+    [cellDialogAvailable, goTo.open, rowCount, clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard
@@ -557,6 +565,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         onHistory={history}
         onContextMenu={onContextMenu}
       />
+      {goTo.dialog}
       {cellDialog !== null ? (
         <CellDialog
           cellLabel={`${columnLabel(cellDialog.col)}${cellDialog.row + 1}`}

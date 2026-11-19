@@ -255,4 +255,13 @@ rememberCommand.svg - The icon on the terminal status bar toggle that keeps a te
 rememberDirectory.svg - The icon on the terminal status bar toggle that reopens a terminal in the folder it was last working in, rather than where it first started. Draw it plain: throng greys it out and draws a line through it while the toggle is off.
 terminalNotifications.svg - The icon on the terminal status bar toggle that lets that one terminal raise attention marks, pop-ups and desktop notifications, or silences it. Draw it plain: throng greys it out and draws a line through it while the toggle is off.
 cellDialog.svg - The icon on the CSV Preview Editor status bar toggle that turns the cell dialog, the editor long cells open in, on or off for that panel.
+insertRowAbove.svg - The icon on the grid menu row that inserts an empty row above the active row.
+insertRowBelow.svg - The icon on the grid menu row that inserts an empty row below the active row.
+insertColumnLeft.svg - The icon on the grid menu row that inserts an empty column to the left of the active column.
+insertColumnRight.svg - The icon on the grid menu row that inserts an empty column to the right of the active column.
+selectRow.svg - The icon on the grid menu row that selects the whole row.
+selectColumn.svg - The icon on the grid menu row that selects the whole column.
+resetColumnWidth.svg - The icon on the grid menu row that puts a column back to the default width.
+resetRowHeight.svg - The icon on the grid menu row that puts a row back to one line high.
+goToRow.svg - The icon on the grid menu row that asks for a row number and goes to that row.
 ---- icon keys: end ----

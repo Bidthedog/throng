@@ -1119,7 +1119,17 @@ export function PreviewPanel({
     return currentHeadingSlug(positions, 0);
   }, []);
 
+  // 073 FR-043a — a body with its own Go to (a grid's rows) claims `preview.goToHeading`; the chrome names no provider.
+  const bodyGoToRef = useRef<(() => void) | null>(null);
+  const registerGoTo = useCallback((open: (() => void) | null): void => {
+    bodyGoToRef.current = open;
+  }, []);
+
   const openHeadingOutlineHandler = useCallback((): void => {
+    if (bodyGoToRef.current !== null) {
+      bodyGoToRef.current();
+      return;
+    }
     // A single picture (a Mermaid preview) has no headings to go to.
     if (!flowingRef.current) return;
     setHeadingOutlineCurrentSlug(computeCurrentHeadingSlug());
@@ -2475,6 +2485,7 @@ export function PreviewPanel({
             projectRoot={projectRoot ?? ''}
             providerSettings={settings.editor.previews.providers[state.providerId] ?? NO_PROVIDER_SETTINGS}
             cellDialogChoice={cellDialogChoice}
+            registerGoTo={registerGoTo}
             linkWording={linkWording}
             initialViewState={state.viewState}
             initialViewStateBasis={state.viewStateBasis}

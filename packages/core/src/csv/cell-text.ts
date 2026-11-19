@@ -5,6 +5,7 @@
  * A value that is a JSON object or array opens pretty-printed; saving flattens the text back to one line,
  * because a CSV field's line break is a hazard for every other tool that reads the file. Pure: no OS, no DOM.
  */
+import { logExpected } from '../diagnostics/caught.js';
 
 /** The shipped Long cell threshold (characters); the descriptor in `preview/providers/csv.ts` ships the same. */
 const SHIPPED_THRESHOLD = 50;
@@ -16,7 +17,8 @@ export function isJsonContainer(value: string): boolean {
   try {
     const parsed: unknown = JSON.parse(trimmed);
     return typeof parsed === 'object' && parsed !== null;
-  } catch {
+  } catch (error) {
+    logExpected('csv cell text: detect JSON', 'a cell that only looks like JSON is ordinary text, edited as such', error);
     return false;
   }
 }

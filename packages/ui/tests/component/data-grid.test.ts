@@ -778,6 +778,47 @@ describe('DataGrid paste target (FR-037f)', () => {
   });
 });
 
+describe('DataGrid goToRow handle (FR-043a)', () => {
+  /** A scroller whose offset is real state, since jsdom has no scrolling. */
+  function trackedScroller(root: HTMLElement): { top: () => number } {
+    const scroller = root.querySelector<HTMLElement>('.data-grid__scroller')!;
+    let top = 0;
+    Object.defineProperty(scroller, 'scrollTop', { get: () => top, set: (v: number) => void (top = v), configurable: true });
+    return { top: () => top };
+  }
+
+  it('makes the row\'s cell in the active column the active cell, with the row at the top', () => {
+    const g = setup({ rowCount: 1200 });
+    const scroll = trackedScroller(g.root);
+    g.key('ArrowRight');
+    g.key('ArrowRight');
+    act(() => g.ref.current!.goToRow(899));
+    expect(sel(g)).toMatchObject({ anchor: { row: 899, col: 2 }, active: { row: 899, col: 2 } });
+    expect(scroll.top()).toBe(899 * 22);
+  });
+
+  it('takes a row below an expanded row from the measured positions', () => {
+    stubCanvas();
+    const g = setup({ getCell: (r, c) => (r === 1 && c === 0 ? 'a\nb\nc' : `r${r}c${c}`) });
+    const scroll = trackedScroller(g.root);
+    fireEvent.doubleClick(g.root.querySelector('[role="rowheader"][data-row="1"]')!);
+    act(() => g.ref.current!.goToRow(4));
+    // Rows 0 and 2 are 22 px, row 1 is 66 px: row 4 starts at 22 + 66 + 22 + 22.
+    expect(scroll.top()).toBe(132);
+  });
+
+  it('clamps a row outside the table to its nearest row, and reports the new selection', () => {
+    const g = setup({ rowCount: 50 });
+    trackedScroller(g.root);
+    act(() => g.ref.current!.goToRow(9999));
+    expect(sel(g).active.row).toBe(49);
+    act(() => g.ref.current!.goToRow(-5));
+    expect(sel(g).active.row).toBe(0);
+    expect(g.onSelectionChange).toHaveBeenLastCalledWith(sel(g));
+  });
+
+});
+
 describe('DataGrid collapseRow handle (FR-006a)', () => {
   it('collapses an expanded row to one line, and leaves a collapsed row alone', () => {
     stubCanvas();

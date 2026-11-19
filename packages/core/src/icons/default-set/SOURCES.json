@@ -476,6 +476,33 @@
     },
     "cellDialog": {
       "throng": "A square window with a pencil writing into it: the CSV cell dialog's toggle, drawn so it stays distinct from rename's pencil and the editor panel's icon"
+    },
+    "insertRowAbove": {
+      "throng": "A row outlined at the foot with a plus above it: inserts a row above the chosen one"
+    },
+    "insertRowBelow": {
+      "throng": "A row outlined at the head with a plus below it: inserts a row below the chosen one"
+    },
+    "insertColumnLeft": {
+      "throng": "A column outlined at the right with a plus to its left: inserts a column left of the chosen one"
+    },
+    "insertColumnRight": {
+      "throng": "A column outlined at the left with a plus to its right: inserts a column right of the chosen one"
+    },
+    "selectRow": {
+      "throng": "A table with its middle row marked by a line: selects the whole row"
+    },
+    "selectColumn": {
+      "throng": "A table with its middle column marked by a line: selects the whole column"
+    },
+    "resetColumnWidth": {
+      "throng": "A two-headed horizontal arrow with a centre mark: puts a column back to its standard width"
+    },
+    "resetRowHeight": {
+      "throng": "A two-headed vertical arrow with a centre mark: puts a row back to its standard height"
+    },
+    "goToRow": {
+      "throng": "An arrow running to a bar: go to a numbered row"
     }
   }
 }

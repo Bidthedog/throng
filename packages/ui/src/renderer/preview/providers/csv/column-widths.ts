@@ -117,7 +117,7 @@ export function useGridColumnWidths(
     [key, apply],
   );
 
-  /** FR-006a — Reset Size: forget the column's stored width, so it shows the default again, after a reopen too. */
+  /** FR-006a — Reset Column Width: forget the column's stored width, so it shows the default again, after a reopen too. */
   const resetWidth = useCallback(
     (col: number) => {
       const next: Record<number, number> = { ...(cache.get(key) ?? {}) };

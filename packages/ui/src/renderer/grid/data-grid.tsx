@@ -26,7 +26,7 @@
  * Scrolling is native: a `position: sticky` header strip and gutter sit inside one scroller, and
  * `@tanstack/react-virtual` supplies the window of rows and columns to draw.
  */
-import { columnLabel, formatGrouped } from '@throng/core';
+import { columnLabel, formatGrouped, logExpected } from '@throng/core';
 import {
   observeElementRect,
   useVirtualizer,
@@ -109,6 +109,8 @@ export interface DataGridHandle {
   beginEdit(initial?: string, selectAllText?: boolean): void;
   /** Collapses an expanded row to one line (FR-006a); a no-op for a row that is not expanded. */
   collapseRow(row: number): void;
+  /** Goes to a row (0-based): its cell in the active column becomes the active cell and the row scrolls to the top (FR-043a). */
+  goToRow(row: number): void;
 }
 
 export interface DataGridProps {
@@ -173,7 +175,8 @@ function makeMeasure(el: Element): MeasureText {
   let ctx: CanvasRenderingContext2D | null;
   try {
     ctx = document.createElement('canvas').getContext('2d');
-  } catch {
+  } catch (error) {
+    logExpected('grid: measure text', 'with no canvas the fit falls back to a per-character estimate', error);
     ctx = null;
   }
   if (ctx) {
@@ -580,6 +583,13 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         el.scrollLeft = pos.left;
       },
       beginEdit,
+      goToRow: (row) => {
+        // FR-043a — the active column stays; the row is selected and brought to the TOP (not merely revealed).
+        const target = Math.min(rows - 1, Math.max(0, Math.floor(row)));
+        commitSel(single(target, selRef.current.active.col), false);
+        const el = scrollRef.current;
+        if (el) el.scrollTop = rowV.measurementsCache[target]?.start ?? target * rowH;
+      },
       collapseRow: (row) =>
         setExpanded((prev) => {
           if (!prev.has(row)) return prev;
@@ -588,7 +598,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
           return next;
         }),
     }),
-    [beginEdit, cols, commitSel, ensureVisible, rows],
+    [beginEdit, cols, commitSel, ensureVisible, rowH, rowV, rows],
   );
 
   // ── Pointer: cell / row / column selection, drag, resize ─────────────────────────────────────────────

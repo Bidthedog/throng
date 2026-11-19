@@ -1,5 +1,5 @@
 /**
- * 073 FR-040, FR-006a — a CSV's stored column widths and Reset Size's persisted removal.
+ * 073 FR-040, FR-006a — a CSV's stored column widths and Reset Column Width's persisted removal.
  * Layer: component — the hook is React state plus a debounced write through `DocumentClient`; the daemon's
  * own storage of the map is integration's. A fake `documents` service shows what is written and when.
  */

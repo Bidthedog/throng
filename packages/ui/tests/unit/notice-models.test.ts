@@ -81,6 +81,7 @@ describe('SC-009 — the nine idioms are gone', () => {
       if (rel === 'confirm-dialog.tsx') continue; // THE model
       if (rel === 'app-close-prompt.tsx') continue; // the BUSY overlay: not a notice, it blocks and waits
       if (rel === 'preferences/capture-modal.tsx' || rel === 'preferences/name-dialog.tsx') continue; // input dialogs, not notices
+      if (rel === 'grid/cell-dialog.tsx') continue; // 073 FR-036a: an input dialog editing a cell, not a notice
       // The project settings dialog (US8) is an EDITING surface, not a confirmation: its footer holds a
       // single Close, and closing a dialog is not consenting to a consequence. The line this guard is
       // drawing is "nothing else asks the user to DECIDE" — an editor with a dismiss control does not.

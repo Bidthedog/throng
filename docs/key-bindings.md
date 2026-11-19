@@ -135,13 +135,13 @@ four splits are on every panel's **+** button and in its **Split** menu.
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|
 | Quick Open | `navigate.quickOpen` | `Ctrl+Shift+T` | Everywhere | Open any file in the current project by typing part of its name or path; **Enter** opens it. |
-| Go To Line | `navigate.gotoLine` | `Ctrl+G` | Editor | Jump to a line number in the focused editor. A terminal keeps its own `Ctrl+G`. |
+| Go To Line | `navigate.gotoLine` | `Ctrl+G` | Editor | Open the Go to dialog in the focused editor: it reads "Line 3 of 120", takes only a line that exists, and Enter goes there. A terminal keeps its own `Ctrl+G`. |
 | Go to next flagged panel | `focus.nextMarkedPanel` | `Ctrl+Shift+Alt+G` | Everywhere | Focus the next panel marked as needing you, switching project if it is in another. Does nothing when no panel is marked. Works from a focused terminal. Also in the right-click menu of a project that has a marked panel, where it goes to that project's next marked panel. |
 | Open Preview | `preview.open` | *(unbound)* | Editor · File Explorer | Open a rendered preview of the focused editor's file, or of the file selected in File Explorer. |
 | Back | `navigate.back` | `Alt+ArrowLeft` | Editor · Preview | Show the previous file in the focused editor or preview's history. In an editor this takes the key from moving by syntax. |
 | Forward | `navigate.forward` | `Alt+ArrowRight` | Editor · Preview | Show the next file in the focused editor or preview's history, after going Back. |
 | Open Link | `preview.followLink` | `Ctrl+Enter` | Editor · Preview | Open the link under the caret in an editor, or the focused link in a preview, exactly as Ctrl+click does. In an editor with no link under the caret it keeps the editor's own meaning. |
-| Go to Heading | `preview.goToHeading` | `Ctrl+G` | Preview | Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. |
+| Go to Heading | `preview.goToHeading` | `Ctrl+G` | Preview | Open a searchable list of the preview's headings over the document and jump to one. In a CSV or workbook grid it opens the same Go to dialog for rows (also **Go to Row…** on the cell and row-number menus): Enter makes that row the active cell in the active column and scrolls it to the top. Pressed again while the list is open, it returns to the list's search box. |
 
 The mouse's own back and forward buttons do the same as **Back** and **Forward** over an editor or
 preview panel; they are not a rebindable chord.
@@ -227,7 +227,7 @@ and paste tab-separated cells, Ctrl+Z and Ctrl+Y undo and redo as in the text ed
 row number expands the row to show its values in full; double-click again to undo either. Every
 right-click menu in the grid — cell, selection, row number, column letter — offers Cut, Copy and Paste; a
 paste overwrites the selection from its top-left cell, and one value pasted onto several cells fills them.
-**Reset Size** on a column letter or row number puts it back to its default size. With whole rows or
+**Reset Column Width** on a column letter and **Reset Row Height** on a row number put them back to their default size. With whole rows or
 columns copied from a grid, the row and column menus also offer **Insert Copied Rows Above/Below** and
 **Insert Copied Columns Left/Right**. [`editor.saveAs`](#editor) and the Save As icon in the title bar save
 the CSV under a new name, as in the text editor. A cell longer than the

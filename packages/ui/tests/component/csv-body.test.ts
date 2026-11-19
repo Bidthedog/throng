@@ -10,6 +10,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { EditorView } from '@codemirror/view';
+import userEvent from '@testing-library/user-event';
+import type { IconKey } from '@throng/core';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseCsv } from '@throng/core';
 import { CsvBody, CSV_WORKER_THRESHOLD } from '../../src/renderer/preview/providers/csv/csv-body.js';
@@ -304,18 +307,18 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     });
   });
 
-  it('Reset Size on a column header puts the column back to the default width', () => {
+  it('Reset Column Width on a column header puts the column back to the default width', () => {
     mount('a,b\n1,2\n');
     fireEvent.mouseDown(document.querySelector('[data-grid-resize][data-col="1"]')!, { button: 0, clientX: 100 });
     fireEvent.mouseMove(window, { clientX: 160 });
     fireEvent.mouseUp(window);
     expect(colWidth(1)).toBe(180);
     fireEvent.contextMenu(colHead(1), { clientX: 5, clientY: 5 });
-    fireEvent.click(screen.getByTestId('menu-item-Reset Size'));
+    fireEvent.click(screen.getByTestId('menu-item-Reset Column Width'));
     expect(colWidth(1)).toBe(120);
   });
 
-  it('Reset Size on a row header collapses an expanded row', () => {
+  it('Reset Row Height on a row header collapses an expanded row', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
       () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8 }) }) as unknown as CanvasRenderingContext2D,
     );
@@ -324,7 +327,7 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     fireEvent.doubleClick(rowHead(1));
     expect(height()).toBe(66);
     fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
-    fireEvent.click(screen.getByTestId('menu-item-Reset Size'));
+    fireEvent.click(screen.getByTestId('menu-item-Reset Row Height'));
     expect(height()).toBe(22);
   });
 });
@@ -600,6 +603,183 @@ describe('CsvBody cell dialog (FR-036a, FR-036b, FR-060a)', () => {
       // 'ab' has 2 characters: more than 1, so a threshold of 0 (clamped to 1) sends it to the dialog.
       expect(dialog()).not.toBeNull();
     });
+  });
+});
+
+describe('CsvBody menu icons (FR-037g)', () => {
+  const iconOf = (label: string): string | undefined =>
+    drawnIcon(document.querySelector(`[data-testid="menu-item-${label}"]`));
+  const expectIcons = (expected: Record<string, IconKey>): void => {
+    for (const [label, key] of Object.entries(expected)) {
+      expect(document.querySelector(`[data-testid="menu-item-${label}"]`), label).not.toBeNull();
+      expect(iconOf(label), label).toBe(iconMarkup(key));
+    }
+  };
+  const head = (kind: 'columnheader' | 'rowheader', n: number): HTMLElement =>
+    document.querySelector<HTMLElement>(`[role="${kind}"][data-${kind === 'columnheader' ? 'col' : 'row'}="${n}"]`)!;
+
+  beforeEach(() => {
+    window.throng = { preview: bridge, clipboard: { paste: vi.fn(async () => ({ text: '' })) } } as unknown as typeof window.throng;
+  });
+
+  it('draws a themeable icon on each cell-menu item that has a picture, and none on Column Width…', () => {
+    mount('a,b\n1,2\n', { providerSettings: { enabled: true, editLongCellsInDialog: true, longCellThreshold: 5 } });
+    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
+    expectIcons({
+      Undo: 'undo',
+      Redo: 'redo',
+      Cut: 'cut',
+      Copy: 'copy',
+      Paste: 'paste',
+      'Select All': 'selectAll',
+      Save: 'save',
+      'Save As…': 'saveAs',
+      'Edit in Dialog…': 'cellDialog',
+      'Insert Row Above': 'insertRowAbove',
+      'Insert Row Below': 'insertRowBelow',
+      'Insert Column Left': 'insertColumnLeft',
+      'Insert Column Right': 'insertColumnRight',
+      'Go to Row…': 'goToRow',
+    });
+    expect(iconOf('Column Width…')).toBeUndefined();
+  });
+
+  it('draws them on the row-header menu', () => {
+    mount('a,b\n1,2\n');
+    fireEvent.contextMenu(head('rowheader', 1), { clientX: 5, clientY: 5 });
+    expectIcons({
+      'Insert Row Above': 'insertRowAbove',
+      'Insert Row Below': 'insertRowBelow',
+      Cut: 'cut',
+      Copy: 'copy',
+      Paste: 'paste',
+      'Select Row': 'selectRow',
+      'Go to Row…': 'goToRow',
+      'Reset Row Height': 'resetRowHeight',
+    });
+  });
+
+  it('draws them on the column-header menu', () => {
+    mount('a,b\n1,2\n');
+    fireEvent.contextMenu(head('columnheader', 1), { clientX: 5, clientY: 5 });
+    expectIcons({
+      'Insert Column Left': 'insertColumnLeft',
+      'Insert Column Right': 'insertColumnRight',
+      Cut: 'cut',
+      Copy: 'copy',
+      Paste: 'paste',
+      'Select Column': 'selectColumn',
+      'Reset Column Width': 'resetColumnWidth',
+    });
+    expect(iconOf('Column Width…')).toBeUndefined();
+  });
+});
+
+describe('CsvBody Go to Row (FR-043a, FR-043b)', () => {
+  const rows = (n: number): string => `h1,h2,h3\n${Array.from({ length: n - 1 }, (_, i) => `a${i},b${i},c${i}`).join('\n')}\n`;
+  const grid = (): HTMLElement => screen.getByTestId('csv-grid-p1');
+  const dialog = (): HTMLElement | null => screen.queryByTestId('grid-goto-p1');
+  const input = (): HTMLInputElement => screen.getByTestId('grid-goto-p1-input') as HTMLInputElement;
+  const activeRow = (): string | null =>
+    document.querySelector('[data-grid-cell].data-grid__cell--active')?.getAttribute('data-row') ?? null;
+  const select = (r: number, c: number): void => {
+    fireEvent.mouseDown(cellAt(r, c), { button: 0 });
+    fireEvent.mouseUp(window);
+  };
+  /** The body's claim on Ctrl+G, as the panel dispatches it. */
+  function mountClaiming(text: string) {
+    const registerGoTo = vi.fn();
+    mount(text, { registerGoTo });
+    const open = (): void => {
+      const claim = registerGoTo.mock.calls.at(-1)?.[0] as (() => void) | null;
+      act(() => claim?.());
+    };
+    return { registerGoTo, open };
+  }
+
+  it('hands the panel its opener on mount and takes it back on unmount', () => {
+    const registerGoTo = vi.fn();
+    const { unmount } = mount('a,b\n1,2\n', { registerGoTo });
+    expect(registerGoTo).toHaveBeenLastCalledWith(expect.any(Function));
+    unmount();
+    expect(registerGoTo).toHaveBeenLastCalledWith(null);
+  });
+
+  it('the chord opens a dialog naming the active cell\'s row and the row count, digit-grouped', () => {
+    const { open } = mountClaiming(rows(1200));
+    open();
+    expect(dialog()).not.toBeNull();
+    expect(screen.getByTestId('grid-goto-p1-status').textContent).toBe('Row 1 of 1,200');
+    expect(input()).toHaveFocus();
+  });
+
+  it('names the row of the active cell as the row header numbers it', () => {
+    const { open } = mountClaiming(rows(40));
+    select(6, 2);
+    open();
+    expect(screen.getByTestId('grid-goto-p1-status').textContent).toBe('Row 7 of 40');
+  });
+
+  it('refuses a letter and a number past the last row', async () => {
+    const { open } = mountClaiming(rows(1200));
+    open();
+    const user = userEvent.setup();
+    await user.type(input(), 'x');
+    expect(input().value).toBe('');
+    await user.type(input(), '1300');
+    expect(input().value).toBe('130');
+  });
+
+  it('Enter makes that row\'s cell in the active column the active cell, closes, and returns focus to the grid', async () => {
+    const { open } = mountClaiming(rows(1200));
+    select(0, 2);
+    open();
+    const user = userEvent.setup();
+    await user.type(input(), '900{Enter}');
+    expect(dialog()).toBeNull();
+    expect(grid()).toHaveFocus();
+    // The virtualised window in jsdom does not draw row 900, so read the active row back through the dialog.
+    open();
+    expect(screen.getByTestId('grid-goto-p1-status').textContent).toBe('Row 900 of 1,200');
+  });
+
+  it('Enter with nothing typed leaves the dialog open and the active cell where it was', async () => {
+    const { open } = mountClaiming(rows(40));
+    select(3, 1);
+    open();
+    const user = userEvent.setup();
+    await user.type(input(), '{Enter}');
+    expect(dialog()).not.toBeNull();
+    expect(activeRow()).toBe('3');
+  });
+
+  it('Escape closes it, moving nothing, with focus back in the grid', () => {
+    const { open } = mountClaiming(rows(40));
+    select(3, 1);
+    open();
+    fireEvent.keyDown(input(), { key: 'Escape' });
+    expect(dialog()).toBeNull();
+    expect(activeRow()).toBe('3');
+    expect(grid()).toHaveFocus();
+  });
+
+  it('Go to Row… is on the cell menu and the row-header menu, and opens the same dialog', () => {
+    mount(rows(40));
+    fireEvent.contextMenu(cellAt(2, 1), { clientX: 5, clientY: 5 });
+    fireEvent.click(screen.getByTestId('menu-item-Go to Row…'));
+    expect(dialog()).not.toBeNull();
+    expect(screen.getByTestId('grid-goto-p1-status').textContent).toBe('Row 3 of 40');
+    fireEvent.keyDown(input(), { key: 'Escape' });
+
+    fireEvent.contextMenu(document.querySelector('[role="rowheader"][data-row="4"]')!, { clientX: 5, clientY: 5 });
+    fireEvent.click(screen.getByTestId('menu-item-Go to Row…'));
+    expect(screen.getByTestId('grid-goto-p1-status').textContent).toBe('Row 5 of 40');
+  });
+
+  it('is not on the column-header menu', () => {
+    mount(rows(40));
+    fireEvent.contextMenu(document.querySelector('[role="columnheader"][data-col="1"]')!, { clientX: 5, clientY: 5 });
+    expect(document.querySelector('[data-testid="menu-item-Go to Row…"]')).toBeNull();
   });
 });
 

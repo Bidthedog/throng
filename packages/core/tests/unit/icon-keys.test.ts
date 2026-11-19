@@ -29,15 +29,16 @@ const EXPECTED_KEYS = [
   // 076 FR-002: the terminal status bar's three per-panel toggles.
   'rememberCommand', 'rememberDirectory', 'terminalNotifications',
   'cellDialog',
+  'insertRowAbove', 'insertRowBelow', 'insertColumnLeft', 'insertColumnRight', 'selectRow', 'selectColumn', 'resetColumnWidth', 'resetRowHeight', 'goToRow',
 ];
 
 describe('icon keys (069 FR-010 to FR-012)', () => {
   // 069 FR-055 added `deleteFile`: the File Explorer's Delete as a rubbish bin, apart from `destroy`'s ✕.
   // 069 FR-056 added the sixteen file and folder kinds Lucide draws that the tree did not.
   // 069 FR-057 added a key per common programming language.
-  it('is the 155 keys: the 110 of 068, without the dead `notifications`, plus forty-two new ones, plus the CSV cell dialog toggle (073)', () => {
+  it('is the 164 keys: the 110 of 068, without the dead `notifications`, plus forty-two new ones, plus the CSV cell dialog toggle and the grid menu icons (073)', () => {
     expect([...ICON_KEYS]).toEqual(EXPECTED_KEYS);
-    expect(ICON_KEYS).toHaveLength(155);
+    expect(ICON_KEYS).toHaveLength(164);
     expect(ICON_KEYS).not.toContain('notifications');
   });
 

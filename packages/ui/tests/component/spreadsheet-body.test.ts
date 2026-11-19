@@ -5,7 +5,9 @@
  * Layer: component — what the body renders from the bytes the source route hands it. The reader itself is
  * `spreadsheet-read.test.ts`'s; the route's containment and cap are `preview-read-source`'s.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { IconKey } from '@throng/core';
+import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as XLSX from 'xlsx';
@@ -125,7 +127,44 @@ describe('SpreadsheetBody', () => {
       expect(labels()).not.toContain('Cut');
     });
 
-    it('Reset Size on a column header returns the column to the default width', async () => {
+    it('draws a themeable icon on every item with a picture, and none on Column Width… (FR-037g)', async () => {
+      mount('throng-preview://source/s1?rev=1');
+      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+      const iconOf = (label: string): string | undefined =>
+        drawnIcon(document.querySelector(`[data-testid="menu-item-${label}"]`));
+      const expectIcons = (expected: Record<string, IconKey>): void => {
+        for (const [label, key] of Object.entries(expected)) {
+          expect(document.querySelector(`[data-testid="menu-item-${label}"]`), label).not.toBeNull();
+          expect(iconOf(label), label).toBe(iconMarkup(key));
+        }
+      };
+      fireEvent.contextMenu(colHead(0), { clientX: 5, clientY: 5 });
+      expectIcons({ Copy: 'copy', 'Select Column': 'selectColumn', 'Reset Column Width': 'resetColumnWidth' });
+      expect(iconOf('Column Width…')).toBeUndefined();
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      fireEvent.contextMenu(rowHead(0), { clientX: 5, clientY: 5 });
+      expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Select Row': 'selectRow', 'Go to Row…': 'goToRow', 'Reset Row Height': 'resetRowHeight' });
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      fireEvent.contextMenu(document.querySelector('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
+      expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
+    });
+
+    it('Go to Row… opens the shared dialog for the sheet rows, and the chord claim opens the same one (FR-043a)', async () => {
+      const registerGoTo = vi.fn();
+      mount('throng-preview://source/s1?rev=1', { registerGoTo });
+      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+      const rowCount = document.querySelectorAll('[role="rowheader"]').length;
+      fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
+      fireEvent.click(screen.getByTestId('menu-item-Go to Row…'));
+      expect(screen.getByTestId('grid-goto-s1-status').textContent).toBe(`Row 2 of ${rowCount}`);
+      fireEvent.keyDown(screen.getByTestId('grid-goto-s1-input'), { key: 'Escape' });
+      expect(screen.queryByTestId('grid-goto-s1')).toBeNull();
+      const claim = registerGoTo.mock.calls.at(-1)?.[0] as () => void;
+      act(() => claim());
+      expect(screen.getByTestId('grid-goto-s1')).toBeTruthy();
+    });
+
+    it('Reset Column Width on a column header returns the column to the default width', async () => {
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
       const width = (): number => Number.parseFloat(colHead(1).style.width);
@@ -134,11 +173,11 @@ describe('SpreadsheetBody', () => {
       fireEvent.mouseUp(window);
       expect(width()).toBe(180);
       fireEvent.contextMenu(colHead(1), { clientX: 5, clientY: 5 });
-      fireEvent.click(screen.getByTestId('menu-item-Reset Size'));
+      fireEvent.click(screen.getByTestId('menu-item-Reset Column Width'));
       expect(width()).toBe(120);
     });
 
-    it('Reset Size on a row header collapses an expanded row', async () => {
+    it('Reset Row Height on a row header collapses an expanded row', async () => {
       vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
         () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8 }) }) as unknown as CanvasRenderingContext2D,
       );
@@ -149,7 +188,7 @@ describe('SpreadsheetBody', () => {
       fireEvent.doubleClick(rowHead(1));
       expect(height()).toBe(66);
       fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
-      fireEvent.click(screen.getByTestId('menu-item-Reset Size'));
+      fireEvent.click(screen.getByTestId('menu-item-Reset Row Height'));
       expect(height()).toBe(22);
     });
   });

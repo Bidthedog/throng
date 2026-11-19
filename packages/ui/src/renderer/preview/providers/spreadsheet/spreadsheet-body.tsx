@@ -14,7 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { columnLabel, logCaught, logExpected, type PreviewCopyFormat } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
-import { rangeOf, type GridRange } from '../../../grid/grid-selection.js';
+import { rangeOf, selectColumn, selectRow, type GridRange } from '../../../grid/grid-selection.js';
+import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
 import { useAppSettings } from '../../../config/config-store.js';
@@ -57,7 +58,7 @@ function parseOffThread(bytes: ArrayBuffer, id: number): Promise<WorkbookRead> {
 }
 
 export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, providerSettings, onDrawn, onBodyFailure, onViewStateCapture, zoom = 1 } = props;
+  const { panelId, content, filePath, providerSettings, registerGoTo, onDrawn, onBodyFailure, onViewStateCapture, zoom = 1 } = props;
   const source = content.kind === 'resource' ? content.url : '';
   const firstRowHeader = providerSettings.firstRowHeader === true;
   const settings = useAppSettings();
@@ -141,7 +142,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
     [sheet],
   );
 
-  /** FR-006a — Reset Size: forget this sheet's width for the column, so it shows the default again. */
+  /** FR-006a — Reset Column Width: forget this sheet's width for the column, so it shows the default again. */
   const resetWidth = useCallback(
     (col: number) => {
       if (sheet === null) return;
@@ -175,6 +176,8 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
     [copyFormat, getCell],
   );
   const colCount = sheet?.width ?? 0;
+  // FR-043a — Ctrl+G and the menus' Go to Row… open the shared Go to dialog for rows.
+  const goTo = useGridGoTo(panelId, gridRef, bodyRows.length, registerGoTo);
   const onContextMenu = useCallback(
     (target: GridMenuTarget, point: { x: number; y: number }) => {
       const grid = gridRef.current;
@@ -183,7 +186,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
       const range = rangeOf(sel, colCount);
       // FR-037e — Copy only: this grid is read-only. Every menu carries it, header menus included.
       const copies: MenuAction[] = [
-        { label: 'Copy', section: 'content', onClick: () => copy(range) },
+        { label: 'Copy', icon: 'copy', section: 'content', onClick: () => copy(range) },
         { label: 'Copy as Rich Text', section: 'content', onClick: () => copy(range, 'rich') },
         { label: 'Copy as Plain Text', section: 'content', onClick: () => copy(range, 'plain') },
       ];
@@ -191,23 +194,28 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
         target.kind === 'column'
           ? [
               ...copies,
+              { label: 'Select Column', icon: 'selectColumn', section: 'content', onClick: () => grid.setSelection(selectColumn(target.col, bodyRows.length)) },
               {
                 label: 'Column Width…',
                 section: 'viewState',
                 onClick: () => setWidthPrompt({ col: target.col, value: String(sheetWidths[target.col] ?? GRID_DEFAULT_COLUMN_WIDTH) }),
               },
-              { label: 'Reset Size', section: 'viewState', onClick: () => resetWidth(target.col) },
+              { label: 'Reset Column Width', icon: 'resetColumnWidth', section: 'viewState', onClick: () => resetWidth(target.col) },
             ]
           : [
               ...copies,
-              { label: 'Select All', section: 'content', onClick: () => grid.selectAll() },
+              { label: 'Select All', icon: 'selectAll', section: 'content', onClick: () => grid.selectAll() },
               ...(target.kind === 'row'
-                ? [{ label: 'Reset Size', section: 'viewState' as const, onClick: () => grid.collapseRow(target.row) }]
+                ? [{ label: 'Select Row', icon: 'selectRow' as const, section: 'content' as const, onClick: () => grid.setSelection(selectRow(target.row)) }]
+                : []),
+              { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open },
+              ...(target.kind === 'row'
+                ? [{ label: 'Reset Row Height', icon: 'resetRowHeight' as const, section: 'viewState' as const, onClick: () => grid.collapseRow(target.row) }]
                 : []),
             ];
       openMenu(point.x, point.y, items);
     },
-    [colCount, copy, openMenu, resetWidth, sheetWidths],
+    [bodyRows.length, colCount, copy, goTo.open, openMenu, resetWidth, sheetWidths],
   );
 
   const submitWidth = (e: FormEvent): void => {
@@ -258,6 +266,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
           if (sheet !== null) scrolls.current.set(sheet.name, pos);
         }}
       />
+      {goTo.dialog}
       <div className="preview-grid-sheets" role="tablist" aria-label="Sheets">
         {sheets.map((s) => (
           <button
