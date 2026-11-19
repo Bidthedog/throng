@@ -66,7 +66,8 @@ let pipeSeq = 0;
  * ══ THIS IS #211's TRUE MECHANISM ══
  *
  * The app spawns its daemon DETACHED, to outlive the UI on purpose. Playwright's `app.close()` waits
- * for the Electron process's child tree, so an app-spawned daemon still running makes close hang —
+ * for every holder of Electron's piped descriptors, and the daemon inherits fd 3 and 4 (measured with
+ * `stdioHolders`, 1.0.0-beta1), so an app-spawned daemon still running makes close hang —
  * `runApp` has always known this and kills the daemon FIRST for exactly that reason.
  *
  * This spec never did, and the reason it failed only sometimes is that it also had no pipe of its
@@ -120,7 +121,10 @@ async function launchApp(): Promise<ElectronApplication> {
 async function closeApp(app: ElectronApplication): Promise<void> {
   const pipeName = launchedPipes.get(app);
   launchedPipes.delete(app);
-  if (pipeName) await killAppSpawnedDaemon(pipeName);
+  // Every launch here spawns a daemon (see `launchedPipes`), and this test closes ~1 s after the shell shows — on a
+  // cold runner possibly before that daemon is listening. Not finding it means not killing it, and it holds the app's
+  // stdio until `shutdownApp` gives up, so keep asking for a few seconds rather than once.
+  if (pipeName) await killAppSpawnedDaemon(pipeName, 5_000);
   await shutdownApp(app);
 }
 

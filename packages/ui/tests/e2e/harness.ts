@@ -32,7 +32,7 @@ import { quiesceSampler } from './quiesce-sampler.js';
  * tsconfig includes only `src/main` and `src/preload`, so nothing under `tests/` is typechecked and
  * an undefined name here is invisible until it runs.
  */
-import { forceKillProcessTree } from './process-tree.js';
+import { forceKillProcessTree, stdioHolders, stdioIdentities } from './process-tree.js';
 import { resolveIpcAddress } from '@throng/core';
 import { shippedPresses, shippedTwoStroke } from '../shared/window-chords.js';
 import { startPlatform } from '@throng/platform';
@@ -718,9 +718,9 @@ async function launchApp(opts: AppOptions): Promise<{
     endSuddenDeathWatch(); // from here on, the app going away is the intent, not a fault (#240)
     if (started) await captureTerminalDiagnostics(started);
     if (started) await stopTracing(started, flushNow);
-    // Kill an app-spawned detached daemon BEFORE closing the app: Playwright's
-    // app.close() waits for the Electron process's child tree, and the detached
-    // daemon (which by design outlives the UI) would otherwise hang teardown.
+    // Kill an app-spawned detached daemon BEFORE closing the app, and wait for it to go: Playwright's
+    // app.close() waits for every holder of Electron's piped descriptors, the detached daemon (which by
+    // design outlives the UI) inherits two of them, and would otherwise hang teardown.
     /*
      * TIMED, because a slow teardown does not fail the test that caused it (#211).
      *
@@ -1051,6 +1051,8 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
   } catch {
     pid = undefined;
   }
+  // Read now, while the app is alive: once it has gone, nothing says which pipes `close` is waiting on.
+  const stdio = pid === undefined ? [] : stdioIdentities(pid);
   // The graceful path: destroy detached sub-workspace windows first (the child windows), settle,
   // then destroy whatever remains (the main window) — mirrors the manual "switch focus, close both
   // windows with a beat between" that avoids the handshake hang — then finalise with app.close().
@@ -1103,6 +1105,12 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
           .split('\n')
           .filter((line) => line.trim().split(/\s+/)[1] === String(pid));
         console.warn(`[teardown] the app (pid ${pid}) did not close within ${SHUTDOWN_GRACE_MS}ms; graceful steps reached: ${steps.join(', ')}; its process group:\n${group.join('\n') || '(empty: the main process and its children have exited)'}`);
+        // An empty group is not the end of it: `close` also waits on every OTHER holder of the app's descriptors 1–4,
+        // and a process in its own session (a detached daemon) is in no group of the app's. Name them (Linux: /proc).
+        if (process.platform === 'linux') {
+          const holders = stdioHolders(stdio);
+          console.warn(`[teardown] still holding the app's stdio (${stdio.join(' ') || 'unread'}):\n${holders.join('\n') || '(nobody)'}`);
+        }
       } catch {
         /* best-effort: the force-kill below still runs */
       }
@@ -1125,9 +1133,78 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
   }
 }
 
-/** Kill a detached daemon the APP spawned: ask it for its pid via health.ping. */
-export async function killAppSpawnedDaemon(pipeName: string): Promise<void> {
-  const pong = await new Promise<{ pid?: number } | null>((resolve) => {
+/** How long a SIGTERMed app-spawned daemon gets to end its terminals and exit before it is SIGKILLed. */
+const DAEMON_EXIT_GRACE_MS = 5_000;
+
+/** True while `pid` is a live process: `kill(pid, 0)` probes without signalling; EPERM still means alive. */
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/** Poll until `pid` has exited or `ms` has passed; true when it has gone. */
+async function waitForExit(pid: number, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (isAlive(pid)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return true;
+}
+
+/**
+ * Kill a detached daemon the APP spawned — asked for its pid via health.ping — and WAIT FOR IT TO GO.
+ *
+ * ══ WHY THE WAIT IS THE POINT (1.0.0-beta1, run 44479757262) ══
+ *
+ * Playwright launches Electron with descriptors 1–4 piped and settles `app.close()` only when every copy of them has
+ * closed. Descriptors 3 and 4 are not close-on-exec, so Node's `spawn` hands them to everything the app starts — the
+ * detached daemon included, which runs in its own session and so in no process group of the app's. Measured on Linux
+ * (`stdioHolders` in `process-tree.ts`): with the app and its whole group gone, the daemon alone still held `fd3`/`fd4`,
+ * and `close` waited out the full shutdown grace for it. This used to SIGTERM it and sleep 300 ms, a fixed delay that
+ * decided: a daemon slower than that to exit — or one not yet answering, so never signalled — left `shutdownApp` to
+ * wait 15 s and be force-killed, which `app-shell`'s "closes cleanly" bound then reported as the APP failing to close.
+ *
+ * So the exit is awaited, not assumed; a daemon that outlives {@link DAEMON_EXIT_GRACE_MS} is SIGKILLed and said so.
+ *
+ * `listenMs` keeps asking while nobody is listening yet, for a caller that knows the app spawns a daemon and may close
+ * before that daemon is up. Default 0: a daemon a test already killed must not cost every teardown a wait.
+ */
+export async function killAppSpawnedDaemon(pipeName: string, listenMs = 0): Promise<void> {
+  const deadline = Date.now() + listenMs;
+  let pong = await pingDaemonPid(pipeName);
+  while (!pong?.pid && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 100));
+    pong = await pingDaemonPid(pipeName);
+  }
+  if (!pong?.pid) {
+    if (listenMs > 0) console.warn(`[teardown] no daemon answered on ${pipeName} within ${listenMs}ms; nothing was killed`);
+    return;
+  }
+  const pid = pong.pid;
+  const began = Date.now();
+  try {
+    process.kill(pid);
+  } catch {
+    return; // already gone
+  }
+  if (await waitForExit(pid, DAEMON_EXIT_GRACE_MS)) return;
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    /* went in between */
+  }
+  const gone = await waitForExit(pid, 2_000);
+  console.warn(`[teardown] the app's daemon (pid ${pid}) ignored SIGTERM for ${DAEMON_EXIT_GRACE_MS}ms; SIGKILLed, ${gone ? 'gone' : 'STILL ALIVE'} after ${Date.now() - began}ms`);
+}
+
+/** One health.ping on `pipeName`: the daemon's reply, or null when nobody answered within 2 s. */
+function pingDaemonPid(pipeName: string): Promise<{ pid?: number } | null> {
+  return new Promise<{ pid?: number } | null>((resolve) => {
     const socket = connect(resolveIpcAddress(pipeName));
     let buffer = '';
     const done = (v: { pid?: number } | null): void => {
@@ -1153,14 +1230,6 @@ export async function killAppSpawnedDaemon(pipeName: string): Promise<void> {
     });
     socket.on('error', () => done(null));
   });
-  if (pong?.pid) {
-    try {
-      process.kill(pong.pid);
-    } catch {
-      /* already gone */
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
 }
 
 /**

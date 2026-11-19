@@ -14,6 +14,78 @@
  * exercise THIS module — the one the harness actually calls, not a copy of it.
  */
 import { execFileSync } from 'node:child_process';
+import { readdirSync, readFileSync, readlinkSync } from 'node:fs';
+
+/**
+ * What Playwright's `app.close()` is really waiting for, on Linux: the identities (`pipe:[n]` /
+ * `socket:[n]`) of the app process's descriptors 1–4.
+ *
+ * Playwright launches Electron with stdio `['ignore', 'pipe', 'pipe', 'pipe', 'pipe']` and settles
+ * `close` on the child's `close` event, which needs EVERY copy of those four descriptors closed — not
+ * just the main process gone. Descriptors 3 and 4 are inherited without close-on-exec, so Node's
+ * `child_process.spawn` hands them to everything the app starts, the detached daemon included (it is
+ * a process the app does not reap, on purpose). Read while the app is alive; `[]` off Linux or once
+ * it has gone.
+ */
+export function stdioIdentities(pid: number): string[] {
+  if (process.platform !== 'linux') return [];
+  const ids: string[] = [];
+  for (const fd of [1, 2, 3, 4]) {
+    try {
+      ids.push(readlinkSync(`/proc/${pid}/fd/${fd}`));
+    } catch {
+      /* not open, or the process has gone */
+    }
+  }
+  return ids;
+}
+
+/**
+ * Every process still holding any of `identities` (from {@link stdioIdentities}), one line each:
+ * pid, ppid, pgid, sid, which descriptors, and its command line. Linux only (`/proc`); `[]` elsewhere.
+ * Never throws — it is read while diagnosing a stall, and a process vanishing mid-scan is expected.
+ */
+export function stdioHolders(identities: readonly string[]): string[] {
+  if (process.platform !== 'linux' || identities.length === 0) return [];
+  const wanted = new Set(identities);
+  const lines: string[] = [];
+  let pids: string[];
+  try {
+    pids = readdirSync('/proc').filter((p) => /^\d+$/.test(p));
+  } catch {
+    return [];
+  }
+  for (const pid of pids) {
+    let fds: string[];
+    try {
+      fds = readdirSync(`/proc/${pid}/fd`);
+    } catch {
+      continue; // gone, or not ours to read
+    }
+    const held: string[] = [];
+    for (const fd of fds) {
+      try {
+        const target = readlinkSync(`/proc/${pid}/fd/${fd}`);
+        if (wanted.has(target)) held.push(`fd${fd}=${target}`);
+      } catch {
+        /* closed mid-scan */
+      }
+    }
+    if (held.length === 0) continue;
+    let ids = '';
+    let args = '';
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      const [, ppid, pgid, sid] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      ids = `ppid=${ppid} pgid=${pgid} sid=${sid}`;
+      args = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').join(' ').trim();
+    } catch {
+      /* exited mid-scan: the pid and descriptors are still worth printing */
+    }
+    lines.push(`${pid} ${ids} ${held.join(',')} ${args}`.replace(/\s+/g, ' ').trim());
+  }
+  return lines;
+}
 
 /**
  * Force-kill an OS process and its entire child tree, best-effort and BOUNDED.
