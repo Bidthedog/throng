@@ -153,6 +153,8 @@ export interface DataGridProps {
   /** 073 FR-036c, FR-060c — a cell holding a line break goes to the dialog too, whatever its length. Default true. */
   multiLineInDialog?: boolean;
   onEditInDialog?(row: number, col: number): void;
+  /** 073 FR-037i — Esc with no cell editor open; `true` when the owner acted on it (the key is then consumed). */
+  onEscape?(): boolean;
   /**
    * 073 FR-013 — wrap cells: every cell shows its whole value, line breaks kept and wrapped to its column's width, and
    * every row is as tall as its tallest cell, with no line cap. Heights are worked out lazily for the rows near the
@@ -395,6 +397,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     longCellThreshold,
     multiLineInDialog = true,
     onEditInDialog,
+    onEscape,
     wrap = false,
   } = props;
 
@@ -942,6 +945,10 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       return;
     }
 
+    if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+      if (onEscape?.() === true) consume();
+      return;
+    }
     if (e.key === 'Enter' || e.key === 'F2') {
       if (editable) {
         consume();

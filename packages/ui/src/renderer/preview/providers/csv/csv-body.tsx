@@ -296,10 +296,31 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     [copyFormat, getCell, rowCount],
   );
 
+  /*
+   * FR-037i — Esc straight after a Cut undoes it, once. The mark is armed with the text the document held before the
+   * cut; the first different text to arrive is what the cut produced, and Esc undoes only while the document still
+   * holds exactly that — any later change, from this grid or a text editor on the file, leaves it unequal.
+   */
+  const cutMark = useRef<{ before: string; after: string | null } | null>(null);
+  const textNow = useRef(text);
+  textNow.current = text;
+  useEffect(() => {
+    const mark = cutMark.current;
+    if (mark !== null && mark.after === null && text !== mark.before) mark.after = text;
+  }, [text]);
+  const escapeCut = useCallback((): boolean => {
+    const mark = cutMark.current;
+    cutMark.current = null;
+    if (mark === null || mark.after === null || mark.after !== textNow.current) return false;
+    void window.throng?.preview?.gridUndo?.(panelId);
+    return true;
+  }, [panelId]);
+
   const cut = useCallback(
     (sel: GridSelection, range: GridRange) => {
       void copyGridRange(range, getCell, copyFormat).then((ok) => {
         if (!ok) return;
+        cutMark.current = { before: textNow.current, after: null };
         // Recorded before the rows go: the record holds the values the cut took.
         recordCopy(sel, range, rowCount, getCell);
         if (sel.rows === true) void send({ kind: 'deleteRows', from: range.top, count: Math.min(range.bottom, rowCount - 1) - range.top + 1 });
@@ -579,6 +600,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         onCut={cut}
         onPaste={paste}
         onHistory={history}
+        onEscape={escapeCut}
         onContextMenu={onContextMenu}
       />
       {goTo.dialog}

@@ -438,6 +438,47 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
   });
 });
 
+describe('CsvBody Esc after a Cut (FR-037i)', () => {
+  beforeEach(() => {
+    const clip = { write: vi.fn(async () => {}), writeRich: vi.fn(async () => {}), paste: vi.fn(async () => ({ text: '' })) };
+    window.throng = { preview: bridge, clipboard: clip } as unknown as typeof window.throng;
+  });
+  const grid = (): HTMLElement => screen.getByTestId('csv-grid-p1');
+  const showText = (h: ReturnType<typeof mount>, text: string): void =>
+    h.rerender(createElement(ContextMenuProvider, { children: createElement(CsvBody, props(text)) }));
+  const cutThen = async (next: (h: ReturnType<typeof mount>) => void): Promise<ReturnType<typeof mount>> => {
+    const h = mount('a,b\n1,2\n3,4\n');
+    fireEvent.mouseDown(cellAt(1, 0), { button: 0 });
+    fireEvent.mouseUp(window);
+    fireEvent.cut(grid());
+    await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalled());
+    // The edit lands: the document now holds the cut text.
+    showText(h, 'a,b\n,2\n3,4\n');
+    next(h);
+    return h;
+  };
+
+  it('undoes the cut once, and a second Esc does nothing more', async () => {
+    await cutThen(() => {});
+    fireEvent.keyDown(grid(), { key: 'Escape' });
+    expect(bridge.gridUndo).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(grid(), { key: 'Escape' });
+    expect(bridge.gridUndo).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing once anything else has changed the document since the cut', async () => {
+    await cutThen((h) => showText(h, 'a,b\n,2\nx,4\n'));
+    fireEvent.keyDown(grid(), { key: 'Escape' });
+    expect(bridge.gridUndo).not.toHaveBeenCalled();
+  });
+
+  it('does nothing with no cut before it', () => {
+    mount('a,b\n1,2\n');
+    fireEvent.keyDown(grid(), { key: 'Escape' });
+    expect(bridge.gridUndo).not.toHaveBeenCalled();
+  });
+});
+
 describe('CsvBody cell dialog (FR-036a, FR-036b, FR-060a)', () => {
   // Threshold 5: 'ab' and 'name' are short; the JSON object (7 characters) and the two-line value are long.
   const TEXT = 'name,doc\nab,"{""k"":1}"\n"line one\nline two",x\n';
