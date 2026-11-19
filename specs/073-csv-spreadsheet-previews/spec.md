@@ -181,6 +181,12 @@ the feedback, the code and precedent rather than stated by the maintainer.
 - Q33: What does Esc do after a Cut? → A: It puts back what the cut took, like one Undo; a second Esc does
   nothing more. *(derived)* Only while the cut is the document's latest change: any later edit, undo or redo, in the
   grid or in a text editor on the same file, disarms it. The clipboard keeps the cut values. (FR-037i)
+- Q34: Can the first row and first column be locked? → A: Yes. Two status-bar toggles, **Lock first row** and
+  **Lock first column**, both off by default, each with a CSV setting for its default. Locked, that row or column
+  stays in place however the panel is scrolled. *(derived)* "First row" is the grid's row 1 and "first column" is
+  column A, held under the column letters and beside the row numbers; per panel, saved with the panel, an untouched
+  panel following its setting (as FR-013); each toggle shows its state, is reachable by keyboard and has a checked
+  panel-menu item; CSV only, as Wrap. This supersedes FR-039's "no frozen pane" for these two. (FR-039a, FR-060d)
 
 ## Terminology
 
@@ -365,6 +371,11 @@ expected bytes: only the edited field differs.
 33. **Given** B2:C3 cut, **When** the user presses Esc, **Then** the four values are back and still on the
     clipboard; a second Esc changes nothing. **Given** a cut followed by typing in another cell, **When** they press
     Esc, **Then** nothing is undone (FR-037i).
+34. **Given** a 1,000-row by 40-column CSV, **When** the user turns on Lock first row and Lock first column in the
+    status bar and scrolls down and right, **Then** row 1 stays under the column letters, column A stays beside the
+    row numbers, and A1 stays in the corner; another CSV panel is unaffected, and the panel keeps both after a
+    restart (FR-039a). **Given** Lock first row on in Preferences, **When** they open a CSV, **Then** row 1 is locked
+    (FR-060d).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -653,7 +664,15 @@ Markdown and Mermaid pattern, each setting working as labelled.
   inserting that many rows or columns holding the copied values at that place, as one undo step, with the
   document's delimiter and line ending (FR-047). The blank inserts of FR-038 stay.
 - **FR-039**: The grid MUST offer no sort, filter, reorder, formula, cell type, formatting or frozen pane
-  control (#323, maintainer agreement).
+  control (#323, maintainer agreement). *(Frozen panes superseded by FR-039a for the first row and column.)*
+- **FR-039a** *(Q34, 2026-11-19)*: The CSV Preview Editor's status bar MUST show **Lock first row** and **Lock first
+  column** toggles. While **Lock first row** is on, row 1 MUST stay directly under the column letters whatever the
+  vertical scroll; while **Lock first column** is on, column A MUST stay directly beside the row numbers whatever
+  the horizontal scroll; both together lock A1 in the corner. Locked cells keep working as cells (select, edit,
+  menus) and stay visually set apart from the scrolling cells. Each toggle MUST show its state, be reachable by
+  keyboard and have a matching checked item on the panel menu. Each is decided per panel: the panel's own choice,
+  saved with the panel, else its setting (FR-060d). Scrolling with either locked still meets SC-009, and Wrap
+  (FR-013) still applies to locked cells. *(Supersedes FR-039 for these two.)*
 - **FR-040**: Column widths MUST be stored per file, as document state alongside the document's other
   persisted state, and restored when the file is next shown in a grid, across restarts. A width MUST be
   shared by every panel showing the file.
@@ -731,6 +750,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
   (characters, a whole number of at least 1, ships **50**).
 - **FR-060b** *(Q24, 2026-11-19)*: The CSV provider MUST have a **Wrap cells** setting (on/off, ships **off**),
   rendered and documented as FR-060 requires: the Wrap state of every CSV panel that has not chosen its own.
+- **FR-060d** *(Q34, 2026-11-19)*: The CSV provider MUST have **Lock first row** and **Lock first column** settings
+  (each on/off, ships **off**), rendered and documented as FR-060 requires: the lock state of every CSV panel that
+  has not chosen its own.
 - **FR-060c** *(Q26, 2026-11-19)*: The CSV provider MUST have an **Edit multi-line cells in a dialog** setting
   (on/off, ships **on**), rendered and documented as FR-060 requires. Off, FR-036c does not apply: a cell
   holding a line break opens in the dialog only when it is longer than the threshold.

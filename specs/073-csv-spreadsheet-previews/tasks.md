@@ -103,6 +103,7 @@ its failing test at the layer R10 names.
 - [x] T064 [US2] FR-008e: a selection drag pins its starting pointer over the whole grid (root `data-drag`), resize edges included
 - [x] T065 [US2] FR-008f: middle-button drag pans the grid (move cursor pinned, no selection change, no autoscroll), and a middle click never pastes (suppress the Linux primary-selection paste); Ctrl+middle-click still resets zoom; both grids
 - [x] T066 [US2] FR-037i: Esc straight after a Cut undoes it once (grid `onEscape`, csv-body cut mark keyed to the document text the cut produced)
+- [ ] T067 [US2] FR-039a, FR-060d: Lock first row / Lock first column — two CSV settings (ship off, docs/preferences.md); per-panel toggles in the CSV status bar and checked panel-menu items, persisted with the panel config, untouched panels following the settings; the grid holds row 0 under the header strip and column 0 beside the gutter while scrolling (sticky, virtualiser keeps them rendered), still selectable/editable, with Wrap — component tests
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies
