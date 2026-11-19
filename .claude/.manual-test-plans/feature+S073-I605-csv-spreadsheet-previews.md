@@ -77,7 +77,7 @@ Paths: `packages/ui/src/main/editor-coordinator.ts`, `packages/ui/src/main/csv-g
 
 ## MT-04: Clipboard and column widths in the grid
 
-Covers: FR-006, FR-006a, FR-006b, FR-006c, FR-012a, FR-008b, FR-008c, FR-008e, FR-008f, FR-037g, FR-037h, FR-011, FR-012, FR-037c, FR-037d, FR-037e, FR-037f, FR-038, FR-038a
+Covers: FR-006, FR-006a, FR-006b, FR-006c, FR-012a, FR-008b, FR-008c, FR-008e, FR-008f, FR-037g, FR-037h, FR-011, FR-012, FR-037c, FR-037d, FR-037i, FR-037e, FR-037f, FR-038, FR-038a
 Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/providers/csv/column-widths.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/daemon/src/document-service.ts`, `packages/persistence/src/**`
 
 ### Steps
@@ -92,6 +92,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 9. Right-click a cell, a dragged selection, a row number and a column letter in turn. Each menu offers Cut, Copy and Paste (a workbook preview: Copy).
 10. Copy a 2×2 block from another CSV. In this grid drag a selection from C3 up to B2 and press Ctrl+V: B2:C3 now hold the copied values and nothing to the right or below C3 changed. Undo, select the same block with the mouse, right-click it and choose Paste: same result.
 11. Copy a single value, select B2:C3, paste. All four cells hold that value.
+11a. Select B2:C3 and press Ctrl+X, then Esc: the four values are back, and pasting elsewhere still pastes them. Press Esc again: nothing changes. Cut again, type in another cell, then Esc: nothing is undone. Cut whole rows 2–3, Esc: the rows are back.
 12. Select whole rows 2–3 by their numbers, paste a 2-row block: it lands from column A of row 2.
 13. Right-click a resized column's letter, **Reset Column Width**: back to the default width; close and reopen the file, still default. No menu says Reset Size or Reset Row Height.
 14. Select rows 2–3 by their numbers and copy. Right-click row 6's number: **Insert Copied Rows Above** and **Insert Copied Rows Below** are there beside **Insert Row Above/Below**. Choose Above: two rows with the copied values appear above row 6; one Ctrl+Z removes both. Copy columns B–C by their letters and use **Insert Copied Columns Right** on column E the same way. Copy text from another app: the Insert Copied items are gone; the blank inserts remain.
