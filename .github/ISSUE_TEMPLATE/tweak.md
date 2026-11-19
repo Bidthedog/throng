@@ -31,6 +31,7 @@ in at a glance. All the detail belongs in the body below, not the title.
      drops out of the backlog's filters. See CONTRIBUTING.md#labelling. -->
 
 - [ ] At least one `area:*` label added.
+- [ ] An `os:*` label added for each OS the work is specific to (`os:windows`, `os:macos`, `os:linux`), or none if it applies everywhere.
 
 ## Current behaviour
 
