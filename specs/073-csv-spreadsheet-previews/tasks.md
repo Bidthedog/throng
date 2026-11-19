@@ -96,6 +96,10 @@ its failing test at the layer R10 names.
 - [x] T057 [US2] FR-013, FR-060b: Wrap cells CSV setting (ships off, docs/preferences.md); per-panel Wrap toggle in the CSV status bar and a checked panel-menu item, persisted with the panel config, untouched panels following the setting; wrapped grid rows as tall as their tallest cell, no cap, virtualised (SC-009) — component tests
 - [x] T058 [US2] FR-036c: a value holding a line break routes to the cell dialog like a long one (core `isLongCell`, used by `data-grid.tsx`)
 - [x] T059 [US2] FR-060c: Edit multi-line cells in a dialog CSV setting (ships on), the grid's `multiLineInDialog` prop, docs/preferences.md
+- [ ] T060 [US2] FR-008c: select-arrow pointers on row numbers, column letters and the corner (resize edge unchanged), both grids
+- [ ] T061 [US2] FR-036d: Edit in Dialog… disabled while more than one cell is selected
+- [ ] T062 [US2] FR-033b: opening or dropping a CSV onto a dirty CSV Preview Editor raises the unsaved-changes prompt (Save & open, Discard & open, Open in new preview, Cancel) instead of opening a new panel; Back/Forward stay refused — integration over PreviewService plus the renderer prompt
+- [ ] T063 [US2] FR-008d: per-file grid selection (and scroll) kept per panel history entry for the session, restored on reuse and Back/Forward, A1 for a first open; never persisted; both grids
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies

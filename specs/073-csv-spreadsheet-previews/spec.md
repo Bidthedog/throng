@@ -156,6 +156,20 @@ the feedback, the code and precedent rather than stated by the maintainer.
 - Q26: Can multi-line cells be kept out of the dialog? → A: Yes, by a CSV setting, on by default. *(derived)*
   **Edit multi-line cells in a dialog**; off, a cell holding a line break opens in the dialog only when it is
   also longer than the threshold. (FR-060c)
+- Q27: Does the pointer show that a header selects? → A: Yes. Over a row number, a column letter or the
+  corner, the pointer changes to say clicking selects it. *(derived)* A row number shows a right-pointing
+  arrow, a column letter a down-pointing arrow, and the corner a diagonal arrow, as spreadsheet programs do;
+  a column's resize edge keeps the resize pointer. Both grids. (FR-008c, refining FR-008b's pointer)
+- Q28: When is Edit in Dialog… offered? → A: It is shown disabled when more than one cell is selected (whole
+  rows, whole columns, or a block). (FR-036d)
+- Q29: What happens when another CSV is opened over a CSV Preview Editor with unsaved edits? → A: The editor's
+  unsaved-changes prompt (006 US9) asks: save and open, discard and open, open in a new preview, or cancel.
+  This replaces FR-033a's silent new panel for an open or a drop. *(derived)* The third choice is labelled
+  **Open in new preview**; Back and Forward stay refused with the existing notice. (FR-033b)
+- Q30: Is the selection carried from one CSV to the next in a reused panel? → A: No. Each CSV keeps its own
+  last selection: reopening it, or going Back or Forward to it, restores that file's selection; a CSV opened
+  for the first time starts at A1. Kept for the session only, never across a restart. *(derived)* Kept per
+  panel history entry, alongside its scroll position; scroll is restored with it. Both grids. (FR-008d)
 
 ## Terminology
 
@@ -330,6 +344,18 @@ expected bytes: only the edited field differs.
     in the cell dialog with the break shown (FR-036c).
 27. **Given** Edit multi-line cells in a dialog off, **When** the user double-clicks that cell, **Then** the
     in-cell editor opens (FR-060c).
+28. **Given** a grid, **When** the pointer rests on a row number, a column letter and the corner in turn,
+    **Then** it shows a right arrow, a down arrow and a diagonal arrow; on a column's edge it shows the
+    resize pointer (FR-008c).
+29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
+    disabled; with one cell selected it is enabled (FR-036d).
+30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
+    the unsaved-changes prompt asks how to open it; Save & open saves a.csv and shows b.csv in the panel,
+    Discard & open drops the edit and shows b.csv, Open in new preview opens b.csv in a new panel, Cancel
+    opens nothing (FR-033b).
+31. **Given** C7 selected in `a.csv`, **When** the user opens `b.csv` in the same panel, **Then** b.csv starts
+    at A1; selecting B3 there and reopening a.csv (or going Back) selects C7 again, and Forward selects B3.
+    After a restart both start at A1 (FR-008d).
 
 ---
 
@@ -467,6 +493,13 @@ Markdown and Mermaid pattern, each setting working as labelled.
   to the width of its widest value across every row, header label included, clamped to 40–2000 px at zoom
   1 and stored as FR-040 stores a width. Double-clicking a column that the previous double-click fitted
   MUST restore the width it had before the fit. Both grids.
+- **FR-008c** *(Q27, 2026-11-19)*: Over a row number the pointer MUST be a right-pointing select arrow, over a
+  column letter a down-pointing select arrow, and over the corner cell a diagonal select arrow; a column's
+  resize edge keeps the resize pointer. Both grids. *(Refines FR-008b's pointer cursor.)*
+- **FR-008d** *(Q30, 2026-11-19)*: A grid's selection MUST belong to the file it shows. When a panel shows
+  another file (Last Preview Panel reuse, Back, Forward), the file it leaves keeps its selection in that
+  history entry, and the file it shows gets back its own last selection, or A1 when it has none. Selections
+  last for the session only and are not persisted. Both grids.
 - **FR-012** *(Q7, 2026-11-19)*: Double-clicking a row header MUST expand that row so each of its cells
   shows its full value, line breaks honoured and wrapped within its column's width, the row as tall as its
   tallest cell up to 20 lines, a taller cell scrolling inside itself. Double-clicking an expanded row's
@@ -517,7 +550,13 @@ Markdown and Mermaid pattern, each setting working as labelled.
   (054 FR-051; 047 FR-010 – FR-016) as a Markdown preview does: with Last Preview Panel, opening another
   CSV moves the panel to it, and reopening the first moves it back, never adding a panel. A CSV Preview
   Editor whose document has unsaved edits only it shows MUST NOT be moved — by an open, a drop or
-  Back/Forward: the other CSV opens in a new panel instead.
+  Back/Forward: the other CSV opens in a new panel instead. *(Superseded for an open or a drop by FR-033b.)*
+- **FR-033b** *(Q29, 2026-11-19)*: Opening or dropping another CSV onto a CSV Preview Editor whose document has
+  unsaved edits only it shows MUST raise the editor's unsaved-changes prompt (006 US9), naming the grid's file
+  and the arriving one, with **Save & open**, **Discard & open**, **Open in new preview** and **Cancel**. Save and
+  Discard then reuse the panel as FR-033a describes; Open in new preview opens the arriving CSV in a new panel and
+  leaves the grid as it was; Cancel opens nothing. Back and Forward stay refused while it is dirty.
+  *(Supersedes FR-033a's new panel for an open or a drop.)*
 - **FR-034**: *Withdrawn (clarification Q1).* No view switch, so no cursor mapping across one.
 - **FR-035**: Every grid edit MUST be a change to the document through the document's authority
   (Principle XI, *one authority, not two peers*), so it appears in every view of the document and in the
@@ -543,6 +582,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
   for any other text, each line break becomes one space and the rest is kept. The flattened value is
   written as one grid edit (one undo step), and nothing is written when the dialog's text is unchanged from
   what it opened with. Esc and Cancel close it without writing. *(Refines FR-036 for long cells.)*
+- **FR-036d** *(Q28, 2026-11-19)*: **Edit in Dialog…** MUST be shown disabled while more than one cell is
+  selected.
 - **FR-036c** *(Q25, 2026-11-19)*: A cell whose value holds a line break MUST open in the cell dialog on
   double-click, F2 and Enter, whatever its length, wherever FR-036a sends a long cell there. *(Refines FR-036a.)*
 - **FR-036b** *(Q18, 2026-11-19)*: Whether the cell dialog is available MUST be decided per panel: the
