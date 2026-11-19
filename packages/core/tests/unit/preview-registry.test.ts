@@ -244,9 +244,9 @@ describe('previewAffordance — the six-row decision table (data-model §2)', ()
 });
 
 describe('the shipped registration (FR-065, FR-080)', () => {
-  it('registers exactly Markdown then Mermaid, Markdown for .md and .markdown, as a text provider', () => {
-    // 054 FR-005 — Mermaid is the second shipped provider, registered after Markdown.
-    expect(SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((p) => p.id)).toEqual(['markdown', 'mermaid']);
+  it('registers Markdown, Mermaid, CSV then Spreadsheet, Markdown for .md and .markdown, as a text provider', () => {
+    // 054 FR-005 — Mermaid is the second shipped provider, registered after Markdown; 073 adds CSV and Spreadsheet.
+    expect(SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((p) => p.id)).toEqual(['markdown', 'mermaid', 'csv', 'spreadsheet']);
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown');
     expect(md?.kind).toBe('text');
     expect(md?.extensions).toEqual(['.md', '.markdown']);
@@ -300,5 +300,21 @@ describe('the shipped registration (FR-065, FR-080)', () => {
       max: 2000,
     });
     expect(jump?.description.trim().length).toBeGreaterThan(0);
+  });
+});
+
+/** 073 data-model §4 — the two descriptor fields the CSV and Spreadsheet providers add. */
+describe('editable and sizeLimitSetting (073)', () => {
+  it('lets a text provider be editable, and refuses an editable binary provider', () => {
+    expect(() => createPreviewProviderRegistry([text({ editable: true })])).not.toThrow();
+    expect(() => createPreviewProviderRegistry([binary({ editable: true })])).toThrow(/editable/);
+  });
+
+  it('accepts a size limit that names one of the provider number settings, and nothing else', () => {
+    const limit = { leaf: 'maxMb', label: 'Limit', description: 'd', control: 'number' as const, default: 25 };
+    const flag = { leaf: 'flag', label: 'Flag', description: 'd', control: 'toggle' as const, default: false };
+    expect(() => createPreviewProviderRegistry([binary({ settings: [limit], sizeLimitSetting: 'maxMb' })])).not.toThrow();
+    expect(() => createPreviewProviderRegistry([binary({ settings: [flag], sizeLimitSetting: 'flag' })])).toThrow(/size limit/);
+    expect(() => createPreviewProviderRegistry([binary({ sizeLimitSetting: 'missing' })])).toThrow(/size limit/);
   });
 });

@@ -80,6 +80,8 @@ describe('DocumentStateRepository (FR-028e)', () => {
       expect(repo.get(OWNER, 'p1', 'src/main.rs')).toEqual({
         projectId: 'p1',
         relPath: 'src/main.rs',
+        // 073 (v13) — the grid column widths leaf, empty here.
+        gridColumnWidths: null,
         languageId: 'python',
       });
 

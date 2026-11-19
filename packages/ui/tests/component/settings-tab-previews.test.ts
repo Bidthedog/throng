@@ -115,6 +115,9 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
     expect(subsections).toEqual([
       'settings-subsection-Editor-Previews-Markdown',
       'settings-subsection-Editor-Previews-Mermaid',
+      // 073 — the CSV Preview Editor and the spreadsheet preview, after them.
+      'settings-subsection-Editor-Previews-CSV',
+      'settings-subsection-Editor-Previews-Spreadsheet',
     ]);
     expect(ownRows(screen.getByTestId('settings-subsection-Editor-Previews-Markdown'))).toEqual([
       `setting-${MD}.enabled`,

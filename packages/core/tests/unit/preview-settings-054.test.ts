@@ -162,7 +162,7 @@ describe('what ships (FR-005, FR-041, FR-050)', () => {
       kind: 'text',
     });
     expect(SHIPPED_PREVIEW_PROVIDERS.forPath('D:/p/flow.MMD')?.id).toBe('mermaid');
-    expect(SHIPPED_PREVIEW_PROVIDERS.list().map((p) => p.id)).toEqual(['markdown', 'mermaid']);
+    expect(SHIPPED_PREVIEW_PROVIDERS.list().map((p) => p.id)).toEqual(['markdown', 'mermaid', 'csv', 'spreadsheet']);
   });
 
   it('gives Markdown a Render Mermaid diagrams toggle, on by default', () => {

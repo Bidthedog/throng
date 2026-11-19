@@ -86,6 +86,11 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   // 054 FR-013 — unbound, so no chord to judge; the group's tier.
   'markdown.collapseAllInside': 'tier2',
   'markdown.expandAllInside': 'tier2',
+  // 073 FR-038 — unbound, so no chord to judge; preview-only, like the Markdown group.
+  'grid.insertRowAbove': 'tier2',
+  'grid.insertRowBelow': 'tier2',
+  'grid.insertColumnLeft': 'tier2',
+  'grid.insertColumnRight': 'tier2',
   'terminal.scrollLineUp': 'tier2',
   'terminal.scrollLineDown': 'tier2',
   'editor.saveAs': 'tier2', // recorded exception (the Save pair)
@@ -422,6 +427,11 @@ describe('the FR-101 tier guard', () => {
       'markdown.collapseAllInside': [],
       'markdown.expandAllInside': [],
       'preview.goToHeading': ['Ctrl+G'],
+      // 073 FR-038 — unbound.
+      'grid.insertRowAbove': [],
+      'grid.insertRowBelow': [],
+      'grid.insertColumnLeft': [],
+      'grid.insertColumnRight': [],
       // 059 FR-041 — unbound.
       'editor.reopenWithEncoding': [],
       'editor.changeEncoding': [],

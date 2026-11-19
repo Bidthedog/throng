@@ -114,6 +114,8 @@ describe('document.* IPC', () => {
       projectId,
       relPath: 'src/main.rs',
       languageId: 'python',
+      // 073 FR-040 — the second leaf of the row, empty here.
+      gridColumnWidths: null,
     });
   });
 

@@ -1,0 +1,67 @@
+/**
+ * 073 FR-040, FR-006a — a CSV's stored column widths and Reset Size's persisted removal.
+ * Layer: component — the hook is React state plus a debounced write through `DocumentClient`; the daemon's
+ * own storage of the map is integration's. A fake `documents` service shows what is written and when.
+ */
+import { act, renderHook } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServicesProvider, type Services } from '../../src/renderer/composition-root.js';
+import { __resetColumnWidthCache, useGridColumnWidths } from '../../src/renderer/preview/providers/csv/column-widths.js';
+
+vi.mock('../../src/renderer/state/projects-store.js', () => ({
+  useProjectsOptional: () => ({ projects: [{ id: 'proj', rootFolder: 'D:/proj' }] }),
+}));
+
+const FILE = 'D:/proj/data.csv';
+
+describe('useGridColumnWidths', () => {
+  let setGridColumnWidths: ReturnType<typeof vi.fn>;
+  let wrapper: (p: { children: ReactNode }) => ReturnType<typeof createElement>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setGridColumnWidths = vi.fn(async () => ({}));
+    const services = {
+      documents: { getState: vi.fn(async () => null), setGridColumnWidths },
+    } as unknown as Services;
+    wrapper = ({ children }) => createElement(ServicesProvider, { services, children });
+  });
+
+  afterEach(() => {
+    __resetColumnWidthCache();
+    vi.useRealTimers();
+  });
+
+  it('resetWidth forgets one column\'s stored width and persists the removal', async () => {
+    const { result } = renderHook(() => useGridColumnWidths('D:/proj', FILE), { wrapper });
+    act(() => {
+      result.current.setWidth(0, 200);
+      result.current.setWidth(2, 300);
+    });
+    act(() => {
+      result.current.resetWidth(0);
+    });
+    expect(result.current.widths).toEqual({ 2: 300 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(setGridColumnWidths).toHaveBeenCalledTimes(1);
+    expect(setGridColumnWidths).toHaveBeenLastCalledWith('proj', 'data.csv', { 2: 300 });
+  });
+
+  it('resetting the last stored width clears the file\'s map (null), not an empty one', async () => {
+    const { result } = renderHook(() => useGridColumnWidths('D:/proj', FILE), { wrapper });
+    act(() => {
+      result.current.setWidth(1, 250);
+    });
+    act(() => {
+      result.current.resetWidth(1);
+    });
+    expect(result.current.widths).toEqual({});
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(setGridColumnWidths).toHaveBeenLastCalledWith('proj', 'data.csv', null);
+  });
+});

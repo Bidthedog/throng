@@ -84,6 +84,9 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           },
           // 054 FR-005 — the shipped Mermaid provider (text, no own settings); ships Preview (MT-04).
           mermaid: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' },
+          // 073 — the CSV Preview Editor ships Preview (Q2); the binary Spreadsheet provider its own two leaves.
+          csv: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' },
+          spreadsheet: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', firstRowHeader: false, maxPreviewMb: 25 },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
@@ -332,6 +335,9 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           },
           // 054 FR-005 — the shipped Mermaid provider (text, no own settings); ships Preview (MT-04).
           mermaid: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' },
+          // 073 — the CSV Preview Editor ships Preview (Q2); the binary Spreadsheet provider its own two leaves.
+          csv: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' },
+          spreadsheet: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', firstRowHeader: false, maxPreviewMb: 25 },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence

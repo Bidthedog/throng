@@ -54,6 +54,13 @@ describe('findEditorPanelByPath', () => {
     expect(findEditorPanelByPath('D:/proj/a.txt')).toBeNull();
   });
 
+  it('73 FR-033 — never answers with a CSV Preview Editor, which is a preview holding the document', () => {
+    setEditorState('pv', { filePath: 'D:/proj/data.csv', displayName: 'data.csv - Preview', preview: true });
+    expect(findEditorPanelByPath('D:/proj/data.csv')).toBeNull();
+    open('ed', 'D:/proj/data.csv');
+    expect(findEditorPanelByPath('D:/proj/data.csv')).toBe('ed');
+  });
+
   it('matches across separator styles', () => {
     /*
      * The case this function exists for. The tree hands out forward slashes and `path.join` hands

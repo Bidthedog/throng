@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { VENDORED, mergeEntries, vendoredEntries } from '../../../../scripts/generate-licenses.mjs';
+import { VENDORED, collectNpmEntries, mergeEntries, vendoredEntries } from '../../../../scripts/generate-licenses.mjs';
 
 /**
  * Spec 069 T032 / FR-022 — the licence manifest records the Lucide art compiled into core, which the
@@ -95,5 +95,40 @@ describe('running as a script', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * 073 R6 — SheetJS is installed from its own CDN tarball, not the npm registry. The lockfile walk keys
+ * on the install path, so a URL-resolved package is listed like any other, with the licence and
+ * homepage its own package.json declares.
+ */
+describe('collectNpmEntries', () => {
+  it('lists a URL-resolved production dependency and skips dev, link and own-workspace entries', () => {
+    const lock = {
+      packages: {
+        '': { name: 'root' },
+        'node_modules/xlsx': {
+          version: '0.20.3',
+          resolved: 'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz',
+          license: 'Apache-2.0',
+        },
+        'node_modules/devonly': { version: '1.0.0', dev: true },
+        'node_modules/@throng/core': { version: '0.0.0', link: true },
+      },
+    };
+    const read = (path: string): Record<string, unknown> | null =>
+      path === 'node_modules/xlsx'
+        ? { version: '0.20.3', license: 'Apache-2.0', homepage: 'https://sheetjs.com/', repository: { type: 'git', url: 'https://git.sheetjs.com/SheetJS/sheetjs' } }
+        : null;
+    expect(collectNpmEntries(lock, read)).toEqual([
+      {
+        name: 'xlsx',
+        version: '0.20.3',
+        license: 'Apache-2.0',
+        licenseUrl: 'https://spdx.org/licenses/Apache-2.0.html',
+        projectUrl: 'https://sheetjs.com/',
+      },
+    ]);
   });
 });

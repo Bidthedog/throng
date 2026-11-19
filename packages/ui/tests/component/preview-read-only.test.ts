@@ -110,6 +110,19 @@ describe('input in the body changes nothing (FR-020)', () => {
     expect(editorBridgeCalls()).toBe(0);
   });
 
+  it('073 FR-037 — the body of an editable provider keeps its own paste and cut: the chrome refuses neither', async () => {
+    const editable = createPreviewProviderRegistry([
+      { id: 'testText', displayName: 'Test text', extensions: ['.prvtxt'], kind: 'text', editable: true },
+    ]);
+    m = await mountMarkdownPreview('The document.', FILE, { providers: { registry: editable, views }, providerId: 'testText' });
+    const body = await screen.findByTestId(`fake-body-${m.id}`);
+    for (const type of ['paste', 'cut']) {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      body.dispatchEvent(event);
+      expect(event.defaultPrevented, type).toBe(false);
+    }
+  });
+
   it('cut is refused: its default is prevented and nothing is written', async () => {
     const { id } = await mountText();
     const event = new Event('cut', { bubbles: true, cancelable: true });
