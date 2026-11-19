@@ -101,7 +101,7 @@ its failing test at the layer R10 names.
 - [x] T062 [US2] FR-033b: opening or dropping a CSV onto a dirty CSV Preview Editor raises the unsaved-changes prompt (Save & open, Discard & open, Open in new preview, Cancel) instead of opening a new panel; Back/Forward stay refused — integration over PreviewService plus the renderer prompt
 - [x] T063 [US2] FR-008d: per-file grid selection (and scroll) kept per panel history entry for the session, restored on reuse and Back/Forward, A1 for a first open; never persisted; both grids
 - [x] T064 [US2] FR-008e: a selection drag pins its starting pointer over the whole grid (root `data-drag`), resize edges included
-- [ ] T065 [US2] FR-008f: middle-button drag pans the grid (move cursor pinned, no selection change, no autoscroll), and a middle click never pastes (suppress the Linux primary-selection paste); Ctrl+middle-click still resets zoom; both grids
+- [x] T065 [US2] FR-008f: middle-button drag pans the grid (move cursor pinned, no selection change, no autoscroll), and a middle click never pastes (suppress the Linux primary-selection paste); Ctrl+middle-click still resets zoom; both grids
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies

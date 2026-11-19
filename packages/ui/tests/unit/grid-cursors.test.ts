@@ -58,6 +58,10 @@ describe('the grid header cursors (FR-008c)', () => {
     expect(pinned('cells')).toMatch(/cursor:\s*default !important;/);
   });
 
+  it('a middle-button pan pins the move cursor over the whole grid, over every per-element cursor (FR-008f)', () => {
+    expect(css).toMatch(/\.data-grid\[data-drag='pan'\],\s*\.data-grid\[data-drag='pan'\] \*\s*\{[^}]*cursor:\s*move\s*!important/);
+  });
+
   it('the column resize edge keeps col-resize, which wins over the column letter\'s arrow', () => {
     expect(rule('.data-grid__resize')).toMatch(/cursor:\s*col-resize;/);
     expect(css.indexOf('.data-grid__resize {')).toBeGreaterThan(css.indexOf('.data-grid__colhead {'));

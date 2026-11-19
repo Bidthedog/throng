@@ -321,6 +321,12 @@
   cursor: url('./cursors/row-select.svg?no-inline') 19 12, pointer !important;
 }
 
+/* FR-008f — a middle-button drag pans the table: the move cursor over the whole grid for its life. */
+.data-grid[data-drag='pan'],
+.data-grid[data-drag='pan'] * {
+  cursor: move !important;
+}
+
 .data-grid[data-drag='cells'],
 .data-grid[data-drag='cells'] * {
   cursor: default !important;

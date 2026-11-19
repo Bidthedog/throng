@@ -72,6 +72,7 @@ import {
   type GridSelection,
 } from './grid-selection.js';
 import { CELL_PADDING_X, fitColumnWidth, wrappedLineCount, type MeasureText } from './fit.js';
+import { primaryModifierHeld } from '../config/host-modifiers.js';
 import './grid.css';
 
 export type { GridRange, GridSelection };
@@ -173,6 +174,8 @@ interface EditingState {
 
 /** A wrapped cell shows at most this many characters, so one pathological value cannot stall the layout. */
 const MAX_WRAP_CHARS = 50_000;
+/** A paste this soon after a middle press or release is the primary selection (Linux), not the reader's (FR-008f). */
+const MIDDLE_PASTE_WINDOW_MS = 500;
 
 /** Pixel widths of a text in `el`'s computed font, from one canvas context (no DOM, no layout per text). */
 function makeMeasure(el: Element): MeasureText {
@@ -409,6 +412,12 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
   const [resizing, setResizing] = useState<{ col: number; startX: number; startWidth: number } | null>(null);
   const [dragging, setDragging] = useState<{ mode: 'cells' | 'rows' | 'cols'; anchor: GridCell } | null>(null);
   const lastKeyboardMenu = useRef(0);
+  // FR-008f — the middle button pans. `pan` is the drag in progress (where it began and the scroll it began at).
+  const [panning, setPanning] = useState(false);
+  const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  // When a middle button was last pressed or released here, for `onPasteEvent`: Linux pastes the PRIMARY selection on
+  // a middle click, and that paste must not land in the grid.
+  const lastMiddle = useRef(0);
   // FR-011: per column, the width a fit replaced and the width it set, so a second fit can undo the first.
   const fitMemo = useRef(new Map<number, { before: number; fitted: number }>());
 
@@ -640,6 +649,37 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     }
     setDragging(null);
   });
+  // FR-008f — while the middle button is held, the table follows the pointer. Release (anywhere) ends it.
+  useEffect(() => {
+    if (!panning) return undefined;
+    const move = (e: MouseEvent): void => {
+      const start = pan.current;
+      const el = scrollRef.current;
+      if (start === null || el === null) return;
+      el.scrollLeft = start.left - (e.clientX - start.x);
+      el.scrollTop = start.top - (e.clientY - start.y);
+    };
+    const up = (e: MouseEvent): void => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      lastMiddle.current = Date.now();
+      pan.current = null;
+      setPanning(false);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+  }, [panning]);
+  // The release and the `auxclick` after it: Chromium's primary-selection paste and any follow-on are their default.
+  const swallowMiddle = (e: ReactMouseEvent<HTMLDivElement>): void => {
+    if (e.button !== 1 || primaryModifierHeld(e)) return;
+    e.preventDefault();
+    lastMiddle.current = Date.now();
+  };
+
   const active = resizing !== null || dragging !== null;
   useEffect(() => {
     if (!active) return undefined;
@@ -654,6 +694,17 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
   }, [active]);
 
   const onMouseDown = (e: ReactMouseEvent<HTMLDivElement>): void => {
+    if (e.button === 1) {
+      // Ctrl+middle-click (Cmd on macOS, 070 FR-030) is the zoom-reset gesture: left alone, as the Mermaid pan leaves it.
+      if (primaryModifierHeld(e)) return;
+      // FR-008f — no autoscroll, no primary-selection paste, no selection change; the drag pans instead.
+      e.preventDefault();
+      lastMiddle.current = Date.now();
+      const el = scrollRef.current;
+      pan.current = { x: e.clientX, y: e.clientY, left: el?.scrollLeft ?? 0, top: el?.scrollTop ?? 0 };
+      setPanning(true);
+      return;
+    }
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.tagName === 'TEXTAREA') return;
@@ -822,6 +873,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
     if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
+    lastMiddle.current = 0; // FR-008f — the reader's own key: a paste after it is theirs
     const ctrl = e.ctrlKey || e.metaKey;
     const consume = (): void => {
       e.preventDefault();
@@ -925,6 +977,13 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     onCut(selRef.current, rangeNow());
   };
   const onPasteEvent = (e: ReactClipboardEvent<HTMLDivElement>): void => {
+    // FR-008f — a paste that follows a middle press is the primary selection, never the reader's own: dropped. The
+    // reader's next key ends the latch (`onKeyDown`), so a Ctrl+V straight after is theirs.
+    if (Date.now() - lastMiddle.current < MIDDLE_PASTE_WINDOW_MS) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if ((e.target as HTMLElement).tagName === 'TEXTAREA' || !editable || !onPaste) return;
     e.preventDefault();
     e.stopPropagation();
@@ -958,7 +1017,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       className="data-grid"
       // FR-008e — a selection drag pins its pointer over the whole grid (grid.css), so crossing a header or a
       // resize edge does not flicker it.
-      data-drag={dragging?.mode}
+      data-drag={panning ? 'pan' : dragging?.mode}
       data-testid={testId}
       role="grid"
       tabIndex={0}
@@ -969,6 +1028,8 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       style={rootStyle}
       onKeyDown={onKeyDown}
       onMouseDown={onMouseDown}
+      onMouseUp={swallowMiddle}
+      onAuxClick={swallowMiddle}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenuEvent}
       onCopy={onCopyEvent}

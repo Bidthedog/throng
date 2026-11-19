@@ -938,6 +938,93 @@ describe('DataGrid goToRow handle (FR-043a)', () => {
 
 });
 
+describe('DataGrid middle button (FR-008f)', () => {
+  const pasteOf = (g: ReturnType<typeof setup>, text: string) =>
+    createEvent.paste(g.root, { clipboardData: { getData: (t: string) => (t === 'text/plain' ? text : '') } });
+  /** A scroller whose offsets are real state, since jsdom has no scrolling. */
+  function offsets(root: HTMLElement): { left: () => number; top: () => number } {
+    const scroller = root.querySelector<HTMLElement>('.data-grid__scroller')!;
+    let left = 0;
+    let top = 0;
+    Object.defineProperty(scroller, 'scrollLeft', { get: () => left, set: (v: number) => void (left = v), configurable: true });
+    Object.defineProperty(scroller, 'scrollTop', { get: () => top, set: (v: number) => void (top = v), configurable: true });
+    return { left: () => left, top: () => top };
+  }
+
+  it('a middle press changes no selection, and its default (autoscroll, paste) is prevented', () => {
+    const g = setup();
+    fireEvent.mouseDown(g.cellAt(1, 1), { button: 0 });
+    fireEvent.mouseUp(window);
+    const before = sel(g);
+    const down = createEvent.mouseDown(g.cellAt(3, 2), { button: 1 });
+    fireEvent(g.cellAt(3, 2), down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(sel(g)).toEqual(before);
+    const up = createEvent.mouseUp(g.cellAt(3, 2), { button: 1 });
+    fireEvent(g.cellAt(3, 2), up);
+    expect(up.defaultPrevented).toBe(true);
+    const aux = createEvent('auxclick', g.cellAt(3, 2), { button: 1, bubbles: true, cancelable: true }, { EventType: 'MouseEvent' });
+    fireEvent(g.cellAt(3, 2), aux);
+    expect(aux.defaultPrevented).toBe(true);
+    expect(g.onPaste).not.toHaveBeenCalled();
+  });
+
+  it('ignores the paste a middle click brings (Linux pastes the primary selection), but not an ordinary Ctrl+V', () => {
+    const g = setup();
+    fireEvent.mouseDown(g.cellAt(0, 0), { button: 1 });
+    fireEvent.mouseUp(window, { button: 1 });
+    const stray = pasteOf(g, 'primary selection');
+    fireEvent(g.root, stray);
+    expect(stray.defaultPrevented).toBe(true);
+    expect(g.onPaste).not.toHaveBeenCalled();
+    // The reader's next key ends the latch, so their own paste works at once.
+    g.key('v', { ctrlKey: true });
+    fireEvent(g.root, pasteOf(g, 'mine'));
+    expect(g.onPaste).toHaveBeenCalledWith('mine', { row: 0, col: 0 }, expect.anything());
+  });
+
+  it('an ordinary paste with no middle press before it works', () => {
+    const g = setup();
+    fireEvent(g.root, pasteOf(g, 'plain'));
+    expect(g.onPaste).toHaveBeenCalledTimes(1);
+  });
+
+  it('a middle drag scrolls the table by the pointer delta, both axes, and ends on release', () => {
+    const g = setup();
+    const at = offsets(g.root);
+    const scroller = g.root.querySelector<HTMLElement>('.data-grid__scroller')!;
+    scroller.scrollLeft = 300;
+    scroller.scrollTop = 200;
+    fireEvent.mouseDown(g.cellAt(2, 2), { button: 1, clientX: 100, clientY: 100 });
+    expect(g.root.getAttribute('data-drag')).toBe('pan');
+    fireEvent.mouseMove(window, { clientX: 70, clientY: 130 });
+    expect(at.left()).toBe(330);
+    expect(at.top()).toBe(170);
+    fireEvent.mouseMove(window, { clientX: 150, clientY: 90 });
+    expect(at.left()).toBe(250);
+    expect(at.top()).toBe(210);
+    fireEvent.mouseUp(window, { button: 1 });
+    expect(g.root.hasAttribute('data-drag')).toBe(false);
+    fireEvent.mouseMove(window, { clientX: 0, clientY: 0 });
+    expect(at.left()).toBe(250);
+  });
+
+  it('a Ctrl+middle press (the zoom reset) is left alone: not prevented, no pan', () => {
+    const g = setup();
+    const down = createEvent.mouseDown(g.cellAt(0, 0), { button: 1, ctrlKey: true });
+    fireEvent(g.cellAt(0, 0), down);
+    expect(down.defaultPrevented).toBe(false);
+    expect(g.root.hasAttribute('data-drag')).toBe(false);
+  });
+
+  it('a left press still selects as before', () => {
+    const g = setup();
+    fireEvent.mouseDown(g.cellAt(2, 1), { button: 0 });
+    fireEvent.mouseUp(window);
+    expect(sel(g).active).toEqual({ row: 2, col: 1 });
+  });
+});
+
 describe('DataGrid scrolling cost (SC-009)', () => {
   /** Move the scroller the way the browser does: a new offset, then the scroll event. */
   function scrollTo(root: HTMLElement, pos: { top: number; left: number }): void {
