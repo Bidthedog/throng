@@ -23,7 +23,13 @@ describe('the CSV provider (the CSV Preview Editor)', () => {
 
   it('opens a .csv in its preview by default (Q2: Throng Preview Editor ships)', () => {
     const shipped = previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS);
-    expect(shipped.providers.csv).toEqual({ enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' });
+    expect(shipped.providers.csv).toEqual({
+      enabled: true,
+      defaultOpenAction: 'preview',
+      openTarget: 'lastActive',
+      editLongCellsInDialog: true,
+      longCellThreshold: 50,
+    });
     expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, shipped, 'D:/p/data.csv')).toBe('preview');
   });
 
@@ -35,7 +41,41 @@ describe('the CSV provider (the CSV Preview Editor)', () => {
       'editor.previews.providers.csv.enabled',
       'editor.previews.providers.csv.defaultOpenAction',
       'editor.previews.providers.csv.openTarget',
+      'editor.previews.providers.csv.editLongCellsInDialog',
+      'editor.previews.providers.csv.longCellThreshold',
     ]);
+  });
+});
+
+describe('the CSV cell dialog settings (FR-060a)', () => {
+  it('ship the dialog on and a 50-character threshold', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({
+      editLongCellsInDialog: true,
+      longCellThreshold: 50,
+    });
+  });
+
+  it('keep a stored value, and fall back on a wrong type (a threshold below 1 is clamped by its reader)', () => {
+    const kept = parsePreviewSettings(
+      { providers: { csv: { editLongCellsInDialog: false, longCellThreshold: 120 } } },
+      SHIPPED_PREVIEW_PROVIDERS,
+    );
+    expect(kept.providers.csv).toMatchObject({ editLongCellsInDialog: false, longCellThreshold: 120 });
+    for (const bad of ['long', null]) {
+      const parsed = parsePreviewSettings(
+        { providers: { csv: { editLongCellsInDialog: 'no', longCellThreshold: bad } } },
+        SHIPPED_PREVIEW_PROVIDERS,
+      );
+      expect(parsed.providers.csv).toMatchObject({ editLongCellsInDialog: true, longCellThreshold: expect.any(Number) });
+    }
+  });
+
+  it('are rendered as a toggle and a slider under the CSV subsection', () => {
+    const rows = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).filter((d) => d.subsection === 'CSV');
+    const dialog = rows.find((d) => d.key.endsWith('.editLongCellsInDialog'));
+    const threshold = rows.find((d) => d.key.endsWith('.longCellThreshold'));
+    expect(dialog).toMatchObject({ label: 'CSV: Edit long cells in a dialog', control: 'toggle' });
+    expect(threshold).toMatchObject({ label: 'CSV: Long cell threshold', min: 1 });
   });
 });
 

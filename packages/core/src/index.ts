@@ -1588,4 +1588,13 @@ export {
   type CsvGridOperation,
   type GridOperationResolution,
 } from './csv/grid-operation.js';
+export {
+  CSV_LONG_CELL_THRESHOLD,
+  cellDialogOn,
+  cellDialogText,
+  flattenCellText,
+  isJsonContainer,
+  isLongCell,
+  longCellThresholdOf,
+} from './csv/cell-text.js';
 export { columnLabel, gridToHtmlTable, gridToTsv, parseTsv } from './csv/grid-clipboard.js';

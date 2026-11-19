@@ -154,6 +154,17 @@ describe('SpreadsheetBody', () => {
     });
   });
 
+  it('has no cell dialog: Enter on a long cell and the cell menu offer none (read-only, FR-036a)', async () => {
+    bytes = book({ Data: [['a value much longer than the shipped threshold of fifty characters, surely']] });
+    mount('throng-preview://source/s1?rev=1');
+    await waitFor(() => expect(cell(0, 0)).toContain('a value much longer'));
+    fireEvent.keyDown(screen.getByTestId('spreadsheet-grid-s1'), { key: 'Enter' });
+    fireEvent.doubleClick(document.querySelector('[data-grid-cell][data-row="0"][data-col="0"]')!);
+    expect(screen.queryByTestId('cell-dialog')).toBeNull();
+    fireEvent.contextMenu(document.querySelector('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
+    expect(screen.queryByTestId('menu-item-Edit in Dialog…')).toBeNull();
+  });
+
   it('never opens a cell editor (read-only, FR-001)', async () => {
     mount('throng-preview://source/s1?rev=1');
     await waitFor(() => expect(cell(0, 0)).toBe('h1'));

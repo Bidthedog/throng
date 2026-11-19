@@ -25,7 +25,13 @@
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactElement } from 'react';
 import {
+  cellDialogOn,
+  cellDialogText,
   cellValue,
+  columnLabel,
+  flattenCellText,
+  isJsonContainer,
+  longCellThresholdOf,
   firstBinding,
   GRID_MAX_CELLS,
   GRID_MAX_ROW_COUNT,
@@ -42,6 +48,7 @@ import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
+import { CellDialog } from '../../../grid/cell-dialog.js';
 import { copiedBlockFor, hasCopiedBlock, recordCopy, type CopiedBlock } from '../../../grid/copied-block.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
 import { useAppSettings, useKeybindings } from '../../../config/config-store.js';
@@ -105,7 +112,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -370,6 +377,33 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     });
   }, [ownsDocument, panelId, filePath, projectRoot, dirty, ownerProjectId]);
 
+  /* ── The cell dialog (FR-036a, FR-036b, FR-060a) ─────────────────────────────────────────────── */
+
+  // Offered by the panel's own choice (its status-bar toggle), else by the setting. Off means NO dialog at all:
+  // no routing of long cells and no menu item.
+  const cellDialogAvailable = cellDialogOn(cellDialogChoice, providerSettings.editLongCellsInDialog);
+  const longCellThreshold = longCellThresholdOf(providerSettings.longCellThreshold);
+  const [cellDialog, setCellDialog] = useState<{ row: number; col: number; initial: string } | null>(null);
+
+  const openCellDialog = useCallback(
+    (row: number, col: number): void => {
+      setCellDialog({ row, col, initial: cellDialogText(getCell(row, col)) });
+    },
+    [getCell],
+  );
+  const closeCellDialog = useCallback((): void => {
+    setCellDialog(null);
+    gridRef.current?.focus();
+  }, []);
+  // Saving writes the flattened text as one edit (one undo step); text unchanged from what the dialog opened with
+  // writes nothing.
+  const saveCellDialog = (text: string): void => {
+    const open = cellDialog;
+    closeCellDialog();
+    if (open === null || text === open.initial) return;
+    setCells([{ row: open.row, col: open.col, value: flattenCellText(text) }]);
+  };
+
   /* ── Menus (contracts/grid-ui.md) ────────────────────────────────────────────────────────────── */
 
   const buildMenu = useCallback(
@@ -440,6 +474,9 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           { label: 'Copy as Plain Text', section: 'content', group: 'clipboard', onClick: () => copy(range, 'plain') },
           { label: 'Paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
           { label: 'Clear Cells', section: 'content', group: 'clipboard', onClick: () => clearRange(range) },
+          ...(cellDialogAvailable
+            ? [{ label: 'Edit in Dialog…', section: 'content' as const, onClick: () => openCellDialog(target.row, target.col) }]
+            : []),
           { label: 'Select All', section: 'content', group: 'clipboard', onClick: () => grid.selectAll() },
           { label: 'Save', section: 'content', group: 'file', onClick: () => void save(), shortcut: chord('editor.save') },
           { label: 'Save As…', section: 'content', group: 'file', onClick: () => void saveAs(), shortcut: chord('editor.saveAs') },
@@ -450,7 +487,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       if (onOpenInEditor !== undefined) items.push({ label: 'Open in Editor', section: 'navigate', onClick: onOpenInEditor });
       openMenu(point.x, point.y, items);
     },
-    [clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
+    [cellDialogAvailable, clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard
@@ -501,6 +538,8 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   return (
     <div className="preview-grid-body" data-testid={`csv-body-${panelId}`}>
       <DataGrid
+        longCellThreshold={cellDialogAvailable ? longCellThreshold : undefined}
+        onEditInDialog={openCellDialog}
         ref={gridRef}
         testId={`csv-grid-${panelId}`}
         rowCount={rowCount}
@@ -518,6 +557,15 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         onHistory={history}
         onContextMenu={onContextMenu}
       />
+      {cellDialog !== null ? (
+        <CellDialog
+          cellLabel={`${columnLabel(cellDialog.col)}${cellDialog.row + 1}`}
+          initial={cellDialog.initial}
+          json={isJsonContainer(cellDialog.initial)}
+          onSave={saveCellDialog}
+          onCancel={closeCellDialog}
+        />
+      ) : null}
       {widthPrompt !== null ? (
         <form className="preview-grid-width" onSubmit={submitWidth} data-testid={`csv-width-${panelId}`}>
           <label>

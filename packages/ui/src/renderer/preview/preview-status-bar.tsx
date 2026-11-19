@@ -63,6 +63,11 @@ export interface PreviewStatusBarProps {
   onToggleSyncScroll: () => void;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no scroll-sync toggle. Absent reads `true`. */
   showSyncScroll?: boolean;
+  /**
+   * 073 FR-036b — a provider whose grid edits long cells in a dialog: whether that is on for THIS panel, and the
+   * toggle's click. Absent for every other provider, which draws no such control.
+   */
+  cellDialog?: { on: boolean; onToggle: () => void };
   /** FR-118 — the hovered or focused link's target; omitted, `null` or empty shows nothing. */
   readout?: string | null;
   /** FR-118a — the drawn document's counts, or `null` until they settle (no counts are drawn). */
@@ -80,6 +85,9 @@ function textAt(r: Readout, form: LabelForm): string {
 
 const ALL_ON = { showCursorPosition: true, showCounts: true };
 
+/** The cell dialog toggle's name: the setting's own label, so the control and the Preferences row read alike. */
+const CELL_DIALOG_LABEL = 'Edit long cells in a dialog';
+
 export function PreviewStatusBar({
   panelId,
   providerKind,
@@ -89,6 +97,7 @@ export function PreviewStatusBar({
   syncScroll,
   onToggleSyncScroll,
   showSyncScroll = true,
+  cellDialog,
   readout,
   metrics = null,
   selection = null,
@@ -166,6 +175,20 @@ export function PreviewStatusBar({
           disabled={editorRouteDisabled}
           onClick={onEditorRoute}
         />
+        {/* 073 FR-036b — the cell dialog's per-panel switch, at the trailing end: pressed while the dialog is on
+            for this panel. Present only for a provider that declares one. An accelerator over the header
+            menu's checked *Edit Long Cells in Dialog* item (Principle VI). */}
+        {cellDialog !== undefined ? (
+          <IconButton
+            token="cellDialog"
+            className="editor-status-strip__preview"
+            testId={`preview-cell-dialog-${panelId}`}
+            title={CELL_DIALOG_LABEL}
+            ariaLabel={CELL_DIALOG_LABEL}
+            ariaPressed={cellDialog.on}
+            onClick={cellDialog.onToggle}
+          />
+        ) : null}
       </div>
       {/* The ruler (040 FR-021, FR-022a): every present readout in each label form it has, drawn where it can be
           measured and nowhere it can be seen or heard — so the fit is decided in one pass. */}

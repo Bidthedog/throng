@@ -473,6 +473,9 @@
     },
     "terminalNotifications": {
       "lucide": "bell"
+    },
+    "cellDialog": {
+      "throng": "A square window with a pencil writing into it: the CSV cell dialog's toggle, drawn so it stays distinct from rename's pencil and the editor panel's icon"
     }
   }
 }

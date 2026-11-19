@@ -24,6 +24,11 @@ export interface PreviewBodyProps {
   projectRoot: string;
   providerSettings: ProviderSettings;
   /**
+   * 073 FR-036b — this panel's own choice to offer the cell dialog (the CSV Preview Editor's status-bar toggle,
+   * persisted with the panel). Absent: the panel follows the provider's "Edit long cells in a dialog" setting.
+   */
+  cellDialogChoice?: boolean;
+  /**
    * 045 FR-168 (review round four, editor M2) — what this window's settings make a link's Ctrl+click
    * DO, for the tooltip and the plain-click hint only. The chrome supplies it because judging it
    * needs the provider registry, which a body never sees (FR-074). Absent: every in-project file

@@ -230,7 +230,11 @@ paste overwrites the selection from its top-left cell, and one value pasted onto
 **Reset Size** on a column letter or row number puts it back to its default size. With whole rows or
 columns copied from a grid, the row and column menus also offer **Insert Copied Rows Above/Below** and
 **Insert Copied Columns Left/Right**. [`editor.saveAs`](#editor) and the Save As icon in the title bar save
-the CSV under a new name, as in the text editor.
+the CSV under a new name, as in the text editor. A cell longer than the
+[Long cell threshold](preferences.md#csv) opens in a dialog on double-click, F2 or Enter — a JSON value
+pretty-printed — and **Edit in Dialog…** on the cell menu opens any cell there; Ctrl+Enter saves it as one
+line and Esc cancels. The cell-dialog toggle at the bottom right of the status bar turns this on or off for
+one panel.
 
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|

@@ -77,6 +77,8 @@ export interface PreviewProviderDescriptor {
    * 2026-10-12). Opening the preview and going to the editor are unaffected.
    */
   flowingDocument?: boolean;
+  /** 073 FR-036b — the provider's editable grid has a cell dialog, with a per-panel toggle on its status bar. */
+  cellDialog?: boolean;
   /**
    * 073 FR-030 — text providers only: the preview EDITS its document (the CSV Preview Editor). Main shows
    * its edits at once rather than after the update delay, the chrome lets its body own paste, cut and

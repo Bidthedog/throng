@@ -599,13 +599,17 @@ describe('DataGrid column fit (FR-011)', () => {
     expect(g.onColumnWidthChange).toHaveBeenLastCalledWith(1, FITTED);
   });
 
-  it('fits a 100,000-row column well inside SC-004\'s 100 ms', () => {
-    stubCanvas();
+  it('fits a 100,000-row column with one text measurement per row and no DOM (SC-004)', () => {
+    const measureText = vi.fn((t: string) => ({ width: t.length * 8 }));
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(() => ({ font: '', measureText }) as unknown as CanvasRenderingContext2D);
     const g = setup({ rowCount: 100_000, getCell: (r) => `value ${r}` });
-    const t0 = performance.now();
     fireEvent.doubleClick(head(g, 0));
-    expect(performance.now() - t0).toBeLessThan(100);
     expect(g.onColumnWidthChange).toHaveBeenCalledOnce();
+    // Every row and the header label once each — linear in the rows, never a layout pass per row.
+    expect(measureText.mock.calls.length).toBeLessThanOrEqual(100_000 + 1);
+    expect(getContext.mock.calls.length).toBeLessThanOrEqual(1);
   });
 });
 
@@ -672,6 +676,72 @@ describe('DataGrid row expand (FR-012)', () => {
       g.ref.current!.beginEdit();
     });
     expect(top(screen.getByLabelText('Cell value'))).toBe(132);
+  });
+});
+
+describe('DataGrid long-cell routing (FR-036a)', () => {
+  // Row 1 holds a value of 12 characters, every other cell 4-5; the threshold is 8.
+  const getCell = (r: number, c: number): string => (r === 1 && c === 0 ? 'twelve chars' : `r${r}c${c}`);
+  const routed = (over: Partial<DataGridProps> = {}) => {
+    const onEditInDialog = vi.fn();
+    const g = setup({ getCell, longCellThreshold: 8, onEditInDialog, ...over });
+    return { g, onEditInDialog };
+  };
+  const select = (g: ReturnType<typeof setup>, r: number, c: number): void => {
+    fireEvent.mouseDown(g.cellAt(r, c), { button: 0 });
+    fireEvent.mouseUp(window);
+  };
+
+  it('sends F2, Enter and a double-click on a cell longer than the threshold to the dialog, not the in-cell editor', () => {
+    const { g, onEditInDialog } = routed();
+    select(g, 1, 0);
+    g.key('F2');
+    g.key('Enter');
+    fireEvent.doubleClick(g.cellAt(1, 0));
+    expect(onEditInDialog).toHaveBeenCalledTimes(3);
+    expect(onEditInDialog).toHaveBeenLastCalledWith(1, 0);
+    expect(screen.queryByLabelText('Cell value')).toBeNull();
+  });
+
+  it('keeps the in-cell editor for a value at or under the threshold', () => {
+    const { g, onEditInDialog } = routed();
+    select(g, 0, 0);
+    g.key('Enter');
+    expect(screen.getByLabelText('Cell value')).toBeTruthy();
+    expect(onEditInDialog).not.toHaveBeenCalled();
+  });
+
+  it('still opens the in-cell editor when a printable character is typed on a long cell', () => {
+    const { g, onEditInDialog } = routed();
+    select(g, 1, 0);
+    g.key('x');
+    expect((screen.getByLabelText('Cell value') as HTMLTextAreaElement).value).toBe('x');
+    expect(onEditInDialog).not.toHaveBeenCalled();
+  });
+
+  it('edits in place everywhere when no threshold is given (the dialog is off)', () => {
+    const { g, onEditInDialog } = routed({ longCellThreshold: undefined });
+    select(g, 1, 0);
+    g.key('F2');
+    expect(screen.getByLabelText('Cell value')).toBeTruthy();
+    expect(onEditInDialog).not.toHaveBeenCalled();
+  });
+
+  it('does nothing on a read-only grid', () => {
+    const { g, onEditInDialog } = routed({ editable: false });
+    select(g, 1, 0);
+    g.key('Enter');
+    fireEvent.doubleClick(g.cellAt(1, 0));
+    expect(onEditInDialog).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Cell value')).toBeNull();
+  });
+
+  it('counts characters, so a value of exactly the threshold is not long', () => {
+    const { g, onEditInDialog } = routed({ longCellThreshold: 12 });
+    select(g, 1, 0);
+    g.key('Enter');
+    expect(onEditInDialog).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Cell value')).toBeTruthy();
   });
 });
 

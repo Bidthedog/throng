@@ -99,6 +99,7 @@ import {
 } from 'react';
 import { diagramActionsAt } from './diagram/diagram-actions.js';
 import {
+  cellDialogOn,
   collapseAll as foldCollapseAll,
   defaultOpenActionFor,
   enabledProviderFor,
@@ -1867,6 +1868,16 @@ export function PreviewPanel({
   // 073 FR-037 — an editable provider's body (the CSV Preview Editor) owns paste and cut, its cell editor's included.
   const editableBody = (state ? registry.get(state.providerId) : undefined)?.editable === true;
   const parented = state?.parent != null;
+  // 073 FR-036b — a provider whose grid has a cell dialog: on for THIS panel by its own choice, else by the setting.
+  const hasCellDialog = (state ? registry.get(state.providerId) : undefined)?.cellDialog === true;
+  const cellDialogChoice = config?.cellDialog;
+  const cellDialogEffective = cellDialogOn(
+    cellDialogChoice,
+    state ? settings.editor.previews.providers[state.providerId]?.editLongCellsInDialog : undefined,
+  );
+  const onToggleCellDialog = useCallback((): void => {
+    ws.updatePanelConfig(panelId, { cellDialog: !cellDialogEffective });
+  }, [ws, panelId, cellDialogEffective]);
 
   /*
    * FR-113, FR-114, FR-121 — two-way scroll sync. The parent editor's top line, from the store its view in
@@ -2463,6 +2474,7 @@ export function PreviewPanel({
             filePath={state.filePath}
             projectRoot={projectRoot ?? ''}
             providerSettings={settings.editor.previews.providers[state.providerId] ?? NO_PROVIDER_SETTINGS}
+            cellDialogChoice={cellDialogChoice}
             linkWording={linkWording}
             initialViewState={state.viewState}
             initialViewStateBasis={state.viewStateBasis}
@@ -2541,6 +2553,7 @@ export function PreviewPanel({
           editorRouteDisabled={movedOutTo !== null}
           syncScroll={settings.editor.previews.syncScroll}
           showSyncScroll={flowing}
+          cellDialog={hasCellDialog ? { on: cellDialogEffective, onToggle: onToggleCellDialog } : undefined}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}
           metrics={documentMetrics}

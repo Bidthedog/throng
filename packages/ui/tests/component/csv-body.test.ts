@@ -9,6 +9,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
+import { EditorView } from '@codemirror/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseCsv } from '@throng/core';
 import { CsvBody, CSV_WORKER_THRESHOLD } from '../../src/renderer/preview/providers/csv/csv-body.js';
@@ -57,6 +58,10 @@ let bridge: {
 };
 
 beforeEach(() => {
+  // jsdom has no text geometry; the cell dialog's CodeMirror asks for it on every measure.
+  const range = Range.prototype as unknown as Record<string, unknown>;
+  range.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: function* () {} });
+  range.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 });
   bridge = {
     gridEdit: vi.fn(async () => ({ ok: true, dirty: true })),
     gridUndo: vi.fn(async () => ({ ok: true })),
@@ -429,6 +434,172 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
     await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalledTimes(1));
     fireEvent.contextMenu(rowHead(0), { clientX: 5, clientY: 5 });
     await screen.findByTestId('menu-item-Insert Copied Rows Above');
+  });
+});
+
+describe('CsvBody cell dialog (FR-036a, FR-036b, FR-060a)', () => {
+  // Threshold 5: 'ab' and 'name' are short; the JSON object (7 characters) and the two-line value are long.
+  const TEXT = 'name,doc\nab,"{""k"":1}"\n"line one\nline two",x\n';
+  const settings = (over: Record<string, unknown> = {}): PreviewBodyProps['providerSettings'] => ({
+    enabled: true,
+    editLongCellsInDialog: true,
+    longCellThreshold: 5,
+    ...over,
+  });
+  const open = (over: Partial<PreviewBodyProps> = {}) =>
+    mount(TEXT, { providerSettings: settings(), ...over });
+  const grid = (): HTMLElement => screen.getByTestId('csv-grid-p1');
+  const dialog = (): HTMLElement | null => screen.queryByTestId('cell-dialog');
+  const view = (): EditorView => EditorView.findFromDOM(dialog()!.querySelector<HTMLElement>('.cm-editor')!)!;
+  const dialogText = (): string => view().state.doc.toString();
+  const setDialogText = (text: string): void =>
+    act(() => view().dispatch({ changes: { from: 0, to: view().state.doc.length, insert: text } }));
+  const select = (r: number, c: number): void => {
+    fireEvent.mouseDown(cellAt(r, c), { button: 0 });
+    fireEvent.mouseUp(window);
+  };
+  const menuHas = (label: string): boolean => document.querySelector(`[data-testid="menu-item-${label}"]`) !== null;
+
+  it('opens a long cell in the dialog on Enter, F2 and a double-click, and a short cell in the cell editor', () => {
+    open();
+    select(2, 0);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    expect(dialog()).not.toBeNull();
+    expect(screen.queryByLabelText('Cell value')).toBeNull();
+    expect(dialogText()).toBe('line one\nline two');
+    fireEvent.keyDown(dialog()!, { key: 'Escape' });
+    expect(dialog()).toBeNull();
+
+    fireEvent.keyDown(grid(), { key: 'F2' });
+    expect(dialog()).not.toBeNull();
+    fireEvent.keyDown(dialog()!, { key: 'Escape' });
+    fireEvent.doubleClick(cellAt(2, 0));
+    expect(dialog()).not.toBeNull();
+    fireEvent.keyDown(dialog()!, { key: 'Escape' });
+
+    select(1, 0);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    expect(dialog()).toBeNull();
+    expect(screen.getByLabelText('Cell value')).toBeTruthy();
+  });
+
+  it('still edits in place when a character is typed on a long cell', () => {
+    open();
+    select(2, 0);
+    fireEvent.keyDown(grid(), { key: 'x' });
+    expect(dialog()).toBeNull();
+    expect((screen.getByLabelText('Cell value') as HTMLTextAreaElement).value).toBe('x');
+  });
+
+  it('opens a value that is a JSON object pretty-printed, with the editor highlighting it as JSON', async () => {
+    open();
+    select(1, 1);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    expect(dialogText()).toBe('{\n  "k": 1\n}');
+    await waitFor(() => expect(dialog()!.querySelector('.cm-editor')?.textContent).toContain('"k"'));
+  });
+
+  it('Esc cancels without writing, and gives the keyboard back to the grid', () => {
+    open();
+    select(2, 0);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    setDialogText('changed');
+    fireEvent.keyDown(dialog()!, { key: 'Escape' });
+    expect(dialog()).toBeNull();
+    expect(bridge.gridEdit).not.toHaveBeenCalled();
+  });
+
+  it('Save with the text unchanged writes nothing', async () => {
+    open();
+    select(1, 1);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(dialog()).toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(bridge.gridEdit).not.toHaveBeenCalled();
+  });
+
+  it('Save writes the text with each line break turned into one space, as ONE setCells edit', async () => {
+    open();
+    select(2, 0);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    setDialogText('first\nsecond\r\n  third');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalledTimes(1));
+    expect(bridge.gridEdit.mock.calls[0]?.[0].operation).toEqual({
+      kind: 'setCells',
+      cells: [{ row: 2, col: 0, value: 'first second   third' }],
+    });
+    expect(dialog()).toBeNull();
+  });
+
+  it('Ctrl+Enter saves too, and flattens an edited JSON value, line break and indent becoming one space', async () => {
+    open();
+    select(1, 1);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    setDialogText('{\n    "k": 2,\n    "j": [\n        1\n    ]\n}');
+    fireEvent.keyDown(dialog()!, { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalledTimes(1));
+    expect(bridge.gridEdit.mock.calls[0]?.[0].operation).toEqual({
+      kind: 'setCells',
+      cells: [{ row: 1, col: 1, value: '{ "k": 2, "j": [ 1 ] }' }],
+    });
+  });
+
+  it('Edit in Dialog… is on every cell\'s menu, short or long, and opens that cell', () => {
+    open();
+    fireEvent.contextMenu(cellAt(1, 0), { clientX: 5, clientY: 5 });
+    fireEvent.click(screen.getByTestId('menu-item-Edit in Dialog…'));
+    expect(dialogText()).toBe('ab');
+    setDialogText('one\ntwo');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    return waitFor(() =>
+      expect(bridge.gridEdit.mock.calls[0]?.[0].operation).toEqual({
+        kind: 'setCells',
+        cells: [{ row: 1, col: 0, value: 'one two' }],
+      }),
+    );
+  });
+
+  describe('availability — the panel\'s own choice, else the setting', () => {
+    it('with the setting off and no choice: no routing and no menu item', () => {
+      open({ providerSettings: settings({ editLongCellsInDialog: false }) });
+      select(2, 0);
+      fireEvent.keyDown(grid(), { key: 'Enter' });
+      expect(dialog()).toBeNull();
+      expect(screen.getByLabelText('Cell value')).toBeTruthy();
+      fireEvent.keyDown(screen.getByLabelText('Cell value'), { key: 'Escape' });
+      fireEvent.contextMenu(cellAt(1, 0), { clientX: 5, clientY: 5 });
+      expect(menuHas('Edit in Dialog…')).toBe(false);
+    });
+
+    it('with the setting on but the panel switched off: the same', () => {
+      open({ cellDialogChoice: false });
+      select(2, 0);
+      fireEvent.keyDown(grid(), { key: 'Enter' });
+      expect(dialog()).toBeNull();
+      fireEvent.keyDown(screen.getByLabelText('Cell value'), { key: 'Escape' });
+      fireEvent.contextMenu(cellAt(1, 0), { clientX: 5, clientY: 5 });
+      expect(menuHas('Edit in Dialog…')).toBe(false);
+    });
+
+    it('with the setting off but the panel switched on: both are offered', () => {
+      open({ providerSettings: settings({ editLongCellsInDialog: false }), cellDialogChoice: true });
+      select(2, 0);
+      fireEvent.keyDown(grid(), { key: 'Enter' });
+      expect(dialog()).not.toBeNull();
+      fireEvent.keyDown(dialog()!, { key: 'Escape' });
+      fireEvent.contextMenu(cellAt(1, 0), { clientX: 5, clientY: 5 });
+      expect(menuHas('Edit in Dialog…')).toBe(true);
+    });
+
+    it('reads the threshold as a whole number of at least 1', () => {
+      open({ providerSettings: settings({ longCellThreshold: 0 }) });
+      select(1, 0);
+      fireEvent.keyDown(grid(), { key: 'Enter' });
+      // 'ab' has 2 characters: more than 1, so a threshold of 0 (clamped to 1) sends it to the dialog.
+      expect(dialog()).not.toBeNull();
+    });
   });
 });
 

@@ -167,6 +167,8 @@ export interface PanelHeaderMenuActions {
   goToEditor: () => void;
   /** 044 FR-122 — flip `editor.previews.syncScroll` (`toggleSyncScroll`, the one command body). */
   toggleSyncScroll: () => void;
+  /** 073 FR-036b — flip this panel's own choice to offer the cell dialog (persisted with the panel). */
+  toggleCellDialog: () => void;
   /** 057 FR-125 — raise a user-flagged Attention mark on this panel (`attention.flag`). */
   flag: () => void;
 }
@@ -179,6 +181,8 @@ export interface PanelHeaderPreviewState {
   parented: boolean;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no Synchronise Scrolling. Absent reads `true`. */
   flowingDocument?: boolean;
+  /** 073 FR-036b — the provider has a cell dialog; `on` is whether it is on for this panel (its own choice, else the setting). */
+  cellDialog?: { on: boolean };
 }
 
 /**
@@ -562,6 +566,19 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   // keep in step with, so none.
   if (isPreview && args.preview?.providerKind === 'text' && args.preview.flowingDocument !== false) {
     items.push({ ...syncScrollItem(args.syncScroll ?? false, keybindings, actions), ...documentCovered });
+  }
+
+  // 073 FR-036b — a grid provider's cell dialog, on or off for THIS panel: a checked toggle in View & state, the menu route
+  // the status bar's toggle is an accelerator over.
+  if (isPreview && args.preview?.cellDialog !== undefined) {
+    items.push({
+      label: 'Edit Long Cells in Dialog',
+      checked: args.preview.cellDialog.on,
+      testId: 'menu-item-Edit Long Cells in Dialog',
+      icon: 'cellDialog' as const,
+      section: 'viewState',
+      onClick: () => actions.toggleCellDialog(),
+    });
   }
 
   // 044 FR-033 — a preview's banner commands, after its Zoom (View & state: Refresh · Zoom · Synchronise

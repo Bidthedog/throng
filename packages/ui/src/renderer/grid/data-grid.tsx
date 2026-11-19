@@ -143,6 +143,13 @@ export interface DataGridProps {
   onContextMenu?(target: GridMenuTarget, point: { x: number; y: number }): void;
   onSelectionChange?(sel: GridSelection): void;
   onScrollChange?(pos: { top: number; left: number }): void;
+  /**
+   * 073 FR-036a — with both given, F2, Enter and a double-click on a cell of MORE than `longCellThreshold` characters
+   * call `onEditInDialog` instead of opening the in-cell editor; a typed character still edits in place. Absent
+   * `longCellThreshold` (the dialog is off for this panel) edits every cell in place.
+   */
+  longCellThreshold?: number;
+  onEditInDialog?(row: number, col: number): void;
 }
 
 interface EditingState {
@@ -381,6 +388,8 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     onContextMenu,
     onSelectionChange,
     onScrollChange,
+    longCellThreshold,
+    onEditInDialog,
   } = props;
 
   const rows = Math.max(1, rowCount);
@@ -532,9 +541,14 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       const { row, col } = selRef.current.active;
       const original = getCell(row, col);
       ensureVisible(row, col);
+      // FR-036a — F2, Enter and a double-click (no typed character) on a long cell edit in the dialog instead.
+      if (initial === undefined && longCellThreshold !== undefined && onEditInDialog !== undefined && original.length > longCellThreshold) {
+        onEditInDialog(row, col);
+        return;
+      }
       setEditing({ row, col, original, text: initial ?? original, selectAll: selectAllText && initial === undefined });
     },
-    [editable, ensureVisible, getCell],
+    [editable, ensureVisible, getCell, longCellThreshold, onEditInDialog],
   );
 
   const finishEdit = (value: string | null, move: 'down' | 'right' | 'none', refocus: boolean): void => {

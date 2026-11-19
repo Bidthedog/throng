@@ -254,4 +254,5 @@ overrideIcon.svg - The icon on the Icons row control that copies the default ico
 rememberCommand.svg - The icon on the terminal status bar toggle that keeps a terminal’s startup command up to date with the command running when it ends, so it runs again next time. Draw it plain: throng greys it out and draws a line through it while the toggle is off.
 rememberDirectory.svg - The icon on the terminal status bar toggle that reopens a terminal in the folder it was last working in, rather than where it first started. Draw it plain: throng greys it out and draws a line through it while the toggle is off.
 terminalNotifications.svg - The icon on the terminal status bar toggle that lets that one terminal raise attention marks, pop-ups and desktop notifications, or silences it. Draw it plain: throng greys it out and draws a line through it while the toggle is off.
+cellDialog.svg - The icon on the CSV Preview Editor status bar toggle that turns the cell dialog, the editor long cells open in, on or off for that panel.
 ---- icon keys: end ----

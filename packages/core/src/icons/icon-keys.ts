@@ -159,6 +159,7 @@ export const ICON_KEYS = [
   'rememberCommand',
   'rememberDirectory',
   'terminalNotifications',
+  'cellDialog',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -473,6 +474,8 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on the terminal status bar toggle that reopens a terminal in the folder it was last working in, rather than where it first started. Draw it plain: throng greys it out and draws a line through it while the toggle is off.',
   terminalNotifications:
     'The icon on the terminal status bar toggle that lets that one terminal raise attention marks, pop-ups and desktop notifications, or silences it. Draw it plain: throng greys it out and draws a line through it while the toggle is off.',
+  cellDialog:
+    'The icon on the CSV Preview Editor status bar toggle that turns the cell dialog, the editor long cells open in, on or off for that panel.',
 };
 
 /** Is `value` one of the icon keys? */

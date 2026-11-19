@@ -18,6 +18,7 @@ import {
   PREVIEW_KIND,
   toDisplayPath,
   effectiveActivePanelId,
+  cellDialogOn,
   panelZoomLevel,
   zoomFactor,
   findPanelLocations,
@@ -711,6 +712,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                       (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
                         previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
                     ),
+                    ...((previewUi ? previewRegistry.get(previewUi.providerId) : undefined)?.cellDialog === true
+                      ? {
+                          cellDialog: {
+                            on: cellDialogOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.cellDialog,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.editLongCellsInDialog : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
                   }
                 : null,
               // 044 FR-002 — an editor's Open Preview, from the same affordance its status-bar button uses.
@@ -923,6 +934,13 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 goToEditor: () => runPreviewEditorRoute(panel, () => wsRef.current),
                 // 044 FR-122 — the one command body, from the value this window holds when the menu opened.
                 toggleSyncScroll: () => void toggleSyncScroll(settings.editor.previews.syncScroll),
+                // 073 FR-036b — the panel's own choice, saved with the panel; a panel that has not chosen reads the setting.
+                toggleCellDialog: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.cellDialog;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.editLongCellsInDialog : undefined;
+                  if (provider?.cellDialog === true) wsRef.current.updatePanelConfig(panel.id, { cellDialog: !cellDialogOn(held, setting) });
+                },
               },
             }),
           );
