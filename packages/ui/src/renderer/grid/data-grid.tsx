@@ -587,11 +587,11 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     }
     if (!dragging) return;
     const at = hit(e.clientX, e.clientY);
-    if (dragging.mode === 'cells') commitSel({ anchor: dragging.anchor, active: at });
+    if (dragging.mode === 'cells') commitSel({ anchor: dragging.anchor, active: at }, false);
     else if (dragging.mode === 'rows') {
-      commitSel(selectRow(at.row, { anchor: dragging.anchor, active: dragging.anchor, rows: true }));
+      commitSel(selectRow(at.row, { anchor: dragging.anchor, active: dragging.anchor, rows: true }), false);
     } else {
-      commitSel(selectColumn(at.col, rows, { anchor: dragging.anchor, active: dragging.anchor }));
+      commitSel(selectColumn(at.col, rows, { anchor: dragging.anchor, active: dragging.anchor }), false);
     }
   });
   const onWindowUp = useEffectEvent((): void => {
@@ -640,7 +640,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       const col = numAttr(cellEl, 'data-col');
       if (row === null || col === null) return;
       const anchor = e.shiftKey && !cur.rows ? cur.anchor : mkCell(row, col);
-      commitSel({ anchor, active: mkCell(row, col) });
+      commitSel({ anchor, active: mkCell(row, col) }, false);
       setDragging({ mode: 'cells', anchor });
       return;
     }
@@ -649,7 +649,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       const row = numAttr(rowEl, 'data-row');
       if (row === null) return;
       const next = selectRow(row, e.shiftKey && cur.rows ? cur : undefined);
-      commitSel(next);
+      commitSel(next, false);
       setDragging({ mode: 'rows', anchor: next.anchor });
       return;
     }
@@ -658,7 +658,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       const col = numAttr(colEl, 'data-col');
       if (col === null) return;
       const next = selectColumn(col, rows, e.shiftKey ? cur : undefined);
-      commitSel(next);
+      commitSel(next, false);
       setDragging({ mode: 'cols', anchor: next.anchor });
     }
   };
@@ -717,7 +717,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       if (row === null || col === null) return;
       const cur = selRef.current;
       if (cur.active.row !== row || cur.active.col !== col || cur.anchor.row !== row || cur.anchor.col !== col || cur.rows) {
-        commitSel(single(row, col));
+        commitSel(single(row, col), false);
       }
       beginEdit(undefined, true);
     }
@@ -728,11 +728,11 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
   const openMenu = (target: GridMenuTarget, point: { x: number; y: number }): void => {
     const cur = selRef.current;
     if (target.kind === 'cell') {
-      if (!inRange(rangeOf(cur, cols), target.row, target.col)) commitSel(single(target.row, target.col));
+      if (!inRange(rangeOf(cur, cols), target.row, target.col)) commitSel(single(target.row, target.col), false);
     } else if (target.kind === 'row') {
-      if (!coversRow(cur, target.row)) commitSel(selectRow(target.row));
+      if (!coversRow(cur, target.row)) commitSel(selectRow(target.row), false);
     } else if (!coversColumn(cur, target.col, rows)) {
-      commitSel(selectColumn(target.col, rows));
+      commitSel(selectColumn(target.col, rows), false);
     }
     onContextMenu?.(target, point);
   };

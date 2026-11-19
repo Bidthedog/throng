@@ -109,10 +109,14 @@ export function selectRow(row: number, extendFrom?: GridSelection): GridSelectio
   return { anchor: cell(anchorRow, 0), active: cell(row, 0), rows: true };
 }
 
-/** One whole column (header click); `extendFrom` keeps that selection's anchor column (Shift+click). */
+/**
+ * One whole column (header click); `extendFrom` keeps that selection's anchor column (Shift+click). The
+ * active cell is the column's TOP row and the anchor its last, so the range spans every row while the next
+ * arrow key moves from the top (073 FR-008a).
+ */
 export function selectColumn(col: number, rowCount: number, extendFrom?: GridSelection): GridSelection {
   const anchorCol = extendFrom ? extendFrom.anchor.col : col;
-  return { anchor: cell(0, anchorCol), active: cell(Math.max(0, rowCount - 1), col) };
+  return { anchor: cell(Math.max(0, rowCount - 1), anchorCol), active: cell(0, col) };
 }
 
 /** True when the selection covers the whole of `col` from top to bottom. */

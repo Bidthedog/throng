@@ -82,6 +82,7 @@ its failing test at the layer R10 names.
 - [x] T043 [US2] FR-037f (refines FR-037c): failing tests — a paste by chord and by menu onto a range dragged bottom-right to top-left or top-left to bottom-right lands at the range's top-left; whole rows paste from column A; one value onto a multi-cell selection fills it; one undo step. Update any existing test asserting paste "from the active cell". Then `csv-body.tsx` and the paste event in `packages/ui/src/renderer/grid/data-grid.tsx`
 - [x] T044 [US2] FR-006a: failing tests — column header menu Reset Size removes the stored width (default width shown, persisted removal through `column-widths.ts`); row header menu Reset Size collapses an expanded row; both grids. Then `csv-body.tsx`, `spreadsheet-body.tsx`, `packages/ui/src/renderer/preview/providers/csv/column-widths.ts`, `data-grid.tsx` (a handle method to collapse a row)
 - [x] T045 Docs for T042–T044 in `docs/key-bindings.md` CSV grid section — `throng-docs` audit
+- [x] T046 [US2] FR-008a: pointer selections never scroll; a column selection's active cell is its top row — tests in `packages/ui/tests/component/data-grid.test.ts`, `packages/ui/tests/unit/grid-selection.test.ts`; code in `packages/ui/src/renderer/grid/data-grid.tsx`, `packages/ui/src/renderer/grid/grid-selection.ts`
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies

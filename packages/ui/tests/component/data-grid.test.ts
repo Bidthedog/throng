@@ -399,6 +399,41 @@ describe('DataGrid column resize (FR-006)', () => {
 });
 
 describe('DataGrid scroll', () => {
+  /** Records every scroll the grid makes itself (jsdom keeps no scroll position of its own). */
+  function watchScroll(root: HTMLElement): string[] {
+    const scroller = root.querySelector<HTMLElement>('.data-grid__scroller')!;
+    const writes: string[] = [];
+    for (const prop of ['scrollTop', 'scrollLeft'] as const) {
+      Object.defineProperty(scroller, prop, {
+        configurable: true,
+        get: () => 0,
+        set: (v: number) => void writes.push(`${prop}=${v}`),
+      });
+    }
+    return writes;
+  }
+
+  it('selecting with the pointer never scrolls: a column letter, a row number, a cell, a right-click (FR-008a)', () => {
+    const g = setup({ rowCount: 500, colCount: 40 });
+    const writes = watchScroll(g.root);
+    fireEvent.mouseDown(g.root.querySelector('[role="columnheader"][data-col="3"]')!, { button: 0 });
+    fireEvent.mouseUp(window);
+    expect(g.ref.current!.selectedRange()).toEqual({ top: 0, left: 3, bottom: 499, right: 3 });
+    fireEvent.mouseDown(g.root.querySelector('[role="rowheader"][data-row="2"]')!, { button: 0 });
+    fireEvent.mouseUp(window);
+    fireEvent.mouseDown(g.cellAt(4, 4), { button: 0 });
+    fireEvent.mouseUp(window);
+    fireEvent.contextMenu(g.root.querySelector('[role="columnheader"][data-col="5"]')!, { clientX: 10, clientY: 10 });
+    expect(writes).toEqual([]);
+  });
+
+  it('keyboard movement still brings the active cell into view (FR-008)', () => {
+    const g = setup({ rowCount: 500, colCount: 40 });
+    const writes = watchScroll(g.root);
+    g.key('End', { ctrlKey: true });
+    expect(writes.length).toBeGreaterThan(0);
+  });
+
   it('reports the scroll position', () => {
     const g = setup();
     const scroller = g.root.querySelector<HTMLElement>('.data-grid__scroller')!;

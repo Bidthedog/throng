@@ -129,6 +129,11 @@ describe('selection constructors', () => {
     expect(coversColumn(extended, 5, 50)).toBe(false);
     expect(coversColumn(single(0, 3), 3, 50)).toBe(false);
   });
+
+  it('a selected column’s active cell is its top row, so the next arrow key moves from there (FR-008a)', () => {
+    expect(selectColumn(2, 50).active).toEqual({ row: 0, col: 2 });
+    expect(selectColumn(4, 50, selectColumn(2, 50)).active).toEqual({ row: 0, col: 4 });
+  });
 });
 
 describe('clampSelection (FR-025)', () => {

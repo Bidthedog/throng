@@ -91,6 +91,10 @@ the feedback, the code and precedent rather than stated by the maintainer.
 - Q13: Can a header's size be reset? → A: Yes. A column header's right-click menu offers **Reset Size**,
   putting the column back to the default width and forgetting its stored width. *(derived)* A row
   header's menu offers it too, collapsing an expanded row to one line. Both grids. (FR-006a)
+- Q14: Does selecting scroll the grid? → A: No. Selecting with the pointer — a column letter, a row number,
+  a cell, a drag or a right-click — never scrolls; the reported fault was a column click jumping to the
+  file's last row. Only keyboard movement brings the active cell into view. *(derived)* A selected
+  column's active cell is its top row, so the next arrow key moves from there. (FR-008a)
 
 ## Terminology
 
@@ -220,6 +224,8 @@ expected bytes: only the edited field differs.
     user pastes, **Then** B2:C3 hold the copied values and nothing after C3 changes (FR-037f).
 12. **Given** a resized column, **When** the user chooses **Reset Size** from its header's menu, **Then**
     it returns to the default width, and stays so after reopening the file (FR-006a).
+13. **Given** the grid scrolled to its top, **When** the user clicks a column letter, **Then** the whole
+    column is selected and the grid does not move; pressing Down then moves to row 2 (FR-008a).
 
 ---
 
@@ -337,6 +343,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
   tokens, and MUST follow the panel's zoom (044 FR-034).
 - **FR-008**: The grid MUST be navigable from the keyboard: arrows, Page Up/Down, Home/End,
   Ctrl+Home/End, and Shift with any of them to extend a selection.
+- **FR-008a** *(Q14, 2026-11-19)*: Selecting with the pointer (a cell, a drag, a row number, a column letter,
+  a right-click) MUST NOT scroll the grid; only keyboard movement (FR-008) brings the active cell into view.
+  A whole-column selection's active cell MUST be its top row. Both grids.
 - **FR-009**: The grid's code, the CSV parser and the workbook library MUST load only when a grid is
   first needed; application startup MUST load none of it (as 054 FR-047 does for diagrams).
 - **FR-010**: Every library this feature adds MUST meet #10's bar: actively maintained, under a licence
