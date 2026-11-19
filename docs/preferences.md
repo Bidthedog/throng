@@ -211,9 +211,11 @@ toggles never hide.
 
 ### Previews
 
-A preview is a read-only, rendered view of a file beside its editor. throng ships two preview types,
-**Markdown Preview** and **Mermaid Preview**; each has its own subsection below with an **Enabled**
-switch, an **Open <files> in** choice and an **Open previews in** choice, plus any settings of its own.
+A preview is a rendered view of a file beside its editor. throng ships four preview types: **Markdown
+Preview**, **Mermaid Preview**, the **CSV Preview Editor** — the one preview that edits, an editable grid
+over the file — and the read-only **Spreadsheet Preview** for workbooks. Each has its own subsection below
+with an **Enabled** switch, an **Open <files> in** choice and, for a text type, an **Open previews in**
+choice, plus any settings of its own.
 **Open <files> in** picks what opening one of its files from File Explorer, Quick Open or a link does:
 **Throng Editor** (`editor`), **Throng Preview** (`preview`) or **Default OS Program** (`os`), which hands
 the file to the program your operating system opens it with and opens no panel. A Find in Files result set
@@ -249,6 +251,32 @@ The settings in this table apply to every preview type.
 | Mermaid: Preview .mmd files | `editor.previews.providers.mermaid.enabled` | on | on · off | Offer previews of standalone `.mmd` and `.mermaid` files, drawn as their diagram. Off, every such preview closes. Diagrams inside a Markdown preview are not affected — **Markdown: Render Mermaid diagrams** controls those. |
 | Open Mermaid files in | `editor.previews.providers.mermaid.defaultOpenAction` | `preview` | `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program) | As **Open Markdown files in**, for Mermaid files. Ships as `preview`, so a diagram file opens as its diagram. |
 | Mermaid: Open previews in | `editor.previews.providers.mermaid.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for Mermaid previews; a Markdown preview is never reused for a Mermaid file, or the reverse. |
+
+#### CSV
+
+The CSV Preview Editor shows a `.csv` as a grid you edit like a document: the same unsaved marker,
+Save, Undo, Redo, **Editor: Auto save** and close-with-unsaved-changes prompt as the text editor, on the
+one document both share. A save changes only the fields you edited; every other byte of the file is kept.
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| CSV: Enabled | `editor.previews.providers.csv.enabled` | on | on · off | Offer the CSV Preview Editor for `.csv` files. Off, every CSV Preview Editor closes (asking first about unsaved changes) and its preview commands are shown disabled; a CSV still opens in the text editor. |
+| Open CSVs in | `editor.previews.providers.csv.defaultOpenAction` | `preview` | `editor` (Throng Editor) · `preview` (Throng Preview Editor) · `os` (Default OS Program) | As **Open Markdown files in**, for CSVs. Ships as `preview`, so a CSV opens in the CSV Preview Editor. |
+| CSV: Open previews in | `editor.previews.providers.csv.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for CSV Preview Editors. |
+
+#### Spreadsheet
+
+A read-only preview of a workbook — `.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`, `.fods` and `.numbers` —
+with a sheet switcher and each sheet as a grid. Formula cells show the value stored in the file; nothing is
+recalculated and no macro runs. Neither Office nor LibreOffice is needed.
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Spreadsheet: Enabled | `editor.previews.providers.spreadsheet.enabled` | on | on · off | Offer previews of workbooks. Off, every spreadsheet preview closes and their preview commands are shown disabled. |
+| Open spreadsheets in | `editor.previews.providers.spreadsheet.defaultOpenAction` | `preview` | `preview` (Throng Preview) · `os` (Default OS Program) | As **Open Markdown files in**, for workbooks. There is no editor option: a workbook is not text. |
+| Spreadsheet: Open previews in | `editor.previews.providers.spreadsheet.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for spreadsheet previews. |
+| Spreadsheet: First row is a header | `editor.previews.providers.spreadsheet.firstRowHeader` | off | on · off | Show each sheet's first row in the column header strip instead of the column letters, with the data starting at the second row. |
+| Spreadsheet: Preview size limit (MB) | `editor.previews.providers.spreadsheet.maxPreviewMb` | 25 | 5 – 500 MB, step 5 | The largest workbook a spreadsheet preview loads. A larger one shows a notice naming its size and this limit; raise the limit and choose **Refresh** to load it. |
 
 ### Links
 

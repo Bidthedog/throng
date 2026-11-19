@@ -197,6 +197,14 @@ can keep browsing or press **F2** to rename the file.
   enter Focus Mode with it. Embed a diagram file in a Markdown document with
   `![[flow.mmd]]` or `![Flow](flow.mmd)`; a plain link to it stays a link. Give an inline diagram a
   fixed height with ```` ```mermaid height=300 ```` or `![[flow.mmd|300]]`.
+- **CSV files** open in the **CSV Preview Editor**, a grid over the file: arrow keys move, Enter, F2 or
+  a double-click edits a cell, double-clicking a column letter or row number fits it to its content, and the row and column right-click menus insert and delete. It is the same document as
+  the text editor, with the same unsaved marker, Save, Undo and Auto Save, and a save rewrites only the
+  fields you changed. A file whose quotes do not balance opens a notice naming the line, with **Open in
+  Editor**. Choose where CSVs open with [Open CSVs in](preferences.md#csv).
+- **Workbooks** — `.xlsx`, `.xls`, `.ods`, `.numbers` and their relatives — preview read-only, every sheet
+  in a switcher along the bottom, formula cells showing their stored values. The limit on how large a
+  workbook loads is [a setting of its own](preferences.md#spreadsheet).
 - In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and
   Obsidian-style `[[wikilinks]]` follow like any other link, including vault-root ones such as
   `[[Docs/Guide]]`; hover one to see its target. Images embed with `![[diagram.png]]`, with

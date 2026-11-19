@@ -29,6 +29,12 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+
+- A CSV opens in the CSV Preview Editor, a grid you edit and save like a document; a save changes only
+  the fields you edited. Choose Throng Editor, Throng Preview Editor or your OS program in **Open CSVs in**.
+- Excel, LibreOffice and Numbers workbooks preview read-only, every sheet, with no office suite installed.
+
 ## 1.0.0-beta1 — 2026-11-19
 
 ### Added

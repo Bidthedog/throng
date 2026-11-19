@@ -216,6 +216,26 @@ view. Collapsing a section keeps the state of the sections inside it.
 In an editor of any other language `Ctrl+M` keeps the editor's own meaning. Whether a document opens
 with its sections expanded or collapsed is [Markdown sections open](preferences.md#editor).
 
+## CSV grid
+
+Inserting rows and columns in the CSV Preview Editor, at its active cell. Each is also on the grid's row
+or column right-click menu. Inside the grid, the arrow keys, Page Up/Down, Home/End and Ctrl+Home/End
+move (with Shift to extend), Enter, F2 or a double-click edits a cell (a double-click selects its text;
+while a cell is being edited those keys move the caret in it), Delete clears, Ctrl+C, Ctrl+X and Ctrl+V copy, cut
+and paste tab-separated cells, Ctrl+Z and Ctrl+Y undo and redo as in the text editor, and
+[`editor.save`](#editor) saves. Double-clicking a column letter fits the column to its widest value, and a
+row number expands the row to show its values in full; double-click again to undo either. Every
+right-click menu in the grid — cell, selection, row number, column letter — offers Cut, Copy and Paste; a
+paste overwrites the selection from its top-left cell, and one value pasted onto several cells fills them.
+**Reset Size** on a column letter or row number puts it back to its default size.
+
+| Command | Action id | Default | Scope | What it does |
+|---|---|---|---|---|
+| Insert Row Above | `grid.insertRowAbove` | *(unbound)* | Preview | Insert an empty row above the active cell. |
+| Insert Row Below | `grid.insertRowBelow` | *(unbound)* | Preview | Insert an empty row below the active cell. |
+| Insert Column Left | `grid.insertColumnLeft` | *(unbound)* | Preview | Insert an empty column left of the active cell. |
+| Insert Column Right | `grid.insertColumnRight` | *(unbound)* | Preview | Insert an empty column right of the active cell. |
+
 ## Search
 
 The find bar is one control routed to the active panel: in an editor it finds and replaces in the
