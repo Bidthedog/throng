@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -448,27 +448,42 @@ test('a reset that cannot be written says so, and says nothing changed (FR-006a,
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
       await expect.poll(() => readSettings(ownCfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
 
-      // Make settings.json unwritable the only way Windows reliably allows: replace it with a
-      // NON-EMPTY directory, so the atomic commit's rename fails and feature 010 rolls back.
       const settingsPath = join(ownCfgRoot, 'settings.json');
       const saved = readFileSync(settingsPath, 'utf8');
-      rmSync(settingsPath, { force: true });
-      mkdirSync(settingsPath, { recursive: true });
-      writeFileSync(join(settingsPath, 'blocker.txt'), 'x', 'utf8');
+      const posix = process.platform !== 'win32';
+      if (posix) {
+        // POSIX: a read-only config folder fails the staged write while settings.json stays readable. Replacing the
+        // file, as Windows must, lets the config watcher find it unreadable and fall back to defaults (032 FR-008
+        // G7) before the click on a slow runner, which disables the very reset under test (hosted macOS).
+        chmodSync(ownCfgRoot, 0o555);
+      } else {
+        // Windows honours no read-only folder: replace settings.json with a NON-EMPTY directory, so the atomic
+        // commit's rename fails and feature 010 rolls back.
+        rmSync(settingsPath, { force: true });
+        mkdirSync(settingsPath, { recursive: true });
+        writeFileSync(join(settingsPath, 'blocker.txt'), 'x', 'utf8');
+      }
 
-      await prefs.getByTestId('setting-reset-editor.autoSave').click();
+      try {
+        await prefs.getByTestId('setting-reset-editor.autoSave').click();
 
-      // It must NOT fail silently: the message names the operation and states nothing changed.
-      const notice = prefs.getByTestId('prefs-notice');
-      await expect(notice).toBeVisible();
-      expect((await notice.innerText()).toLowerCase()).toContain('nothing was changed');
-      // And it is dismissable.
-      await prefs.getByTestId('prefs-notice-dismiss').click();
-      await expect(notice).toHaveCount(0);
-
-      // Put the file back so teardown is clean.
-      rmSync(settingsPath, { recursive: true, force: true });
-      writeFileSync(settingsPath, saved, 'utf8');
+        // It must NOT fail silently: the message names the operation and states nothing changed.
+        const notice = prefs.getByTestId('prefs-notice');
+        await expect(notice).toBeVisible();
+        expect((await notice.innerText()).toLowerCase()).toContain('nothing was changed');
+        // And it is dismissable.
+        await prefs.getByTestId('prefs-notice-dismiss').click();
+        await expect(notice).toHaveCount(0);
+        if (posix) expect(readSettings(ownCfgRoot)?.editor?.autoSave, 'the failed reset changed the file').toBe(true);
+      } finally {
+        // Put the folder and file back so teardown is clean.
+        if (posix) {
+          chmodSync(ownCfgRoot, 0o755);
+        } else {
+          rmSync(settingsPath, { recursive: true, force: true });
+          writeFileSync(settingsPath, saved, 'utf8');
+        }
+      }
     },
     { env: { THRONG_CONFIG_ROOT: ownCfgRoot } },
   );
