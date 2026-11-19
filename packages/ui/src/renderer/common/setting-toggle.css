@@ -1,0 +1,50 @@
+/*
+ * The look of a setting toggle (constitution, Action controls › Setting toggles; 076 FR-002, 073 FR-007a), drawn ONCE
+ * for every icon control whose pressed state is an on/off setting: the terminal status bar's three, the preview status
+ * bar's four and Synchronise Scrolling on both bars. A surface adds its own layout class beside `setting-toggle`
+ * (padding, flex), never its own colours.
+ *
+ * On and off must differ at a glance, and neither may read as the other. On is the theme's full-contrast text colour on
+ * the strip's pressed background; off is the muted text colour with a line struck through the glyph, as Lucide draws its
+ * "-off" icons. The glyph ships plain (a bell, not a crossed bell) and the line is drawn here, so a user's own icon set
+ * gets the same treatment. Colours from theme tokens only.
+ */
+
+.setting-toggle {
+  /* The containing block for the off state's line. */
+  position: relative;
+}
+
+.setting-toggle:hover,
+.setting-toggle[aria-pressed='true'] {
+  background: var(--throng-colour-editorStatusStripHover);
+}
+
+.setting-toggle[aria-pressed='true'] .icon {
+  color: var(--throng-colour-text);
+}
+
+.setting-toggle[aria-pressed='false'] .icon {
+  color: var(--throng-colour-textMuted);
+}
+
+/* The line runs top left to bottom right across the glyph, at Lucide's own length and stroke weight (20 and 2 units
+   of 24). Its outline in the strip's background cuts a gap into the strokes it crosses, so it reads as a line through
+   the icon rather than a scratch on it. */
+.setting-toggle[aria-pressed='false']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--throng-size-icon, 16px) * 1.18);
+  height: calc(var(--throng-size-icon, 16px) / 12);
+  border-radius: 1px;
+  background: var(--throng-colour-textMuted);
+  box-shadow: 0 0 0 1px var(--throng-colour-editorStatusStripBg, #151a23);
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+
+.setting-toggle[aria-pressed='false']:hover::after {
+  box-shadow: 0 0 0 1px var(--throng-colour-editorStatusStripHover);
+}

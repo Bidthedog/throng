@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
-import { terminalToggleTitle, type IconKey, type TerminalToggleId } from '@throng/core';
-import { IconButton } from '../common/icon-button.js';
+import type { IconKey, TerminalToggleId } from '@throng/core';
+import { SettingToggleButton } from '../common/setting-toggle-button.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
 import { useTerminalLinkReadout } from './terminal-link-readout-store.js';
 
@@ -46,21 +46,18 @@ export function TerminalStatusBar({ panelId, flavourLabel, toggles = [] }: Termi
       <LinkTargetReadout testId={`terminal-status-link-readout-${panelId}`} target={linkReadout} />
       {toggles.length > 0 && (
         <div className="terminal-status-bar__toggles">
-          {toggles.map((t) => {
-            const name = terminalToggleTitle(t.label, t.on, t.chord);
-            return (
-              <IconButton
-                key={t.id}
-                token={t.icon}
-                className="terminal-status-bar__toggle"
-                testId={`terminal-toggle-${t.id}-${panelId}`}
-                title={name}
-                ariaLabel={name}
-                ariaPressed={t.on}
-                onClick={() => t.onToggle()}
-              />
-            );
-          })}
+          {toggles.map((t) => (
+            <SettingToggleButton
+              key={t.id}
+              token={t.icon}
+              label={t.label}
+              on={t.on}
+              chord={t.chord}
+              onToggle={t.onToggle}
+              testId={`terminal-toggle-${t.id}-${panelId}`}
+              className="terminal-status-bar__toggle"
+            />
+          ))}
         </div>
       )}
     </div>

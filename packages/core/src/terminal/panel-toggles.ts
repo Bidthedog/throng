@@ -64,12 +64,3 @@ export function resolveTerminalToggles(
     notifications: pick('notifications'),
   };
 }
-
-/**
- * The title and accessible name (FR-002): the setting, its state, and the chord when one is bound —
- * "Remember the last running command: enabled (Ctrl+Alt+R)".
- */
-export function terminalToggleTitle(label: string, on: boolean, chord?: string): string {
-  const base = `${label}: ${on ? 'enabled' : 'disabled'}`;
-  return chord ? `${base} (${chord})` : base;
-}
