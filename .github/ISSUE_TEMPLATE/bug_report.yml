@@ -17,6 +17,7 @@ body:
       description: The `bug` type label is applied for you. Add the area(s) yourself — an unlabelled issue drops out of the backlog's filters. See [CONTRIBUTING.md#labelling](https://github.com/Bidthedog/throng/blob/master/CONTRIBUTING.md#labelling).
       options:
         - label: At least one `area:*` label added (`area:terminal`, `area:editor`, `area:explorer`, `area:preferences`, `area:themes`, `area:ui-shell`, `area:projects`, `area:vcs`, `area:agents`, `area:extensibility`, `area:infra`, `area:platform`).
+        - label: An `os:*` label added for each OS the bug is known to be specific to (`os:windows`, `os:macos`, `os:linux`). Leave it off while that is unknown — the Operating system field below records where it was seen.
 
   - type: textarea
     id: observed

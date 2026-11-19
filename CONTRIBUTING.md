@@ -22,7 +22,7 @@ contributions and bar repeat offenders. Report concerns privately to the maintai
 A PR **cannot merge** unless all of these hold:
 
 - [ ] A **GitHub issue exists and a maintainer has agreed it** before the PR was opened. A maintainer agrees their own issue by ticking its **Maintainer agreement** box; anyone else's issue is agreed by a maintainer's written "agreed" in a comment, because an issue's author can tick their own box. There is no label for it.
-- [ ] The issue is **labelled** — exactly one type (`bug` / `enhancement` / `tweak` / `documentation`) and at least one `area:*`. See [Labelling](#labelling).
+- [ ] The issue is **labelled** — exactly one type (`bug` / `enhancement` / `tweak` / `documentation`), at least one `area:*`, and an `os:*` for each OS the work is specific to. See [Labelling](#labelling).
 - [ ] **Authoring** — either produced with the recommended AI toolchain, driven by **Claude Opus 4.8 or a more capable model**, *or* hand-written without AI. Either way every gate below applies.
 - [ ] **Tested at the layer that can prove it** — unit, component, integration and E2E observed green (not merely built/type-checked); every change ships coverage at the **lowest layer that can prove it**, and E2E is reserved for what no lower layer can observe (constitution V). Hand-written work is tested **at least as thoroughly as the AI workflow produces**.
 - [ ] **For AI / spec-driven changes** — a **fully specified spec** under `specs/<NNN-slug>/` with no `[NEEDS CLARIFICATION]` left, `/speckit-analyze` clean of critical/high findings, and `/speckit-converge` run so code and spec agree.
@@ -86,20 +86,24 @@ know it works* (outcomes). If they can't, it isn't clear enough yet.
 ## Labelling
 
 Labels are how the backlog is filtered and picked up, so an unlabelled issue is invisible rather
-than merely untidy. **Every issue carries exactly one type and at least one area.** The issue
-templates apply the type for you; the area is yours to add.
+than merely untidy. **Every issue carries exactly one type and at least one area**, and an OS label
+for each operating system the work is specific to. The issue templates apply the type for you; the
+area and any OS are yours to add. The two exceptions to the type rule are
+[observations and hardening](#observations-and-hardening).
 
-**This section governs pull requests too.** A PR carries the same type, area and milestone as the
-issue(s) it closes — but `gh pr create` inherits none of them, so they are added by hand, and a PR
-with no milestone is missing from the board a maintainer merges from. The PR template asks for this
-explicitly.
+**This section governs pull requests too.** A PR carries the same type, area, OS and milestone as
+the issue(s) it closes. `gh pr create` inherits none of them, so they are added by hand, and a PR
+with no milestone is missing from the board a maintainer merges from. A PR that closes several
+issues takes one type, from the issue it mainly delivers; a PR that closes none is labelled on its
+own merits. The PR template asks for this explicitly.
 
 | | Labels | Rule |
 |---|---|---|
 | **Type** (exactly one) | `bug`, `enhancement`, `tweak`, `documentation` | The type decides the template and the title prefix. |
 | **Area** (one or more) | `area:editor`, `area:explorer`, `area:terminal`, `area:preferences`, `area:themes`, `area:ui-shell`, `area:projects`, `area:vcs`, `area:agents`, `area:extensibility`, `area:infra`, `area:platform` | Where the work lands. Add every area the change touches. |
+| **OS** (when it applies) | `os:windows`, `os:macos`, `os:linux` | The operating systems the work is specific to. Cross-platform work carries none. See [OS labels](#os-labels). |
 | **Milestone** | `v1.0.0`, `v1.0.1` etc | Maintainers schedule this. Unscheduled work carries **no milestone**. |
-| **Status** (when it applies) | `needs-info`, `blocked`, `monitoring`, `under-observation`, `cannot-reproduce` | Where the issue stands. See [Status labels](#status-labels). |
+| **Status** (when it applies) | `needs-info`, `needs-refinement`, `blocked`, `monitoring`, `under-observation`, `cannot-reproduce` | Where the issue stands. See [Status labels](#status-labels). |
 | **Other** (when it applies) | `priority:high`, `hardening`, `fun`, and GitHub's defaults | See [Other labels](#other-labels). |
 
 ### Area labels
@@ -119,11 +123,32 @@ explicitly.
 | `area:infra` | Build, CI, packaging, linting, tests |
 | `area:platform` | OS support: Windows, macOS, Linux |
 
+### OS labels
+
+`os:windows`, `os:macos` and `os:linux` say **which** operating system an issue or PR concerns.
+`area:platform` says the work is OS-integration work; the OS label says where. The two are
+independent: a ConPTY fix is `area:terminal` + `os:windows`, and macOS packaging is
+`area:infra` + `os:macos`.
+
+Add an OS label only when the work is **specific** to that OS:
+
+- the defect happens only there, or its cause is in that OS's code path (ConPTY, elevation,
+  Wayland, Finder, an installer format);
+- the work only touches or delivers for that OS (a port, a package, a runner job, an integration
+  built for one OS); or
+- it has been shown to happen only there.
+
+Add one label per OS concerned, two where exactly two are. **Work that applies to every OS carries
+none** — not all three. A bug reported from one OS, with nothing yet showing that it is specific to
+it, carries none either: the bug form's *Operating system* field already records where it was seen.
+Add the label when the cause is found to be OS-specific.
+
 ### Status labels
 
 | Label | Means | Ends when |
 |---|---|---|
 | `needs-info` | A maintainer has asked the reporter for something in a comment, usually a rewrite against the issue template. Nobody plans, specs or picks the issue up meanwhile. If your issue carries it, reply there. | The reporter answers and a maintainer removes the label. |
+| `needs-refinement` | Agreed in direction, but the scope or design still needs working out before it can be specced. Nobody specs or picks it up meanwhile. | The scope is settled in the issue and a maintainer removes the label. |
 | `blocked` | Blocked by another issue or something upstream. | The blocker clears. |
 | `monitoring` | Reproducible, but the cause is outside throng. Kept open and watched. | An upstream fix reaches users, or throng decides to mitigate it. |
 | `under-observation` | Seen here, but cannot be reproduced on demand. Kept open while evidence is gathered. | It can be driven reliably, or the evidence runs out. |
@@ -152,13 +177,25 @@ Stop at the first that matches:
 - **Tweak** — adjusts something that already works without adding any capability: copy, spacing, colour, ordering, a default. If it were never done, nothing would be *missing* — only slightly worse.
 - **Documentation** — docs-only work. Takes the `documentation` label in place of a type.
 
+### Observations and hardening
+
+Two kinds of issue carry **no type label**, because no type fits them yet or at all:
+
+- **Observation** — something seen once that cannot yet be driven on demand. Title prefix
+  `[Observation]`, labelled `under-observation` and its area(s). It is not a Bug until it can be
+  reproduced; once it can, it is retitled `[Bug]`, given the `bug` type, and loses
+  `under-observation`.
+- **Hardening** — a real defect that no caller can reach. Title prefix `[Hardening]`, labelled
+  `hardening` and its area(s). It is never a release blocker.
+
 The line between Enhancement and Tweak is **new ability, not effort**: "let users pick their font
 size" is an Enhancement; "the default font size should be 14, not 13" is a Tweak. If a request
 contains both a bug and a wish, **split it** — otherwise one of the two is silently dropped when
 the other is done.
 
-**Titles** are `[Type] Summary` — the prefix matches the type label, and the summary is short
-enough to scan in a list. Detail belongs in the body, never the title.
+**Titles** are `[Type] Summary` — the prefix matches the type label (`[Bug]`, `[Enhancement]`,
+`[Tweak]`, `[Docs]`, or `[Observation]` / `[Hardening]` above), and the summary is short enough to
+scan in a list. Detail belongs in the body, never the title.
 
 ## Testing
 
