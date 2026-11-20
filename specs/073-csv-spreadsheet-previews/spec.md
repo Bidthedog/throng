@@ -606,6 +606,16 @@ Markdown and Mermaid pattern, each setting working as labelled.
   platform's autoscroll. While the middle button is held, dragging MUST scroll the grid so the table follows the
   pointer, both ways, with the **move** cursor shown over the whole grid until release. Ctrl+middle-click remains
   the zoom reset (Cmd on macOS). Both grids.
+- **FR-008g** *(maintainer, 2026-11-20: "Middle mouse should not paste in throng at all")*: The middle mouse button
+  MUST NOT paste anywhere in throng — in every window (the main window, sub-workspaces, Preferences, Print Preview,
+  the Resource Monitor, About) and inside an HTML Preview's page — whatever has the focus: an editor, a text box, a
+  grid or its cell dialog, a contenteditable, or a terminal. Neither the primary selection nor the clipboard is
+  inserted on a middle press or release, and a paste that arrives just after one is dropped. The reader's own paste
+  (a key or a menu) is unaffected; middle-drag panning (grid, diagrams, pictures, previews) and Ctrl+middle-click's
+  zoom reset (Cmd on macOS) keep working. Stated here because no spec owns throng's clipboard behaviour app-wide;
+  002 FR-039 owns the middle button's zoom gesture. *(Covers FR-008f's "MUST NOT paste" in the grid and FR-036e in the
+  cell dialog, which remain as the surfaces where it was first reported; the terminal's inclusion awaits the
+  maintainer's confirmation.)*
 - **FR-008d** *(Q30, 2026-11-19)*: A grid's selection MUST belong to the file it shows. When a panel shows
   another file (Last Preview Panel reuse, Back, Forward), the file it leaves keeps its selection in that
   history entry, and the file it shows gets back its own last selection, or A1 when it has none. Selections
@@ -738,7 +748,7 @@ Markdown and Mermaid pattern, each setting working as labelled.
   that arrives just after one. The reader's own paste (a key or the menu) is unaffected; Ctrl+middle-click stays
   the zoom reset (Cmd on macOS). Reported from hand-testing on Linux: a middle-click in the dialog's editor
   pasted. The maintainer's rule is wider — "Middle mouse should not paste in throng at all" — and belongs to
-  an app-wide requirement; this one covers what 073 added.
+  an app-wide requirement; this one covers what 073 added. *(Covered by FR-008g, 2026-11-20.)*
 - **FR-037**: Selection MUST cover text within a cell (while its editor is open), single cells, cell
   ranges and whole rows (by the row gutter). **Copy**, **Cut** and **Paste** MUST be offered on the
   grid's right-click menu and work by their chords.

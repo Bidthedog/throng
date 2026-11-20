@@ -19,6 +19,8 @@
  * Plain typing, arrows and paging stay the page's (it scrolls and selects with them) and are never replayed.
  */
 
+import { installNoMiddlePaste } from '../../../common/no-middle-paste.js';
+
 /** Whether a key in the page is the app's: a key down that is a chord with Ctrl, Alt or Meta, or a function key. */
 export function isAppKey(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'altKey' | 'metaKey'>): boolean {
   return e.ctrlKey || e.altKey || e.metaKey || /^F([1-9]|1[0-9]|2[0-4])$/.test(e.key);
@@ -147,6 +149,9 @@ export function listenToFrameInput(frame: HTMLIFrameElement, doc: Document): () 
   );
   // FR-085a — Copy is routed through the panel as anywhere else in a preview (the copy-format setting).
   on('copy', (e) => replay(frame, e, new Event('copy', { bubbles: true, cancelable: true, composed: true })));
+  // 073 FR-008g — the page's events never reach the window's guard, so the page gets its own: a middle-click pastes into
+  // no text box or contenteditable the page holds.
+  removers.push(installNoMiddlePaste(doc));
   return () => {
     for (const remove of removers) remove();
   };

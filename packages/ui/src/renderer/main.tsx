@@ -5,6 +5,7 @@ import { parseWindowIdentity } from './window-identity.js';
 import { settleConfigWrites } from './config/write-config.js';
 import { settleLayoutSaves } from './state/layout-saves.js';
 import { installWindowErrorListeners, rootErrorOptions } from './error-hooks.js';
+import { installNoMiddlePaste } from './common/no-middle-paste.js';
 import { WindowPopups } from './common/window-popups.js';
 import './theme.css';
 import { logCaught } from '@throng/core';
@@ -59,6 +60,9 @@ registerShutdownDrain();
 // 066 FR-009: this entry point serves every window kind, so the failure hooks are installed once here —
 // the window listeners for what no boundary sees, the root callbacks for what React tore down.
 installWindowErrorListeners();
+
+// 073 FR-008g: the middle mouse button never pastes, in any window this entry serves.
+installNoMiddlePaste(window);
 
 /**
  * Each window kind's app, loaded by dynamic import so a window evaluates only its own (055 SC-002).

@@ -11,7 +11,6 @@
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react';
 import { useFocusTrap } from '../common/focus-trap.js';
-import { useNoMiddlePaste } from '../common/no-middle-paste.js';
 import { StandaloneEditor } from '../editor/standalone-editor.js';
 import './cell-dialog.css';
 
@@ -52,11 +51,7 @@ export function CellDialog({ cellLabel, initial, json, onSave, onCancel, returnF
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // FR-036e — the middle button never pastes here, as it never pastes in the grid behind (FR-008f).
-  const noMiddlePaste = useNoMiddlePaste();
-
   const onKeyDownCapture = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
-    noMiddlePaste.onKeyDownCapture(e);
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
@@ -82,10 +77,6 @@ export function CellDialog({ cellLabel, initial, json, onSave, onCancel, returnF
         }}
         tabIndex={-1}
         onKeyDownCapture={onKeyDownCapture}
-        onMouseDownCapture={noMiddlePaste.onMouseDownCapture}
-        onMouseUpCapture={noMiddlePaste.onMouseUpCapture}
-        onAuxClickCapture={noMiddlePaste.onAuxClickCapture}
-        onPasteCapture={noMiddlePaste.onPasteCapture}
         onKeyDown={trap.onKeyDown}
       >
         <h3 className="modal__title" id="cell-dialog-title">

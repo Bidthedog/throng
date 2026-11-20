@@ -154,3 +154,29 @@ describe('focus and the menu (FR-083a, FR-085a)', () => {
     expect(seen).toHaveLength(0);
   });
 });
+
+/*
+ * 073 FR-008g — the page's events never reach the window's guard, so the page has its own: a middle click pastes into no
+ * text box or contenteditable the page holds, while Ctrl+middle-click is still replayed for the zoom reset.
+ */
+describe('a middle click in the page pastes nowhere (073 FR-008g)', () => {
+  it('a contenteditable in the page: the press is cancelled and the paste never reaches it', async () => {
+    const { doc } = await mount();
+    const editable = doc.body.appendChild(doc.createElement('div'));
+    editable.contentEditable = 'true';
+    const heard: Event[] = [];
+    editable.addEventListener('paste', (e) => heard.push(e));
+    const press = new (pageWindow(doc).MouseEvent)('mousedown', { bubbles: true, cancelable: true, button: 1 });
+    editable.dispatchEvent(press);
+    editable.dispatchEvent(new (pageWindow(doc).MouseEvent)('mouseup', { bubbles: true, cancelable: true, button: 1 }));
+    editable.dispatchEvent(new (pageWindow(doc).Event)('paste', { bubbles: true, cancelable: true }));
+    expect(press.defaultPrevented).toBe(true);
+    expect(heard).toHaveLength(0);
+  });
+
+  it('Ctrl+middle-click is still replayed on the frame for the zoom reset', async () => {
+    const { doc, seen } = await mount();
+    inPage(doc).dispatchEvent(new (pageWindow(doc).MouseEvent)('mousedown', { bubbles: true, cancelable: true, button: 1, ctrlKey: true }));
+    expect(seen.filter((e) => e.type === 'mousedown')).toHaveLength(1);
+  });
+});

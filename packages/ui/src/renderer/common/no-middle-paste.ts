@@ -1,49 +1,82 @@
 /**
- * The middle mouse button never pastes (maintainer, 2026-11-20: "Middle mouse should not paste in throng at all").
+ * 073 FR-008g — the middle mouse button never pastes, anywhere in throng (maintainer, 2026-11-20: "Middle mouse should
+ * not paste in throng at all").
  *
  * On Linux, Chromium pastes the primary selection (or, where there is none, the clipboard) into the focused editor as
- * the DEFAULT of a middle-button release, delivered as a `paste` event. Spread these capture-phase handlers on an
- * element and nothing inside it takes that paste: the press, release and `auxclick` are cancelled, and a paste arriving
- * within {@link MIDDLE_PASTE_WINDOW_MS} of a middle press or release is dropped before the editor sees it. A key press
- * ends that window, so a Ctrl+V straight after is the reader's own.
+ * the DEFAULT of a middle-button release, delivered as a `paste` event. The guard, installed once per window at the
+ * renderer entry (`main.tsx`) and once in an HTML Preview's page (`frame-input.ts`):
+ * - cancels the default of every middle press, release and `auxclick` (no paste, no autoscroll), with a modifier or not;
+ * - drops a `paste` that arrives within {@link MIDDLE_PASTE_WINDOW_MS} of one, before any editor, input or terminal
+ *   sees it. A key press ends that window, so a Ctrl+V straight after is the reader's own.
  *
- * Ctrl+middle-click (Cmd on macOS, 070 FR-030) is the zoom-reset gesture and is left alone. The grid keeps its own
- * equivalent (`data-grid.tsx`, 073 FR-008f), which also turns the press into a pan.
+ * What it leaves alone: `pointerdown` (the previews' middle-drag pan reads `defaultPrevented` there, and cancelling it
+ * would drop the compatibility `mousedown` the zoom reset is bound to), and every listener — cancelling a default
+ * stops nothing from hearing the event, so the grid's and the diagrams' pans and Ctrl+middle-click's zoom reset
+ * (`mouse-zoom.ts`) run as before.
+ *
+ * The terminal needs no case of its own: its container already swallows every native paste (#142), and this drops the
+ * middle-click's before it gets there.
  */
-import { useMemo, useRef, type ClipboardEvent, type KeyboardEvent, type MouseEvent } from 'react';
-import { primaryModifierHeld } from '../config/host-modifiers.js';
-
 /** A paste this soon after a middle press or release is that click's, not the reader's. */
 export const MIDDLE_PASTE_WINDOW_MS = 500;
 
-export interface NoMiddlePasteHandlers {
-  onMouseDownCapture(e: MouseEvent<HTMLElement>): void;
-  onMouseUpCapture(e: MouseEvent<HTMLElement>): void;
-  onAuxClickCapture(e: MouseEvent<HTMLElement>): void;
-  onKeyDownCapture(e: KeyboardEvent<HTMLElement>): void;
-  onPasteCapture(e: ClipboardEvent<HTMLElement>): void;
+interface MouseLike {
+  readonly button: number;
+  preventDefault(): void;
+}
+interface PasteLike {
+  preventDefault(): void;
+  stopImmediatePropagation(): void;
 }
 
-export function useNoMiddlePaste(): NoMiddlePasteHandlers {
-  const lastMiddle = useRef(0);
-  return useMemo(() => {
-    const swallow = (e: MouseEvent<HTMLElement>): void => {
-      if (e.button !== 1 || primaryModifierHeld(e)) return;
+export interface MiddlePasteGuard {
+  /** A `mousedown`, `mouseup` or `auxclick`. */
+  mouse(e: MouseLike): void;
+  /** A `keydown`: the reader's own paste may follow. */
+  key(): void;
+  paste(e: PasteLike): void;
+}
+
+/** The guard's decisions, with the clock injected. */
+export function createMiddlePasteGuard(now: () => number = Date.now): MiddlePasteGuard {
+  let lastMiddle = Number.NEGATIVE_INFINITY;
+  return {
+    mouse(e) {
+      if (e.button !== 1) return;
       e.preventDefault();
-      lastMiddle.current = Date.now();
-    };
-    return {
-      onMouseDownCapture: swallow,
-      onMouseUpCapture: swallow,
-      onAuxClickCapture: swallow,
-      onKeyDownCapture: () => {
-        lastMiddle.current = 0;
-      },
-      onPasteCapture: (e) => {
-        if (Date.now() - lastMiddle.current >= MIDDLE_PASTE_WINDOW_MS) return;
-        e.preventDefault();
-        e.stopPropagation();
-      },
-    };
-  }, []);
+      lastMiddle = now();
+    },
+    key() {
+      lastMiddle = Number.NEGATIVE_INFINITY;
+    },
+    paste(e) {
+      if (now() - lastMiddle >= MIDDLE_PASTE_WINDOW_MS) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    },
+  };
+}
+
+type Listenable = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
+
+/**
+ * Install the guard on `target` (a window, or a frame's document) in the capture phase, so it runs before anything
+ * inside. The answer removes it.
+ */
+export function installNoMiddlePaste(target: Listenable, now?: () => number): () => void {
+  const guard = createMiddlePasteGuard(now);
+  const mouse = (e: Event): void => guard.mouse(e as MouseEvent);
+  const key = (): void => guard.key();
+  const paste = (e: Event): void => guard.paste(e);
+  const listeners: [string, (e: Event) => void][] = [
+    ['mousedown', mouse],
+    ['mouseup', mouse],
+    ['auxclick', mouse],
+    ['keydown', key],
+    ['paste', paste],
+  ];
+  for (const [type, fn] of listeners) target.addEventListener(type, fn, true);
+  return () => {
+    for (const [type, fn] of listeners) target.removeEventListener(type, fn, true);
+  };
 }

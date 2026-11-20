@@ -61,6 +61,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-101 | [General] Preview titles and icons for all eight types | untested | | | |
 | MT-102 | [General] One Go to dialog for lines, rows, pages and headings | untested | | | |
 | MT-103 | [General] Print… shown everywhere, enabled only where it prints | untested | | | |
+| MT-104 | [General] The middle mouse button never pastes | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -924,3 +925,25 @@ Paths: `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/s
 
 ### Negative cases
 - Print… is never missing from any preview menu; it is greyed, not hidden.
+
+## MT-104: [General] The middle mouse button never pastes
+
+Covers: 073 FR-008g, 073 FR-008f, 073 FR-036e
+Paths: `packages/ui/src/renderer/common/no-middle-paste.ts`, `packages/ui/src/renderer/main.tsx`, `packages/ui/src/renderer/preview/providers/html/frame-input.ts`, `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/middle-drag-scroll.ts`, `packages/ui/src/renderer/preview/diagram/**`
+
+### Steps
+1. On Linux, select a word in another app (the primary selection) and copy a different word (the clipboard).
+2. Open a text file in the editor, click into its text, then middle-click in it. Nothing is pasted and the caret does not move.
+3. Open a CSV in the CSV Preview Editor. Middle-click a cell, then open a cell's in-place editor and middle-click in it. Nothing is pasted.
+4. Double-click a long or multi-line cell to open the cell dialog and middle-click in its text. Nothing is pasted. Press Ctrl+V: the clipboard pastes.
+5. In the file tree, press F2 on a file to rename it and middle-click in the name box. Nothing is pasted. Press Escape.
+6. Open Preferences, click into a number box (a size or duration setting), and middle-click in it. Nothing is pasted.
+7. Open Print Preview from a Markdown preview (Ctrl+P), click into the page range or copies field, and middle-click in it. Nothing is pasted.
+8. Open a terminal and middle-click in it. Nothing is pasted at the prompt.
+9. Open an HTML preview of a page with a text box, click into the text box, and middle-click it. Nothing is pasted.
+10. Hold the middle button over a Mermaid diagram and drag: the diagram pans with the move cursor. Do the same in a PDF preview: the pages scroll with the pointer.
+11. Ctrl+middle-click a panel that is zoomed in: its zoom resets to 100%, and nothing is pasted.
+
+### Negative cases
+- No middle-click anywhere in throng starts Chromium's autoscroll (the round scroll icon).
+- A Ctrl+V straight after a middle-click still pastes.

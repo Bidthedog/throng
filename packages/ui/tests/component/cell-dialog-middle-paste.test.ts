@@ -1,8 +1,9 @@
 /**
- * 073 FR-036e — the middle mouse button never pastes in the cell dialog (maintainer, 2026-11-20: "Middle mouse should
- * not paste in throng at all"). Reported from hand-testing on Linux: a middle-click in the dialog's editor pasted, where
- * the grid behind it (FR-008f) already refused. Confirmed in the running app: the dialog's text `two lines` became
- * `twoCLIPBOARDlines` after one middle-click.
+ * 073 FR-036e, now covered by FR-008g — the middle mouse button never pastes in the cell dialog (maintainer, 2026-11-20:
+ * "Middle mouse should not paste in throng at all"). Reported from hand-testing on Linux: a middle-click in the dialog's
+ * editor pasted, where the grid behind it (FR-008f) already refused. Confirmed in the running app: the dialog's text
+ * `two lines` became `twoCLIPBOARDlines` after one middle-click. The window's guard (`no-middle-paste.ts`, installed
+ * by `main.tsx`) is installed here as the entry installs it, with the dialog's real CodeMirror editor under it.
  *
  * Chromium's middle-click paste is the DEFAULT of the middle button's press and release, delivered as a `paste` event to
  * the focused editor; jsdom performs no default, so what is asserted is that each of them is cancelled, and that a paste
@@ -12,10 +13,16 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CellDialog } from '../../src/renderer/grid/cell-dialog.js';
+import { installNoMiddlePaste } from '../../src/renderer/common/no-middle-paste.js';
 
+let uninstall: (() => void) | undefined;
+beforeEach(() => {
+  uninstall = installNoMiddlePaste(window);
+});
 afterEach(() => {
+  uninstall?.();
   document.body.replaceChildren();
 });
 
@@ -36,7 +43,7 @@ function paste(target: HTMLElement, text: string): Event {
   return e;
 }
 
-describe('the cell dialog refuses the middle button\'s paste (073 FR-036e)', () => {
+describe('the cell dialog refuses the middle button\'s paste (073 FR-036e, FR-008g)', () => {
   it('cancels the press, the release and the auxclick, so Chromium starts no paste and no autoscroll', async () => {
     const content = await mount();
     for (const type of ['mousedown', 'mouseup', 'auxclick'] as const) {
@@ -64,10 +71,12 @@ describe('the cell dialog refuses the middle button\'s paste (073 FR-036e)', () 
     expect(content.textContent).toContain('mine');
   });
 
-  it('leaves Ctrl+middle-click alone: it is the zoom reset (070 FR-030)', async () => {
+  it('Ctrl+middle-click still reaches the window, where the zoom reset hears it (070 FR-030)', async () => {
     const content = await mount();
-    const e = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 1, ctrlKey: true });
-    act(() => void content.dispatchEvent(e));
-    expect(e.defaultPrevented).toBe(false);
+    const heard = vi.fn();
+    window.addEventListener('mousedown', heard);
+    act(() => void content.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 1, ctrlKey: true })));
+    window.removeEventListener('mousedown', heard);
+    expect(heard).toHaveBeenCalledTimes(1);
   });
 });
