@@ -13,7 +13,7 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 | MT-07 | Go to Row, Line and Page | untested | | | |
 | MT-08 | Wrapping cells | untested | | | |
 | MT-09 | Locking the first row and column | untested | | | |
-| MT-10 | A CSV and its editor in step; toggle looks | needs retest | | | failed: When I have scroll-sync enabled in a very large file (3000+ lines, possibly less), scrolling and interacting with either editor is extremely slow and lagged. |
+| MT-10 | A CSV and its editor in step; toggle looks | needs retest | | | failed: scrolling from the CSV editor with scroll sync on is still lagging a lot. Scrolling in the synced editor is not as bad (though its worse with wrapped lines), but it still happens. |
 
 ## MT-01: A CSV opens as a grid
 
@@ -199,7 +199,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 
 ## MT-10: A CSV and its editor in step; toggle looks
 
-Covers: FR-033c, FR-033d, FR-033e, FR-033f, FR-007a
+Covers: FR-033c, FR-033d, FR-033e, FR-033f, FR-033g, SC-009, FR-007a
 Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/editor/status-strip.tsx`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/preview/provider.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/editor/**`, `packages/ui/src/renderer/preview/providers/markdown/**`
 
 ### Steps
@@ -212,6 +212,8 @@ Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/s
 7. Scroll the grid with Wrap on, so its rows are taller than the editor's lines: the highlight sits on the row in the middle of the grid, and on the matching line in the editor wherever that is, not necessarily its middle.
 8. Do the same with a long Markdown file and its preview, the preview gutter enabled: the editor highlights the matching line and the preview's gutter shows a marker beside the matching block. Turn the Markdown preview gutter off in Preferences: no marker, the editor highlight remains.
 9. Preferences › Editor › Previews › **Scroll-sync highlight duration** shows 1.5. Set it to 4: both highlights stay about four seconds after you stop scrolling. Set it to 0: no highlight in either view.
+10. Scroll either view continuously: no highlight while you scroll; about 0.3 s after you stop it appears on the pair in step. Start scrolling again: it clears.
+11. With a 3,000+ row CSV and Wrap on, scroll the grid and then the editor quickly: both views keep up with no visible lag.
 
 ### Negative cases
 - A CSV preview has no Go to Heading; Ctrl+G still opens Go to Row.
