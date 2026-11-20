@@ -57,6 +57,18 @@ export const PAGE_SIZE_MM: Readonly<Record<PrintPageSize, { readonly width: numb
 };
 
 export type PrintOrientation = 'portrait' | 'landscape';
+
+/** 075 FR-068b — `size` in millimetres, turned for `orientation` (width × height). */
+export function paperSizeMm(size: PrintPageSize, orientation: PrintOrientation): { width: number; height: number } {
+  const { width, height } = PAGE_SIZE_MM[size];
+  return orientation === 'landscape' ? { width: height, height: width } : { width, height };
+}
+
+/** 075 FR-068b (2026-11-20) — a paper size's option label: its name, and its size in mm for `orientation`. */
+export function paperSizeLabel(size: PrintPageSize, orientation: PrintOrientation): string {
+  const { width, height } = paperSizeMm(size, orientation);
+  return `${size} (${width} × ${height} mm)`;
+}
 export type PrintMarginPreset = 'default' | 'none' | 'minimum' | 'custom';
 
 export interface PrintMargins {

@@ -15,6 +15,8 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Reac
 import {
   PRINT_FIELDS,
   PRINT_PAGE_SIZES,
+  paperSizeLabel,
+  paperSizeMm,
   PRINT_PALETTE,
   formatGrouped,
   logCaught,
@@ -88,6 +90,24 @@ const PAGE_KEYS: Record<string, number | 'first' | 'last'> = {
 /** Whether `target` is a field that takes these keys itself. */
 function takesKeys(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.matches('input, select, textarea') || target.isContentEditable);
+}
+
+/** The margins drawing's longer side, in em: the page drawn at the paper's shape within it. */
+const SHEET_LONG_EM = 7;
+
+/**
+ * 075 FR-068b (the maintainer, 2026-11-20: "When 'landscape' is selected, the example page for margins should switch
+ * to landscape") — the drawn page in the paper's proportions, turned for the orientation, its longer side
+ * {@link SHEET_LONG_EM}. Its shorter side stays wider than a margin box and taller than a side box for every paper
+ * offered, so the page still fills its cell and the gap round it stays even.
+ */
+function sheetSize(settings: PrintSettings): CSSProperties {
+  const { width, height } = paperSizeMm(settings.pageSize, settings.orientation);
+  const long = Math.max(width, height);
+  return {
+    '--print-sheet-width': `${((width / long) * SHEET_LONG_EM).toFixed(3)}em`,
+    '--print-sheet-height': `${((height / long) * SHEET_LONG_EM).toFixed(3)}em`,
+  } as CSSProperties;
 }
 
 export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPreviewProps): ReactElement {
@@ -412,7 +432,7 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                 <select value={settings.pageSize} onChange={(e) => update({ pageSize: e.target.value as PrintSettings['pageSize'] })} data-testid="print-page-size">
                   {PRINT_PAGE_SIZES.map((size) => (
                     <option key={size} value={size}>
-                      {size}
+                      {paperSizeLabel(size, settings.orientation)}
                     </option>
                   ))}
                 </select>
@@ -456,7 +476,7 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                       </span>
                     </span>
                   ))}
-                  <span className="print-preview__margins-sheet" aria-hidden="true" />
+                  <span className="print-preview__margins-sheet" aria-hidden="true" style={sheetSize(settings)} />
                 </div>
               )}
               <label className="print-preview__field print-preview__field--inline">

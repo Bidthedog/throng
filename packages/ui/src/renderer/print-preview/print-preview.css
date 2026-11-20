@@ -174,14 +174,16 @@
 }
 
 /*
- * The paper: the print palette's page colour, white in every theme. FR-068b — it fills its cell, as wide as the top
- * and bottom boxes and at least a page's height, so the grid's one gap is the space on every side of it.
+ * The paper: the print palette's page colour, white in every theme. FR-068b — drawn in the paper's shape, turned for
+ * the orientation, and large enough to fill its cell, so the grid's one gap is the space on every side of it.
  */
 .print-preview__margins-sheet {
   grid-area: sheet;
   justify-self: stretch;
   align-self: stretch;
-  min-height: 6.5em;
+  /* 18:10 — the paper's shape, turned for the orientation (set inline by the form). */
+  width: var(--print-sheet-width);
+  height: var(--print-sheet-height);
   background: var(--print-paper);
   border: 1px solid var(--throng-colour-border);
   border-radius: 2px;

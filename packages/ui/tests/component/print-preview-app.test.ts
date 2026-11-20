@@ -443,7 +443,32 @@ describe('the settings form (FR-066, FR-069; 2026-11-20)', () => {
     const sheet = rule('.print-preview__margins-sheet');
     expect(sheet).toMatch(/justify-self:\s*stretch/);
     expect(sheet).toMatch(/align-self:\s*stretch/);
-    expect(sheet, 'a fixed width leaves the sheet narrower than its column').not.toMatch(/(?:^|[;\s])width:/);
+    // 18:10 — its size is the paper's, turned for the orientation (set inline, below).
+    expect(sheet).toMatch(/width:\s*var\(--print-sheet-width\)/);
+    expect(sheet).toMatch(/height:\s*var\(--print-sheet-height\)/);
+  });
+
+  // The maintainer, 2026-11-20 18:10 — "When 'landscape' is selected, the example page for margins should switch to
+  // landscape", and "For 'Paper size', show the size in mm next to each option, depending on the orientation selected".
+  it('draws the margins page in the paper\'s shape, and labels each paper size in mm, both turned with the orientation (FR-068b)', async () => {
+    await mount(bridge({ ...JOB, settings: { ...JOB.settings, pageSize: 'A4', orientation: 'portrait', margins: { preset: 'custom', custom: { top: 10, right: 10, bottom: 10, left: 10 } } } }));
+    const sheet = (): HTMLElement => screen.getByTestId('print-margins-page').querySelector<HTMLElement>('.print-preview__margins-sheet')!;
+    const size = (): { w: number; h: number } => ({
+      w: Number.parseFloat(sheet().style.getPropertyValue('--print-sheet-width')),
+      h: Number.parseFloat(sheet().style.getPropertyValue('--print-sheet-height')),
+    });
+    const label = (value: string): string | null => (screen.getByTestId('print-page-size') as HTMLSelectElement).querySelector(`option[value="${value}"]`)!.textContent;
+
+    expect(size().h).toBeGreaterThan(size().w);
+    expect(size().h / size().w).toBeCloseTo(297 / 210, 2);
+    expect(label('A4')).toBe('A4 (210 × 297 mm)');
+
+    fireEvent.change(screen.getByTestId('print-orientation'), { target: { value: 'landscape' } });
+    await settle();
+    expect(size().w).toBeGreaterThan(size().h);
+    expect(size().w / size().h).toBeCloseTo(297 / 210, 2);
+    expect(label('A4')).toBe('A4 (297 × 210 mm)');
+    expect(label('Letter')).toBe('Letter (279.4 × 215.9 mm)');
   });
 
   // The maintainer, 2026-11-20 18:00 — "center align the top and bottom boxes, and have the 'mm' offset so the boxes are

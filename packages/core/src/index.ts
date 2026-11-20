@@ -1517,6 +1517,8 @@ export {
   MARGIN_MAX_MM,
   MARGIN_PRESETS_MM,
   PAGE_SIZE_MM,
+  paperSizeLabel,
+  paperSizeMm,
   PRINT_FIELDS,
   PRINT_PAGE_SIZES,
   SCALE_MAX,
