@@ -149,7 +149,7 @@ export function ToolbarControls(): ReactElement {
         value={String(settings.intervalSeconds)}
         onChange={(e) =>
           void writeConfigPatch({ kind: 'settings' }, [
-            { path: ['resourceMonitor', 'captureIntervalSeconds'], value: Number(e.target.value) },
+            { path: ['resourceMonitor', 'captureIntervalMs'], value: Number(e.target.value) * 1000 },
           ])
         }
       >

@@ -5,6 +5,7 @@
  */
 import { readableTextOn } from './colour-math.js';
 import { deriveFileIconColours } from './file-icon-colours.js';
+import { deriveCalloutColours } from './callout-colours.js';
 
 export interface ThemeFonts {
   family: string;
@@ -360,6 +361,8 @@ export const THRONG_THEME: Theme = {
     destroyButtonHoverText: '#ffffff',
     /* 069 FR-061 — the file icon categories, derived to clear 4.5:1 on every background they sit on. */
     ...deriveFileIconColours(THRONG_FILE_ICON_BACKGROUNDS),
+    /* 075 FR-022 — the seven callout roles, derived to clear body-text contrast on their own tint. */
+    ...deriveCalloutColours('#0c0f16', '#d6deea'),
   },
   fonts: {
     family: "'Segoe UI', system-ui, sans-serif",
@@ -478,6 +481,11 @@ export const OPTIONAL_THEME_COLOUR_TOKENS: readonly string[] = Object.freeze([
   'fileIconArchive',
   'fileIconScript',
   'fileIconOther',
+  // 074 FR-027a, FR-027b (2026-11-19) — an Image or SVG preview's canvas, and the hatch drawn behind a picture's
+  // transparent areas. Unset, both are mixed from the editor background and text colour (diagram.css), so every
+  // theme gets a canvas apart from its editor and a hatch that reads against the canvas without a value of its own.
+  'pictureCanvas',
+  'pictureHatch',
 ]);
 
 export const TOKEN_PARENT: Readonly<Record<string, string>> = Object.freeze({
@@ -567,6 +575,8 @@ export function toCssVariables(theme: Theme): Record<string, string> {
   //   iconButtonSurface    unset ⇒ `transparent`   ⇒ an icon button shows only its icon until pointed at
   //   titleBarSurface      unset ⇒ the app background a tenth of the way toward the text ⇒ a bar apart from its window
   //   fileIcon*            unset ⇒ the Icon Colour ⇒ that category's file icons look like every other icon
+  //   pictureCanvas        unset ⇒ the editor background a twentieth of the way toward the text ⇒ a canvas apart from it
+  //   pictureHatch         unset ⇒ the editor background a fifth of the way toward the text ⇒ a hatch that reads on it
   //
   // Emptiness counts as unset, not as a colour: clearing the field in the Themes editor is exactly
   // how a user says "go back to inheriting", and the resolver already agrees (see resolveSplitColour).

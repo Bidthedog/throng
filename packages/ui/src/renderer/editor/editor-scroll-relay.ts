@@ -49,9 +49,11 @@
 import { EditorView } from '@codemirror/view';
 import type { StateEffect } from '@codemirror/state';
 import {
+  editorCentreLine,
   editorTopLine,
   forgetEditorTopLine,
   publishEditorDocLines,
+  registerEditorCentreReader,
   publishEditorTopLine,
   registerEditorScroller,
   type TopLineView,
@@ -186,6 +188,7 @@ export function attachEditorScrollRelay(view: RelayView, panelId: string, frames
   const unregister = registerEditorScroller(panelId, scroller);
   // A preview that mounted first finds out this view exists, and where it is (FR-113).
   publishEditorDocLines(panelId, view.state.doc.lines);
+  const unregisterCentre = registerEditorCentreReader(panelId, () => editorCentreLine(view));
   publishEditorTopLine(panelId, editorTopLine(view));
 
   return {
@@ -210,6 +213,7 @@ export function attachEditorScrollRelay(view: RelayView, panelId: string, frames
       publishFrame = null;
       lapseFrame = null;
       unregister();
+      unregisterCentre();
       forgetEditorTopLine(panelId);
     },
   };

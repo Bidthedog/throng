@@ -15,7 +15,7 @@ import {
   guardedSettingsValidator,
   logExpected,
   parseKeybindings,
-  planSettingsUpgrade,
+  applySettingsUpgrade,
   planThemeUpgrade,
   planThemeIconSetUpgrade,
   planThemeValueUpgrade,
@@ -307,10 +307,9 @@ export class ShippedDefaultsService {
       logExpected('shipped-defaults-service: upgrade settings', 'a hand-edited settings.json may not parse; it is left alone for the user to repair', error);
       return null;
     }
-    const leaves = planSettingsUpgrade(parsed, this.shipped);
-    if (leaves.length === 0) return null;
-    let next = parsed;
-    for (const leaf of leaves) next = setAtPath(next as Record<string, unknown>, leaf.path, leaf.value);
+    // One implementation of "how a plan becomes a document" (077 FR-002 adds renames, which remove a key as well).
+    const next = applySettingsUpgrade(parsed, this.shipped);
+    if (next === parsed) return null; // nothing owed
     return { path: this.store.pathOf(doc), content: FileConfigStore.serialize(next) };
   }
 

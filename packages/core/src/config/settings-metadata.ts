@@ -34,7 +34,7 @@ import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from '.
 // 044 — imports neither this module nor `app-settings.ts`, so no cycle (see its header).
 import { previewSettingsDescriptors } from './preview-settings.js';
 import { validateTitleTemplate } from '../terminal/title-template.js';
-import { minimumIntervalFor, resolveResourceMonitorSettings } from '../resources/settings-resolution.js';
+import { CAPTURE_INTERVAL_MS, minimumIntervalFor, resolveResourceMonitorSettings } from '../resources/settings-resolution.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
@@ -177,16 +177,19 @@ const MARKDOWN_SECTIONS_OPEN: FieldDescriptor = {
  */
 const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
   {
-    key: 'resourceMonitor.captureIntervalSeconds',
-    label: 'Capture interval (seconds)',
+    key: 'resourceMonitor.captureIntervalMs',
+    label: 'Capture interval',
     description:
-      'How often throng measures its own CPU, memory, GPU and I/O, for the status bar and the Resource Monitor alike. A longer history needs a slower capture: up to 5 minutes allows 2 seconds, up to 10 minutes 5, up to 20 minutes 15, and up to 30 minutes 30.',
+      'How often throng measures its own CPU, memory, GPU and I/O, for the status bar and the Resource Monitor alike. A longer history needs a slower capture: when the history window chosen needs a slower one than this, the capture interval in force is shown beside it.',
     group: 'Resource Monitor',
     control: 'slider',
-    min: 2,
-    max: 60,
-    step: 1,
-    minFor: (settings) => minimumIntervalFor(settings.resourceMonitor.historyMinutes),
+    // 077 FR-001 — stored in ms, shown in seconds.
+    storedUnit: 'ms',
+    display: 's',
+    min: CAPTURE_INTERVAL_MS.min,
+    max: CAPTURE_INTERVAL_MS.max,
+    step: CAPTURE_INTERVAL_MS.step,
+    minFor: (settings) => minimumIntervalFor(settings.resourceMonitor.historyMs / 60_000) * 1000,
     note: (settings) => {
       const r = resolveResourceMonitorSettings(settings.resourceMonitor);
       return r.intervalRaised
@@ -195,68 +198,88 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     },
   },
   {
-    key: 'resourceMonitor.historyMinutes',
-    label: 'History window (minutes)',
+    key: 'resourceMonitor.historyMs',
+    label: 'History window',
     description:
-      'How many minutes of history the Resource Monitor keeps for each process while it is open. Nothing is kept once it closes.',
+      'How much history the Resource Monitor keeps for each process while it is open. Nothing is kept once it closes.',
     group: 'Resource Monitor',
     control: 'slider',
-    min: 1,
-    max: 30,
-    step: 1,
+    // 077 FR-001 — stored in ms, shown in minutes.
+    storedUnit: 'ms',
+    display: 'min',
+    min: 60_000,
+    max: 1_800_000,
+    step: 60_000,
+    hardMax: 1_800_000,
   },
   {
     key: 'resourceMonitor.cpuWarningPercent',
-    label: 'CPU warning (%)',
+    label: 'CPU warning',
     description:
       'The share of the whole machine\'s CPU at which a figure is shown in the warning colour. Kept below the critical level.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in percent.
+    storedUnit: 'percent',
+    display: 'own',
     min: 1,
     max: 100,
     step: 1,
   },
   {
     key: 'resourceMonitor.cpuCriticalPercent',
-    label: 'CPU critical (%)',
+    label: 'CPU critical',
     description: 'The share of the whole machine\'s CPU at which a figure is shown in the critical colour.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in percent.
+    storedUnit: 'percent',
+    display: 'own',
     min: 1,
     max: 100,
     step: 1,
   },
   {
     key: 'resourceMonitor.memoryWarningPercent',
-    label: 'Memory warning (%)',
+    label: 'Memory warning',
     description:
       'The share of installed memory at which a figure is shown in the warning colour. Kept below the critical level.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in percent.
+    storedUnit: 'percent',
+    display: 'own',
     min: 1,
     max: 100,
     step: 1,
   },
   {
     key: 'resourceMonitor.memoryCriticalPercent',
-    label: 'Memory critical (%)',
+    label: 'Memory critical',
     description: 'The share of installed memory at which a figure is shown in the critical colour.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in percent.
+    storedUnit: 'percent',
+    display: 'own',
     min: 1,
     max: 100,
     step: 1,
   },
   {
     key: 'resourceMonitor.popoverDelayMs',
-    label: 'Popup delay (ms)',
+    label: 'Popup delay',
     description:
       'How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    hardMax: 10000,
     min: 0,
-    max: 5000,
-    step: 50,
+    max: 1500,
+    step: 25,
   },
 ];
 
@@ -343,6 +366,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description: 'The widest (px) the Projects sidebar pane can be dragged.',
     group: 'Panes',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in px.
+    storedUnit: 'px',
+    display: 'own',
     min: 200,
     max: 1200,
     step: 10,
@@ -353,6 +379,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description: 'The widest (px) the File Explorer pane can be dragged.',
     group: 'Panes',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in px.
+    storedUnit: 'px',
+    display: 'own',
     min: 200,
     max: 1200,
     step: 10,
@@ -366,8 +395,12 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'General',
     subgroup: 'Behaviour',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    hardMax: 10000,
     min: 0,
-    max: 2000,
+    max: 1500,
     step: 25,
   },
 
@@ -387,6 +420,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How long the tab strip takes to ease to a new position when it scrolls, in milliseconds. Zero scrolls instantly — as does the system "reduce motion" setting, which overrides this without changing it.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
     // US7 / FR-055. Was 3000. Three seconds to ease the strip to a new position is not a preference
     // anyone holds — the original ceiling was invented rather than chosen, and a range whose top
@@ -402,6 +438,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How long the pointer must rest on a tab before its close button will act, in milliseconds. The delay is what stops a click landing on a tab the pointer was only passing over.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
     // US7 / FR-056. Was 2000, narrowed for the same reason as the scroll animation above: a delay
     // measured in seconds is not a guard against a mis-click, it is a broken close button. 50 is
@@ -416,6 +455,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'The most characters a tab or panel name may use. Longer names are shortened for display, with the full name still shown on hover. One limit covers both, because they are the same name in the same strip.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in characters.
+    storedUnit: 'characters',
+    display: 'own',
     min: 10,
     max: 128,
     step: 2,
@@ -429,6 +471,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'The widest a tab may be drawn, in characters. A longer title is ellipsised in the strip and shown in full on hover — the name itself is not shortened, which is what the name limit above does.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in characters.
+    storedUnit: 'characters',
+    display: 'own',
     min: 10,
     max: 128,
     // Two, for the same reason as the name limit: 1 across a 118-wide range is 0.85% and the
@@ -454,8 +499,12 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How long a press-and-hold on a scroll chevron waits before the strip starts scrolling continuously, in milliseconds. Releasing the pointer stops it immediately.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    hardMax: 10000,
     min: 100,
-    max: 3000,
+    max: 1500,
     step: 50,
   },
   {
@@ -473,6 +522,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How long the pointer must rest on a tab before its information popover appears, in milliseconds. Zero shows it as soon as the pointer arrives; a longer delay keeps it out of the way while you cross the strip.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
     max: 1500,
     step: 25,
@@ -492,9 +544,13 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How long a panel or tab you are DRAGGING must dwell over another tab before that tab comes to the front, in milliseconds. It is what lets you drop onto a tab that is not the one currently showing: hold the drag over that tab, wait, and it switches so you can drop inside it. An ordinary mouse-over does nothing — this delay applies only while a drag is in progress.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    hardMax: 10000,
     min: 0,
-    max: 5000,
-    step: 50,
+    max: 1500,
+    step: 25,
   },
 
   // File Explorer
@@ -617,6 +673,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path, in milliseconds. Zero shows it as soon as the pointer arrives.',
     group: 'File Explorer',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
     max: EXPLORER_POPOVER_DELAY_MAX_MS,
     step: 25,
@@ -657,6 +716,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description: 'Debounce (ms) after typing stops before an auto-save writes.',
     group: 'Editor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: 0,
     max: 10000,
     // 018: WIDENED from 50. A step must be at least 1% of the range (FR-035), and 50 across
@@ -708,9 +770,13 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // there beside it, still typed, still digit-grouped, for anyone who wants an exact number.
     label: 'Max open file size',
     description:
-      'Files larger than this report "too large" instead of opening. Measured in bytes; the slider moves in 5 MB steps.',
+      'Files larger than this report "too large" instead of opening.',
     group: 'Editor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in bytes, shown in MB.
+    storedUnit: 'bytes',
+    display: 'MB',
+    hardMax: 2147483648,
     min: 5242880,
     max: 262144000,
     step: 5242880,
@@ -720,7 +786,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
      * The 5 MiB minimum exists so the 5 MiB step is a sane place for the control to start, not
      * because a smaller cap is invalid: "refuse anything over 1 MB" is a perfectly reasonable thing
      * to ask for, and hand-editing was always how you asked. Enforcing the slider's minimum would
-     * have silently RAISED every such user's cap to 5 MiB — the same trap `diagnostics.maxFileSizeKb`
+     * have silently RAISED every such user's cap to 5 MiB — the same trap `diagnostics.maxFileBytes`
      * set from the other direction, and found the same way, by the guard changing a behaviour a test
      * depended on (os-drop.e2e.ts lowers this to make its fixture cheap).
      *
@@ -925,6 +991,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     subgroup: 'Links',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: 250,
     max: 25_000,
     step: 250,
@@ -1012,6 +1081,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     subgroup: 'Navigation',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'entries',
     min: 1,
     max: 100,
     step: 1,
@@ -1105,6 +1178,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description: 'How many values each field keeps per terminal type. Lowering this trims every list to its newest entries.',
     group: 'Terminal',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'entries',
     min: 1,
     max: 50,
     step: 1,
@@ -1123,6 +1200,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // useful over: below that the observation cost stops being negligible, above it a command
     // started shortly before an unclean kill would routinely be missed (FR-019d).
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: 250,
     max: 5000,
     step: 250,
@@ -1158,6 +1238,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How many characters of the running command a terminal panel’s name shows before it is cut short with an ellipsis.',
     group: 'Terminal',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in characters.
+    storedUnit: 'characters',
+    display: 'own',
     min: 10,
     max: 200,
     step: 5,
@@ -1169,6 +1252,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How many characters of the working directory a terminal panel’s name shows. A longer one keeps its drive and last folder and drops folders from the middle.',
     group: 'Terminal',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in characters.
+    storedUnit: 'characters',
+    display: 'own',
     min: 10,
     max: 200,
     step: 5,
@@ -1256,18 +1342,22 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     enabledWhen: { key: 'terminals.attention.enabled', is: true },
   },
   {
-    key: 'terminals.attention.quietSeconds',
+    key: 'terminals.attention.quietMs',
     label: 'Quiet time',
-    description:
-      'How many seconds a terminal must stay silent after activity before Output went quiet marks it.',
+    description: 'How long a terminal must stay silent after activity before Output went quiet marks it.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'slider',
     // Spec says 5-600 step 5, but slider-descriptors.test.ts requires a step of at least 1% of the
-    // range (0.84% here). 10-600 step 10 keeps the default of 10 on the grid and passes.
-    min: 10,
-    max: 600,
-    step: 10,
+    // range (0.84% here). 10-600 s step 10 s keeps the default of 10 s on the grid and passes.
+    // 077 FR-001 — stored in ms, shown in seconds; any value from 1 s to an hour can be typed.
+    storedUnit: 'ms',
+    display: 's',
+    min: 10_000,
+    max: 600_000,
+    step: 10_000,
+    hardMin: 1000,
+    hardMax: 3_600_000,
     enabledWhen: { key: 'terminals.attention.enabled', is: true },
   },
 
@@ -1281,6 +1371,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'General',
     subgroup: 'Attention',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: 0,
     max: 10000,
     step: 100,
@@ -1320,6 +1413,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     subgroup: 'Indentation',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'columns',
     min: 1,
     max: 16,
     step: 1,
@@ -1332,6 +1429,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     subgroup: 'Indentation',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'columns',
     min: 1,
     max: 16,
     step: 1,
@@ -1406,9 +1507,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Search',
     subgroup: 'Find Bar',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
-    max: 1000,
-    step: 10,
+    max: 2000,
+    // 077 research R6 — any debounce up to 10,000 ms can be typed.
+    hardMax: 10_000,
+    step: 25,
   },
   /*
    * Find in Files (043, FR-059). Six leaves, in a section of their OWN (FR-076) — and two more at
@@ -1487,9 +1593,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
     max: 2000,
-    step: 50,
+    // 077 research R6 — any debounce up to 10,000 ms can be typed.
+    hardMax: 10_000,
+    step: 25,
   },
   {
     key: 'search.inFiles.defaultGrouping',
@@ -1622,6 +1733,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // it exactly so the maximum is reachable, and lands on the shipped 3000. It constrains DRAGGING
     // only: the field beside it takes any integer in the bounds.
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: TOAST_DURATION_MIN_MS,
     max: TOAST_DURATION_MAX_MS,
     step: 500,
@@ -1637,6 +1751,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // the maximum is reachable, and lands on the shipped 520. It constrains DRAGGING only: the field beside it takes any
     // integer in the bounds.
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in px.
+    storedUnit: 'px',
+    display: 'own',
     min: TOAST_WIDTH_MIN_PX,
     max: TOAST_WIDTH_MAX_PX,
     step: 10,
@@ -1652,6 +1769,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How long the pointer must rest on a notification before it shows more, in milliseconds: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. Zero shows it as soon as the pointer arrives; a longer delay keeps the notifications still while you move the pointer across them. Keyboard focus never waits.',
     group: 'Notifications',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: NOTICE_HOVER_DELAY_MIN_MS,
     max: NOTICE_HOVER_DELAY_MAX_MS,
     step: 25,
@@ -1673,6 +1793,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'The most notifications the Notifications panel keeps. Past the limit the oldest are dropped and you are warned once that unattended notifications can affect performance.',
     group: 'Notifications',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'notifications',
     min: PANEL_LIMIT_MIN,
     max: PANEL_LIMIT_MAX,
     step: 10,
@@ -1713,18 +1837,21 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     allowedValues: [...LOG_LEVELS],
   },
   {
-    key: 'diagnostics.maxFileSizeKb',
-    label: 'Log file size (KB)',
+    key: 'diagnostics.maxFileBytes',
+    label: 'Log file size',
     description:
       'How large a single log file may grow before throng starts a new one. Older files are kept for the days set below, up to the folder limit.',
     group: 'Logging',
     control: 'slider',
-    min: 64,
+    // 077 FR-001 — stored in bytes, shown in MB, a quarter of a megabyte a step.
+    storedUnit: 'bytes',
+    display: 'MB',
+    min: 262_144,
     // 4 MB a file rather than 8: the step has to stay aimable (the slider guard wants one step to
     // be at least 1% of the range), and 4 MB × the retention limit is already far more log than any
     // report needs.
-    max: 4096,
-    step: 64,
+    max: 4_194_304,
+    step: 262_144,
     /*
      * 031 (#227) — a larger cap really is settable by hand, and now SAYS so.
      *
@@ -1734,7 +1861,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
      * capability revoked by a change meant to be a safety net. The slider's ceiling constrains the
      * CONTROL; this constrains the FILE.
      */
-    hardMax: 65_536,
+    hardMin: 1024,
+    hardMax: 67_108_864,
   },
   {
     // 066 FR-019 — supersedes 031 FR-015's `diagnostics.keepFiles` (066 FR-020). Days throng actually
@@ -1745,24 +1873,31 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How many days of logs to keep, counting only days throng was running. Older logs are deleted.',
     group: 'Logging',
     control: 'slider',
+    // 077 — a COUNT of the days throng ran (066 FR-019), not a span of time, so it stays a count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'days',
     min: 1,
     max: 30,
     step: 1,
   },
   {
     // 066 FR-019a — the backstop for a crash loop, which can fill a day's worth of files in minutes.
-    key: 'diagnostics.maxTotalMb',
-    label: 'Log folder limit (MB)',
+    key: 'diagnostics.maxTotalBytes',
+    label: 'Log folder limit',
     description:
       'The most space all of throng’s logs may take. When the folder grows past it, the oldest logs are deleted first.',
     group: 'Logging',
     control: 'slider',
-    // Steps of 50: the slider guard wants a step of at least 1% of the range.
-    min: 50,
-    max: 2000,
-    step: 50,
+    // Steps of 50 MB: the slider guard wants a step of at least 1% of the range. 077 FR-001 — stored in bytes.
+    storedUnit: 'bytes',
+    display: 'MB',
+    min: 52_428_800,
+    max: 2_097_152_000,
+    step: 52_428_800,
     // A larger cap is settable by hand, as for the file size above.
-    hardMax: 65_536,
+    hardMin: 1_048_576,
+    hardMax: 68_719_476_736,
   },
   ...RESOURCE_MONITOR_DESCRIPTORS,
 ];

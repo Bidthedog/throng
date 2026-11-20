@@ -10,6 +10,7 @@
  */
 import { THRONG_THEME, TOKEN_PARENT, type Theme } from '../theme.js';
 import { deriveFileIconColours } from '../file-icon-colours.js';
+import { deriveCalloutColours } from '../callout-colours.js';
 import {
   CURRENT_MATCH_SEPARATION,
   INACTIVE_SELECTION_FROM_PAGE,
@@ -756,6 +757,8 @@ function makeTheme(name: string, p: Palette): Theme {
       // 069 FR-061 — the file icon categories: each keeps its hue, its lightness set for this theme so it
       // clears 4.5:1 on the tree's pane, a hovered or selected row and the app background.
       ...deriveFileIconColours([p.sidebar ?? p.bg, p.surface, p.surfaceActive ?? p.surface, p.bg]),
+      // 075 FR-022 — the seven callout roles, per theme, legible on their own tint over the editor background.
+      ...deriveCalloutColours(editorBg, editorFg),
     },
     fonts: {
       family: p.fontFamily ?? THRONG_THEME.fonts.family,

@@ -2390,7 +2390,7 @@ textarea,
  * the stored name, to be copied out of a selection, or to accumulate across successive reductions —
  * which is exactly what `truncateGraphemes` being marker-free buys, and this is the other half of it.
  */
-/* 044 FR-032 — a preview title marks its NAME half (`name… - Preview`); its suffix is never cut. */
+/* 044 FR-032 — a preview title marks its NAME half (`name… - Markdown Preview`); its suffix is never cut. */
 .tab-chip__label--truncated::after,
 .panel-box__title--truncated::after,
 .panel-box__title-name--truncated::after {
@@ -2882,6 +2882,15 @@ textarea,
   transition: opacity var(--throng-popup-fade-out) ease-in;
 }
 
+/* 074 (2026-11-20) — a preview's zoom stays shown, faded as its controls are until the pointer is over the preview. */
+.zoom-indicator--resting {
+  opacity: 0.35;
+  transition: opacity 120ms ease-out;
+}
+
+.preview-diagram-frame:hover .zoom-indicator--resting,
+.preview-diagram-frame--in-pane .zoom-indicator--resting,
+.preview-pdf-view:hover .zoom-indicator--resting,
 .zoom-indicator--shown {
   opacity: 1;
   transition: opacity var(--throng-popup-fade-in) ease-out;
@@ -2889,6 +2898,7 @@ textarea,
 
 @media (prefers-reduced-motion: reduce) {
   .zoom-indicator,
+  .zoom-indicator--resting,
   .zoom-indicator--shown {
     transition: none;
   }

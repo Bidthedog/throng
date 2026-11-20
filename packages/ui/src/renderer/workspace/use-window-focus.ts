@@ -14,7 +14,18 @@ export function useWindowFocus(): boolean {
 
   useEffect(() => {
     const onFocus = (): void => setFocused(true);
-    const onBlur = (): void => setFocused(false);
+    /*
+     * 074 FR-083a (2026-11-19) — focus moving INTO a frame in this window (a click in an HTML preview's page) blurs the
+     * window too, yet the window is still the foreground one: `hasFocus()` stays true while a nested frame holds focus.
+     * Read once the blur has landed, so only a window that really lost the foreground dims its active panel.
+     */
+    const onBlur = (): void => {
+      if (!(document.activeElement instanceof HTMLIFrameElement)) {
+        setFocused(false);
+        return;
+      }
+      setTimeout(() => setFocused(document.hasFocus()), 0);
+    };
     window.addEventListener('focus', onFocus);
     window.addEventListener('blur', onBlur);
     // Re-sync once: focus may have changed between the initial render and the

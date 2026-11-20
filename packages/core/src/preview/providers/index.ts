@@ -20,6 +20,12 @@ import type { PreviewProviderDescriptor, PreviewProviderRegistry } from '../prov
 import { createPreviewProviderRegistry } from '../registry.js';
 import { markdownProvider } from './markdown.js';
 import { mermaidProvider } from './mermaid.js';
+import { csvProvider } from './csv.js';
+import { spreadsheetProvider } from './spreadsheet.js';
+import { pdfProvider } from './pdf.js';
+import { imageProvider } from './image.js';
+import { svgProvider } from './svg.js';
+import { htmlProvider } from './html.js';
 
 export { markdownHeadingLine } from './markdown/heading-line.js';
 // 047 (research R2) — forwarded the same way, for the editor's own heading extractor (#375, T007) to
@@ -27,7 +33,17 @@ export { markdownHeadingLine } from './markdown/heading-line.js';
 export { markdownInlineText } from './markdown/inline-text.js';
 
 // 054 US5 — Mermaid after Markdown: the Preferences subsections follow this order (FR-050).
-export const SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS: readonly PreviewProviderDescriptor[] = [markdownProvider, mermaidProvider];
+// 073 — CSV and Spreadsheet after them; 074 — then Image, SVG, PDF and HTML.
+export const SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS: readonly PreviewProviderDescriptor[] = [
+  markdownProvider,
+  mermaidProvider,
+  csvProvider,
+  spreadsheetProvider,
+  imageProvider,
+  svgProvider,
+  pdfProvider,
+  htmlProvider,
+];
 
 export const SHIPPED_PREVIEW_PROVIDERS: PreviewProviderRegistry = createPreviewProviderRegistry(
   SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS,

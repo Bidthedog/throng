@@ -48,6 +48,8 @@ if (!container) throw new Error('Renderer root element #root not found');
 const search = new URLSearchParams(window.location.search);
 const prefsTab = search.get('prefs');
 const aboutParam = search.get('about');
+// 075 — the Print Preview window, for the job main opened it with.
+const printJob = search.get('printPreview');
 const monitorParam = search.has('monitor');
 const identity = parseWindowIdentity(window.location.search);
 
@@ -78,6 +80,10 @@ function loadWindowApp(): Promise<ReactElement> {
   }
   if (monitorParam) return import('./resources/monitor-app.js').then(({ MonitorApp }) => <MonitorApp />);
   if (aboutParam !== null) return import('./about/about-app.js').then(({ AboutApp }) => <AboutApp />);
+  if (printJob !== null) {
+    const jobId = printJob;
+    return import('./print-preview/print-preview-app.js').then(({ PrintPreviewApp }) => <PrintPreviewApp jobId={jobId} />);
+  }
   if (identity.kind === 'subworkspace') {
     const { id } = identity;
     return import('./composition-root.js').then(({ SubWorkspaceCompositionRoot }) => <SubWorkspaceCompositionRoot id={id} />);

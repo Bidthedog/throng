@@ -34,12 +34,13 @@
  * Every panel action has a menu item (Principle VI): the route is on the body menu's and the header menu's Navigate
  * section, the toggle is their *Synchronise Scrolling*, and each calls the one function the panel hands in.
  */
-import { useRef, type ReactElement } from 'react';
+import { memo, useRef, type ReactElement } from 'react';
 import { FOCUS_MODE_STRIP_CLASS, FocusModeBadge, usePanelInFocusMode } from '../workspace/focus-mode-badge.js';
 import type { PreviewProviderKind } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
 import { SyncScrollButton } from './sync-scroll-button.js';
+import { SettingToggleButton } from '../common/setting-toggle-button.js';
 import { BAR_GAP, readoutText, type Readout } from '../editor/status-strip.js';
 import { fitReadouts, labelShortens, type LabelForm, type ReadoutId, type SegmentId, type SegmentWidth } from '../editor/status-strip-fit.js';
 import { useStripMeasure } from '../editor/status-strip-measure.js';
@@ -63,6 +64,16 @@ export interface PreviewStatusBarProps {
   onToggleSyncScroll: () => void;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no scroll-sync toggle. Absent reads `true`. */
   showSyncScroll?: boolean;
+  /**
+   * 073 FR-036b — a provider whose grid edits long cells in a dialog: whether that is on for THIS panel, and the
+   * toggle's click. Absent for every other provider, which draws no such control.
+   */
+  cellDialog?: { on: boolean; onToggle: () => void };
+  /** 073 FR-013 — a provider whose grid wraps its cells: whether wrapping is on for THIS panel, and the toggle's click. */
+  wrap?: { on: boolean; onToggle: () => void };
+  /** 073 FR-039a — a provider whose grid locks its first row / column: whether each is on for THIS panel, and the toggle's click. */
+  lockFirstRow?: { on: boolean; onToggle: () => void };
+  lockFirstColumn?: { on: boolean; onToggle: () => void };
   /** FR-118 — the hovered or focused link's target; omitted, `null` or empty shows nothing. */
   readout?: string | null;
   /** FR-118a — the drawn document's counts, or `null` until they settle (no counts are drawn). */
@@ -80,7 +91,15 @@ function textAt(r: Readout, form: LabelForm): string {
 
 const ALL_ON = { showCursorPosition: true, showCounts: true };
 
-export function PreviewStatusBar({
+/** The cell dialog toggle's name: the setting's own label, so the control and the Preferences row read alike. */
+const CELL_DIALOG_LABEL = 'Edit long cells in a dialog';
+/** The Wrap toggle's name (FR-013). */
+const WRAP_LABEL = 'Wrap cells';
+/** The two lock toggles' names (FR-039a). */
+const LOCK_ROW_LABEL = 'Lock first row';
+const LOCK_COLUMN_LABEL = 'Lock first column';
+
+function PreviewStatusBarView({
   panelId,
   providerKind,
   parented,
@@ -89,6 +108,10 @@ export function PreviewStatusBar({
   syncScroll,
   onToggleSyncScroll,
   showSyncScroll = true,
+  cellDialog,
+  wrap,
+  lockFirstRow,
+  lockFirstColumn,
   readout,
   metrics = null,
   selection = null,
@@ -100,7 +123,22 @@ export function PreviewStatusBar({
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const measured = useStripMeasure(barRef, controlsRef, rulerRef);
-  if (providerKind !== 'text') return null;
+  // 044 FR-015e — a binary provider's bar offers no editor route, and is not shown while it would carry nothing.
+  // 074 FR-022, FR-062 — what it can carry is the body's readout (an image's size, a PDF's page).
+  if (providerKind !== 'text') {
+    if (readout === null || readout === undefined || readout === '') return null;
+    return (
+      <div
+        className={`editor-status-strip preview-status-bar${focusMode ? ` ${FOCUS_MODE_STRIP_CLASS}` : ''}`}
+        data-testid={`preview-status-bar-${panelId}`}
+      >
+        <FocusModeBadge panelId={panelId} active={focusMode} />
+        <div className="editor-status-strip__group editor-status-strip__group--readouts">
+          <LinkTargetReadout testId={`preview-status-readout-${panelId}`} target={readout} />
+        </div>
+      </div>
+    );
+  }
 
   // The preferences filter BEFORE the fit and the ruler: a readout switched off reserves no width (040 FR-014) and is
   // absent from the accessibility tree rather than hidden in it (FR-017).
@@ -166,6 +204,53 @@ export function PreviewStatusBar({
           disabled={editorRouteDisabled}
           onClick={onEditorRoute}
         />
+        {/* 073 FR-036b — the cell dialog's per-panel switch, at the trailing end: pressed while the dialog is on
+            for this panel. Present only for a provider that declares one. An accelerator over the header
+            menu's checked *Edit Long Cells in Dialog* item (Principle VI). */}
+        {/* 073 FR-013 — the grid's Wrap switch: pressed while this panel wraps its cells. An accelerator over the
+            header menu's checked *Wrap* item (Principle VI). */}
+        {/* 073 FR-039a — the grid's two lock switches, beside Wrap: pressed while the first row / column is locked for this
+            panel. Accelerators over the header menu's checked *Lock First Row* / *Lock First Column* items (Principle VI). */}
+        {lockFirstRow !== undefined ? (
+          <SettingToggleButton
+            token="lockFirstRow"
+            label={LOCK_ROW_LABEL}
+            on={lockFirstRow.on}
+            onToggle={lockFirstRow.onToggle}
+            testId={`preview-lock-row-${panelId}`}
+            className="editor-status-strip__preview"
+          />
+        ) : null}
+        {lockFirstColumn !== undefined ? (
+          <SettingToggleButton
+            token="lockFirstColumn"
+            label={LOCK_COLUMN_LABEL}
+            on={lockFirstColumn.on}
+            onToggle={lockFirstColumn.onToggle}
+            testId={`preview-lock-column-${panelId}`}
+            className="editor-status-strip__preview"
+          />
+        ) : null}
+        {wrap !== undefined ? (
+          <SettingToggleButton
+            token="wrapCells"
+            label={WRAP_LABEL}
+            on={wrap.on}
+            onToggle={wrap.onToggle}
+            testId={`preview-wrap-${panelId}`}
+            className="editor-status-strip__preview"
+          />
+        ) : null}
+        {cellDialog !== undefined ? (
+          <SettingToggleButton
+            token="cellDialog"
+            label={CELL_DIALOG_LABEL}
+            on={cellDialog.on}
+            onToggle={cellDialog.onToggle}
+            testId={`preview-cell-dialog-${panelId}`}
+            className="editor-status-strip__preview"
+          />
+        ) : null}
       </div>
       {/* The ruler (040 FR-021, FR-022a): every present readout in each label form it has, drawn where it can be
           measured and nowhere it can be seen or heard — so the fit is decided in one pass. */}
@@ -181,3 +266,22 @@ export function PreviewStatusBar({
     </div>
   );
 }
+
+type Toggle = { on: boolean; onToggle: () => void } | undefined;
+const sameToggle = (a: Toggle, b: Toggle): boolean => a === b || (a !== undefined && b !== undefined && a.on === b.on && a.onToggle === b.onToggle);
+
+/**
+ * The bar re-measures its ruler after EVERY render (`useStripMeasure`): a dozen rectangle reads, each a forced layout in
+ * a browser. The panel chrome above re-renders once a frame while a pair scrolls in step (the editor's top line moves),
+ * and the toggles' props are fresh objects each time, so a plain `memo` would never hold. Compare them by value: a frame
+ * that changes nothing the bar draws re-renders and re-measures nothing (073 T077).
+ */
+export const PreviewStatusBar = memo(PreviewStatusBarView, (a, b) => {
+  const { cellDialog: ac, wrap: aw, lockFirstRow: ar, lockFirstColumn: al, readoutPrefs: ap, ...ra } = a;
+  const { cellDialog: bc, wrap: bw, lockFirstRow: br, lockFirstColumn: bl, readoutPrefs: bp, ...rb } = b;
+  if (!sameToggle(ac, bc) || !sameToggle(aw, bw) || !sameToggle(ar, br) || !sameToggle(al, bl)) return false;
+  if (ap !== bp && (ap?.showCursorPosition !== bp?.showCursorPosition || ap?.showCounts !== bp?.showCounts)) return false;
+  const keys = new Set([...Object.keys(ra), ...Object.keys(rb)] as (keyof typeof ra)[]);
+  for (const key of keys) if (!Object.is(ra[key], rb[key])) return false;
+  return true;
+});

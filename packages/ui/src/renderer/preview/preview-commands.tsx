@@ -32,9 +32,10 @@ import {
   type Panel,
   type PreviewProviderRegistry,
   type PreviewSettings,
-  isFlowingDocument,
+  supportsScrollSync,
 } from '@throng/core';
-import { followFocusedPreviewLink, openPreviewHeadingOutline } from './preview-panel-handles.js';
+import { followFocusedPreviewLink, openPreviewHeadingOutline, printPreviewFromPanel } from './preview-panel-handles.js';
+import { isGridCommand, runCsvGridCommand } from '../grid/grid-commands.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { currentEditorPreviewAffordance } from '../editor/editor-preview.js';
 import { getPreviewState } from './preview-store.js';
@@ -72,13 +73,13 @@ function showsSyncToggle(panel: Panel, registry: PreviewProviderRegistry, settin
       filePath: editor.filePath,
       projectRoot: editor.ownerKind === 'subworkspace' ? null : editor.ownerRoot,
     });
-    return affordance.state !== 'absent' && isFlowingDocument(affordance.provider);
+    return affordance.state !== 'absent' && supportsScrollSync(affordance.provider);
   }
   if (panel.kind === PREVIEW_KIND) {
     const state = getPreviewState(panel.id);
     const filePath = state?.filePath ?? (panel.config as { filePath?: string } | undefined)?.filePath;
     const provider = (state ? registry.get(state.providerId) : undefined) ?? (filePath ? registry.forPath(filePath) : undefined);
-    return isFlowingDocument(provider);
+    return supportsScrollSync(provider);
   }
   return false;
 }
@@ -162,7 +163,9 @@ export function PreviewCommands(): null {
         (action !== 'preview.open' &&
           action !== 'preview.followLink' &&
           action !== 'preview.toggleSyncScroll' &&
-          action !== 'preview.goToHeading') ||
+          action !== 'preview.goToHeading' &&
+          action !== 'preview.print' &&
+          !isGridCommand(action)) ||
         !layout ||
         getActivePane() !== 'workspace'
       ) {
@@ -175,7 +178,7 @@ export function PreviewCommands(): null {
       // Heading act on a document nobody can see, so their chords are consumed and do nothing.
       if (
         panel?.kind === PREVIEW_KIND &&
-        (action === 'preview.toggleSyncScroll' || action === 'preview.goToHeading') &&
+        (action === 'preview.toggleSyncScroll' || action === 'preview.goToHeading' || action === 'preview.print') &&
         isPanelSectionMaximised(panel.id)
       ) {
         e.preventDefault();
@@ -192,6 +195,19 @@ export function PreviewCommands(): null {
         // 5 — FR-096c: Ctrl+click for the keyboard, on the link focused in the active preview. The key is
         // taken only when a link was followed, so Ctrl+Enter anywhere else in the preview is untouched.
         if (panel?.kind === PREVIEW_KIND && followFocusedPreviewLink(panel.id)) e.preventDefault();
+        return;
+      }
+      if (isGridCommand(action)) {
+        // 073 FR-038 — the focused CSV Preview Editor's insert commands; elsewhere the key is left alone.
+        if (panel?.kind === PREVIEW_KIND && runCsvGridCommand(panel.id, action)) e.preventDefault();
+        return;
+      }
+      if (action === 'preview.print') {
+        // 075 FR-064 — Print Preview for the active preview. The chord is consumed in a preview even when its
+        // provider cannot print (the menu row says why); it never reaches the browser's own print.
+        if (panel?.kind !== PREVIEW_KIND) return;
+        e.preventDefault();
+        printPreviewFromPanel(panel.id);
         return;
       }
       if (action === 'preview.goToHeading') {

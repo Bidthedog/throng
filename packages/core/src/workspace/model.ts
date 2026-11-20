@@ -182,6 +182,23 @@ export type PreviewPanelConfig = {
   /** 050 FR-035 — as {@link EditorPanelConfig.movedOut}: the preview shows the moved notice and reads nothing. */
   movedOut?: true;
   /**
+   * 073 FR-036b — the CSV Preview Editor's own choice to offer its cell dialog (on or off). Absent: the panel follows
+   * the "Edit long cells in a dialog" setting. Written by the status-bar toggle, so it survives a restart.
+   */
+  cellDialog?: boolean;
+  /**
+   * 073 FR-013 — the CSV Preview Editor's own choice to wrap its cells (on or off). Absent: the panel follows the
+   * "Wrap cells" setting. Written by the status-bar toggle and the panel menu's Wrap, so it survives a restart.
+   */
+  wrapCells?: boolean;
+  /**
+   * 073 FR-039a — the CSV Preview Editor's own choice to lock its first row / first column (on or off). Absent: the
+   * panel follows the "Lock first row" / "Lock first column" setting. Written by the status-bar toggles and the panel
+   * menu, so it survives a restart.
+   */
+  lockFirstRow?: boolean;
+  lockFirstColumn?: boolean;
+  /**
    * 054 FR-005, FR-009 — the preview panel TYPE: the id of the provider whose file it shows. Written when
    * the preview is placed, and whenever it comes to show a file of another provider. Absent on a layout
    * written before 054 — `previewProviderIdOf` derives it from the file, without writing it back.

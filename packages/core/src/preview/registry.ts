@@ -51,6 +51,19 @@ function validate(provider: PreviewProviderDescriptor): void {
     }
   }
 
+  if (provider.editable === true && provider.kind !== 'text') {
+    throw new Error(`Preview provider "${id}" is a binary provider and cannot be editable`);
+  }
+  // 077 FR-018 — the one size-cap field names one of the provider's own numbers, stored in bytes.
+  if (provider.maxFileBytesSetting !== undefined) {
+    const named = provider.settings?.find((s) => s.leaf === provider.maxFileBytesSetting);
+    if (named?.control !== 'number' || named.storedUnit !== 'bytes') {
+      throw new Error(
+        `Preview provider "${id}" names "${provider.maxFileBytesSetting}" as its size cap, which is not one of its numbers in bytes`,
+      );
+    }
+  }
+
   if (provider.kind === 'text' && provider.sourceMimeTypes !== undefined) {
     throw new Error(`Preview provider "${id}" is a text provider and must not declare sourceMimeTypes`);
   }

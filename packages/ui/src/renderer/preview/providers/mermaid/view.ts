@@ -32,4 +32,6 @@ export const mermaidView: PreviewProviderView = {
   textSelection: true,
   load: () => import('./mermaid-body.js').then((m) => m.MermaidBody),
   exportHtml: (selection) => htmlExporter().then((exportHtml) => exportHtml(selection)),
+  // 075 FR-060, FR-075 — one diagram, fitted to the page.
+  printable: (body, { title }) => import('../../print/printable.js').then((m) => m.buildPrintable(body, { title, fit: 'page' })),
 };

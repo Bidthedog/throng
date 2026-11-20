@@ -3,7 +3,8 @@ import type { EditorView } from '@codemirror/view';
 import {
   ENCODING_CHOICES,
   encodingLabel,
-  isFlowingDocument,
+  supportsScrollSync,
+  previewIconOf,
   lineEndingLabel,
   type EncodingId,
   type HeadingRecord,
@@ -373,7 +374,8 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       ? [
           {
             label: 'Open Preview',
-            icon: 'preview' as const,
+            // 074 FR-103 — the provider's own preview icon.
+            icon: previewIconOf(args.openPreview.affordance.provider),
             section: 'navigate' as const,
             shortcut: args.openPreview.chord,
             disabled: args.openPreview.affordance.state === 'disabled',
@@ -475,7 +477,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
     args.openPreview !== undefined &&
     args.openPreview.affordance.state !== 'absent' &&
     // 054 — none for a source whose preview is one picture (a Mermaid file).
-    isFlowingDocument(args.openPreview.affordance.provider)
+    supportsScrollSync(args.openPreview.affordance.provider)
       ? [
           {
             label: 'Synchronise Scrolling',

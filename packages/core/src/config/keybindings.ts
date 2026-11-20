@@ -97,6 +97,8 @@ export type ActionId =
   | 'editor.save'
   | 'editor.saveAll'
   | 'editor.saveAs'
+  // Print… for an editor's document: opens Print Preview, the preview's Print… for text. `editor`-only.
+  | 'editor.print'
   // In-panel search (013, FR-017/FR-020). One shared find affordance routed to the
   // ACTIVE panel: a terminal searches its scrollback (read-only), an editor searches
   // and replaces in its file. The replace commands are inert unless an editor is active.
@@ -236,6 +238,16 @@ export type ActionId =
    * #375's, not this spec's.
    */
   | 'preview.goToHeading'
+  /* 075 FR-064 — opens Print Preview for the active preview. `preview`-only; never prints directly. */
+  | 'preview.print'
+  /*
+   * 073 FR-038 — the CSV Preview Editor's insert commands, acting on the focused grid's active cell. Each is
+   * also on the grid's row or column menu (every panel action has a menu item, and the reverse).
+   */
+  | 'grid.insertRowAbove'
+  | 'grid.insertRowBelow'
+  | 'grid.insertColumnLeft'
+  | 'grid.insertColumnRight'
   /*
    * 070 FR-027, FR-024a — the application commands the macOS app menu carries, each also in the key bindings list
    * (Principle VI): Settings opens Preferences; Install and Uninstall put the `throng` command on the PATH and take it
@@ -310,6 +322,12 @@ const EXPLORER_ONLY = new Set<DispatchScope>(['explorer']);
 /** Panels, but not the file tree: a find bar and a save belong to whatever panel is showing. */
 const PANELS = new Set<DispatchScope>(['editor', 'terminal']);
 /**
+ * 073 FR-035, FR-035a — Save and Save As also resolve over a preview, so the CSV Preview Editor saves by the
+ * editor's chords. The dispatcher saves only a preview whose provider is editable; over any other preview
+ * the chord still reaches nothing (044 FR-021).
+ */
+const SAVE_PANELS = new Set<DispatchScope>(['editor', 'terminal', 'preview']);
+/**
  * 047 (research R1, FR-004) — `PANELS` widened by one surface for FOUR of the seven `search.*` bar
  * commands: a preview now mounts its own find bar (`PreviewSearchController`), so `search.find`,
  * `search.findNext`, `search.findPrevious` and `search.close` are live there too. The three replace
@@ -326,6 +344,10 @@ const FIND_SURFACES = new Set<DispatchScope>(['editor', 'terminal', 'preview']);
 const MARKDOWN_SURFACES = new Set<DispatchScope>(['editor', 'preview']);
 /** 047 (research R7) — Go to Heading opens the preview's own pop-down; nowhere else. */
 const GO_TO_HEADING_SURFACES = new Set<DispatchScope>(['preview']);
+/** 073 FR-038 — where the grid's insert commands are live: a preview, the CSV Preview Editor's panel kind. */
+const GRID_SURFACES = new Set<DispatchScope>(['preview']);
+/** 075 FR-064 — Print… is live in a preview only: never in an editor, a terminal or File Explorer. */
+const PRINT_SURFACES = new Set<DispatchScope>(['preview']);
 /**
  * The scope of every registered command (016, FR-017b0). Declared here, beside the chords, so a
  * new command cannot be added without answering "where is this live?" — the completeness test
@@ -420,9 +442,12 @@ export const COMMAND_SCOPES: CommandScopes = {
   'file.undo': EXPLORER_ONLY,
   'file.redo': EXPLORER_ONLY,
   // Save acts on the active panel's document; it is inert, not wrong, in a terminal.
-  'editor.save': PANELS,
+  'editor.save': SAVE_PANELS,
   'editor.saveAll': PANELS,
-  'editor.saveAs': PANELS,
+  'editor.saveAs': SAVE_PANELS,
+  // Print… prints the editor's document. Never live in a terminal, where Ctrl+P is readline's previous-history;
+  // a preview has its own Print… (`preview.print`) on the same chord, on a disjoint scope.
+  'editor.print': EDITOR_ONLY,
   // One find bar, routed to the active panel (013): a terminal searches its scrollback. 047 widens
   // four of the seven to `FIND_SURFACES` — a preview mounts the same find bar (research R1) — while
   // the replace trio stays on `PANELS`, which has nothing for a preview to act on.
@@ -487,6 +512,12 @@ export const COMMAND_SCOPES: CommandScopes = {
   'markdown.expandAllInside': MARKDOWN_SURFACES,
   // 047 (research R7) — the Go to Heading pop-down, preview-only.
   'preview.goToHeading': GO_TO_HEADING_SURFACES,
+  // 073 FR-038 — a preview only (the CSV Preview Editor); never a terminal, so no shell loses a key.
+  'grid.insertRowAbove': GRID_SURFACES,
+  'grid.insertRowBelow': GRID_SURFACES,
+  'grid.insertColumnLeft': GRID_SURFACES,
+  'grid.insertColumnRight': GRID_SURFACES,
+  'preview.print': PRINT_SURFACES,
 };
 
 /** The modifier held to drag a rectangular selection. Platform-keyed, like the chords (FR-017e). */
@@ -677,6 +708,22 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      * receiving `^G` in a terminal because neither scope includes it.
      */
     'preview.goToHeading': ['Ctrl+G'],
+    // 073 FR-038 — unbound: the grid's row and column menus carry all four, and no chord is free of collisions.
+    'grid.insertRowAbove': [],
+    'grid.insertRowBelow': [],
+    'grid.insertColumnLeft': [],
+    'grid.insertColumnRight': [],
+    /*
+     * 075 FR-064 — Print…, which opens Print Preview. `Ctrl+P` is readline's previous-history, so it is scoped to
+     * {preview} alone and never live in a terminal; macOS derives `Cmd+P`.
+     */
+    'preview.print': ['Ctrl+P'],
+    /*
+     * Print… for an editor's document — the same chord as the preview's, one command per panel type (Principle IV),
+     * on the disjoint {editor} scope, so a terminal still receives `^P`. A brand-new command: the per-read fill
+     * supplies it to saved installs, no bump. macOS derives `Cmd+P`.
+     */
+    'editor.print': ['Ctrl+P'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],

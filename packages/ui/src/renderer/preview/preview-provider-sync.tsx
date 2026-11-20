@@ -32,7 +32,10 @@
  * stay (FR-067).
  */
 import { useEffect, useRef } from 'react';
-import { collectPanels, providersTurnedOff, type Panel } from '@throng/core';
+import { collectPanels, logCaught, providersTurnedOff, type Panel } from '@throng/core';
+import { getEditorActions } from '../editor/editor-actions.js';
+import { getEditorState } from '../editor/editor-state.js';
+import { promptDirtyClose } from '../editor/dirty-close-store.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useServicesOptional } from '../composition-root.js';
 import { useWorkspace } from '../state/workspace-store.js';
@@ -68,27 +71,49 @@ export function PreviewProviderSync({ isSubWorkspace = false }: { isSubWorkspace
     const matches = (panel: Panel): boolean => isPreviewOfProviders(panel, ids, registry);
 
     const place = { inSubWorkspace: isSubWorkspace, layoutProjectId: layout.projectId };
-    const closing = layout.tabs.flatMap((tab) => (collectPanels(tab.root) as Panel[]).filter(matches));
-    if (closing.length === 0) return;
-    // The predicate is decided NOW, before the mirrors are forgotten — `isPreviewOfProviders` reads the
-    // live provider id from `preview-store`, which releasing a view clears.
-    const closingIds = new Set(closing.map((p) => p.id));
-    for (const panel of closing) releasePreviewView(panel, place);
+    const found = layout.tabs.flatMap((tab) => (collectPanels(tab.root) as Panel[]).filter(matches));
+    if (found.length === 0) return;
+    const closePreviews = (closing: Panel[]): void => {
+      if (closing.length === 0) return;
+      // The predicate is decided NOW, before the mirrors are forgotten — `isPreviewOfProviders` reads the
+      // live provider id from `preview-store`, which releasing a view clears.
+      const closingIds = new Set(closing.map((p) => p.id));
+      for (const panel of closing) releasePreviewView(panel, place);
 
-    /*
-     * Controller ruling (044 US4 fix round 1, item 2): FR-064 means "exactly as closing by hand". When
-     * every panel this window's layout holds is one of the closing previews, an OPEN sub-workspace
-     * window is left with nothing to show — the case a hand ✕ on its last Panel diverts to destroying
-     * the sub-workspace (005 FR-029, `panel-placeholder.tsx`), taken here with no confirmation. A real
-     * project's layout has no such concept: its last panel still becomes an empty panel, as before.
-     */
-    const subId = SubWorkspaceWorkspaceClient.subWorkspaceIdOf(layout.projectId);
-    const subClient = servicesRef.current?.subWorkspaces;
-    if (subId !== null && subClient && emptiesLayout(layout, closingIds)) {
-      void destroySubWorkspace(subClient, subId);
+      /*
+       * Controller ruling (044 US4 fix round 1, item 2): FR-064 means "exactly as closing by hand". When
+       * every panel this window's layout holds is one of the closing previews, an OPEN sub-workspace
+       * window is left with nothing to show — the case a hand ✕ on its last Panel diverts to destroying
+       * the sub-workspace (005 FR-029, `panel-placeholder.tsx`), taken here with no confirmation. A real
+       * project's layout has no such concept: its last panel still becomes an empty panel, as before.
+       */
+      const subId = SubWorkspaceWorkspaceClient.subWorkspaceIdOf(layout.projectId);
+      const subClient = servicesRef.current?.subWorkspaces;
+      if (subId !== null && subClient && emptiesLayout(layout, closingIds)) {
+        void destroySubWorkspace(subClient, subId);
+        return;
+      }
+      // The store as it is NOW: a prompt (073 FR-063) may have stood between the check and this close.
+      wsRef.current.removePanelsWhere((panel) => closingIds.has(panel.id));
+    };
+
+    // 073 FR-063 — a CSV Preview Editor holding an unsaved document no editor shows (its actions answer dirty
+    // only then) asks first, through the editor's own dirty-close prompt; the rest close as 044 FR-063 says.
+    if (found.some((p) => getEditorActions(p.id)?.isDirty() === true)) {
+      void (async () => {
+        const keep = new Set<string>();
+        for (const panel of found) {
+          const actions = getEditorActions(panel.id);
+          if (actions?.isDirty() !== true) continue;
+          const name = getEditorState(panel.id)?.displayName ?? panel.title;
+          const choice = await promptDirtyClose(name, [name]);
+          if (choice === 'cancel' || (choice === 'save' && !(await actions.saveForClose()))) keep.add(panel.id);
+        }
+        closePreviews(found.filter((p) => !keep.has(p.id)));
+      })().catch((error: unknown) => logCaught('preview-provider-sync: ask before closing', error));
       return;
     }
-    current.removePanelsWhere((panel) => closingIds.has(panel.id));
+    closePreviews(found);
   }, [previews, registry, isSubWorkspace]);
 
   return null;

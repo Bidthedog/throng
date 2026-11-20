@@ -35,7 +35,8 @@ export function useUnloadProject(): (project: { readonly id: string; readonly na
     // SURVIVES its panel unmounting when you switch away from its project, and is removed only on an
     // explicit destroy.
     const editorPanelIds = allEditorStates()
-      .filter((s) => s.ownerProjectId === project.id)
+      // 073 — a CSV Preview Editor's entry is torn down with its preview panel, not as an editor.
+      .filter((s) => s.ownerProjectId === project.id && s.preview !== true)
       .map((s) => s.panelId);
     const collaborators: UnloadCollaborators = {
       settings: { projects: { unloadTerminalAction: settings.projects.unloadTerminalAction } },

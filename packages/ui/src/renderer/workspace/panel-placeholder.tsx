@@ -12,12 +12,17 @@ import {
   panelDisplayTitle,
   panelRemovalVerb,
   previewTitleParts,
+  previewIconOf,
   previewPanelTypeLabel,
   previewPathOf,
   previewProviderIdOf,
   PREVIEW_KIND,
   toDisplayPath,
   effectiveActivePanelId,
+  cellDialogOn,
+  wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
   panelZoomLevel,
   zoomFactor,
   findPanelLocations,
@@ -27,6 +32,9 @@ import {
   type Panel,
   type PreviewPanelConfig,
   isFlowingDocument,
+  supportsScrollSync,
+  previewGoToKind,
+  canPrint,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
 import { PanelErrorBoundary } from './panel-error-boundary.js';
@@ -93,7 +101,8 @@ import { useReportSubjectFailure } from './panel-failure-notice.js';
 import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import { destroyPanelSearch } from '../search/search-store.js';
-import { openPreviewHeadingOutline } from '../preview/preview-panel-handles.js';
+import { openPreviewHeadingOutline, printPreviewFromPanel } from '../preview/preview-panel-handles.js';
+import { printEditorPanel } from '../editor/editor-print.js';
 import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js';
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
@@ -367,8 +376,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const titleTruncated = effectiveTitle !== fullTitle;
   /*
    * FR-032 — a preview's title in its two halves, so the header's truncation marker lands on the NAME
-   * (`name… - Preview`). The generic `--truncated` class draws its `…` after the whole title, which for
-   * a preview would read `name - Preview…` and mark the one half that is never cut.
+   * (`name… - Markdown Preview`). The generic `--truncated` class draws its `…` after the whole title, which for
+   * a preview would read `name - Markdown Preview…` and mark the one half that is never cut.
    */
   const previewTitle = previewTitleParts(panel, titleSources, maxNameLength);
 
@@ -611,6 +620,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         if (panel.kind === 'terminal') focusTerminal(panel.id);
       }}
       /*
+       * 074 FR-083a (2026-11-19) — a press INSIDE a frame (an HTML preview's sandboxed page) never reaches this
+       * element's pointer-down: the page is another document. Focus moving into the frame is told as a bubbling
+       * `focusin` from the frame element (`providers/html/frame-input.ts`, from the frame document's own focusin), so that activates the panel instead.
+       */
+      onFocus={(e) => {
+        if (!(e.target instanceof HTMLIFrameElement)) return;
+        ws.setActivePanel(tabId, panel.id);
+        setActivePane('workspace');
+      }}
+      /*
        * 044 FR-105 — the mouse's back (3) and forward (4) buttons over an editor or a preview step THIS panel,
        * the one under the pointer, whichever panel has focus. Default-prevented on both press and release, so
        * nothing else — Chromium's own history navigation included — acts on them. Performed on release, and
@@ -665,6 +684,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           const others = (ws.layout?.tabs ?? [])
             .filter((t) => t.id !== tabId)
             .map((t) => ({ id: t.id, title: t.title, disabled: getMaximiseStack(t.id).length > 0 }));
+          // The preview's provider is the component's `previewProvider` (the run's, else the persisted or derived one),
+          // resolved once for the title and every row below. The per-panel toggles belong to a run that has named its
+          // provider, so they read the run's alone.
+          const runProvider = isPreview && previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
           // 033 US5 (T062) — the items live in `panel-header-menu.ts`, which declares their
           // sections; `ContextMenu` derives the dividers from those. This handler supplies the
           // panel's state and the action bodies that need the confirm dialog, the clipboard and the
@@ -700,16 +723,56 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               // 044 FR-033 — a preview's provider KIND (never its identity) and whether it is parented.
               preview: isPreview
                 ? {
-                    // The run's provider once an update has named it; before that, whichever provider
-                    // claims the persisted file (`editorFilePath` reads `config.filePath` for any kind).
-                    providerKind:
-                      (previewUi ? previewRegistry.get(previewUi.providerId) : undefined)?.kind ??
-                      previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? '')?.kind ??
-                      'text',
+                    providerKind: previewProvider?.kind ?? 'text',
                     parented: previewUi?.parent != null,
                     flowingDocument: isFlowingDocument(
-                      (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
-                        previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
+                      previewProvider,
+                    ),
+                    scrollSync: supportsScrollSync(
+                      previewProvider,
+                    ),
+                    ...(runProvider?.cellDialog === true
+                      ? {
+                          cellDialog: {
+                            on: cellDialogOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.cellDialog,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.editLongCellsInDialog : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
+                    ...(runProvider?.wrapToggle === true
+                      ? {
+                          wrap: {
+                            on: wrapCellsOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.wrapCells,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.wrapCells : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
+                    ...(runProvider?.lockToggles === true
+                      ? {
+                          lockFirstRow: {
+                            on: lockFirstRowOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.lockFirstRow,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstRow : undefined,
+                            ),
+                          },
+                          lockFirstColumn: {
+                            on: lockFirstColumnOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.lockFirstColumn,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstColumn : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
+                    goTo: previewGoToKind(
+                      previewProvider,
+                    ),
+                    // 075 FR-062 — Print… is drawn disabled for a provider that cannot print.
+                    printable: canPrint(
+                      previewProvider,
                     ),
                   }
                 : null,
@@ -886,6 +949,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 goToHeading: () => {
                   openPreviewHeadingOutline(panel.id);
                 },
+                // 075 FR-061 — the same handles `preview.print`'s and `editor.print`'s chord dispatches use.
+                print: () => {
+                  if (panel.kind === 'editor') void printEditorPanel(panel.id);
+                  else printPreviewFromPanel(panel.id);
+                },
                 /*
                  * Replace All needs a term and a replacement, and with no bar open there is
                  * neither. So the menu row OPENS the bar in that case rather than firing a
@@ -923,6 +991,33 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 goToEditor: () => runPreviewEditorRoute(panel, () => wsRef.current),
                 // 044 FR-122 — the one command body, from the value this window holds when the menu opened.
                 toggleSyncScroll: () => void toggleSyncScroll(settings.editor.previews.syncScroll),
+                // 073 FR-036b — the panel's own choice, saved with the panel; a panel that has not chosen reads the setting.
+                toggleCellDialog: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.cellDialog;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.editLongCellsInDialog : undefined;
+                  if (provider?.cellDialog === true) wsRef.current.updatePanelConfig(panel.id, { cellDialog: !cellDialogOn(held, setting) });
+                },
+                // 073 FR-013 — the panel's own choice, saved with the panel; a panel that has not chosen reads the setting.
+                toggleWrap: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.wrapCells;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.wrapCells : undefined;
+                  if (provider?.wrapToggle === true) wsRef.current.updatePanelConfig(panel.id, { wrapCells: !wrapCellsOn(held, setting) });
+                },
+                // 073 FR-039a — the panel's own choices, saved with the panel; a panel that has not chosen reads the setting.
+                toggleLockFirstRow: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.lockFirstRow;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstRow : undefined;
+                  if (provider?.lockToggles === true) wsRef.current.updatePanelConfig(panel.id, { lockFirstRow: !lockFirstRowOn(held, setting) });
+                },
+                toggleLockFirstColumn: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.lockFirstColumn;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstColumn : undefined;
+                  if (provider?.lockToggles === true) wsRef.current.updatePanelConfig(panel.id, { lockFirstColumn: !lockFirstColumnOn(held, setting) });
+                },
               },
             }),
           );
@@ -956,7 +1051,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   title={flavour ? `${typeLabel} · ${flavour}` : `Panel type: ${typeLabel}`}
                   aria-label={typeLabel}
                 >
-                  <Icon token={desc.icon} />
+                  {/* 074 FR-103 — a preview is headed by its provider's own preview icon. */}
+                  <Icon token={isPreview ? previewIconOf(previewProvider) : desc.icon} />
                 </span>
               );
             })()
@@ -1013,9 +1109,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          *
          * 044 FR-040, FR-043 — a PARENTED preview displays its source document's dot too, read from the
          * update main sent (never editor-state, so the document is still counted once). A standalone
-         * preview never wears it. The editor gate stays spelled out inline, where
+         * preview never wears it — unless it holds the document itself (073 FR-033: a CSV Preview Editor's
+         * grid document), when the dot is that document's. The editor gate stays spelled out inline, where
          * `unsaved-dot-call-sites.test.ts` reads it. */}
-        {(panel.kind === 'editor' && editorUi?.dirty) || (isPreview && previewUi?.parent != null && previewUi.dirty) ? (
+        {(panel.kind === 'editor' && editorUi?.dirty) ||
+        (isPreview && (previewUi?.parent != null || previewUi?.ownsDocument === true) && previewUi.dirty) ? (
           <span
             className="throng-unsaved-dot panel-box__unsaved"
             data-testid={`panel-unsaved-${panel.id}`}
@@ -1043,11 +1141,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         ) : null}
         <span className="panel-box__actions">
           {/* 067 FR-069 — an editor's Save and Save As, then the separator, before the common icons. */}
-          {panel.kind === 'editor' ? (
+          {/* 073 FR-035a — the CSV Preview Editor edits its document, so it carries the same two controls. They
+              run the actions its body registers (`getEditorActions`), exactly as an editor's do. The preview
+              does not report a moved-out file, so Save stays enabled: main refuses it there. */}
+          {panel.kind === 'editor' || (isPreview && previewUi?.providerId === 'csv') ? (
             <PanelHeaderSaveIcons
               panelId={panel.id}
               keybindings={keybindings}
-              movedOut={editorUi?.movedOut === true}
+              movedOut={panel.kind === 'editor' && editorUi?.movedOut === true}
             />
           ) : null}
           {/*

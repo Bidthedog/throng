@@ -38,7 +38,16 @@
  * what the reader may not do. The file's path is shown under it, as every panel's banner shows it.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { refusalMessage, toDisplayPath, type NoticeSubject, type OsName, type PreviewNotice } from '@throng/core';
+import {
+  formatSetting,
+  refusalMessage,
+  SETTINGS_METADATA,
+  toDisplayPath,
+  type FieldDescriptor,
+  type NoticeSubject,
+  type OsName,
+  type PreviewNotice,
+} from '@throng/core';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import type { PreviewFailure, PreviewPanelState } from './preview-store.js';
 
@@ -81,6 +90,15 @@ export function isMovedOutNotice(
   return notice !== null && notice !== undefined && notice.kind === 'moved-out';
 }
 
+/**
+ * The descriptor of the setting that set a too-large limit; one shaped like every size setting (bytes shown in MB) when
+ * main named none the registry knows.
+ */
+function sizeDescriptor(key: string | undefined): FieldDescriptor {
+  const found = key === undefined ? undefined : SETTINGS_METADATA.find((d) => d.key === key);
+  return found ?? { key: '', label: '', description: '', group: '', control: 'slider', storedUnit: 'bytes', display: 'MB' };
+}
+
 /** The one sentence a file notice says (030 FR-040, FR-026). */
 export function previewNoticeMessage(notice: FileNotice): string {
   switch (notice.kind) {
@@ -89,7 +107,13 @@ export function previewNoticeMessage(notice: FileNotice): string {
     case 'unreadable':
       return 'This file could not be read.';
     case 'too-large':
-      return 'This file is too large to preview.';
+      // 074 FR-012, 077 FR-015 — named with its size and the limit, as the limit's setting is shown in Preferences
+      // (MB with its bytes), digit-grouped, when main measured them. The setting's value, never a default (7.3.0).
+      if (notice.size === undefined || notice.limit === undefined) return 'This file is too large to preview.';
+      {
+        const d = sizeDescriptor(notice.limitKey);
+        return `This file is too large to preview: ${formatSetting(notice.size, d)}, over the ${formatSetting(notice.limit, d)} limit set in Preferences.`;
+      }
     // 059 FR-053 — core's one wording, which the editor says too.
     case 'not-text':
       return refusalMessage('binary');

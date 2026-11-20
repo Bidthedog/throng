@@ -24,6 +24,8 @@ export interface PreviewPanelHandles {
   navigateHistory(target: { index: number; filePath: string }): void;
   /** 047 US4 (research R7) — open this panel's Go to Heading pop-down (`preview.goToHeading`). */
   openHeadingOutline(): void;
+  /** 075 FR-064 — open Print Preview for this panel (`preview.print`). `false` when it cannot print. */
+  print(): boolean;
 }
 
 const registry = new Map<string, PreviewPanelHandles>();
@@ -114,6 +116,11 @@ export function onPendingReveal(panelId: string, listener: () => void): () => vo
   return () => {
     if (revealListeners.get(panelId) === listener) revealListeners.delete(panelId);
   };
+}
+
+/** `preview.print` (075 FR-064). `false` when the panel is not mounted here or cannot print. */
+export function printPreviewFromPanel(panelId: string): boolean {
+  return registry.get(panelId)?.print() ?? false;
 }
 
 /** `preview.goToHeading` (047 US4). `false` when the panel is not mounted here. */

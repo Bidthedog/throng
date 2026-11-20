@@ -116,6 +116,7 @@ import {
 import { forgetPanelCaret, setPanelCaret } from './caret-store.js';
 import { clearEditorHoveredLink, setEditorHoveredLink } from './editor-hovered-link-store.js';
 import { hideLinkHintFor } from '../links/link-hint-store.js';
+import { syncMarkExtension } from './sync-mark.js';
 import { attachEditorScrollRelay, type EditorScrollRelay } from './editor-scroll-relay.js';
 import {
   forgetDocumentMetrics,
@@ -1941,6 +1942,8 @@ export function useEditor(params: UseEditorParams): void {
           readOnlyCompartment.of(movedOutExtensions(movedOutRef.current)),
           drawSelection(),
           highlightActiveLine(),
+          // 073 FR-033d — the line Synchronise Scrolling has the preview in step at, softly highlighted.
+          syncMarkExtension(panelId),
           /**
            * A block is MANY selection ranges, and CodeMirror will not keep them without this (US6).
            *

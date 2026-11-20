@@ -1,0 +1,27 @@
+/* The cell dialog (073 FR-036a). Theme tokens only; the frame is the shared `.modal` / `.modal-overlay` chrome. */
+
+.cell-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 92vw);
+  max-width: 92vw;
+}
+
+.cell-dialog__editor {
+  flex: 1 1 auto;
+  height: min(50vh, 420px);
+  min-height: 8em;
+  border: 1px solid var(--throng-colour-border);
+  background: var(--throng-colour-editorBg);
+  color: var(--throng-colour-editorFg);
+}
+
+.cell-dialog__editor .standalone-editor {
+  height: 100%;
+}
+
+.cell-dialog__hint {
+  margin: 6px 0 0;
+  color: var(--throng-colour-textMuted);
+  font-size: 0.9em;
+}

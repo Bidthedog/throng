@@ -13,6 +13,8 @@ export interface DiagramActions {
   inFocus(): boolean;
   /** The chord that does the same, when there is one (a `.mmd` preview's is the panel's). */
   focusChord?: string;
+  /** 074 FR-033 — the drawing is a picture (an image or an SVG), so the copy row reads Copy Image. */
+  picture?: boolean;
 }
 
 const actions = new Map<string, DiagramActions>();

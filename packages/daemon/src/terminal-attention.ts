@@ -107,7 +107,7 @@ export function defaultAttentionConfig(): AttentionProducerConfig {
   return {
     enabled: base.enabled,
     signals: { ...base.signals },
-    quietMs: base.quietSeconds * 1000,
+    quietMs: base.quietMs,
     notifyByDefault: DEFAULT_APP_SETTINGS.terminals.defaultNotifications,
   };
 }

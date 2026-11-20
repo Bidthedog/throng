@@ -78,6 +78,9 @@ import {
 } from '../../link-dom.js';
 import type { PipelineContext } from './pipeline.js';
 import { WIKI_HREF_ATTRIBUTE, WIKI_SCHEME_PREFIX, wikiHrefDisplayText } from './wikilinks.js';
+import { CALLOUT_ATTRIBUTES, sanitiseCalloutAttributes } from './callout-sanitise.js';
+import { MATH_ATTRIBUTE, MATH_OPEN_ATTRIBUTE, sanitiseMathAttributes } from './math.js';
+import { MATH_COPY_MARK } from '../../math-host.js';
 import { DIAGRAM_IMAGE_ATTRIBUTE, DIAGRAM_PNG_DATA_URI } from '../../diagram/diagram-host.js';
 import { logExpected } from '@throng/core';
 
@@ -103,6 +106,11 @@ export const PROFILE = Object.freeze({
     'data-throng-embed-wiki', // 068 FR-013 — the `![[ ]]` spelling of an embed (presence only); it falls back to the project root
     'data-diagram-height', // 054 FR-046m — a diagram's box height, whole pixels; parsed again where it is read
     'data-diagram-pending', // 054 FR-032 — a place a diagram is drawn into once its source is read; presence only
+    // 075 FR-014 — a callout's markup (callouts.ts); the callout hook keeps them only on a pipeline callout.
+    ...CALLOUT_ATTRIBUTES,
+    // 075 FR-047 — a maths placeholder (math.ts); its rule keeps only the closed values.
+    MATH_ATTRIBUTE,
+    MATH_OPEN_ATTRIBUTE,
   ],
   ALLOW_DATA_ATTR: false,
   ALLOW_ARIA_ATTR: false,
@@ -350,6 +358,9 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
     }
 
     const nonce = node.getAttribute('data-heading-nonce');
+    // 075 FR-014 — callout attributes survive only on a callout this render's pipeline emitted.
+    sanitiseCalloutAttributes(node, nonce !== null && nonce === current?.context?.headingNonce);
+    sanitiseMathAttributes(node);
     node.removeAttribute('data-heading-nonce');
     if (HEADING.test(tag)) onHeading(node, nonce);
     else if (node.hasAttribute('data-heading-slug')) node.removeAttribute('data-heading-slug');
@@ -383,14 +394,31 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
  * copy draws in a diagram's place, marked by the copy — and the exporter's hook removes any other image
  * that reaches DOMPurify, so that pass still has a backstop.
  */
+/**
+ * 075 FR-050 — the MathML a copied equation carries in a rich copy: what KaTeX's `htmlAndMathml` output holds
+ * beside its drawing. Admitted for ONE shape only, a `<math>` the copy marked (`MATH_COPY_MARK`); the
+ * exporter's hook removes any other `<math>` before DOMPurify reads it, and the render profile still drops
+ * MathML a document writes.
+ */
+const EXPORT_MATHML_TAGS = [
+  'math', 'semantics', 'annotation', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mtext', 'mspace', 'msup', 'msub', 'msubsup',
+  'mfrac', 'msqrt', 'mroot', 'mover', 'munder', 'munderover', 'mtable', 'mtr', 'mtd', 'mpadded', 'mphantom',
+  'menclose', 'mstyle',
+];
+const EXPORT_MATHML_ATTR = [
+  'xmlns', 'display', 'encoding', 'mathvariant', 'stretchy', 'fence', 'separator', 'lspace', 'rspace', 'accent',
+  'accentunder', 'columnalign', 'rowspacing', 'columnspacing', 'displaystyle', 'scriptlevel', 'linethickness',
+  'minsize', 'maxsize', 'movablelimits', 'symmetric', 'notation',
+];
+
 export const EXPORT_PROFILE = Object.freeze({
   // 054 FR-049a — `img` and `src` are back for ONE shape only: the PNG data URI a copy draws in a diagram's
   // place. The exporter's hook removes every other image before DOMPurify reads its attributes.
-  ALLOWED_TAGS: PROFILE.ALLOWED_TAGS.filter((tag) => tag !== 'span'),
-  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan'],
+  ALLOWED_TAGS: [...PROFILE.ALLOWED_TAGS.filter((tag) => tag !== 'span'), ...EXPORT_MATHML_TAGS],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan', ...EXPORT_MATHML_ATTR],
   ALLOW_DATA_ATTR: false,
   ALLOW_ARIA_ATTR: false,
-  ADD_FORBID_CONTENTS: PROFILE.ADD_FORBID_CONTENTS,
+  ADD_FORBID_CONTENTS: PROFILE.ADD_FORBID_CONTENTS.filter((tag) => tag !== 'math'),
   ALLOWED_URI_REGEXP: PROFILE.ALLOWED_URI_REGEXP,
 } satisfies Config);
 
@@ -415,6 +443,15 @@ export type PreviewHtmlExporter = (selection: DocumentFragment) => string;
 export function createHtmlExporter(root: WindowLike = window): PreviewHtmlExporter {
   const purify = DOMPurify(root);
   purify.addHook('beforeSanitizeAttributes', (node) => {
+    // 075 FR-050 — MathML survives only as a copied equation: a `<math>` the copy marked, and what is inside it.
+    if (node.tagName?.toUpperCase() === 'MATH') {
+      if (!node.hasAttribute(MATH_COPY_MARK)) {
+        node.remove();
+        return;
+      }
+      node.removeAttribute(MATH_COPY_MARK);
+      return;
+    }
     // 054 FR-049a — an image survives only as a copied diagram: marked by the copy, a PNG data URI, nothing else.
     if (node.tagName?.toUpperCase() === 'IMG') {
       const diagram = node.hasAttribute(DIAGRAM_IMAGE_ATTRIBUTE) && DIAGRAM_PNG_DATA_URI.test(node.getAttribute('src') ?? '');

@@ -732,6 +732,25 @@ declare global {
         writeImage?: (entry: { dataUri: string }) => Promise<void>;
         paste: () => Promise<{ text: string; mode: import('@throng/core').ClipboardMode }>;
       };
+      // 075 (contracts/print.md §IPC) — Print Preview.
+      print?: {
+        /** From a preview: open Print Preview for `request`. `opened: false` when one was already open (it is focused). */
+        open: (request: import('@throng/core').PrintJobRequest) => Promise<{ opened: boolean }>;
+        /** From Print Preview: what it was opened for, or `null` for a job that has gone. */
+        job: (jobId: string) => Promise<import('@throng/core').PrintJobView | null>;
+        /** Lay the pages out with `settings`: their count, and the PDF Print Preview draws them from (FR-068a). */
+        render: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<import('@throng/core').PrintRenderResult>;
+        /** 2026-11-20 — the OS's printers now; `null` once the job has closed. */
+        printers: (jobId: string) => Promise<import('@throng/core').PrintJobView['printers'] | null>;
+        /** Print `sheet` — the pages shown, drawn — with `settings`, with no OS dialog. On success the window closes. */
+        print: (
+          jobId: string,
+          settings: import('@throng/core').PrintSettings,
+          sheet: import('@throng/core').PrintSheet,
+        ) => Promise<import('@throng/core').PrintSendResult>;
+        /** Save `settings` and close. */
+        close: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<void>;
+      };
       // 045 — file links (#394). Every call carries the link TEXT and the panel it was seen in, and
       // never a resolved path: main re-resolves, derives the owning project from `panelId`, and
       // re-checks that the target still exists before acting (FR-037, I1/I2).
@@ -781,6 +800,8 @@ declare global {
         detach: (panelId: string) => void;
         /** The panel no longer exists (FR-042, FR-110). Never prompts, never touches the document. */
         destroyed: (panelId: string) => void;
+        /** 074 FR-072a — register the safe sources the panel's HTML frame (`throng-html-<panelId>`) may load from; [] forgets. */
+        setFrameSources: (panelId: string, origins: string[]) => void;
         navigate: (
           req: import('@throng/core').PreviewNavigateRequest,
         ) => Promise<import('@throng/core').PreviewNavigateResponse>;
@@ -803,6 +824,11 @@ declare global {
          * resolved and confined by main against the panel's own document and project. At most 50 per call.
          */
         readEmbeds?: (panelId: string, refs: string[]) => Promise<{ results: import('@throng/core').PreviewEmbedRead[] }>;
+        /** 073 R7, 074 R4 — a binary provider's source bytes (a workbook, PDF.js, Copy Image), confined as the protocol confines them. */
+        readSource?: (
+          panelId: string,
+          asset?: string,
+        ) => Promise<{ ok: true; bytes: Uint8Array; mime: string } | { ok: false; status: number }>;
         /**
          * 054 FR-022 – FR-029 (contracts/preview-ipc-054.md) — toggle a task-list checkbox in the source.
          * Main locates the marker in the CURRENT text and edits one character; the preview never writes.
@@ -810,6 +836,22 @@ declare global {
         toggleTask: (
           request: import('@throng/core').TaskToggleRequest,
         ) => Promise<import('@throng/core').TaskToggleResponse>;
+        /**
+         * 073 (contracts/preview-ipc-073.md) — a CSV Preview Editor's grid operation, resolved by main against
+         * the document's current text and applied as one undo step. Optional: an older preload has none.
+         */
+        gridEdit?: (request: {
+          panelId: string;
+          filePath: string;
+          operation: import('@throng/core').CsvGridOperation;
+        }) => Promise<
+          | { ok: true; dirty: boolean }
+          | { ok: false; reason: 'changed' | 'invalid' | 'unavailable' }
+          | { ok: false; reason: 'malformed'; line: number }
+        >;
+        gridUndo?: (panelId: string) => Promise<{ ok: boolean }>;
+        gridRedo?: (panelId: string) => Promise<{ ok: boolean }>;
+        gridSave?: (panelId: string, absPath?: string) => Promise<{ ok: true } | { ok: false; reason: string; error: string }>;
         /** FR-031 — an editor panel's display title, forwarded as its previews' `parent.title`. */
         publishEditorTitle: (panelId: string, title: string) => void;
         /** FR-010 — this window's layout does not hold the parent a `place` named. */
@@ -817,6 +859,8 @@ declare global {
         /** FR-091 — open a preview link's `http:`/`https:`/`mailto:` URL; main re-checks the scheme. */
         openExternal: (url: string) => void;
         onUpdate: (cb: (update: import('@throng/core').PreviewUpdate) => void) => () => void;
+        /** 074 R6 — a Ctrl+clicked link in a preview's sandboxed page, by the panel it was clicked in. */
+        onFrameLink?: (cb: (link: { panelId: string; href: string }) => void) => () => void;
         onOpenChanged: (cb: (evt: import('@throng/core').PreviewOpenChanged) => void) => () => void;
         onPathChanged: (cb: (evt: import('@throng/core').PreviewPathChanged) => void) => () => void;
         onFocus: (cb: (evt: import('@throng/core').PreviewFocusMessage) => void) => () => void;

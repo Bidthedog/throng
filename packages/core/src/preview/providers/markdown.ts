@@ -13,6 +13,10 @@ export const markdownProvider: PreviewProviderDescriptor = {
   displayName: 'Markdown',
   extensions: ['.md', '.markdown'],
   kind: 'text',
+  // 074 FR-103 — drawn as the preview icon with this type's mark.
+  previewIcon: 'previewMarkdown',
+  // 075 FR-060 — a flowing document, paginated by throng.
+  print: 'document',
   settings: [
     // 054 FR-041. First of the own settings: the contract places it straight after Open previews in.
     {
@@ -20,6 +24,15 @@ export const markdownProvider: PreviewProviderDescriptor = {
       label: 'Render Mermaid diagrams',
       description:
         'Draw a mermaid code block in a Markdown preview as its diagram. When off, the block shows as code.',
+      control: 'toggle',
+      default: true,
+    },
+    // 075 FR-042 — typeset TeX maths ($…$, $$…$$, ```math). Off renders every expression as its source.
+    {
+      leaf: 'typesetMath',
+      label: 'Typeset math',
+      description:
+        'Draw mathematics written between dollar signs, or in a math code block, as typeset equations. When off, each expression shows as the text it was written in.',
       control: 'toggle',
       default: true,
     },
@@ -55,12 +68,16 @@ export const markdownProvider: PreviewProviderDescriptor = {
     // 0 jumps instantly.
     {
       leaf: 'headingJumpMs',
-      label: 'Heading jump scroll duration (ms)',
+      label: 'Heading jump scroll duration',
       description: 'How long a jump to a heading in a Markdown preview takes to scroll into view. 0 jumps instantly.',
       control: 'number',
       default: 200,
+      // 077 FR-001, FR-012 — stored in ms, 0–1,500 ms.
+      storedUnit: 'ms',
+      display: 'ms',
       min: 0,
-      max: 2000,
+      max: 1500,
+      hardMax: 5000,
       // A bounded number takes the slider (018 SC-007's converse guard), so it needs a step: at
       // least 1% of the range (`slider-descriptors.test.ts`), and the shipped 200 lands exactly on
       // one — 0 + 50×4.

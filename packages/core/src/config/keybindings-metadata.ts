@@ -299,8 +299,20 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord(
     'preview.goToHeading',
     'Navigate',
-    'Go to Heading…',
-    'Open a searchable list of the preview’s headings and jump to one. Live in a preview only.',
+    'Go to Heading, Page or Row…',
+    'Open a searchable list of the preview’s headings and jump to one; in a PDF preview, Go to Page; in a CSV or spreadsheet preview, Go to Row. Live in a preview only.',
+  ),
+  // 073 FR-038 — the CSV Preview Editor's insert commands, each also on its row or column menu.
+  chord('grid.insertRowAbove', 'CSV grid', 'Insert Row Above', 'Insert an empty row above the active cell in the CSV Preview Editor.'),
+  chord('grid.insertRowBelow', 'CSV grid', 'Insert Row Below', 'Insert an empty row below the active cell in the CSV Preview Editor.'),
+  chord('grid.insertColumnLeft', 'CSV grid', 'Insert Column Left', 'Insert an empty column left of the active cell in the CSV Preview Editor.'),
+  chord('grid.insertColumnRight', 'CSV grid', 'Insert Column Right', 'Insert an empty column right of the active cell in the CSV Preview Editor.'),
+  // 075 FR-064 — Print Preview for the active preview; Print Preview's own Print button sends the job.
+  chord(
+    'preview.print',
+    'Navigate',
+    'Print…',
+    'Open Print Preview for the active preview, to choose a printer and page settings and see the pages before printing. Live in a preview only.',
   ),
 
   // File Explorer (resolved while the File Explorer pane has focus)
@@ -326,6 +338,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord('editor.save', 'Editor', 'Save', 'Save the active editor document.'),
   chord('editor.saveAll', 'Editor', 'Save all', 'Save all open editor documents in scope.'),
   chord('editor.saveAs', 'Editor', 'Save as', 'Save the active document to a new location.'),
+  chord(
+    'editor.print',
+    'Editor',
+    'Print…',
+    'Open Print Preview for the active editor\'s document, unsaved changes included, to choose a printer and page settings and see the pages before printing. Live in an editor only.',
+  ),
 
   // Editor text editing (016). These are live only inside an editor, which is why `Cut line`
   // can share Ctrl+X with the File Explorer's Cut without either shadowing the other.

@@ -195,6 +195,7 @@ export class NodeFileWatcher implements IFileWatcher {
         timer = null;
         resetBurst();
         waitForPath();
+        reportGone();
         return;
       }
       // A delivered event proves this watch works, so the retry budget is spent, not consumed.
@@ -272,6 +273,7 @@ export class NodeFileWatcher implements IFileWatcher {
         timer = null;
         resetBurst();
         waitForPath();
+        reportGone();
       };
       try {
         watchFile(dir, { interval: ROOT_POLL_MS, persistent: false }, onStat);
@@ -297,6 +299,18 @@ export class NodeFileWatcher implements IFileWatcher {
      * ten minutes, and a bounded wait would simply move the give-up further out. The wait ends when
      * the path returns or when the handle is disposed, and nothing else.
      */
+    /**
+     * #696 — the watched folder itself went away under a live watch (renamed or removed outside throng). Whatever
+     * was in it is gone too, and no event inside it says so: Linux reports the rename only as the watch's own
+     * ENOENT, macOS not at all. Report it once, as a return is reported on re-arm, so every reader re-reads and
+     * finds its file missing — an editor's banner, a preview's notice — instead of showing it as though it were there.
+     */
+    const reportGone = (): void => {
+      if (disposed) return;
+      const whole = join(dir, '.');
+      onChange(whole, { paths: [whole], complete: false });
+    };
+
     const waitForPath = (): void => {
       if (disposed) return;
       closeRootGuard();
@@ -370,6 +384,7 @@ export class NodeFileWatcher implements IFileWatcher {
           // give-up — which is what lets a folder renamed away and back recover by itself.
           if (error.code === 'ENOENT') {
             waitForPath();
+            reportGone();
             return;
           }
           scheduleRetry(error.code ?? error.message);

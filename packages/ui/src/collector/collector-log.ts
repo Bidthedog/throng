@@ -1,12 +1,12 @@
-import { logFatal, parseLogLevel, sessionFileName } from '@throng/core';
+import { logFatal, parseLogLevel, retentionFromEnv, sessionFileName } from '@throng/core';
 import { createFileLog, createProcessAnonymiser, type DiagnosticLog } from '@throng/platform';
 
 /**
  * 066 FR-005 / FR-017 — the resource collector's own log, in the one logs folder.
  *
  * UI main passes the folder, level and retention through the environment it forks the collector with
- * (`THRONG_LOG_DIR`, `THRONG_LOG_LEVEL`, `THRONG_LOG_MAX_KB`, `THRONG_LOG_KEEP_DAYS`,
- * `THRONG_LOG_MAX_TOTAL_MB`); one session file per collector process, like the PTY agent's.
+ * (`THRONG_LOG_DIR`, `THRONG_LOG_LEVEL`, `THRONG_LOG_MAX_BYTES`, `THRONG_LOG_KEEP_DAYS`,
+ * `THRONG_LOG_MAX_TOTAL_BYTES`); one session file per collector process, like the PTY agent's.
  */
 export interface CollectorLogOptions {
   readonly env: NodeJS.ProcessEnv;
@@ -27,11 +27,8 @@ export function openCollectorLog(options: CollectorLogOptions): DiagnosticLog | 
     component: 'collector',
     anonymiser,
     level: parseLogLevel(env.THRONG_LOG_LEVEL),
-    retention: {
-      maxFileBytes: Number(env.THRONG_LOG_MAX_KB) * 1024 || undefined,
-      keepDays: Number(env.THRONG_LOG_KEEP_DAYS) || undefined,
-      maxTotalBytes: Number(env.THRONG_LOG_MAX_TOTAL_MB) * 1024 * 1024 || undefined,
-    },
+    // 077 FR-001 — in bytes; the KB/MB names v1.0.0-beta1 shipped are still read where these are unset.
+    retention: retentionFromEnv(env),
     // Its stdout is ignored by the fork; writing through would only reach nobody.
     mirrorToConsole: false,
   });
