@@ -124,3 +124,15 @@ Preview providers "markdown" and "notes" both claim ".md"
 
 The shipped registry is built at module load in core, so the throw happens on the first import in
 every process — a unit test (`preview-registry.test.ts`) pins the message.
+
+## Amendment — spec 074 (2026-11-18)
+
+- **§2 descriptors** gain provider-neutral fields: `filesNoun`, `previewOptionLabel` (the "Open <files> in"
+  preference, 074 `contracts/open-in-preference.md`, which supersedes 044 FR-050/FR-051 — every provider, binary
+  included, has `defaultOpenAction` and `openTarget`), `maxFileBytesSetting`, `assetMimeTypes` and
+  `revealsMatches`.
+- **§4 binary size limit**: the source route is capped by `maxFileBytesFor(registry, settings, providerId,
+  editor.maxOpenFileBytes)` — the provider's own Maximum file size where it declares one — and main refuses a file
+  over it before reading, with `{ kind: 'too-large', size, limit }`.
+- **Body props** gain `onStatusReadout` (the status bar's readout slot; a binary preview's bar shows it and nothing
+  else) and `readSource(asset?)` (the run's source, or one of its assets, through the protocol handler).
