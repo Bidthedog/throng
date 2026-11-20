@@ -26,7 +26,7 @@ const capped: PreviewProviderDescriptor = {
   kind: 'binary',
   sourceMimeTypes: ['application/pdf'],
   maxFileBytesSetting: 'maxFileBytes',
-  settings: [{ leaf: 'maxFileBytes', label: 'Maximum file size', description: 'd', control: 'number', default: 16 }],
+  settings: [{ leaf: 'maxFileBytes', label: 'Maximum file size', description: 'd', control: 'number', storedUnit: 'bytes', default: 16 }],
 };
 const page: PreviewProviderDescriptor = {
   id: 'page',
