@@ -39,6 +39,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-30 | [Media] HTML page right-click menu | untested | | | carried from 074 MT-11; no sign-off survives the merge |
 | MT-31 | [Media] Safe HTML preview sources | untested | | | carried from 074 MT-12; no sign-off survives the merge |
 | MT-32 | [Media] Preview type icons and titles | untested | | | carried from 074 MT-13; no sign-off survives the merge |
+| MT-33 | [Media] PDF scrolls and resizes smoothly | untested | | | new 2026-11-20 |
 | MT-40 | [Markdown] Callouts draw with their type, icon and title | needs retest | | | signed off on 075 at 0c5219b71c9e; later 075 work (loading placeholder, resize hold) and the merge touched its paths |
 | MT-41 | [Markdown] Folding callouts | needs retest | | | signed off on 075 at 0c5219b71c9e; later 075 work and the merge touched preview-panel.tsx, markdown-body.tsx and copy.ts |
 | MT-42 | [Markdown] Callout colours in the Themes editor | needs retest | 03657a275a3b | 2026-11-20 | 1bb44e9d touched packages/core/src/config/theme-copy.ts |
@@ -558,6 +559,23 @@ Paths: `packages/core/src/workspace/panel-title.ts`, `packages/core/src/preview/
 
 ### Negative cases
 - Narrow a preview panel until its title truncates: the name shortens and ` - <Type> Preview` stays whole.
+
+## MT-33: [Media] PDF scrolls and resizes smoothly
+
+Covers: 074 FR-065a, 074 FR-065b, 074 FR-065c
+Paths: `packages/ui/src/renderer/preview/providers/pdf/**`
+
+### Steps
+1. Open a several-hundred-page PDF. Scroll it steadily with the wheel, then drag the scrollbar fast down the document. The scroll stays smooth; pages passed over show as plain placeholders.
+2. Stop scrolling. Within a moment the pages in view start drawing. A page that takes a while shows a spinner in its centre until it appears.
+3. Page through an ordinary text PDF with Page Down. Pages appear without a spinner flashing.
+4. At Fit, drag the splitter beside the PDF to and fro. The pages follow the drag smoothly, a little soft while it moves, and turn sharp once you let go.
+5. Zoom in and out a few steps with Ctrl+wheel. The pages resize at once and sharpen a moment after the last step.
+6. Turn on the OS's reduced-motion setting and repeat step 2. The spinner shows but does not spin.
+
+### Negative cases
+- No page goes blank or white while it redraws after a zoom or a resize.
+- Nothing below a page jumps as the pages above it finish drawing.
 
 ## MT-40: [Markdown] Callouts draw with their type, icon and title
 
