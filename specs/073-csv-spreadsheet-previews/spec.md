@@ -222,6 +222,11 @@ the feedback, the code and precedent rather than stated by the maintainer.
   then appears on the pair in step at that moment and fades after the Scroll-sync highlight duration. *(derived)* No
   highlight is drawn or moved while scrolling continues; a mark already showing clears when scrolling starts again; the
   300 ms is fixed, not a preference. (FR-033g, superseding FR-033d's "appears when a scroll moves the other view")
+- Q42: When a CSV already open in an editor is opened again while the Last Preview Panel shows another CSV, does a
+  second preview open beside the editor? → A: No. "Only one CSV preview should exist at a time, unless the user
+  explicitly opens another preview editor." *(derived)* The Last Preview Panel moves back to the CSV and pairs with its
+  editor again; asking for a new panel still places one beside the editor. Markdown keeps 047 FR-012 unchanged.
+  (FR-060e, superseding 047 FR-012 for CSV)
 
 ## Terminology
 
@@ -855,6 +860,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-060c** *(Q26, 2026-11-19)*: The CSV provider MUST have an **Edit multi-line cells in a dialog** setting
   (on/off, ships **on**), rendered and documented as FR-060 requires. Off, FR-036c does not apply: a cell
   holding a line break opens in the dialog only when it is longer than the threshold.
+- **FR-060e** *(Q42, 2026-11-20)*: With CSV **Open previews in** set to the Last Preview Panel, opening a CSV whose
+  document an editor already holds MUST reuse the Last Preview Panel — moving it to that CSV, with the unsaved-grid
+  prompt of FR-033 when it holds edits, and pairing it with that editor — rather than placing a second preview beside
+  the editor. A new preview beside the editor opens only when the user explicitly asks for a new panel (047 FR-014).
+  *(Supersedes 047 FR-012's "a parented preview still opens beside its editor" for the CSV provider only.)*
 - **FR-061**: **Preview size limit** MUST be a Spreadsheet provider setting, shipping at **25 MB**.
 - **FR-062**: A workbook above the preview size limit MUST show one inline notice naming the file's size
   and the limit, with Refresh retrying under the current limit. This **supersedes 044 FR-026**'s "the size
