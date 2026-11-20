@@ -71,7 +71,7 @@ test('a CSV cell edited in the grid saves only that field, and a workbook previe
   await expect(win.getByTestId(`panel-title-${id}`)).toHaveText(/people\.csv - CSV Preview/);
 
   await grid.focus();
-  await win.keyboard.press('Control+S');
+  await win.keyboard.press('ControlOrMeta+s'); // Cmd+S on macOS, where the Ctrl of a binding is Cmd
   // Every other byte kept: the CRLF endings, the doubled quote, the unedited records.
   await expect
     .poll(() => readFileSync(join(root, 'people.csv'), 'utf8'), { timeout: 8000 })
