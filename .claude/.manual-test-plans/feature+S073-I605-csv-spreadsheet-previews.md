@@ -126,7 +126,7 @@ Paths: `packages/ui/src/renderer/preview/providers/spreadsheet/**`, `packages/co
 
 ## MT-06: Open-in settings and turning a provider off
 
-Covers: FR-020, FR-033a, FR-033b, FR-008d, FR-063, FR-064, Q1, Q2, Q5, Q10
+Covers: FR-020, FR-033a, FR-033b, FR-008d, FR-063, FR-064, Q1, Q2, Q5, Q10, FR-060e
 Paths: `packages/core/src/preview/providers/**`, `packages/core/src/config/preview-settings.ts`, `packages/ui/src/renderer/preview/preview-provider-sync.tsx`, `packages/ui/src/renderer/preview/open-preview.ts`, `packages/ui/src/main/preview-service.ts`, `packages/ui/src/main/csv-grid-service.ts`, `packages/ui/src/renderer/preview/preview-link-notice.tsx`
 
 ### Steps
@@ -137,6 +137,7 @@ Paths: `packages/core/src/preview/providers/**`, `packages/core/src/config/previ
 5. With **CSV: Open previews in** = Last Preview Panel, open `a.csv`, resize a column, then open `b.csv`: it replaces `a.csv` in the same panel. Open `a.csv` again: it replaces `b.csv` in that panel, with its resized column; no second panel opens. Edit a cell in `a.csv`, save, open `b.csv`: still the same panel.
 6. Edit a cell in `a.csv` and do NOT save; open `b.csv`. The unsaved-changes prompt names both files. **Cancel**: nothing opens. **Open in new preview**: `b.csv` opens in a new panel and `a.csv` keeps its edit and marker. Repeat with **Discard & open**: the panel shows `b.csv` and `a.csv` reopens unedited. Repeat with **Save & open**: `a.csv` is saved and the panel shows `b.csv`. Drop `b.csv` from File Explorer onto the dirty grid: the same prompt. With unsaved edits, Back in that panel shows a notice: "This grid has unsaved changes. Save them to go back or forward."
 7. In one panel, select C7 in `a.csv`, then open `b.csv`: it starts at A1. Select B3, reopen `a.csv`: C7 is selected and in view. Back: B3. Forward: C7. Restart throng and reopen both: each starts at A1.
+8. With **CSV: Open previews in** = Last Preview Panel, open `a.csv`, click the status bar's open-in-editor button, click back into the preview, open `b.csv`, then open `a.csv` again from Files & Folders: the one preview moves back to `a.csv` beside its editor and no second CSV preview appears. Use Back instead of Files & Folders: the same.
 
 ### Negative cases
 - Turning **Spreadsheet: Enabled** off closes every spreadsheet preview with no prompt.
