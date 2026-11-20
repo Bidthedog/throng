@@ -594,14 +594,16 @@ li + .encoding-picker__heading {
   cursor: pointer;
 }
 
-/* 073 FR-033d — the line Synchronise Scrolling has the preview in step at. Drawn on the whole line, soft, from a theme
-   token; it fades out when the class goes (1.5 s after the last sync scroll), and never moves the caret or selection. */
+/* 073 FR-033d — the line Synchronise Scrolling has the preview in step at. Drawn on the whole line, soft, from the `accent`
+   token (NOT `accentText`, which is the colour of text ON an accent fill and equals the background in the shipped themes,
+   so a wash of it is invisible: editor-sync-mark-css.test.ts). It fades out when the class goes (the highlight duration
+   after the last sync scroll), and never moves the caret or selection. */
 .cm-line.throng-sync-mark {
   background-color: transparent;
   transition: background-color 600ms ease-out;
 }
 
 .cm-line.throng-sync-mark--on {
-  background-color: color-mix(in srgb, var(--throng-colour-accentText) 22%, transparent);
+  background-color: color-mix(in srgb, var(--throng-colour-accent) 22%, transparent);
   transition-duration: 120ms;
 }
