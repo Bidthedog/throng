@@ -357,6 +357,7 @@ function UntypedPanelBody({
           projectRoot={root}
           rootless={ownedBySub}
           terminalMemory={panel.terminalMemory}
+          formerKind={panel.formerKind}
         />
       </PanelDropTarget>
     </TreeDropTarget>

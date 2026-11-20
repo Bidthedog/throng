@@ -65,6 +65,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-104 | [General] The middle mouse button never pastes | untested | | | |
 | MT-105 | [General] Open files in and Open previews in, both ways | untested | | | |
 | MT-106 | [General] The Preferences JSON editors are themed like an editor | untested | | | |
+| MT-107 | [General] × on the last panel returns it to the blank form | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1002,3 +1003,20 @@ Paths: `packages/ui/src/renderer/preferences/json-tab.tsx`, `packages/ui/src/ren
 
 ### Negative cases
 - No JSON editor draws a pale selection over a dark background, a black caret, or a light gutter beside dark text.
+
+## MT-107: [General] × on the last panel returns it to the blank form
+
+Covers: 002 FR-016a, 002 FR-016
+Paths: `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/panel-type/panel-type-form.tsx`, `packages/core/src/panel-type/assignment.ts`
+
+### Steps
+1. Close panels until the workspace has one tab with one panel. Open a text file in it, type a change, and press the panel's ×. The unsaved-changes prompt appears; press Cancel. The editor stays as it was.
+2. Press × again and choose Discard. The panel shows the blank panel form titled **Blank Panel**, with **Editor** already chosen in Panel Type.
+3. Choose Terminal and Confirm. Press × on the terminal (confirm if asked). The blank form returns with **Terminal** chosen.
+4. Open Find in Files (Ctrl+Shift+F) into that last panel, then press ×. The blank form returns titled **Blank Panel**, with nothing chosen in Panel Type.
+5. Open a CSV as a preview into the last panel and press ×. The blank form returns with nothing chosen.
+6. Split the panel so there are two, and press × on one. That panel disappears, as before.
+
+### Negative cases
+- No last panel keeps a type's title or body after its ×, and none is left showing a closed editor or a dead terminal.
+- A panel created with + still opens with nothing chosen.

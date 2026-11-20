@@ -278,6 +278,12 @@ export interface Panel {
    */
   terminalMemory?: TerminalMemory;
   /**
+   * 002 FR-016a — the type this panel had before it last returned to the blank form, which the form preselects when it
+   * still offers that type. Written by `clearPanelType`, dropped when the panel is typed again. Beside
+   * `terminalMemory` and outside `config`, for the same reason: it must survive the clear that removes `config`.
+   */
+  formerKind?: PanelKind;
+  /**
    * 039 FR-022/FR-027 (#293) — this Terminal Panel has NOT been reloaded, and is waiting to be.
    *
    * Set when a project is opened while `terminals.reloadMode` is `'manual'`; cleared when the user

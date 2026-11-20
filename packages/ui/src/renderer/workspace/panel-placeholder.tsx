@@ -563,6 +563,12 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
      * panel, the same order `panel-body`'s FR-067 refusal uses; any other close removes it as before.
      */
     if (isPreview) ws.clearPanelType(panel.id);
+    /*
+     * 002 FR-016a — the workspace's LAST panel is kept (FR-016), so × there would remove nothing and leave the panel's
+     * kind over the content just torn down: an editor with no document, a Find in Files panel titled as one. It returns
+     * to the blank form instead, which remembers the type it had for the form to offer.
+     */
+    if (!inSubWorkspace && totalPanels <= 1) ws.clearPanelType(panel.id);
     ws.removePanel(panel.id);
     // Cascade to the sub-workspaces ONLY when destroying from the project (FR-026).
     // A sub-workspace destroy stays local (no broadcast → the project is untouched).
