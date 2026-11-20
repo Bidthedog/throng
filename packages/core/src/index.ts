@@ -1524,6 +1524,8 @@ export {
   checkPrintField,
   marginsMm,
   parsePageRanges,
+  clipPageRanges,
+  formatPageRanges,
   parsePrintSettings,
   pickDefaultPrinter,
   printerChoices,

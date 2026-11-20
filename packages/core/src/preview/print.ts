@@ -36,7 +36,11 @@ export interface PrintJobView {
 
 /** The answer to `throng.print.render`: the pages laid out, or why they could not be. */
 /** A layout's answer: how many pages print, and the PDF Print Preview draws them from (075 FR-068a). */
-export type PrintRenderResult = { readonly pageCount: number; readonly pdf: Uint8Array } | { readonly error: string };
+export type PrintRenderResult =
+  | { readonly pageCount: number; readonly pdf: Uint8Array }
+  | { readonly error: string }
+  /** Every page the range names lies past the last: the document has `pageCount` pages (known gap 1, 2026-11-20). */
+  | { readonly outOfRange: true; readonly pageCount: number };
 
 /** The paper sizes offered, each a name both of Electron's calls accept (research R10). */
 export const PRINT_PAGE_SIZES = ['A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid'] as const;
@@ -200,7 +204,7 @@ export function serialisePrintSettings(s: PrintSettings): { version: 1; settings
 
 /**
  * A page-range string — `1-3, 5` — as sorted, merged 1-based ranges, or `null` when it is malformed or names no
- * page. A range past the last page is clipped by the caller, which knows the page count.
+ * page. A range past the last page is clipped by the caller, which knows the page count ({@link clipPageRanges}).
  */
 export function parsePageRanges(text: string): { from: number; to: number }[] | null {
   const parts = text.split(',').map((p) => p.trim()).filter((p) => p.length > 0);
@@ -222,6 +226,19 @@ export function parsePageRanges(text: string): { from: number; to: number }[] | 
     else merged.push({ ...r });
   }
   return merged;
+}
+
+/**
+ * Known gap 1 (2026-11-20) — `ranges` kept to a document of `pageCount` pages: a range running past the last page
+ * ends there, and one starting past it is dropped. Empty when every page named is past the last.
+ */
+export function clipPageRanges(ranges: readonly { from: number; to: number }[], pageCount: number): { from: number; to: number }[] {
+  return ranges.filter((r) => r.from <= pageCount).map((r) => ({ from: r.from, to: Math.min(r.to, pageCount) }));
+}
+
+/** Ranges as the range string Chromium takes: `1-3,5`. */
+export function formatPageRanges(ranges: readonly { from: number; to: number }[]): string {
+  return ranges.map((r) => (r.from === r.to ? `${r.from}` : `${r.from}-${r.to}`)).join(',');
 }
 
 /** The margins in effect, in millimetres. */
@@ -283,15 +300,17 @@ export function printSheetHtml(sheet: PrintSheet): string {
 
 const scaleOf = (s: PrintSettings): number => (s.scale.fitWidth ? 100 : s.scale.percent);
 
-export function toPdfOptions(s: PrintSettings): PdfOptions {
+/** `printToPDF`'s options for `s`; with `pageCount`, its page range is clipped to that many pages first. */
+export function toPdfOptions(s: PrintSettings, pageCount?: number): PdfOptions {
   const m = marginsMm(s);
-  const ranges = s.pages.all ? null : parsePageRanges(s.pages.ranges);
+  const parsed = s.pages.all ? null : parsePageRanges(s.pages.ranges);
+  const ranges = parsed !== null && pageCount !== undefined ? clipPageRanges(parsed, pageCount) : parsed;
   return {
     pageSize: s.pageSize,
     landscape: s.orientation === 'landscape',
     margins: { top: m.top / MM_PER_INCH, right: m.right / MM_PER_INCH, bottom: m.bottom / MM_PER_INCH, left: m.left / MM_PER_INCH },
     scale: scaleOf(s) / 100,
-    ...(ranges !== null ? { pageRanges: ranges.map((r) => (r.from === r.to ? `${r.from}` : `${r.from}-${r.to}`)).join(',') } : {}),
+    ...(ranges !== null ? { pageRanges: formatPageRanges(ranges) } : {}),
     printBackground: true,
     preferCSSPageSize: false,
   };

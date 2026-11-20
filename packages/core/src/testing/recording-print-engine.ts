@@ -36,8 +36,11 @@ export class RecordingPrintEngine implements IPrintEngine {
 
   async pdf(handle: PrintHostHandle, options: PdfOptions): Promise<Uint8Array> {
     this.calls.push({ op: 'pdf', handle: handle.id, options });
-    // As Chromium does: a range keeps the document's pages it names, and ignores those past the last.
+    // As Chromium does: a range keeps the document's pages it names, and ignores those past the last — but a range
+    // that STARTS past the last page is refused outright (`PdfPrintResult::kPageCountExceeded`), and Electron rejects
+    // printToPDF with this message.
     const ranges = options.pageRanges === undefined ? null : parsePageRanges(options.pageRanges);
+    if (ranges !== null && ranges.some((r) => r.from > this.pageCount)) throw new Error('Page range exceeds page count');
     const kept = ranges === null ? this.pageCount : ranges.reduce((n, r) => n + Math.max(0, Math.min(r.to, this.pageCount) - r.from + 1), 0);
     const pages = Array.from({ length: kept }, () => '<< /Type /Page >>').join('\n');
     return new TextEncoder().encode(`%PDF-1.7\n${pages}\n%%EOF`);

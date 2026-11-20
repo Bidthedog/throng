@@ -100,6 +100,8 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
   const [page, setPage] = useState(1);
   const [drawn, setDrawn] = useState(false);
   const [shown, setShown] = useState<PrintSettings | null>(null);
+  /** Known gap 1 — the page count, when every page the range names lies past the last; `null` otherwise. */
+  const [pastEnd, setPastEnd] = useState<{ range: string; pageCount: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
   // 2026-11-20 — each typed number's state; Print waits until every one is checked and valid.
@@ -211,6 +213,14 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
             setShown(null);
             return;
           }
+          if ('outOfRange' in result) {
+            // Said on the range box itself, as a malformed range is: no page to show, and nothing to print.
+            setLaying(false);
+            setShown(null);
+            setPastEnd({ range: settings.pages.all ? '' : settings.pages.ranges, pageCount: result.pageCount });
+            return;
+          }
+          setPastEnd(null);
           const doc = await openPrintPages(result.pdf);
           if (!active) {
             doc.destroy();
@@ -290,6 +300,8 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
   const noPrinter = job !== null && job.printers.length === 0;
   const upToDate = settings !== null && shown !== null && JSON.stringify(settings) === JSON.stringify(shown);
   const anyInvalid = Object.values(fields).includes('invalid');
+  /** Gap 1 — the past-the-end answer, while the range it was given for is still the one in the box. */
+  const rangePastEnd = pastEnd !== null && settings !== null && !settings.pages.all && settings.pages.ranges === pastEnd.range ? pastEnd : null;
   const anyPending = Object.values(fields).includes('pending');
   const canPrint = !noPrinter && upToDate && !laying && !printing && !anyInvalid && !anyPending;
   const settled = upToDate && !laying && pageCount !== null;
@@ -506,11 +518,16 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                       setRangeText(e.target.value);
                       update({ pages: { all: false, ranges: e.target.value } });
                     }}
-                    aria-invalid={!rangeValid(settings) || undefined}
+                    aria-invalid={!rangeValid(settings) || rangePastEnd !== null || undefined}
                     data-testid="print-pages-text"
                   />
                 </label>
                 {!rangeValid(settings) && <span className="print-preview__message">Enter pages as numbers and ranges, such as 1-3, 5.</span>}
+                {rangeValid(settings) && rangePastEnd !== null && (
+                  <span className="print-preview__message">
+                    This document has {formatGrouped(rangePastEnd.pageCount)} page{rangePastEnd.pageCount === 1 ? '' : 's'}.
+                  </span>
+                )}
               </fieldset>
               <label className="print-preview__field">
                 <span>Copies</span>

@@ -11,7 +11,9 @@
  */
 import { randomUUID } from 'node:crypto';
 import {
+  clipPageRanges,
   logCaught,
+  parsePageRanges,
   printerChoices,
   printSheetHtml,
   toPdfOptions,
@@ -142,7 +144,12 @@ export class PrintController {
     const render = ++job.renders;
     try {
       const host = await this.hostOf(job);
-      const pdf = await this.deps.engine.pdf(host, toPdfOptions(settings));
+      const pdf = await this.pagesOf(host, settings);
+      if (!(pdf instanceof Uint8Array)) {
+        // Nothing the range names exists: nothing is shown, so nothing can print (SC-012).
+        if (job.state !== 'closed' && render === job.renders) job.shown = null;
+        return pdf;
+      }
       const pageCount = countPdfPages(pdf);
       if (job.state !== 'closed' && render === job.renders) {
         job.shown = settings;
@@ -156,6 +163,23 @@ export class PrintController {
       logCaught('print: lay out the pages', error);
       return { error: error instanceof Error ? error.message : String(error) };
     }
+  }
+
+  /**
+   * Known gap 1 (2026-11-20) — the PDF of the pages `settings` names. Chromium refuses a range that starts past the
+   * last page ("Page range exceeds page count") and nothing else here knows the page count, so a range is laid out
+   * against the whole document first: past its end, the range is clipped to the pages there are, and a range left
+   * with none says how many there are instead. A range covering every page is that first layout, laid out once.
+   */
+  private async pagesOf(host: PrintHostHandle, settings: PrintSettings): Promise<Uint8Array | { outOfRange: true; pageCount: number }> {
+    const ranges = settings.pages.all ? null : parsePageRanges(settings.pages.ranges);
+    if (ranges === null) return this.deps.engine.pdf(host, toPdfOptions(settings));
+    const whole = await this.deps.engine.pdf(host, toPdfOptions({ ...settings, pages: { all: true } }));
+    const total = countPdfPages(whole);
+    const kept = clipPageRanges(ranges, total);
+    if (kept.length === 0) return { outOfRange: true, pageCount: total };
+    if (kept.length === 1 && kept[0]!.from === 1 && kept[0]!.to === total) return whole;
+    return this.deps.engine.pdf(host, toPdfOptions(settings, total));
   }
 
   /**

@@ -125,8 +125,37 @@ describe('laying out and printing (FR-068, SC-012)', () => {
     await controller.open(null, REQUEST);
     const view = await controller.describe('job-1');
     const result = await controller.render('job-1', { ...view!.settings, pages: { all: false, ranges: '1, 3' } });
-    expect(engine.of('pdf')[0]!.options.pageRanges).toBe('1,3');
+    expect(engine.of('pdf').at(-1)!.options.pageRanges).toBe('1,3');
     expect(result).toMatchObject({ pageCount: 2 });
+  });
+
+  /*
+   * Known gap 1 (2026-11-20) — a range past the last page is clipped to the pages there are, never a layout error.
+   * Chromium refuses a range that STARTS past the last page, so the controller, which learns the page count by laying
+   * the document out, clips before asking for the range.
+   */
+  it('clips a range past the last page to the pages there are, rather than failing to lay out', async () => {
+    await controller.open(null, REQUEST);
+    const view = await controller.describe('job-1');
+    const result = await controller.render('job-1', { ...view!.settings, pages: { all: false, ranges: '2, 5-9' } });
+    expect(result).toEqual({ pageCount: 1, pdf: expect.any(Uint8Array) });
+    expect(engine.of('pdf').at(-1)!.options.pageRanges).toBe('2');
+  });
+
+  it('lays out the whole document once when the range covers every page there is', async () => {
+    await controller.open(null, REQUEST);
+    const view = await controller.describe('job-1');
+    const result = await controller.render('job-1', { ...view!.settings, pages: { all: false, ranges: '1-9' } });
+    expect(result).toMatchObject({ pageCount: 3 });
+    expect(engine.of('pdf')).toHaveLength(1);
+  });
+
+  it('says how many pages there are when the whole range lies past the last, and prints nothing', async () => {
+    await controller.open(null, REQUEST);
+    const view = await controller.describe('job-1');
+    const settings: PrintSettings = { ...view!.settings, pages: { all: false, ranges: '5-7' } };
+    expect(await controller.render('job-1', settings)).toEqual({ outOfRange: true, pageCount: 3 });
+    expect((await controller.print('job-1', settings, SHEET(0))).ok).toBe(false);
   });
 
   it('never prints a job whose pages were not shown', async () => {

@@ -657,6 +657,11 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   **Print** MUST send the printer exactly the pages the preview shows — each drawn whole, margins included — so
   the chosen range, margins, scale and page breaks on paper are the preview's. The printer lays nothing out
   again and adds no margin, scale or range of its own.
+- **FR-068e**: *(2026-11-20; known gap 1.)* A page range naming pages past the document's last page MUST be clipped
+  to the pages there are — `2, 5-9` of a 3-page document shows and prints page 2 — never refused with a layout
+  error. When **every** page it names lies past the last, the range box MUST carry the same red outline a
+  malformed range does, with a message giving the document's page count ("This document has 3 pages."); no page
+  is shown and Print stays disabled.
 
 #### What prints (#484)
 

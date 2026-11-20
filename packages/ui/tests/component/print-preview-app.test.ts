@@ -46,7 +46,7 @@ const JOB: PrintJobView = {
 /** A laid-out job of `n` pages, as the fake PDF.js reads it. */
 const pdfOf = (n: number): Uint8Array => new Uint8Array([n % 256, Math.floor(n / 256)]);
 
-type RenderAnswer = { pageCount: number; pdf: Uint8Array } | { error: string };
+type RenderAnswer = { pageCount: number; pdf: Uint8Array } | { error: string } | { outOfRange: true; pageCount: number };
 
 function bridge(job: PrintJobView = JOB) {
   return {
@@ -165,6 +165,23 @@ describe('Print Preview', () => {
     });
     expect(b.render).toHaveBeenCalledTimes(1);
     expect((screen.getByTestId('print-print') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('outlines the range in red and names the page count when every page it names is past the last (gap 1)', async () => {
+    const b = bridge();
+    const b2 = await mount(b);
+    b2.render.mockImplementation(async () => ({ outOfRange: true as const, pageCount: 3 }));
+    fireEvent.click(screen.getByTestId('print-pages-range'));
+    fireEvent.change(screen.getByTestId('print-pages-text'), { target: { value: '5-7' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RENDER_DEBOUNCE_MS);
+    });
+    await settle();
+    expect(screen.getByTestId('print-pages-text').getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByText('This document has 3 pages.')).toBeTruthy();
+    expect((screen.getByTestId('print-print') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId('print-notice')).toBeNull();
+    expect(screen.getByTestId('print-status').textContent).not.toBe('Laying out pages…');
   });
 
   it('stops saying it is laying out when a range becomes malformed before the layout starts', async () => {
