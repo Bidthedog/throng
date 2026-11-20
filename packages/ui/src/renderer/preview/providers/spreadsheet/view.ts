@@ -13,4 +13,6 @@ export const spreadsheetView: PreviewProviderView = {
   id: 'spreadsheet',
   textSelection: false,
   load: () => import('./spreadsheet-body.js').then((m) => m.SpreadsheetBody),
+  // 075 FR-075b — the grid as a table, every row.
+  printable: (body, { title }) => import('../../../grid/grid-print.js').then((m) => m.gridPrintable(body, title)),
 };

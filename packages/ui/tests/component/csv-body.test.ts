@@ -24,6 +24,7 @@ import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { PREVIEW_LOADING_CLASS } from '../../src/renderer/preview/loading-placeholder.js';
 import { PRINT_UNAVAILABLE } from '../../src/renderer/preview/print/print-command.js';
+import { gridPrintable } from '../../src/renderer/grid/grid-print.js';
 import { __resetPreviewStore, applyPreviewUpdate } from '../../src/renderer/preview/preview-store.js';
 import { getEditorActions } from '../../src/renderer/editor/editor-actions.js';
 import { getEditorState } from '../../src/renderer/editor/editor-state.js';
@@ -239,12 +240,47 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     ['a cell', () => cellAt(0, 0)],
     ['a row header', () => rowHead(0)],
     ['a column header', () => colHead(0)],
-  ])('the menu of %s offers Print…, disabled with the reason, since a CSV cannot print (075 FR-062, FR-063)', (_name, target) => {
-    mount('a,b\n1,2\n');
+  ])('the menu of %s offers Print…, which runs the chrome\'s Print… (075 FR-063, FR-075b)', (_name, target) => {
+    const onPrint = vi.fn();
+    mount('a,b\n1,2\n', { onPrint });
     fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
+    const print = screen.getByTestId('menu-item-Print…');
+    expect(print.getAttribute('aria-disabled')).not.toBe('true');
+    fireEvent.click(print);
+    expect(onPrint).toHaveBeenCalledTimes(1);
+  });
+
+  it('without the chrome\'s Print… route, the row is drawn disabled with the reason (075 FR-062)', () => {
+    mount('a,b\n1,2\n');
+    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
     const print = screen.getByTestId('menu-item-Print…');
     expect(print.getAttribute('aria-disabled')).toBe('true');
     expect(print.getAttribute('title')).toBe(PRINT_UNAVAILABLE);
+  });
+
+  it('prints every row as a table, not the rows in view; Lock first row makes the first row the repeated header (075 FR-075b)', async () => {
+    const rows = Array.from({ length: 500 }, (_, i) => `r${i},<v${i}>`).join('\n');
+    const { container } = mount(`name,value\n${rows}\n`, { lockFirstRowChoice: true });
+    const output = await gridPrintable(container as HTMLElement, 'data.csv');
+    if (output.kind !== 'document') throw new Error('not a document');
+    const doc = new DOMParser().parseFromString(output.html, 'text/html');
+    expect([...doc.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(['name', 'value']);
+    const body = doc.querySelectorAll('tbody tr');
+    expect(body).toHaveLength(500);
+    expect(body[499]!.textContent).toBe('r499<v499>');
+    expect(doc.querySelectorAll('col')).toHaveLength(2);
+    // Runs nothing, requests nothing.
+    expect(output.html).toContain("default-src 'none'");
+    expect(doc.querySelector('script')).toBeNull();
+  });
+
+  it('with Lock first row off, the first row prints as data and there is no header', async () => {
+    const { container } = mount('name,value\na,1\n', { lockFirstRowChoice: false });
+    const output = await gridPrintable(container as HTMLElement, 'data.csv');
+    if (output.kind !== 'document') throw new Error('not a document');
+    const doc = new DOMParser().parseFromString(output.html, 'text/html');
+    expect(doc.querySelector('thead')).toBeNull();
+    expect([...doc.querySelectorAll('tbody tr')].map((tr) => tr.textContent)).toEqual(['namevalue', 'a1']);
   });
 
   it('Cut on a whole column clears its values and removes no column', async () => {

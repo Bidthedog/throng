@@ -19,6 +19,7 @@ import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { PREVIEW_LOADING_CLASS } from '../../src/renderer/preview/loading-placeholder.js';
 import { PRINT_UNAVAILABLE } from '../../src/renderer/preview/print/print-command.js';
+import { gridPrintable } from '../../src/renderer/grid/grid-print.js';
 import { WORKBOOK_READ_ONLY_TITLE, subscribeReadOnlyFlash } from '../../src/renderer/preview/read-only-marker.js';
 
 function book(sheets: Record<string, string[][]>, hidden: string[] = []): ArrayBuffer {
@@ -169,7 +170,28 @@ describe('SpreadsheetBody', () => {
     const colHead = (c: number): HTMLElement => document.querySelector<HTMLElement>(`[role="columnheader"][data-col="${c}"]`)!;
     const rowHead = (r: number): HTMLElement => document.querySelector<HTMLElement>(`[role="rowheader"][data-row="${r}"]`)!;
 
-    it('every grid menu offers Print…, disabled with the reason, since a workbook cannot print (075 FR-062, FR-063)', async () => {
+    it('every grid menu offers Print…, which runs the chrome\'s Print… (075 FR-063, FR-075b)', async () => {
+      const onPrint = vi.fn();
+      mount('throng-preview://source/s1?rev=1', { onPrint });
+      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+      const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;
+      for (const target of [cellEl, () => rowHead(0), () => colHead(0)]) {
+        fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
+        fireEvent.click(screen.getByTestId('menu-item-Print…'));
+      }
+      expect(onPrint).toHaveBeenCalledTimes(3);
+    });
+
+    it('prints the sheet on screen as a table, every row (075 FR-075b)', async () => {
+      const { container } = mount('throng-preview://source/s1?rev=1');
+      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+      const output = await gridPrintable(container as HTMLElement, 'book.xlsx');
+      if (output.kind !== 'document') throw new Error('not a document');
+      const doc = new DOMParser().parseFromString(output.html, 'text/html');
+      expect(doc.querySelector('tbody tr td')?.textContent).toBe('h1');
+    });
+
+    it('without the chrome\'s Print… route, every grid menu draws Print… disabled with the reason (075 FR-062)', async () => {
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
       const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;

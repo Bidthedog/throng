@@ -22,6 +22,8 @@ export const csvProvider: PreviewProviderDescriptor = {
   goTo: 'row',
   extensions: ['.csv'],
   kind: 'text',
+  // 075 FR-075b (the maintainer, 2026-11-20) — the grid prints as a table: every row, the header row on every page.
+  print: 'document',
   editable: true,
   defaultOpenAction: 'preview',
   // Q1/Q2 — "Open CSVs in": Throng Editor · Throng Preview Editor · Default OS Program (074 FR-016, FR-017).

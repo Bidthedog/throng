@@ -31,6 +31,8 @@ export const spreadsheetProvider: PreviewProviderDescriptor = {
   readOnly: true,
   extensions: ['.xlsx', '.xlsm', '.xlsb', '.xls', '.ods', '.fods', '.numbers'],
   kind: 'binary',
+  // 075 FR-075b (the maintainer, 2026-11-20) — the grid prints as a table: every row, the header row on every page.
+  print: 'document',
   // Q5 — "Open spreadsheets in": Throng Preview · Default OS Program (binary, so no editor; 074 FR-016).
   filesNoun: 'spreadsheets',
   sourceMimeTypes: [

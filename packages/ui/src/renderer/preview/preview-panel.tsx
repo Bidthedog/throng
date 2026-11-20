@@ -2744,6 +2744,8 @@ export function PreviewPanel({
             // 073 — the grid lays out in JS, so it takes the factor itself; its notice and menu offer the editor route.
             zoom={zoomFactor(panelZoomLevel(panel))}
             {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute } : {})}
+            // 075 FR-075b — a grid's own menus carry Print…, the same command as the header's.
+            {...(state && canPrint(registry.get(state.providerId)) ? { onPrint: () => void printPanel() } : {})}
           />
         ) : null}
         {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a

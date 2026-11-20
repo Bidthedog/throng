@@ -57,6 +57,7 @@ import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { useFilePlaces } from '../../../grid/use-file-places.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
 import { gridPrintRow } from '../../../grid/grid-print-row.js';
+import { registerGridPrintSource, type GridPrintSource } from '../../../grid/grid-print.js';
 import { CellDialog } from '../../../grid/cell-dialog.js';
 import { copiedBlockFor, hasCopiedBlock, recordCopy, type CopiedBlock } from '../../../grid/copied-block.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
@@ -123,7 +124,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, onPrint, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -149,6 +150,23 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     (row: number, col: number): string => (model === null ? '' : cellValue(model, modelText, row, col)),
     [model, modelText],
   );
+
+  // 075 FR-075b — what Print… prints: every row, read when it runs. With Lock first row on, the first row is the
+  // table's header, repeated on every page.
+  const printRead = useRef<() => GridPrintSource>(() => ({ rowCount: 0, colCount: 0, cell: () => '', header: null, width: () => undefined }));
+  const headerRow = lockFirstRowOn(lockFirstRowChoice, providerSettings.lockFirstRow);
+  printRead.current = () => {
+    const skip = headerRow && rowCount > 0 ? 1 : 0;
+    return {
+      rowCount: rowCount - skip,
+      colCount,
+      cell: (row, col) => getCell(row + skip, col),
+      header: skip === 1 ? Array.from({ length: colCount }, (_, c) => getCell(0, c)) : null,
+      width: (col) => widths[col],
+    };
+  };
+  const [printRoot, printRootRef] = useState<HTMLDivElement | null>(null);
+  useEffect(() => (printRoot === null ? undefined : registerGridPrintSource(printRoot, () => printRead.current())), [printRoot]);
 
   // data-model §13 — every draw reports exactly one of onDrawn / onBodyFailure.
   const onDrawnRef = useRef(onDrawn);
@@ -547,10 +565,10 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         );
       }
       if (onOpenInEditor !== undefined) items.push({ label: 'Open in Editor', section: 'navigate', onClick: onOpenInEditor });
-      items.push(gridPrintRow(chord('preview.print')));
+      items.push(gridPrintRow(chord('preview.print'), onPrint));
       openMenu(point.x, point.y, items);
     },
-    [cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
+    [cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, onPrint, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard
@@ -600,6 +618,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
 
   if (parsed === null) {
     // 075 FR-043a — the placeholder everything in a preview shows while it loads, until the worker's first parse lands.
+    // (Nothing to print yet: the print source registers on the grid body below.)
     return (
       <div className="preview-loading preview-loading--block" data-testid={`csv-loading-${panelId}`} aria-busy="true">
         <Spinner label="Loading CSV" />
@@ -609,7 +628,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   }
 
   return (
-    <div className="preview-grid-body" data-testid={`csv-body-${panelId}`}>
+    <div className="preview-grid-body" data-testid={`csv-body-${panelId}`} ref={printRootRef}>
       <DataGrid
         longCellThreshold={cellDialogAvailable ? longCellThreshold : undefined}
         multiLineInDialog={providerSettings.multiLineCellsInDialog !== false}

@@ -249,6 +249,11 @@ export interface PreviewBodyProps {
    */
   onOpenInEditor?(): void;
   /**
+   * 075 FR-075b — the chrome's Print…, for a body that builds its own menus (the grids). Absent when the preview's
+   * provider cannot print.
+   */
+  onPrint?(): void;
+  /**
    * 074 R8 (FR-022, FR-062) — a short sentence about what is drawn, for the status bar's readout slot: an image's
    * pixel size and file size, a PDF's page. `null` clears it. A followed link's target, when there is one, is shown
    * instead. Optional: a body that never calls it shows nothing there.

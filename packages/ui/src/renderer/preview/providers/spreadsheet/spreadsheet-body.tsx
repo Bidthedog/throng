@@ -19,6 +19,7 @@ import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { useFilePlaces } from '../../../grid/use-file-places.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
 import { gridPrintRow } from '../../../grid/grid-print-row.js';
+import { registerGridPrintSource, type GridPrintSource } from '../../../grid/grid-print.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
 import { useAppSettings } from '../../../config/config-store.js';
 import { useContextMenu } from '../../../context-menu-provider.js';
@@ -63,7 +64,7 @@ function parseOffThread(bytes: ArrayBuffer, id: number): Promise<WorkbookRead> {
 }
 
 export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, providerSettings, registerGoTo, navigationSeq, onDrawn, onBodyFailure, onViewStateCapture, readSource, zoom = 1 } = props;
+  const { panelId, content, filePath, providerSettings, registerGoTo, navigationSeq, onDrawn, onBodyFailure, onViewStateCapture, readSource, onPrint, zoom = 1 } = props;
   const source = content.kind === 'resource' ? content.url : '';
   const firstRowHeader = providerSettings.firstRowHeader === true;
   const settings = useAppSettings();
@@ -234,11 +235,24 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
               { label: 'Select All', icon: 'selectAll', section: 'content', onClick: () => grid.selectAll() },
               { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open },
             ];
-      items.push(gridPrintRow());
+      items.push(gridPrintRow(undefined, onPrint));
       openMenu(point.x, point.y, items);
     },
-    [colCount, copy, goTo.open, openMenu, resetWidth, sheetWidths],
+    [colCount, copy, goTo.open, onPrint, openMenu, resetWidth, sheetWidths],
   );
+
+  // 075 FR-075b — what Print… prints: the sheet on screen, every row, read when it runs; with First row is header on,
+  // that row is the table's header, repeated on every page.
+  const printRead = useRef<() => GridPrintSource>(() => ({ rowCount: 0, colCount: 0, cell: () => '', header: null, width: () => undefined }));
+  printRead.current = () => ({
+    rowCount: bodyRows.length,
+    colCount,
+    cell: getCell,
+    header: header === null ? null : Array.from({ length: colCount }, (_, c) => header[c] ?? ''),
+    width: (col) => sheetWidths[col],
+  });
+  const [printRoot, printRootRef] = useState<HTMLDivElement | null>(null);
+  useEffect(() => (printRoot === null ? undefined : registerGridPrintSource(printRoot, () => printRead.current())), [printRoot]);
 
   const submitWidth = (e: FormEvent): void => {
     e.preventDefault();
@@ -275,7 +289,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
   }
 
   return (
-    <div className="preview-grid-body preview-grid-body-sheets" data-testid={`spreadsheet-body-${panelId}`}>
+    <div className="preview-grid-body preview-grid-body-sheets" data-testid={`spreadsheet-body-${panelId}`} ref={printRootRef}>
       <DataGrid
         key={sheet?.name ?? ''}
         ref={gridRef}

@@ -14,4 +14,6 @@ export const csvView: PreviewProviderView = {
   id: 'csv',
   textSelection: false,
   load: () => import('./csv-body.js').then((m) => m.CsvBody),
+  // 075 FR-075b — the grid as a table, every row.
+  printable: (body, { title }) => import('../../../grid/grid-print.js').then((m) => m.gridPrintable(body, title)),
 };
