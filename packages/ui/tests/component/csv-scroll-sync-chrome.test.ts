@@ -6,9 +6,11 @@
  * Layer: component — what each surface draws for a provider that has the capability and one that does not. The mapping
  * itself is `csv-record-lines.test.ts`'s (core) and the body's following is `csv-body-scroll-sync.test.ts`'s.
  */
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { __resetSyncMarks, publishSyncMark } from '../../src/renderer/preview/sync-mark-store.js';
+import { previewUpdate } from './helpers/mount-preview-panel.js';
 import { DEFAULT_KEYBINDINGS, PREVIEW_KIND, createPreviewProviderRegistry, type Panel } from '@throng/core';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
 import { panelHeaderMenu, type PanelHeaderMenuActions } from '../../src/renderer/workspace/panel-header-menu.js';
@@ -88,5 +90,38 @@ describe('the panel header menu (FR-033c)', () => {
     expect(labels({ flowingDocument: false })).not.toContain('Synchronise Scrolling');
     expect(labels({ flowingDocument: false, scrollSync: false })).not.toContain('Synchronise Scrolling');
     expect(labels({ flowingDocument: true })).toContain('Synchronise Scrolling');
+  });
+});
+
+describe('a sync mark that moves re-renders the body that draws it, not the panel chrome (073 T075)', () => {
+  it('hands the body a live source instead of the mark\'s value, so a mark move renders nothing above the body', async () => {
+    __resetSyncMarks();
+    const parent = { panelId: 'ed-1', title: 'data.prvsync' };
+    let renders = 0;
+    let source: PreviewBodyProps['syncMarkSource'] = null;
+    function CountingBody(props: PreviewBodyProps): ReactElement {
+      renders += 1;
+      source = props.syncMarkSource;
+      return createElement('div', { 'data-testid': `fake-body-${props.panelId}` }, 'body');
+    }
+    const counting: Record<string, PreviewProviderView> = {
+      gridSync: { id: 'gridSync', textSelection: true, load: () => Promise.resolve(CountingBody) },
+    };
+    m = await mountMarkdownPreview('a,b\n', 'D:/proj/t.prvsync', {
+      providers: { registry, views: counting },
+      providerId: 'gridSync',
+      attach: { parent },
+    });
+    await screen.findByTestId(`fake-body-${m.id}`);
+    m.push(previewUpdate({ panelId: m.id, revision: 2, content: null, parent }));
+    await act(() => Promise.resolve());
+    expect(source).not.toBeNull();
+    const before = renders;
+
+    for (let line = 1; line <= 20; line += 1) act(() => publishSyncMark('ed-1', line));
+
+    expect(renders).toBe(before); // twenty mark moves, no body re-render from the chrome
+    expect(source!.get()).toEqual({ line: 20, on: true }); // yet the source is live
+    __resetSyncMarks();
   });
 });

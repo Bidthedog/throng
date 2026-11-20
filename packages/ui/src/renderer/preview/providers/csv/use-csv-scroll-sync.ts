@@ -13,7 +13,7 @@
  *
  * Nothing here writes into the selection or the document.
  */
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import { recordAtLine, recordStartLines, type CsvModel } from '@throng/core';
 import type { DataGridHandle } from '../../../grid/data-grid.js';
 
@@ -24,15 +24,31 @@ export interface CsvScrollSyncProps {
   onTopLineRead?: ((read: () => number | null) => void) | undefined;
 }
 
-/** Returns the grid's scroll handler: pass it to `DataGrid.onScrollChange`. */
+export interface CsvScrollSync {
+  /** The grid's scroll handler: pass it to `DataGrid.onScrollChange`. */
+  schedule: () => void;
+  /**
+   * Per record, the 0-based line it starts on — worked out ONCE per parsed document and only when something asks (a sync
+   * line, a mark), so a keystroke in a CSV that is not in step with an editor costs none of it (073 T075). The same array
+   * serves the follower, the reporter and the sync mark.
+   */
+  starts: () => Int32Array | null;
+}
+
 export function useCsvScrollSync(
   grid: RefObject<DataGridHandle | null>,
   parsed: { text: string; model: CsvModel } | null,
   { syncLine, syncEcho, onTopLineChange, onTopLineRead }: CsvScrollSyncProps,
-): () => void {
-  const starts = useMemo(() => (parsed === null ? null : recordStartLines(parsed.model, parsed.text)), [parsed]);
-  const startsRef = useRef(starts);
-  startsRef.current = starts;
+): CsvScrollSync {
+  const cache = useRef<{ of: typeof parsed; starts: Int32Array } | null>(null);
+  const parsedRef = useRef(parsed);
+  parsedRef.current = parsed;
+  const getStarts = useCallback((): Int32Array | null => {
+    const p = parsedRef.current;
+    if (p === null) return null;
+    if (cache.current === null || cache.current.of !== p) cache.current = { of: p, starts: recordStartLines(p.model, p.text) };
+    return cache.current.starts;
+  }, []);
 
   const line = syncLine ?? null;
   const echo = syncEcho === true;
@@ -55,23 +71,25 @@ export function useCsvScrollSync(
   const deferred = useRef(false);
 
   const topLine = useCallback((): number | null => {
-    const s = startsRef.current;
+    const s = getStarts();
     const g = grid.current;
     if (s === null || g === null || s.length === 0) return null;
     return s[g.topRow()] ?? null;
-  }, [grid]);
+  }, [grid, getStarts]);
 
   const report = useCallback((): void => {
     frame.current = null;
     const g = grid.current;
-    const s = startsRef.current;
     const send = reportRef.current;
-    if (g === null || s === null || s.length === 0) return;
+    if (g === null) return;
     const claimed = own.current;
     if (claimed !== null && g.getScroll().top === claimed) return;
     own.current = null;
     const at = editorLine.current;
     if (send === undefined || at === null) return;
+    // Only a view that is in step with an editor works the mapping out at all.
+    const s = getStarts();
+    if (s === null || s.length === 0) return;
     const row = g.topRow();
     if (row === recordAtLine(s, at)) return;
     const top = s[row];
@@ -81,7 +99,7 @@ export function useCsvScrollSync(
       return;
     }
     editorLine.current = top;
-  }, [grid]);
+  }, [grid, getStarts]);
 
   const schedule = useCallback((): void => {
     if (frame.current !== null) return;
@@ -104,7 +122,7 @@ export function useCsvScrollSync(
       return;
     }
     const g = grid.current;
-    const s = starts;
+    const s = getStarts();
     if (g === null || s === null || s.length === 0) return;
     if (line !== applied.current) {
       applied.current = line;
@@ -120,12 +138,12 @@ export function useCsvScrollSync(
       deferred.current = false;
       schedule();
     }
-  }, [line, echo, starts, grid, schedule]);
+  }, [line, echo, parsed, grid, schedule, getStarts]);
 
   // FR-121h — the chrome reads the line at the top when it adopts an editor.
   useEffect(() => {
     onTopLineRead?.(topLine);
   }, [onTopLineRead, topLine]);
 
-  return schedule;
+  return { schedule, starts: getStarts };
 }

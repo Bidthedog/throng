@@ -234,7 +234,7 @@ import {
 } from './copy.js';
 import { PreviewStatusBar } from './preview-status-bar.js';
 import { toggleSyncScroll } from './sync-scroll-toggle.js';
-import { clearSyncMark, publishSyncMark, useSyncMark } from './sync-mark-store.js';
+import { clearSyncMark, publishSyncMark, syncMarkSource } from './sync-mark-store.js';
 import {
   editorDocLinesOf,
   editorTopLineOf,
@@ -1941,7 +1941,7 @@ export function PreviewPanel({
    * The editor leading is noticed here (its published top line moved, and not because this preview asked); this view
    * leading is marked where it asks the editor to follow (`onTopLineChange`). The first line seen is only recorded.
    */
-  const syncMark = useSyncMark(syncing ? parentId : null);
+  const syncMarkSrc = useMemo(() => (syncing && parentId !== null ? syncMarkSource(parentId) : null), [syncing, parentId]);
   const lastEditorLine = useRef<EditorTopLine | null>(null);
   useEffect(() => {
     const seen = lastEditorLine.current;
@@ -2553,7 +2553,7 @@ export function PreviewPanel({
             syncEcho={syncEcho}
             onTopLineChange={onTopLineChange}
             onTopLineRead={onTopLineRead}
-            syncMark={syncMark}
+            syncMarkSource={syncMarkSrc}
             placePolicy={placePolicy}
             onViewStateCapture={onViewStateCapture}
             onFollow={onFollow}

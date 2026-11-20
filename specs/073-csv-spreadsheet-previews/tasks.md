@@ -111,7 +111,7 @@ its failing test at the layer R10 names.
 - [x] T072 [US2] FR-033e: the in-step highlight marks the line/record at the vertical centre of the scrolled view (and its counterpart), not its top; sync still keys on the top — CSV and Markdown, both directions; tests updated
 - [x] T073 [US2] Defect against FR-033d/FR-033e: the editor's in-step highlight no longer shows (maintainer, after T072); the CSV grid's does — reproduce with a failing test first, then fix
 - [x] T074 [US2] FR-033f: Scroll-sync highlight duration preference (editor.previews.syncHighlightSeconds, ships 1.5, 0–10 step 0.5, 0 = none), read live by the sync-mark store; docs/preferences.md; settings and fade tests
-- [ ] T075 [US2] Defect against Responsive UI (constitution) and SC-009: with Synchronise Scrolling on, scrolling and typing in a 3000+ line file (CSV or Markdown, editor or preview) lags badly (maintainer, after T074) — measure the per-scroll cost first, then fix, with a regression test that bounds the work done per scroll
+- [x] T075 [US2] Defect against Responsive UI (constitution) and SC-009: with Synchronise Scrolling on, scrolling and typing in a 3000+ line file (CSV or Markdown, editor or preview) lags badly (maintainer, after T074) — measure the per-scroll cost first, then fix, with a regression test that bounds the work done per scroll
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies

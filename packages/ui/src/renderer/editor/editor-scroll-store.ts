@@ -69,15 +69,28 @@ export function publishEditorTopLine(panelId: string, line: number, fromSync = f
  * Only the sync MARK reads it (the soft highlight names the place under the middle of the scrolled view); sync itself
  * still keys on the top line. Stored apart from {@link EditorTopLine} so a centre change never replaces that object.
  */
-const centres = new Map<string, number>();
+const centres = new Map<string, number | (() => number)>();
 
 export function publishEditorCentreLine(panelId: string, line: number): void {
   centres.set(panelId, line);
 }
 
-/** The editor panel's centre line, or `null` when no mounted view of it has published one in this window. */
+/**
+ * 073 T075 — the editor view registers HOW to read its centre line rather than publishing it each frame. The centre is
+ * needed only when a sync mark is published (at most once a frame, and only while Synchronise Scrolling is on), so a view
+ * that is scrolled or typed in with no pair pays no layout read for it. The reader is called at that moment.
+ */
+export function registerEditorCentreReader(panelId: string, read: () => number): () => void {
+  centres.set(panelId, read);
+  return () => {
+    if (centres.get(panelId) === read) centres.delete(panelId);
+  };
+}
+
+/** The editor panel's centre line (read now, for a registered reader), or `null` when no mounted view of it can say. */
 export function editorCentreLineOf(panelId: string): number | null {
-  return centres.get(panelId) ?? null;
+  const held = centres.get(panelId);
+  return held === undefined ? null : typeof held === 'number' ? held : held();
 }
 
 /** The editor panel's top line, or `null` when no mounted view of it has published one in this window. */

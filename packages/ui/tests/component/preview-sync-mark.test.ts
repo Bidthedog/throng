@@ -13,8 +13,8 @@
  */
 import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { __resetEditorScrollStore, publishEditorCentreLine, publishEditorTopLine, registerEditorScroller } from '../../src/renderer/editor/editor-scroll-store.js';
-import { SYNC_MARK_FADE_MS, SYNC_MARK_REMOVE_MS, __resetSyncMarks, syncMarkOf } from '../../src/renderer/preview/sync-mark-store.js';
+import { __resetEditorScrollStore, publishEditorCentreLine, publishEditorDocLines, publishEditorTopLine, registerEditorCentreReader, registerEditorScroller } from '../../src/renderer/editor/editor-scroll-store.js';
+import { SYNC_MARK_FADE_MS, SYNC_MARK_REMOVE_MS, __resetSyncMarks, subscribeSyncMark, syncMarkOf } from '../../src/renderer/preview/sync-mark-store.js';
 import { COLD, README, mountMarkdownPreview, previewUpdate, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
 const DOC = Array.from({ length: 30 }, (_, i) => `P${i}`).join('\n\n');
@@ -233,4 +233,107 @@ describe('Scroll-sync highlight duration (FR-033f)', () => {
     act(() => void vi.advanceTimersByTime(1));
     expect(syncMarkOf('ed-1')?.on).toBe(false);
   });
+});
+
+describe('the work per sync scroll is bounded by the viewport, not the document (073 T075)', () => {
+  /** A pair over a 3,000-line Markdown file: 1,500 paragraphs, every one a block the old scan measured. */
+  async function mountLarge(): Promise<void> {
+    const doc = Array.from({ length: 1500 }, (_, i) => `P${i}`).join('\n\n');
+    m = await mountMarkdownPreview(doc, README, { settings: GUTTER(true), attach: { parent: PARENT } });
+    await screen.findByText('P1499', {}, COLD);
+    m.push(previewUpdate({ panelId: m.id, revision: 2, content: null, parent: PARENT }));
+    editorScrolledTo(0);
+    await frames();
+  }
+
+  it('an editor-led scroll reads a handful of rectangles and attributes, where the full scan read one per block', async () => {
+    await mountLarge();
+    const scroller = host(); // looked up before counting: the lookup is a query of its own
+    const rect = Element.prototype.getBoundingClientRect as unknown as ReturnType<typeof vi.fn>;
+    const attr = vi.spyOn(Element.prototype, 'getAttribute');
+    const qsa = vi.spyOn(Element.prototype, 'querySelectorAll');
+    rect.mockClear();
+    const SCROLLS = 30;
+    for (let i = 1; i <= SCROLLS; i += 1) {
+      editorScrolledTo(i * 12);
+      await frames(1);
+    }
+    expect(scroller.scrollTop).toBeGreaterThan(0); // the preview really followed: the counts are not vacuous
+    // Measured before the index: ~3,016 rects, ~12,028 attribute reads and 5 whole-document queries per scroll.
+    expect(rect.mock.calls.length / SCROLLS).toBeLessThanOrEqual(60);
+    expect(attr.mock.calls.length / SCROLLS).toBeLessThanOrEqual(150);
+    expect(qsa.mock.calls.length / SCROLLS).toBeLessThanOrEqual(1);
+  }, 60_000);
+
+  it('a preview-led scroll is just as bounded', async () => {
+    await mountLarge();
+    const scroller = host();
+    const rect = Element.prototype.getBoundingClientRect as unknown as ReturnType<typeof vi.fn>;
+    const attr = vi.spyOn(Element.prototype, 'getAttribute');
+    rect.mockClear();
+    const SCROLLS = 30;
+    for (let i = 1; i <= SCROLLS; i += 1) {
+      scroller.scrollTop = i * 600;
+      scroller.dispatchEvent(new Event('scroll'));
+      await frames(1);
+    }
+    expect(ed1).toHaveBeenCalled();
+    expect(rect.mock.calls.length / SCROLLS).toBeLessThanOrEqual(60);
+    expect(attr.mock.calls.length / SCROLLS).toBeLessThanOrEqual(150);
+  }, 60_000);
+
+  it('moving the mark touches the class of two blocks at most, and publishes at most once a frame', async () => {
+    await mountLarge();
+    const scroller = host();
+    const touched: Set<Element>[] = [];
+    let current = new Set<Element>();
+    const mo = new MutationObserver((records) => records.forEach((r) => current.add(r.target as Element)));
+    mo.observe(scroller, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    let emits = 0;
+    const off = subscribeSyncMark(() => void (emits += 1));
+    const SCROLLS = 20;
+    for (let i = 1; i <= SCROLLS; i += 1) {
+      current = new Set();
+      editorScrolledTo(i * 12);
+      await frames(1);
+      current = new Set([...current, ...mo.takeRecords().map((r) => r.target as Element)]);
+      touched.push(current);
+    }
+    off();
+    mo.disconnect();
+    expect(touched.every((t) => t.size <= 2)).toBe(true);
+    expect(emits).toBeLessThanOrEqual(SCROLLS);
+  }, 60_000);
+
+  it('typing publishes no mark and reads no centre: the editor\'s top line stands still while its document changes', async () => {
+    await mountLarge();
+    const centre = vi.fn(() => 10);
+    const unregister = registerEditorCentreReader('ed-1', centre);
+    let emits = 0;
+    const off = subscribeSyncMark(() => void (emits += 1));
+    for (let lines = 3001; lines < 3041; lines += 1) {
+      act(() => {
+        publishEditorDocLines('ed-1', lines);
+        publishEditorTopLine('ed-1', 0);
+      });
+      await frames(1);
+    }
+    off();
+    unregister();
+    expect(emits).toBe(0);
+    expect(centre).not.toHaveBeenCalled();
+    expect(syncMarkOf('ed-1')).toBeNull();
+  }, 60_000);
+
+  it('reads the editor\'s centre once per published mark, and only then', async () => {
+    await mountLarge();
+    const centre = vi.fn(() => 40);
+    const unregister = registerEditorCentreReader('ed-1', centre);
+    for (let i = 1; i <= 10; i += 1) {
+      act(() => publishEditorTopLine('ed-1', i * 12));
+      await frames(1);
+    }
+    unregister();
+    expect(centre).toHaveBeenCalledTimes(10);
+  }, 60_000);
 });

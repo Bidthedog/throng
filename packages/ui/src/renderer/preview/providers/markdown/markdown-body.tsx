@@ -114,17 +114,16 @@ import { linkScanOptions } from '../../../links/link-scan-options.js';
 import type { MarkdownRenderer } from './markdown-renderer.js';
 import { placeOnStep, shouldDrive, shouldFollow } from '../../scroll-sync-policy.js';
 import {
-  blockLineFor,
   captureScrollAnchor,
-  centreBlockLine,
   remapAnchorLine,
   restoreScrollAnchor,
-  topBlockLine,
   type ScrollAnchor,
 } from './scroll-anchor.js';
 import { highlightCodeBlocks } from './highlight.js';
 import { applyFoldGutter } from './fold-gutter.js';
-import { applySyncMark } from './sync-mark.js';
+import { SyncMarkIndicator } from './sync-mark.js';
+import { BlockIndex } from './block-index.js';
+import { useSyncMarkFrom } from '../../sync-mark-store.js';
 import { applyWikiResolution } from './wikilinks.js';
 import { applyImageEmbedResolution, EMBED_ATTRIBUTE, embedReadRefOf, embedRefOf } from './embeds.js';
 import { embedRefusalText, type PreviewEmbedRead } from '@throng/core';
@@ -307,17 +306,6 @@ function showAltText(img: HTMLImageElement): void {
 }
 
 /**
- * 044 FR-121g — the block `line` is shown in: the block at or before it, or — for a line above every block —
- * the first block, where `restoreScrollAnchor` would put that line. `null` only for a body with no blocks.
- */
-function blockOf(body: HTMLElement, line: number): number | null {
-  const at = blockLineFor(body, line);
-  if (at !== null) return at;
-  const first = Number(body.querySelector('[data-source-line]')?.getAttribute('data-source-line'));
-  return Number.isFinite(first) ? first : null;
-}
-
-/**
  * What the body does with a place it is handed (044 FR-107, FR-121e, FR-121h). `keep` restores like `restore`
  * but drives nothing: the view's own place, shown again (048 FR-084).
  */
@@ -366,7 +354,8 @@ export function MarkdownBody({
   syncEcho,
   onTopLineChange,
   onTopLineRead,
-  syncMark,
+  syncMark: syncMarkProp,
+  syncMarkSource,
   placePolicy,
   onViewStateCapture,
   onFollow,
@@ -418,6 +407,15 @@ export function MarkdownBody({
   const gutterRef = useRef(gutter);
   gutterRef.current = gutter;
   /** 073 FR-033d — the sync mark's indicator, redrawn after every draw and whenever the mark or the gutter changes. */
+  const syncMark = useSyncMarkFrom(syncMarkSource, syncMarkProp);
+  /**
+   * 073 T075 — the index of this body's source-mapped blocks (`block-index.ts`), so each scrolled frame reads a few rectangles
+   * instead of measuring every block; and the gutter indicator that moves between two blocks instead of searching them all.
+   */
+  const blockIndex = useRef<BlockIndex | null>(null);
+  blockIndex.current ??= new BlockIndex(() => bodyRef.current);
+  const indicator = useRef<SyncMarkIndicator | null>(null);
+  indicator.current ??= new SyncMarkIndicator(blockIndex.current);
   const syncMarkRef = useRef(syncMark);
   syncMarkRef.current = syncMark;
   const onFoldChangeRef = useRef(onFoldChange);
@@ -640,9 +638,10 @@ export function MarkdownBody({
     const report = onTopLineChangeRef.current;
     const editorLine = editorLineRef.current;
     if (report === undefined || editorLine === null) return;
-    const top = topBlockLine(scroller);
-    if (top === null || !shouldDrive({ previewTopBlock: top, editorLineBlock: blockOf(body, editorLine) })) return;
-    if (report(top, centreBlockLine(scroller)) === false) {
+    const index = blockIndex.current!;
+    const top = index.topLine(scroller);
+    if (top === null || !shouldDrive({ previewTopBlock: top, editorLineBlock: index.blockOf(editorLine) })) return;
+    if (report(top, index.centreLine(scroller)) === false) {
       // Compared with a stale editor line: decide again against the next one the chrome hands down.
       reportDeferred.current = true;
       return;
@@ -668,10 +667,11 @@ export function MarkdownBody({
     if (line === null || line === syncedRef.current || body === null) return;
     syncedRef.current = line;
     if (syncEchoRef.current) return;
-    if (!shouldFollow({ previewTopBlock: topBlockLine(scroller), editorLineBlock: blockOf(body, line) })) return;
+    const index = blockIndex.current!;
+    if (!shouldFollow({ previewTopBlock: index.topLine(scroller), editorLineBlock: index.blockOf(line) })) return;
     // The editor moved, and the preview follows it: a place still settling is no longer where it should be.
     pendingPlace.current = null;
-    restoreScrollAnchor(scroller, { line, offsetRatio: 0 });
+    index.scrollLineToTop(scroller, line);
     ownScrollTop.current = scroller.scrollTop;
   }, []);
 
@@ -830,7 +830,7 @@ export function MarkdownBody({
   useEffect(() => {
     onTopLineRead?.(() => {
       const body = bodyRef.current;
-      return body === null || shown.current === null ? null : topBlockLine(scrollerOf(body));
+      return body === null || shown.current === null ? null : blockIndex.current!.topLine(scrollerOf(body));
     });
   }, [onTopLineRead]);
 
@@ -942,7 +942,9 @@ export function MarkdownBody({
         // inserted. After the place above, not before: a toggle's own gutter offset must never be measured
         // as part of the scroll anchor's layout.
         drawFoldGutter(body, headings);
-        applySyncMark(body, syncMarkRef.current, gutterRef.current === true);
+        // The draw replaced every block: the index is rebuilt on the next question, and the indicator is placed again.
+        blockIndex.current?.invalidate();
+        indicator.current?.apply(syncMarkRef.current, gutterRef.current === true);
         // 048 FR-083 — the collapsed sections just hidden moved everything below them: a place applied above
         // lands again under the folded layout. In the same task, so the reader never sees the unfolded one.
         reanchor(scroller);
@@ -1023,7 +1025,9 @@ export function MarkdownBody({
     const body = bodyRef.current;
     if (body === null || shown.current === null) return;
     drawFoldGutter(body, lastHeadingsRef.current);
-    applySyncMark(body, syncMarkRef.current, gutterRef.current === true);
+    // A fold changed which blocks are hidden.
+    blockIndex.current?.invalidate();
+    indicator.current?.apply(syncMarkRef.current, gutterRef.current === true);
     // 048 FR-083 — fold state seeded late (main's answer after the draw) is a settle point too.
     reanchor(scrollerOf(body));
   }, [foldState, gutter, theme, sets, drawFoldGutter, reanchor]);
@@ -1032,7 +1036,7 @@ export function MarkdownBody({
   useEffect(() => {
     const body = bodyRef.current;
     if (body === null || shown.current === null) return;
-    applySyncMark(body, syncMark, gutter === true);
+    indicator.current?.apply(syncMark, gutter === true);
   }, [syncMark, gutter]);
 
   /*

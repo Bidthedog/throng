@@ -44,7 +44,6 @@ import {
   parseTsv,
   recordAtLine,
   recordFieldCount,
-  recordStartLines,
   type CsvGridOperation,
   type CsvModel,
   type PreviewCopyFormat,
@@ -53,6 +52,7 @@ import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
 import { useCsvScrollSync } from './use-csv-scroll-sync.js';
+import { useSyncMarkFrom } from '../../sync-mark-store.js';
 import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { useFilePlaces } from '../../../grid/use-file-places.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
@@ -120,7 +120,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -439,10 +439,15 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
 
   // FR-043a — Ctrl+G and the menus' Go to Row… open the shared Go to dialog for rows.
   // 073 FR-033c — scroll in step with the linked text editor, as a Markdown preview does.
-  const onGridScroll = useCsvScrollSync(gridRef, parsed, { syncLine, syncEcho, onTopLineChange, onTopLineRead });
+  const gridSync = useCsvScrollSync(gridRef, parsed, { syncLine, syncEcho, onTopLineChange, onTopLineRead });
+  const syncMark = useSyncMarkFrom(syncMarkSource, syncMarkProp);
   const markedRow = useMemo(
-    () => (syncMark === null || syncMark === undefined || model === null ? null : { row: recordAtLine(recordStartLines(model, modelText), syncMark.line), on: syncMark.on }),
-    [syncMark, model, modelText],
+    () => {
+      const starts = syncMark === null ? null : gridSync.starts();
+      return syncMark === null || starts === null ? null : { row: recordAtLine(starts, syncMark.line), on: syncMark.on };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `parsed` stands for the starts it keys
+    [syncMark, parsed, gridSync.starts],
   );
   const goTo = useGridGoTo(panelId, gridRef, rowCount, registerGoTo);
 
@@ -615,7 +620,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         onHistory={history}
         onEscape={escapeCut}
         onContextMenu={onContextMenu}
-        onScrollChange={onGridScroll}
+        onScrollChange={gridSync.schedule}
         syncMarkRow={markedRow}
       />
       {goTo.dialog}

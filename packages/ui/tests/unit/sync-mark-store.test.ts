@@ -79,3 +79,24 @@ describe('the highlight duration is the caller\'s, per scroll (FR-033f: read liv
     expect(syncMarkOf('ed')).toBeNull();
   });
 });
+
+describe('073 T075 — a publish that changes nothing tells nobody', () => {
+  it('the same line again, while it is showing, emits nothing: a hundred repeats are one notification', () => {
+    const heard = vi.fn();
+    const off = subscribeSyncMark(heard);
+    for (let i = 0; i < 100; i += 1) publishSyncMark('ed', 3);
+    expect(heard).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  it('each move to another line is one notification, and the fade is one more', () => {
+    const heard = vi.fn();
+    const off = subscribeSyncMark(heard);
+    publishSyncMark('ed', 3);
+    publishSyncMark('ed', 4);
+    expect(heard).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(SYNC_MARK_FADE_MS);
+    expect(heard).toHaveBeenCalledTimes(3);
+    off();
+  });
+});

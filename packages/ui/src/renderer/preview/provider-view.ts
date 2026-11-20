@@ -17,7 +17,7 @@ import type { DocumentSymbol, FoldState, PreviewContent, PreviewEmbedRead, Previ
 import type { PreviewLinkWording } from './link-dom.js';
 import type { TaskToggle } from './task-toggle.js';
 
-import type { SyncMark } from './sync-mark-store.js';
+import type { SyncMark, SyncMarkSource } from './sync-mark-store.js';
 
 export interface PreviewBodyProps {
   panelId: string;
@@ -119,6 +119,11 @@ export interface PreviewBodyProps {
    * focus, selection or scroll. Optional: a body that ignores it still conforms.
    */
   syncMark?: SyncMark | null;
+  /**
+   * 073 T075 — the same mark as a subscribable source, which the panel chrome gives a body in place of `syncMark` so a mark
+   * that moves every frame re-renders the body and not the chrome. When present it wins over `syncMark`.
+   */
+  syncMarkSource?: SyncMarkSource | null;
   /**
    * 044 FR-121e, FR-121h (data-model §15.2) — how the body treats `initialViewState`:
    *

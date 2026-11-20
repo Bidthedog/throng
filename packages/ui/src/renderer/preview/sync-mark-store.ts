@@ -107,6 +107,29 @@ export function useSyncMark(editorId: string | null): SyncMark | null {
   return useSyncExternalStore(subscribeSyncMark, () => (editorId === null ? null : syncMarkOf(editorId)));
 }
 
+/**
+ * A body's way to read ONE pair's mark: a stable `subscribe` / `get` pair. The panel chrome hands this down instead of the
+ * mark's value, so a mark that moves every frame re-renders the body that draws it and not the whole chrome above it
+ * (073 T075: the chrome already re-renders once a frame for the editor's top line).
+ */
+export interface SyncMarkSource {
+  subscribe(listener: () => void): () => void;
+  get(): SyncMark | null;
+}
+
+export function syncMarkSource(editorId: string): SyncMarkSource {
+  return { subscribe: subscribeSyncMark, get: () => syncMarkOf(editorId) };
+}
+
+const NO_SUBSCRIBE = (): (() => void) => () => {};
+const NO_MARK = (): null => null;
+
+/** The mark a body draws: from its `source` when the chrome gave one, else the plain value (a harness or a test). */
+export function useSyncMarkFrom(source: SyncMarkSource | null | undefined, plain: SyncMark | null | undefined): SyncMark | null {
+  const fromSource = useSyncExternalStore(source?.subscribe ?? NO_SUBSCRIBE, source?.get ?? NO_MARK);
+  return source ? fromSource : (plain ?? null);
+}
+
 /** Test seam: forget every mark and timer. */
 export function __resetSyncMarks(): void {
   for (const id of [...fadeTimers.keys(), ...removeTimers.keys()]) stopTimers(id);

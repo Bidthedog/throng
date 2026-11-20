@@ -53,7 +53,7 @@ import {
   editorTopLine,
   forgetEditorTopLine,
   publishEditorDocLines,
-  publishEditorCentreLine,
+  registerEditorCentreReader,
   publishEditorTopLine,
   registerEditorScroller,
   type TopLineView,
@@ -119,7 +119,6 @@ export function attachEditorScrollRelay(view: RelayView, panelId: string, frames
     if (disposed) return;
     // U2 — the line count first, so a preview reading the new line also sees which document it numbers.
     publishEditorDocLines(panelId, view.state.doc.lines);
-    publishEditorCentreLine(panelId, editorCentreLine(view));
     publishEditorTopLine(panelId, editorTopLine(view), armed);
     if (armed && scrolledSinceDispatch) disarm();
   };
@@ -189,7 +188,7 @@ export function attachEditorScrollRelay(view: RelayView, panelId: string, frames
   const unregister = registerEditorScroller(panelId, scroller);
   // A preview that mounted first finds out this view exists, and where it is (FR-113).
   publishEditorDocLines(panelId, view.state.doc.lines);
-  publishEditorCentreLine(panelId, editorCentreLine(view));
+  const unregisterCentre = registerEditorCentreReader(panelId, () => editorCentreLine(view));
   publishEditorTopLine(panelId, editorTopLine(view));
 
   return {
@@ -214,6 +213,7 @@ export function attachEditorScrollRelay(view: RelayView, panelId: string, frames
       publishFrame = null;
       lapseFrame = null;
       unregister();
+      unregisterCentre();
       forgetEditorTopLine(panelId);
     },
   };

@@ -96,3 +96,36 @@ describe('the editor line highlight (FR-033d)', () => {
     expect(marked()).toEqual([{ text: 'line 29', on: true }]);
   });
 });
+
+describe('moving the highlight costs no CodeMirror update (073 T075)', () => {
+  it('a hundred mark moves dispatch no transaction and touch the class of two lines at most each', () => {
+    const v = mount();
+    const dispatch = vi.spyOn(v, 'dispatch');
+    const touched: Set<Element>[] = [];
+    let current = new Set<Element>();
+    const mo = new MutationObserver((records) => records.forEach((r) => current.add(r.target as Element)));
+    mo.observe(v.dom, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    for (let i = 1; i <= 100; i += 1) {
+      current = new Set();
+      act(() => publishSyncMark('ed-1', i % 25));
+      current = new Set([...current, ...mo.takeRecords().map((r) => r.target as Element)]);
+      touched.push(current);
+    }
+    mo.disconnect();
+    // Before: a decoration, so one full view update (every plugin, the link scan, a measure) per move.
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(touched.every((t) => t.size <= 2)).toBe(true);
+    expect(marked()).toHaveLength(1);
+  });
+
+  it('puts the class back on a line CodeMirror redrew, and takes it off with the mark', async () => {
+    const v = mount();
+    act(() => publishSyncMark('ed-1', 4));
+    // An edit above redraws lines; the mark follows the line number it names, applied again after the update.
+    act(() => v.dispatch({ changes: { from: 0, insert: 'inserted\n' } }));
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    expect(marked()).toHaveLength(1);
+    act(() => clearSyncMark('ed-1'));
+    expect(marked()).toEqual([]);
+  });
+});
