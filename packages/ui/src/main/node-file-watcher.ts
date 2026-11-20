@@ -61,12 +61,18 @@ export interface NodeFileWatcherOptions {
  *
  * On macOS the native watch is FSEvents, and libuv drops every event about the watched folder itself: renamed away, it
  * goes silent rather than failing, so nothing reaches `waitForPath` and an open editor never learns the folder came
- * back. Windows reports it as an event storm and Linux as an error, both already handled.
+ * back. Linux reports it as an error, already handled.
+ *
+ * Windows is silent too (#696). Its watch holds the folder open with delete sharing, so a rename outside throng
+ * succeeds and the watch follows the folder to its new name, reporting nothing about the old one; only a REMOVAL
+ * shows, as the event storm `STORM_CHECK_EVERY` catches. A preview or editor of a file in a renamed folder kept
+ * showing it (pipeline 44760413458, Windows).
  *
  * A poll, not a watch on the parent: libuv rebuilds the one FSEvents stream it shares across a process each time a
  * watch is added, and a change in that gap is lost, so a second watch per folder doubled the gap every new watch opens.
  */
-export const guardsRootByDefault = (platform: NodeJS.Platform = process.platform): boolean => platform === 'darwin';
+export const guardsRootByDefault = (platform: NodeJS.Platform = process.platform): boolean =>
+  platform === 'darwin' || platform === 'win32';
 
 /** How often the guard asks whether the folder is still there: one `stat` per quarter second per watch. */
 export const ROOT_POLL_MS = 250;
