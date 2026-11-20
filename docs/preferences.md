@@ -211,9 +211,14 @@ toggles never hide.
 
 ### Previews
 
-A preview is a read-only, rendered view of a file beside its editor. throng ships two preview types,
-**Markdown Preview** and **Mermaid Preview**; each has its own subsection below with an **Enabled**
-switch, a **Default open action** and an **Open previews in** choice, plus any settings of its own.
+A preview is a read-only, rendered view of a file beside its editor. throng ships six preview types —
+**Markdown Preview**, **Mermaid Preview**, **Image Preview**, **SVG Preview**, **PDF Preview** and
+**HTML Preview**; each has its own subsection below with an **Enabled**
+switch, an **Open <files> in** choice and an **Open previews in** choice, plus any settings of its own.
+**Open <files> in** picks what opening one of its files from File Explorer, Quick Open or a link does:
+**Throng Editor** (`editor`), **Throng Preview** (`preview`) or **Default OS Program** (`os`), which hands
+the file to the program your operating system opens it with and opens no panel. A Find in Files result set
+to Default OS Program opens an editor at the match, and **Open In**'s targets always do what they name.
 Turning a type off closes its open previews and greys its other settings rather than hiding them.
 The settings in this table apply to every preview type.
 
@@ -229,7 +234,7 @@ The settings in this table apply to every preview type.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Markdown: Enabled | `editor.previews.providers.markdown.enabled` | on | on · off | Offer previews of `.md` and `.markdown` files. Off, every such preview closes and the preview commands are shown disabled. |
-| Markdown: Default open action | `editor.previews.providers.markdown.defaultOpenAction` | `editor` | `editor` · `preview` | What opening a Markdown file from File Explorer, Quick Open or a Find in Files result does. **Open In**'s editor targets always open an editor. |
+| Open Markdown files in | `editor.previews.providers.markdown.defaultOpenAction` | `editor` | `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program) | What opening a Markdown file from File Explorer, Quick Open, a link or a Find in Files result does. **Open In**'s targets always do what they name. |
 | Markdown: Open previews in | `editor.previews.providers.markdown.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | Last Active reuses the most recently used Markdown preview in the tab you are looking at, adding to its Back history; otherwise a new preview opens. New opens every preview in a panel of its own. **Open In → Last Preview Panel / New Preview Panel**, in the File Explorer and on Find in Files results, choose explicitly. A value saved under the former single `editor.previews.openTarget` key is carried over to each preview type. |
 | Markdown: Render Mermaid diagrams | `editor.previews.providers.markdown.renderMermaid` | on | on · off | Draw a `mermaid` code block in a Markdown preview as its diagram. Off, the block shows as code. |
 | Markdown: Load remote images | `editor.previews.providers.markdown.loadRemoteImages` | on | on · off | Show images a document links from the web over HTTPS, such as build badges. Off, each shows its alternative text and nothing is requested. |
@@ -243,8 +248,80 @@ The settings in this table apply to every preview type.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Mermaid: Preview .mmd files | `editor.previews.providers.mermaid.enabled` | on | on · off | Offer previews of standalone `.mmd` and `.mermaid` files, drawn as their diagram. Off, every such preview closes. Diagrams inside a Markdown preview are not affected — **Markdown: Render Mermaid diagrams** controls those. |
-| Mermaid: Default open action | `editor.previews.providers.mermaid.defaultOpenAction` | `preview` | `editor` · `preview` | What opening a Mermaid file from File Explorer, Quick Open or a Find in Files result does. Ships as `preview`, so a diagram file opens as its diagram; **Open In**'s editor targets always open an editor. |
+| Open Mermaid files in | `editor.previews.providers.mermaid.defaultOpenAction` | `preview` | `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program) | As **Open Markdown files in**, for Mermaid files. Ships as `preview`, so a diagram file opens as its diagram. |
 | Mermaid: Open previews in | `editor.previews.providers.mermaid.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for Mermaid previews; a Markdown preview is never reused for a Mermaid file, or the reverse. |
+
+#### Image
+
+An image opens in the centre of its panel, on a canvas filling the panel, with its transparent parts
+hatched so its edges show (the colours are the theme's [Picture Preview Background and Picture
+Transparency Marker](#themes-and-icon-sets)). It carries the view controls a Mermaid diagram has, top
+left: Fit, Zoom In, Zoom 100%, Zoom Out, middle-button drag, Ctrl+wheel to zoom about the pointer, and
+**Copy Image** on the right-click menu. It opens at 100%, or fitted when it is larger than the panel; Fit fills
+the panel, enlarging a small image. An image larger
+than the panel, or zoomed in past it, scrolls both ways; a middle-button drag scrolls it, or moves the
+image itself across a panel it does not fill.
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Image: Enabled | `editor.previews.providers.image.enabled` | on | on · off | Offer previews of `.png`, `.apng`, `.jpg`, `.jpeg`, `.jfif`, `.pjpeg`, `.pjp`, `.gif`, `.webp`, `.avif`, `.bmp`, `.dib`, `.ico` and `.cur` files. Off, every such preview closes and the preview commands are shown disabled. |
+| Open images in | `editor.previews.providers.image.defaultOpenAction` | `preview` | `preview` (Throng Preview) · `os` (Default OS Program) | What opening one of these files from File Explorer, Quick Open or a link does. |
+| Image: Open previews in | `editor.previews.providers.image.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for Image previews. |
+| Image: Maximum file size | `editor.previews.providers.image.maxFileBytes` | 52,428,800 | 5,242,880 – 262,144,000 bytes, step 5,242,880 | A file larger than this is not read: the preview names its size and this limit instead. Raise it and press **Refresh** to show the file. |
+| Image: Hatch transparent areas | `editor.previews.providers.image.transparencyHatch` | on | on · off | Draw diagonal hatching behind an image's transparent parts, in the theme's Picture Transparency Marker. Off, the canvas shows through plainly. |
+
+#### SVG
+
+An SVG is drawn as a picture, never as part of throng's own page: an SVG file can carry scripts and
+links to remote content, and none of it runs or loads. Beside its editor the drawing follows your
+unsaved changes. It sits on the same canvas, with the same hatching, controls and scrolling, as an
+image. A `svg` code block in a Markdown note is drawn the same way.
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| SVG: Enabled | `editor.previews.providers.svg.enabled` | on | on · off | Offer previews of `.svg` files. Off, every such preview closes and the preview commands are shown disabled. |
+| Open SVG files in | `editor.previews.providers.svg.defaultOpenAction` | `preview` | `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program) | What opening one of these files from File Explorer, Quick Open or a link does. |
+| SVG: Open previews in | `editor.previews.providers.svg.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for SVG previews. |
+| SVG: Maximum file size | `editor.previews.providers.svg.maxFileBytes` | 10,485,760 | 5,242,880 – 262,144,000 bytes, step 5,242,880 | A file larger than this is not read: the preview names its size and this limit instead. Raise it and press **Refresh** to show the file. A preview beside its editor applies the same limit to the unsaved text. |
+| SVG: Hatch transparent areas | `editor.previews.providers.svg.transparencyHatch` | on | on · off | Draw diagonal hatching behind an SVG's transparent parts, in the theme's Picture Transparency Marker. Off, the canvas shows through plainly. |
+
+#### PDF
+
+A PDF shows its pages one after another, at 100% — or fitted to the panel's width when a page is wider; pages are drawn as they come into
+view. Its view controls, top left — Fit page width, Zoom In, Zoom 100%, Zoom Out — and the panel's zoom
+chords and Ctrl+wheel redraw them sharp at the new size. Beside them, and on the right-click menu, the page
+layouts: **Single Page**, **Two Pages** (two to a row, which Fit fills the width with) and **Pages Side by
+Side** (as many to a row as fit, re-flowed as the panel is resized); a middle-button drag moves around the pages, and
+[`Ctrl+G`](key-bindings.md#navigate) goes to a page. Its text can be selected and copied. Nothing in a
+PDF runs, and a link follows only on Ctrl+click.
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| PDF: Enabled | `editor.previews.providers.pdf.enabled` | on | on · off | Offer previews of `.pdf` files. Off, every such preview closes and the preview commands are shown disabled. |
+| Open PDFs in | `editor.previews.providers.pdf.defaultOpenAction` | `preview` | `preview` (Throng Preview) · `os` (Default OS Program) | What opening one of these files from File Explorer, Quick Open or a link does. |
+| PDF: Open previews in | `editor.previews.providers.pdf.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for PDF previews. |
+| PDF: Maximum file size | `editor.previews.providers.pdf.maxFileBytes` | 104,857,600 | 5,242,880 – 262,144,000 bytes, step 5,242,880 | A file larger than this is not read: the preview names its size and this limit instead. Raise it and press **Refresh** to show the file. |
+
+#### HTML
+
+An HTML page is shown as its static markup in a sandboxed frame, with the stylesheets, fonts and images
+beside it in the project: no script runs and the page cannot navigate. A link follows only on Ctrl+click. The
+page fills its panel at every zoom; a click in it makes the panel active, and the zoom chords, Ctrl+wheel and
+the app's other shortcuts work while it has the keyboard. An edit updates the page in place, keeping where you
+were scrolled. Find searches the page, and a right-click offers Copy, Copy as Rich Text, Select All and Split.
+
+Nothing is fetched from the network except stylesheets, fonts and images from a **safe source**: one listed in
+**HTML: Safe preview sources** below, which applies to every project, or in the project's own list in
+**Project Settings**. When a page names a remote resource that is not loaded, one notice in the panel lists
+each one under its source, with **Allow this source** to add that source to the project's list.
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| HTML: Enabled | `editor.previews.providers.html.enabled` | on | on · off | Offer previews of `.html` and `.htm` files. Off, every such preview closes and the preview commands are shown disabled. |
+| Open HTML files in | `editor.previews.providers.html.defaultOpenAction` | `preview` | `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program) | What opening one of these files from File Explorer, Quick Open or a link does. |
+| HTML: Open previews in | `editor.previews.providers.html.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for HTML previews. |
+| HTML: Maximum file size | `editor.previews.providers.html.maxFileBytes` | 10,485,760 | 5,242,880 – 262,144,000 bytes, step 5,242,880 | A file larger than this is not read: the preview names its size and this limit instead. Raise it and press **Refresh** to show the file. A preview beside its editor applies the same limit to the unsaved text. |
+| HTML: Safe preview sources | `editor.previews.providers.html.safeSources` | `https://fonts.googleapis.com`, `https://fonts.gstatic.com` | A list of `https:` addresses, each a host (`https://cdn.example.com`, with a port if it needs one) or every subdomain of one (`https://*.example.com`); may be empty | Where an HTML preview may load stylesheets, fonts and images from, in every project. Scripts never run, whatever is listed. A project adds sources of its own in **Project Settings**. |
 
 ### Links
 
@@ -495,6 +572,9 @@ data, documents, media, archives and scripts — in the File Explorer and Find i
 Icons** colours a file of a kind throng does not recognise, in a neutral grey apart from the folders; every
 bundled theme sets all eight, and clearing one gives those icons the Icon Colour. **Title Bar Background**, under General, is
 the bar across the top of every window; left empty, it is a shade apart from the window background.
+**Picture Preview Background** and **Picture Transparency Marker**, under Main panel / workspace, are the
+canvas an Image or SVG preview draws on and the hatching behind a picture's transparent parts; left
+empty, both are mixed from the editor background and text colour.
 **Icon Button Background**, under
 General › Buttons, is what every icon button sits on in every window; left empty, an icon button shows only its
 icon until you point at it. The

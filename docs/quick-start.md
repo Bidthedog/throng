@@ -175,14 +175,22 @@ can keep browsing or press **F2** to rename the file.
 - The same file open in two places is **one document**, with one undo history, and unsaved edits
   survive a crash.
 - **Preview** a Markdown file beside its editor from the status bar's preview button; it follows your
-  typing and scrolls with the editor. With **Default open action** set to Preview, clicking notes in
+  typing and scrolls with the editor. With **Open Markdown files in** set to Throng Preview, clicking notes in
   the tree reuses the preview you already have ([Open previews in](preferences.md#previews)), and you
   can drop a `.md` file onto a preview to show it there — or onto an empty panel, which opens it the
-  way **Default open action** says. Right-click a note — in the tree or in Find in Files' results — and
+  way **Open Markdown files in** says. Right-click a note — in the tree or in Find in Files' results — and
   choose **Open In › Last Preview Panel** to show it in the preview named beside the item, or **New
   Preview Panel** for a fresh one; once the note has its preview open, **Current Preview** goes to it.
   A preview's status bar counts the document's lines, characters and words, and while you select text it
   shows how much and which source lines.
+- **Look at images, SVGs, PDFs and HTML pages** by clicking them in the tree: each opens in its own
+  preview, whose icon and title name its type (`logo.png - Image Preview`). Pictures zoom and pan like a
+  Mermaid diagram; a PDF has the same zoom controls, selectable text and `Ctrl+G` to go to a page; drag
+  with the middle mouse button to move around any preview. An SVG or HTML preview beside its editor
+  follows your typing, and `Ctrl+F` finds text in an HTML page or a PDF. Nothing in a previewed file
+  runs, and an HTML page reaches only the [safe sources](preferences.md#previews) you allow — the
+  panel lists whatever it left out. **Open … in** for each
+  type ([Previews](preferences.md#previews)) sends its files to your system's own program instead.
 - **Fold** a Markdown document's sections from the gutter beside each heading, the right-click menu's
   **Outlining** submenu, or **Ctrl+M** chords ([Markdown bindings](key-bindings.md#markdown)); an editor
   and its preview fold together. **Collapse All Inside This Section** folds just one branch.
@@ -220,7 +228,7 @@ Right-click a file for **Open in OS Default Program**, and any item for
   you are on is filled more strongly.
 - **Ctrl+Shift+F** searches every file in the project as you type; **Ctrl+Shift+H** adds replace,
   one match, one file or everything at once. Right-click a folder in the tree to search just there.
-  A Markdown result opens its preview, scrolled to the match, when **Default open action** is Preview.
+  A Markdown result opens its preview, scrolled to the match, when **Open Markdown files in** is Throng Preview.
 - **Ctrl+Shift+T** is **Quick Open**: type any part of a name or path to jump to a file.
 - **Ctrl+G** goes to a line in the active editor.
 - Right-click a folder in the tree to open a terminal there, or to expand or collapse its children.

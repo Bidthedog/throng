@@ -46,7 +46,7 @@ goes away.
 - **Find across files and Quick Open** — search and replace the whole project, or jump to any file by name.
 - **Previews** — rendered, live-updating Markdown beside its editor, with scroll kept in sync, find,
   a heading outline, section folding shared with the editor, Obsidian wikilinks and image embeds, clickable task lists and
-  Mermaid diagrams.
+  Mermaid diagrams — and images, SVGs, PDFs and HTML pages shown safely, nothing in them run or fetched.
 - **Focus Mode** — let any panel, or a single diagram, fill its tab while you work on it, and step back out with Esc.
 - **Clickable links** — paths, URLs and hyperlinks in terminals, editors and previews open where they belong.
 - **Resource Monitor** — throng's own CPU, memory, GPU and I/O in the status bar, and a visual task manager that drills from project to tab to panel to every process your terminals started.
