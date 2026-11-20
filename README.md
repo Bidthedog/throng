@@ -2,16 +2,40 @@
 
 **Every project, every terminal, one window.**
 
+🌐 **[throng-ide.com](https://throng-ide.com)**
+
+**Build**
 [![CI](https://github.com/Bidthedog/throng/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/Bidthedog/throng/actions/workflows/ci.yml?query=event%3Apull_request)
 [![Nightly pipeline](https://github.com/Bidthedog/throng/actions/workflows/pipeline.yml/badge.svg?branch=master&event=schedule)](https://github.com/Bidthedog/throng/actions/workflows/pipeline.yml?query=event%3Aschedule)
 [![Release](https://github.com/Bidthedog/throng/actions/workflows/release.yml/badge.svg)](https://github.com/Bidthedog/throng/actions/workflows/release.yml)
+[![Website](https://github.com/Bidthedog/throng/actions/workflows/pages.yml/badge.svg)](https://github.com/Bidthedog/throng/actions/workflows/pages.yml)
+
+**Release**
 [![Latest release](https://img.shields.io/github/v/release/Bidthedog/throng?include_prereleases&sort=date&label=release&color=blue)](https://github.com/Bidthedog/throng/releases)
+[![Release date](https://img.shields.io/github/release-date-pre/Bidthedog/throng?label=released)](https://github.com/Bidthedog/throng/releases)
+[![Downloads](https://img.shields.io/github/downloads/Bidthedog/throng/total?color=blue)](https://github.com/Bidthedog/throng/releases)
 [![v1.0.0 progress](https://img.shields.io/github/milestones/progress-percent/Bidthedog/throng/1?label=v1.0.0)](https://github.com/Bidthedog/throng/milestone/1)
+
+**Platforms**
 [![Windows 11 x64](https://img.shields.io/badge/Windows%2011-x64-0078D4)](docs/install-windows.md)
 [![Linux x64](https://img.shields.io/badge/Linux-x64-FCC624?logo=linux&logoColor=black)](docs/install-linux.md)
 [![macOS Apple silicon](https://img.shields.io/badge/macOS-Apple%20silicon-999999?logo=apple&logoColor=white)](docs/install-macos.md)
 [![apt and dnf](https://img.shields.io/badge/packages-apt%20%7C%20dnf-A81D33)](docs/install-linux.md#the-package-repository)
+
+**Built with**
+[![Electron](https://img.shields.io/github/package-json/dependency-version/Bidthedog/throng/dev/electron?logo=electron&logoColor=white&color=47848F)](https://www.electronjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/github/package-json/dependency-version/Bidthedog/throng/react?filename=packages%2Fui%2Fpackage.json&logo=react&logoColor=black&color=61DAFB)](https://react.dev/)
+[![xterm.js](https://img.shields.io/github/package-json/dependency-version/Bidthedog/throng/@xterm/xterm?filename=packages%2Fui%2Fpackage.json&label=xterm.js)](https://xtermjs.org/)
+
+**License**
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+[![CLA](https://img.shields.io/badge/CLA-required-blue)](CLA.md)
+
+**Community**
+[![Open issues](https://img.shields.io/github/issues/Bidthedog/throng)](https://github.com/Bidthedog/throng/issues)
+[![Last commit](https://img.shields.io/github/last-commit/Bidthedog/throng/master)](https://github.com/Bidthedog/throng/commits/master)
+[![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)](CONTRIBUTING.md)
 
 throng is a themeable desktop workspace for people who live in the command line. Give each project its own
 folder and colour, then build it a home: tabs and split panels holding real PowerShell, Git Bash
