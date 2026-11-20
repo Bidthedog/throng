@@ -126,20 +126,12 @@ async function restoreAppZoom(app: ElectronApplication, win: Page): Promise<void
   // setZoomFactor returns before the relayout: until the page is as wide as the window again, the pane still shows
   // the last zoom's state (shown at 0.9), which the coordinator then collapses at 1.
   await expect.poll(() => win.evaluate(() => window.innerWidth), { timeout: 10_000 }).toBe(contentWidth);
-  // The pane may still restore itself after the zoom's relayout (a wide window): only a rail that stays one is shown.
-  const hide = win.getByTestId('pane-hide-right');
-  await expect
-    .poll(
-      async () => {
-        if (await hide.isVisible()) return true;
-        await win.waitForTimeout(300);
-        if (await hide.isVisible()) return true;
-        await win.getByTestId('pane-show-right').click({ timeout: 2_000 }).catch(() => undefined);
-        return hide.isVisible();
-      },
-      { timeout: 10_000 },
-    )
-    .toBe(true);
+  // The width coordinator runs from a ResizeObserver, whose callback lands before the next frame's paint: two frames
+  // after the relayout, the pane is in its settled state — restored in a wide window, a rail in a narrow one.
+  await win.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const show = win.getByTestId('pane-show-right');
+  if (await show.isVisible()) await show.click();
+  await expect(win.getByTestId('pane-hide-right')).toBeVisible({ timeout: 10_000 });
   await expect(
     win.getByTestId('file-explorer-tree').getByText('picture.png', { exact: true }),
     'the Explorer came back after app zoom returned to 1',
