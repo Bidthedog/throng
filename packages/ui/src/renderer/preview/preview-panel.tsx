@@ -234,7 +234,7 @@ import {
 } from './copy.js';
 import { PreviewStatusBar } from './preview-status-bar.js';
 import { toggleSyncScroll } from './sync-scroll-toggle.js';
-import { clearSyncMark, publishSyncMark, syncMarkSource } from './sync-mark-store.js';
+import { clearSyncMark, settleSyncMark, syncMarkSource } from './sync-mark-store.js';
 import {
   editorDocLinesOf,
   editorTopLineOf,
@@ -1948,8 +1948,9 @@ export function PreviewPanel({
     lastEditorLine.current = parentTop;
     if (!syncing || parentId === null || parentTop === null || seen === null || seen === parentTop) return;
     if (parentTop.fromSync || seen.line === parentTop.line) return;
-    // 073 FR-033e — the editor's centre line, not its top (sync itself keys on the top).
-    publishSyncMark(parentId, editorCentreLineOf(parentId) ?? parentTop.line, highlightMsRef.current);
+    // 073 FR-033g — nothing is drawn while scrolling continues; the mark is made 300 ms after the last scroll, from
+    // where the editor is THEN. 073 FR-033e — its centre line, not its top (sync itself keys on the top).
+    settleSyncMark(parentId, () => editorCentreLineOf(parentId) ?? editorTopLineOf(parentId)?.line ?? null, highlightMsRef.current);
   }, [parentTop, parentId, syncing]);
   useEffect(() => {
     if (!syncing || parentId === null) return;
@@ -2061,7 +2062,8 @@ export function PreviewPanel({
     requestEditorTopLine(editor, line);
     // 073 FR-033d — this view led: the pair is in step at its top line.
     // 073 FR-033e — the mark names the line at the CENTRE of this view; sync itself keyed on the top.
-    publishSyncMark(editor, centreLine ?? line, highlightMsRef.current);
+    // 073 FR-033g — drawn once scrolling has stopped for 300 ms, at the latest place this view reported.
+    settleSyncMark(editor, () => centreLine ?? line, highlightMsRef.current);
     return true;
   }, []);
 

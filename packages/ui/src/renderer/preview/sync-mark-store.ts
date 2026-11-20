@@ -12,8 +12,11 @@
  * Keyed by the EDITOR panel of the pair, which is what both sides can name: the preview as its parent, the editor as
  * itself. Module state, so one per renderer window like `editor-scroll-store.ts`; the pair lives in one window.
  *
- * The mark is `on` from a sync scroll until {@link SYNC_MARK_FADE_MS} after the LAST one (each publish resets the
- * timer), then `off` — a class flip the views' CSS transitions out — and gone a moment after that. It is a decoration:
+ * While scrolling continues nothing is drawn (FR-033g): {@link settleSyncMark} waits {@link SYNC_MARK_QUIET_MS} after the
+ * LAST sync scroll, then publishes once, on the pair in step at that moment; a mark still showing comes down when
+ * scrolling starts again.
+ *
+ * A published mark is `on` until the highlight duration ({@link SYNC_MARK_FADE_MS} by default) later, then `off` — a class flip the views' CSS transitions out — and gone a moment after that. It is a decoration:
  * nothing here touches focus, a caret, a selection or a scroll position, and it has no setting of its own.
  */
 import { useSyncExternalStore } from 'react';
@@ -88,7 +91,44 @@ export function publishSyncMark(editorId: string, line: number, fadeMs: number =
 /** Drop the pair's mark at once — sync stopped, or a view went. */
 export function clearSyncMark(editorId: string): void {
   stopTimers(editorId);
+  const waiting = quietTimers.get(editorId);
+  if (waiting !== undefined) clearTimeout(waiting);
+  quietTimers.delete(editorId);
   if (marks.delete(editorId)) emit();
+}
+
+/** How long scrolling must have stopped before the mark is drawn (073 FR-033g, Q41). Fixed, not a preference. */
+export const SYNC_MARK_QUIET_MS = 300;
+const quietTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * A sync scroll happened for the pair whose editor is `editorId` (073 FR-033g): while scrolling continues NOTHING is
+ * drawn or moved — no publish, no read of either view's centre, no store notification. A mark still showing from before
+ * comes down (the one notification this costs, and only when there was one), and the quiet timer restarts. Once
+ * {@link SYNC_MARK_QUIET_MS} pass with no further call, `lineAt` is asked for the place the pair is in step at THEN and
+ * the mark is published (fading after `fadeMs`, FR-033f). A `fadeMs` of 0 draws nothing, so nothing is scheduled.
+ */
+export function settleSyncMark(editorId: string, lineAt: () => number | null, fadeMs: number = SYNC_MARK_FADE_MS): void {
+  const waiting = quietTimers.get(editorId);
+  if (waiting !== undefined) clearTimeout(waiting);
+  quietTimers.delete(editorId);
+  if (!(fadeMs > 0) || !Number.isFinite(fadeMs)) {
+    clearSyncMark(editorId);
+    return;
+  }
+  if (marks.has(editorId)) {
+    stopTimers(editorId);
+    marks.delete(editorId);
+    emit();
+  }
+  quietTimers.set(
+    editorId,
+    setTimeout(() => {
+      quietTimers.delete(editorId);
+      const line = lineAt();
+      if (line !== null) publishSyncMark(editorId, line, fadeMs);
+    }, SYNC_MARK_QUIET_MS),
+  );
 }
 
 export function syncMarkOf(editorId: string): SyncMark | null {
@@ -133,6 +173,8 @@ export function useSyncMarkFrom(source: SyncMarkSource | null | undefined, plain
 /** Test seam: forget every mark and timer. */
 export function __resetSyncMarks(): void {
   for (const id of [...fadeTimers.keys(), ...removeTimers.keys()]) stopTimers(id);
+  for (const t of quietTimers.values()) clearTimeout(t);
+  quietTimers.clear();
   marks.clear();
   emit();
 }

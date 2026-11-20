@@ -7,9 +7,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SYNC_MARK_FADE_MS,
+  SYNC_MARK_QUIET_MS,
   SYNC_MARK_REMOVE_MS,
   __resetSyncMarks,
+  clearSyncMark,
   publishSyncMark,
+  settleSyncMark,
   subscribeSyncMark,
   syncMarkOf,
 } from '../../src/renderer/preview/sync-mark-store.js';
@@ -98,5 +101,72 @@ describe('073 T075 — a publish that changes nothing tells nobody', () => {
     vi.advanceTimersByTime(SYNC_MARK_FADE_MS);
     expect(heard).toHaveBeenCalledTimes(3);
     off();
+  });
+});
+
+describe('the mark is made once scrolling has stopped for 300 ms (FR-033g)', () => {
+  it('draws nothing, reads nothing and tells no one while calls keep coming inside the quiet period', () => {
+    const heard = vi.fn();
+    const line = vi.fn(() => 7);
+    const off = subscribeSyncMark(heard);
+    for (let i = 0; i < 50; i += 1) {
+      settleSyncMark('ed', line);
+      vi.advanceTimersByTime(16);
+    }
+    expect(heard).not.toHaveBeenCalled();
+    expect(line).not.toHaveBeenCalled();
+    expect(syncMarkOf('ed')).toBeNull();
+    off();
+  });
+
+  it('publishes exactly once, SYNC_MARK_QUIET_MS after the last call, from the line asked for THEN', () => {
+    let at = 1;
+    settleSyncMark('ed', () => at);
+    vi.advanceTimersByTime(100);
+    at = 9;
+    settleSyncMark('ed', () => at);
+    vi.advanceTimersByTime(SYNC_MARK_QUIET_MS - 1);
+    expect(syncMarkOf('ed')).toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(syncMarkOf('ed')).toEqual({ line: 9, on: true });
+  });
+
+  it('a mark that is showing comes down on the next call, with one notification, and nothing is drawn until it stops again', () => {
+    settleSyncMark('ed', () => 4);
+    vi.advanceTimersByTime(SYNC_MARK_QUIET_MS);
+    expect(syncMarkOf('ed')?.on).toBe(true);
+    const heard = vi.fn();
+    const off = subscribeSyncMark(heard);
+    settleSyncMark('ed', () => 5);
+    expect(syncMarkOf('ed')).toBeNull();
+    expect(heard).toHaveBeenCalledTimes(1);
+    settleSyncMark('ed', () => 5);
+    expect(heard).toHaveBeenCalledTimes(1); // no mark to clear: no notification
+    vi.advanceTimersByTime(SYNC_MARK_QUIET_MS);
+    expect(syncMarkOf('ed')).toEqual({ line: 5, on: true });
+    off();
+  });
+
+  it('a duration of 0 schedules nothing, and one that is showing comes down', () => {
+    publishSyncMark('ed', 2);
+    const line = vi.fn(() => 3);
+    settleSyncMark('ed', line, 0);
+    vi.advanceTimersByTime(SYNC_MARK_QUIET_MS * 2);
+    expect(line).not.toHaveBeenCalled();
+    expect(syncMarkOf('ed')).toBeNull();
+  });
+
+  it('clearing the pair (sync turned off, a view gone) cancels a mark that was waiting to be drawn', () => {
+    settleSyncMark('ed', () => 6);
+    vi.advanceTimersByTime(100);
+    clearSyncMark('ed');
+    vi.advanceTimersByTime(SYNC_MARK_QUIET_MS);
+    expect(syncMarkOf('ed')).toBeNull();
+  });
+
+  it('a line of null (no place to name) draws nothing', () => {
+    settleSyncMark('ed', () => null);
+    vi.advanceTimersByTime(SYNC_MARK_QUIET_MS);
+    expect(syncMarkOf('ed')).toBeNull();
   });
 });

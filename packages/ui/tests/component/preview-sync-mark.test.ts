@@ -14,7 +14,7 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetEditorScrollStore, publishEditorCentreLine, publishEditorDocLines, publishEditorTopLine, registerEditorCentreReader, registerEditorScroller } from '../../src/renderer/editor/editor-scroll-store.js';
-import { SYNC_MARK_FADE_MS, SYNC_MARK_REMOVE_MS, __resetSyncMarks, subscribeSyncMark, syncMarkOf } from '../../src/renderer/preview/sync-mark-store.js';
+import { SYNC_MARK_FADE_MS, SYNC_MARK_QUIET_MS, SYNC_MARK_REMOVE_MS, __resetSyncMarks, subscribeSyncMark, syncMarkOf } from '../../src/renderer/preview/sync-mark-store.js';
 import { COLD, README, mountMarkdownPreview, previewUpdate, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
 const DOC = Array.from({ length: 30 }, (_, i) => `P${i}`).join('\n\n');
@@ -40,6 +40,8 @@ const editorScrolledTo = (line: number, fromSync = false, centre = line + 10): v
     publishEditorCentreLine('ed-1', centre);
     publishEditorTopLine('ed-1', line, fromSync);
   });
+/** FR-033g: scrolling stops, and the mark appears after the quiet period. */
+const settle = (): void => act(() => void vi.advanceTimersByTime(SYNC_MARK_QUIET_MS));
 async function frames(n = 2): Promise<void> {
   for (let i = 0; i < n; i += 1) await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
@@ -136,7 +138,7 @@ describe('the preview leads (FR-033d, FR-033e)', () => {
     await mountParented();
     await readerScrolls(500); // P12 (line 24) straddles the top; P17 (line 34, 180-220 px) straddles the middle, 200 px down
     expect(ed1).toHaveBeenCalledWith(24);
-    expect(syncMarkOf('ed-1')).toEqual({ line: 34, on: true });
+    await waitFor(() => expect(syncMarkOf('ed-1')).toEqual({ line: 34, on: true }), { timeout: 2000 });
     await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P17']));
   });
 });
@@ -146,6 +148,7 @@ describe('the mark fades after the last sync scroll (FR-033d)', () => {
     await mountParented();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     editorScrolledTo(13);
+    settle();
     expect(syncMarkOf('ed-1')?.on).toBe(true);
 
     act(() => void vi.advanceTimersByTime(SYNC_MARK_FADE_MS - 1));
@@ -164,8 +167,10 @@ describe('the mark fades after the last sync scroll (FR-033d)', () => {
     await mountParented();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     editorScrolledTo(13);
+    settle();
     act(() => void vi.advanceTimersByTime(1000));
     editorScrolledTo(30);
+    settle();
     act(() => void vi.advanceTimersByTime(1000));
     expect(syncMarkOf('ed-1')).toEqual({ line: 40, on: true });
     act(() => void vi.advanceTimersByTime(500));
@@ -199,6 +204,7 @@ describe('Scroll-sync highlight duration (FR-033f)', () => {
     await mountParented(seconds(4));
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     editorScrolledTo(13);
+    settle();
     act(() => void vi.advanceTimersByTime(3999));
     expect(syncMarkOf('ed-1')?.on).toBe(true);
     expect(marked()[0]).toHaveClass('preview-sync-mark--on');
@@ -223,11 +229,13 @@ describe('Scroll-sync highlight duration (FR-033f)', () => {
     await mountParented(seconds(1.5));
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     editorScrolledTo(13);
+    settle();
     act(() => void vi.advanceTimersByTime(1500));
     expect(syncMarkOf('ed-1')?.on).toBe(false);
 
     m!.setSettings(seconds(4));
     editorScrolledTo(30);
+    settle();
     act(() => void vi.advanceTimersByTime(3999));
     expect(syncMarkOf('ed-1')?.on).toBe(true);
     act(() => void vi.advanceTimersByTime(1));
@@ -329,11 +337,94 @@ describe('the work per sync scroll is bounded by the viewport, not the document 
     await mountLarge();
     const centre = vi.fn(() => 40);
     const unregister = registerEditorCentreReader('ed-1', centre);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     for (let i = 1; i <= 10; i += 1) {
       act(() => publishEditorTopLine('ed-1', i * 12));
-      await frames(1);
+      settle();
     }
     unregister();
     expect(centre).toHaveBeenCalledTimes(10);
   }, 60_000);
+});
+
+describe('the mark waits until scrolling has stopped (073 FR-033g, Q41)', () => {
+  /** Frames at 16 ms apiece on the fake clock, so a continuous scroll never leaves a 300 ms gap. */
+  const FRAMES = 50;
+
+  it('the editor leading: no publish, no centre read and no notification over a 50-frame scroll; exactly one mark 300 ms after the last', async () => {
+    await mountParented();
+    const centre = vi.fn(() => 40);
+    const unregister = registerEditorCentreReader('ed-1', centre);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let emits = 0;
+    const off = subscribeSyncMark(() => void (emits += 1));
+    for (let i = 1; i <= FRAMES; i += 1) {
+      act(() => publishEditorTopLine('ed-1', i * 3));
+      act(() => void vi.advanceTimersByTime(16));
+    }
+    expect(emits).toBe(0);
+    expect(centre).not.toHaveBeenCalled();
+    expect(syncMarkOf('ed-1')).toBeNull();
+    expect(marked()).toEqual([]);
+    act(() => void vi.advanceTimersByTime(SYNC_MARK_QUIET_MS - 16 - 1));
+    expect(emits).toBe(0);
+    act(() => void vi.advanceTimersByTime(1));
+    expect(emits).toBe(1);
+    expect(centre).toHaveBeenCalledTimes(1);
+    expect(syncMarkOf('ed-1')).toEqual({ line: 40, on: true });
+    off();
+    unregister();
+  }, 60_000);
+
+  it('the editor leading: scrolling again clears the mark that is showing and draws nothing until it stops once more', async () => {
+    await mountParented();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    editorScrolledTo(13);
+    settle();
+    expect(syncMarkOf('ed-1')?.on).toBe(true);
+    expect(marked()).toHaveLength(1);
+
+    editorScrolledTo(30);
+    expect(syncMarkOf('ed-1')).toBeNull();
+    expect(marked()).toEqual([]);
+    act(() => void vi.advanceTimersByTime(SYNC_MARK_QUIET_MS - 1));
+    expect(syncMarkOf('ed-1')).toBeNull();
+    settle();
+    expect(syncMarkOf('ed-1')).toEqual({ line: 40, on: true });
+  });
+
+  it('the preview leading: no publish over a 50-frame scroll, one mark 300 ms after the last, cleared when it starts again', async () => {
+    await mountParented();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let emits = 0;
+    const off = subscribeSyncMark(() => void (emits += 1));
+    for (let i = 1; i <= FRAMES; i += 1) {
+      await readerScrolls(i * 20);
+      act(() => void vi.advanceTimersByTime(16));
+    }
+    expect(ed1).toHaveBeenCalled(); // sync itself followed
+    expect(emits).toBe(0);
+    expect(syncMarkOf('ed-1')).toBeNull();
+    act(() => void vi.advanceTimersByTime(SYNC_MARK_QUIET_MS - 16 - 1));
+    expect(emits).toBe(0);
+    act(() => void vi.advanceTimersByTime(1));
+    expect(emits).toBe(1);
+    expect(syncMarkOf('ed-1')?.on).toBe(true);
+
+    await readerScrolls(FRAMES * 20 + 40);
+    expect(syncMarkOf('ed-1')).toBeNull();
+    off();
+  }, 60_000);
+
+  it('still follows every frame while the mark waits: the preview moves with each editor scroll', async () => {
+    await mountParented();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    editorScrolledTo(13);
+    await frames();
+    expect(host().scrollTop).toBe(240);
+    editorScrolledTo(20);
+    await frames();
+    expect(host().scrollTop).toBe(400);
+    expect(syncMarkOf('ed-1')).toBeNull();
+  });
 });
