@@ -285,7 +285,7 @@ test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, rais
     JSON.stringify({ editor: { previews: { providers: { html: { defaultOpenAction: 'editor' } } } } }),
   );
   try {
-    await runApp(async (_app, win) => {
+    await runOwnApp(async (_app, win) => {
       const errors: string[] = [];
       win.on('pageerror', (e) => errors.push(e.message));
       await createProject(win, 'HL', root);
