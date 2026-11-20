@@ -197,6 +197,10 @@ the feedback, the code and precedent rather than stated by the maintainer.
   pressed background; each is titled "<setting>: enabled" or "<setting>: disabled". *(derived)* That covers Edit long
   cells in a dialog, Wrap cells, Lock first row, Lock first column and Synchronise Scrolling, which the constitution
   lists as a known gap to bring into line at its next change, on the editor's status bar too. (FR-007a)
+- Q37: How does a locked row or column show where it ends? → A: A highlighted line along the locked cells' outside
+  edge — the bottom of the locked row, the right of the locked column — that replaces the border already there, so no
+  cell or the grid changes size or moves. *(derived)* The theme's accent colour, at the ordinary border's width.
+  (FR-039b, refining FR-039a's separator)
 
 ## Terminology
 
@@ -392,6 +396,9 @@ expected bytes: only the edited field differs.
 36. **Given** the CSV status bar, **When** a toggle is off, **Then** its icon is muted with a diagonal line through it
     and its title reads "Wrap cells: disabled"; turned on, the line goes, the icon is full-contrast on the pressed
     background and the title reads "Wrap cells: enabled" (FR-007a).
+37. **Given** a CSV, **When** the user turns Lock first row and Lock first column on and off, **Then** a highlighted
+    line runs along the bottom of row 1 and the right of column A while locked, and no cell moves or changes size
+    either way (FR-039b).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -701,6 +708,10 @@ Markdown and Mermaid pattern, each setting working as labelled.
   keyboard and have a matching checked item on the panel menu. Each is decided per panel: the panel's own choice,
   saved with the panel, else its setting (FR-060d). Scrolling with either locked still meets SC-009, and Wrap
   (FR-013) still applies to locked cells. *(Supersedes FR-039 for these two.)*
+- **FR-039b** *(Q37, 2026-11-20)*: The edge a locked strip shares with the scrolling cells — the bottom border of every
+  locked-row cell, the right border of every locked-column cell — MUST be drawn in the theme's accent colour at the
+  ordinary cell border's width, in place of that border, so no cell or the grid changes size or position when a lock
+  is turned on or off. *(Refines FR-039a's separator.)*
 - **FR-040**: Column widths MUST be stored per file, as document state alongside the document's other
   persisted state, and restored when the file is next shown in a grid, across restarts. A width MUST be
   shared by every panel showing the file.

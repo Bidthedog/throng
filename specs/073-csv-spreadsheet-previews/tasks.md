@@ -106,6 +106,7 @@ its failing test at the layer R10 names.
 - [x] T067 [US2] FR-039a, FR-060d: Lock first row / Lock first column — two CSV settings (ship off, docs/preferences.md); per-panel toggles in the CSV status bar and checked panel-menu items, persisted with the panel config, untouched panels following the settings; the grid holds row 0 under the header strip and column 0 beside the gutter while scrolling (sticky, virtualiser keeps them rendered), still selectable/editable, with Wrap — component tests
 - [x] T068 [US2] FR-007a: the CSV status-bar toggles (cell dialog, wrap, locks) and the shared Synchronise Scrolling button follow constitution v7.1.0 Setting toggles — muted glyph with a struck line when off, full-contrast on pressed when on, "<setting>: enabled|disabled" titles — reusing master's terminal toggle styling (076) rather than a copy
 - [x] T069 [US2] FR-033c: CSV previews link to their editor and Synchronise Scrolling works between them by record (grid top row ↔ editor top line) — a provider flag separate from flowingDocument so Go to Heading stays absent; sync button on both status bars
+- [x] T070 [US2] FR-039b: the locked strip's outside edge is the accent colour at the ordinary 1px border width, replacing the 2px separator
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies
