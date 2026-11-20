@@ -2574,15 +2574,30 @@ export function PreviewPanel({
    */
   const fileGone = fileNotice?.kind === 'deleted';
   const [bodyUnloaded, setBodyUnloaded] = useState(false);
+  /*
+   * Where the reader was as the body unloaded, held HERE rather than in the store: the update that brings the file
+   * back is a new revision with no place of its own, and the store keeps no place across one (pipeline 44762998591:
+   * the body came back at the top, FR-107 US7 scenario 3). Kept for that file only — a different file loaded into the
+   * panel meanwhile starts where its own load says.
+   */
+  const unloadPlace = useRef<{ filePath: string; place: unknown; basis: PreviewContent | null } | null>(null);
   useLayoutEffect(() => {
     if (!fileGone) {
       setBodyUnloaded(false);
       return;
     }
     const place = placeLeft();
-    if (place !== undefined) keepDetachedViewState(panelId, place);
+    const current = getPreviewState(panelId);
+    if (place !== undefined && current !== undefined) {
+      unloadPlace.current = { filePath: current.filePath, place, basis: current.content };
+    }
     setBodyUnloaded(true);
   }, [fileGone, panelId, placeLeft]);
+  // The body is back (or never went): the place has been handed to it, once.
+  useEffect(() => {
+    if (!bodyUnloaded) unloadPlace.current = null;
+  }, [bodyUnloaded]);
+  const returning = !bodyUnloaded && unloadPlace.current !== null && unloadPlace.current.filePath === state?.filePath ? unloadPlace.current : null;
 
   /*
    * 047 US2 (FR-015, research R8) — this panel just became the reader's most recently active preview
@@ -2680,15 +2695,15 @@ export function PreviewPanel({
             lockFirstColumnChoice={lockFirstColumnChoice}
             registerGoTo={registerGoTo}
             linkWording={linkWording}
-            initialViewState={state.viewState}
-            initialViewStateBasis={state.viewStateBasis}
+            initialViewState={returning !== null ? returning.place : state.viewState}
+            initialViewStateBasis={returning !== null ? returning.basis : state.viewStateBasis}
             navigationSeq={state.navigationSeq}
             syncLine={syncLine}
             syncEcho={syncEcho}
             onTopLineChange={onTopLineChange}
             onTopLineRead={onTopLineRead}
             syncMarkSource={syncMarkSrc}
-            placePolicy={placePolicy}
+            placePolicy={returning !== null ? 'keep' : placePolicy}
             onViewStateCapture={onViewStateCapture}
             onFollow={onFollow}
             onNotice={onNotice}
