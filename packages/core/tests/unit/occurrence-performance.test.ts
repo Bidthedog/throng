@@ -25,18 +25,29 @@ const selection = { from: doc.line(1).from + lines[0]!.indexOf('id,'), to: doc.l
  * CPU time does not count the time the scheduler kept the thread waiting. Windows reports it in clock
  * ticks (about 15.6 ms), so one run cannot be timed alone; a total of 200 ms keeps that within 8%.
  * Node before 23.9 has no `threadCpuUsage`, and there it falls back to wall time.
+ *
+ * CPU time is not immune either: in a whole unit run beside two others (load ~6 on 20 cores), the same scan's mean
+ * read 22.5-23.0 ms against the 20 ms budget in 3 of 21 runs, where it reads ~3 ms alone. A thread sharing its core
+ * and cache with a busy neighbour, or a worker heap other files have grown, slows a whole window at a time. So the
+ * answer is the fastest of `SAMPLES` such means, as `text-fidelity-perf` takes the fastest of three reads: a window
+ * the machine slowed is discarded, while a cost every run pays is in every sample.
  */
+const SAMPLES = 3;
 function cpuMsPerRun(fn: (i: number) => void, minTotalMs = 200): number {
   const now = (): number => {
     const u = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : null;
     return u ? (u.user + u.system) / 1000 : performance.now();
   };
   fn(0); // warm
-  const start = now();
-  let runs = 0;
-  do fn(++runs);
-  while (now() - start < minTotalMs);
-  return (now() - start) / runs;
+  let best = Number.POSITIVE_INFINITY;
+  for (let s = 0; s < SAMPLES; s++) {
+    const start = now();
+    let runs = 0;
+    do fn(++runs);
+    while (now() - start < minTotalMs);
+    best = Math.min(best, (now() - start) / runs);
+  }
+  return best;
 }
 
 describe('occurrence tinting cost on 10,000 lines (SC-005, Principle XII)', () => {
