@@ -41,7 +41,7 @@ Covers: FR-020, FR-022, FR-023, FR-024, FR-026, FR-027, FR-028, FR-030, FR-031, 
 Paths: `packages/core/src/preview/providers/image.ts`, `packages/ui/src/renderer/preview/providers/image/**`, `packages/ui/src/renderer/preview/blocks/picture.ts`, `packages/ui/src/renderer/preview/diagram/**`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`
 
 ### Steps
-1. Click a `.png` in Files & Folders. An Image Preview titled `<name>.png - Preview` shows it fitted to the panel. The status bar shows its size in pixels and bytes.
+1. Click a `.png` in Files & Folders. An Image Preview titled `<name>.png - Image Preview` shows it fitted to the panel. The status bar shows its size in pixels and bytes.
 2. Use Fit, Zoom In, Zoom 100%, Zoom Out; middle-drag to pan; Ctrl+wheel over a detail; Ctrl+middle-click. Each behaves as on a Mermaid preview, with the fading zoom percentage.
 3. Zoom past 100% on a small icon. The pixels show as squares, not blurred.
 4. Open a PNG with transparency. A checkerboard shows behind the transparent parts, in a dark and a light theme.
@@ -218,7 +218,7 @@ Paths: `packages/core/src/workspace/panel-title.ts`, `packages/core/src/preview/
 ### Steps
 1. Open a Markdown, a Mermaid, an image, an SVG, a PDF and an HTML file as previews side by side. Each header shows its own preview icon, all recognisably the preview icon, each with its type's mark.
 2. Each title names its type: `notes.md - Markdown Preview`, `flow.mmd - Mermaid Preview`, `logo.png - Image Preview`, `drawing.svg - SVG Preview`, `datasheet.pdf - PDF Preview`, `page.html - HTML Preview`.
-3. Open the tab picker: each preview's row shows its type's icon.
+3. Hover the tab holding them: its popover lists each preview with its type's icon and title.
 4. Open an HTML file in an editor: its status-bar preview button shows the HTML preview icon. Right-click the file in Files & Folders → Open In: the Preview row shows it too.
 5. Switch theme and icon set. Each icon follows the theme.
 
