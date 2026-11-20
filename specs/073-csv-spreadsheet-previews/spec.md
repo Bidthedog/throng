@@ -218,6 +218,10 @@ the feedback, the code and precedent rather than stated by the maintainer.
   highlight duration** under Editor → Previews, in seconds, shipping **1.5**, from 0 to 10 in steps of 0.5; 0 shows no
   highlight at all. It governs every provider's highlight and the editor's, takes effect without a restart, and
   supersedes FR-033d's fixed 1.5 seconds. (FR-033f)
+- Q41: Should the in-step highlight follow every scroll frame? → A: No. It waits until scrolling has stopped for 300 ms,
+  then appears on the pair in step at that moment and fades after the Scroll-sync highlight duration. *(derived)* No
+  highlight is drawn or moved while scrolling continues; a mark already showing clears when scrolling starts again; the
+  300 ms is fixed, not a preference. (FR-033g, superseding FR-033d's "appears when a scroll moves the other view")
 
 ## Terminology
 
@@ -428,6 +432,9 @@ expected bytes: only the edited field differs.
     in the other; the tops of the two views stay in step as before (FR-033e).
 41. **Given** Scroll-sync highlight duration set to 4, **When** the user scrolls a synchronised view, **Then** both
     highlights stay for about four seconds after scrolling stops; set to 0, no highlight shows (FR-033f).
+42. **Given** a synchronised CSV or Markdown pair, **When** the user scrolls continuously, **Then** no highlight shows
+    while scrolling; about 300 ms after scrolling stops the highlight appears on the pair in step, and scrolling again
+    clears it (FR-033g).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -670,6 +677,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
   documented as every preference is. The in-step highlight (FR-033d) MUST fade that long after the last scroll, in the
   editor and in every preview, and a change MUST take effect at the next scroll without a restart; 0 MUST show no
   highlight. *(Supersedes FR-033d's fixed "1.5 seconds".)*
+- **FR-033g** *(Q41, 2026-11-20)*: The in-step highlight (FR-033d, FR-033e) MUST NOT be drawn or moved while scrolling
+  continues. It MUST appear once scrolling has stopped for **300 ms**, on the pair in step at that moment, and then fade
+  after the Scroll-sync highlight duration (FR-033f); a highlight still showing MUST clear when scrolling starts again.
+  Synchronise Scrolling itself keeps following every frame. *(Supersedes FR-033d's "appears when a scroll moves the
+  other view".)*
 - **FR-033b** *(Q29, 2026-11-19)*: Opening or dropping another CSV onto a CSV Preview Editor whose document has
   unsaved edits only it shows MUST raise the editor's unsaved-changes prompt (006 US9), naming the grid's file
   and the arriving one, with **Save & open**, **Discard & open**, **Open in new preview** and **Cancel**. Save and
