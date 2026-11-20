@@ -9,6 +9,7 @@ import { EditorCoordinator } from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
 import { PreviewService, type PreviewHistoryHooks } from '../../src/main/preview-service.js';
 import { CsvGridService, gridDocumentIdFor } from '../../src/main/csv-grid-service.js';
+import { NavigationHistoryService } from '../../src/main/navigation-history-service.js';
 import { lateListener, liveSettings, manualWatcher, recordingPush, recordingWindows } from './helpers/preview-harness.js';
 
 /**
@@ -185,6 +186,130 @@ describe('Last Preview Panel reuse for a CSV (073 T035, FR-060)', () => {
       kind: 'reroute',
     });
     expect(previews.run('v1')?.filePath).toBe(a);
+  });
+});
+
+/**
+ * 073 T078 (MT-06) — open a.csv in the Last Preview Panel, open its editor from the status bar (Open in Editor),
+ * go to another CSV, then back to a.csv: ONE CSV preview, never a second one beside the editor. Driven through
+ * a REAL `NavigationHistoryService`, so the Back reading of "go back" is the same run's history step.
+ */
+describe('Last Preview Panel reuse once the CSV has an editor (073 T078, FR-060; 047 FR-016a)', () => {
+  let hist: NavigationHistoryService;
+
+  beforeEach(() => {
+    hist = new NavigationHistoryService({ cap: () => 50, broadcastChanged: () => {} });
+    const settings = liveSettings();
+    const relay = lateListener();
+    const service = new EditorService(fs, settings.get);
+    coord = new EditorCoordinator(service, new EditorRecovery(recoveryDir), {
+      recoveryDebounceMs: 10_000,
+      relaySync: () => {},
+      persistUndoHistory: () => false,
+      documentLifecycle: relay,
+      history: hist,
+    });
+    const gridRef: { current?: CsvGridService } = {};
+    previews = new PreviewService({
+      documents: coord,
+      reader: service,
+      fs,
+      fileWatcher: manualWatcher(),
+      settings: settings.get,
+      registry: SHIPPED_PREVIEW_PROVIDERS,
+      projectRoot: async (id) => (id === 'P' ? root : undefined),
+      push: recordingPush(),
+      windows: recordingWindows(1),
+      history: hist,
+      runEnded: (panelId: string) => gridRef.current?.release(panelId),
+      gridDocumentLeft: (panelId: string) => gridRef.current?.release(panelId),
+      saveGridDocument: async (panelId: string) => (await gridRef.current?.save(panelId))?.ok === true,
+    } as ConstructorParameters<typeof PreviewService>[0]);
+    relay.bind(previews);
+    grid = new CsvGridService(coord, previews);
+    gridRef.current = grid;
+  });
+
+  afterEach(() => coord.destroy('ed1'));
+
+  const setB2 = (value: string) => ({ kind: 'setCells', cells: [{ row: 1, col: 1, value }] });
+
+  /** a.csv in the Last Preview Panel v1, then Open in Editor from its status bar: ed1 holds a.csv's document. */
+  async function previewThenEditor(): Promise<{ a: string; b: string }> {
+    const a = await file('a.csv', 'x,y\n1,2\n');
+    const b = await file('b.csv', 'p,q\n3,4\n');
+    await attach('v1', a);
+    const loaded = await coord.load({
+      panelId: 'ed1',
+      windowId: String(REQUESTER),
+      ownerKind: 'project',
+      ownerProjectId: 'P',
+      ownerRoot: root,
+      allProjectRoots: [root],
+      tabId: 't1',
+      absPath: a,
+      encoding: 'utf8',
+      hasBom: false,
+      lineEnding: 'lf',
+    });
+    if (!loaded.ok) throw new Error(`editor load refused: ${loaded.reason}`);
+    expect((await previews.refresh('v1')).update?.parent).toMatchObject({ panelId: 'ed1' });
+    return { a, b };
+  }
+
+  // `hasParentLocally` is what the renderer sends: this window's layout holds ed1 for a.csv, none for b.csv.
+  const openFrom = (absPath: string, hasParentLocally: boolean) =>
+    previews.open(REQUESTER, { absPath, projectId: 'P', hasParentLocally, target: { mode: 'lastActive', reusePanelId: 'v1' } });
+
+  it('reopening a.csv while the preview still shows it (the editor active) focuses that preview', async () => {
+    const { a } = await previewThenEditor();
+    expect(await openFrom(a, true)).toEqual({ kind: 'focused', panelId: 'v1' });
+  });
+
+  it('a.csv → b.csv → a.csv again from Files & Folders: the one preview moves back, re-paired with the editor', async () => {
+    const { a, b } = await previewThenEditor();
+    expect(await openFrom(b, false)).toEqual({ kind: 'navigated', panelId: 'v1' });
+
+    expect(await openFrom(a, true)).toEqual({ kind: 'navigated', panelId: 'v1' });
+    expect(previews.run('v1')?.filePath).toBe(a);
+    expect((await previews.refresh('v1')).update?.parent).toMatchObject({ panelId: 'ed1' });
+  });
+
+  it('a.csv → b.csv, then Back: the one preview steps back to a.csv, re-paired with the editor', async () => {
+    const { a, b } = await previewThenEditor();
+    expect(await openFrom(b, false)).toEqual({ kind: 'navigated', panelId: 'v1' });
+
+    const back = await previews.navigate(REQUESTER, { panelId: 'v1', target: { absPath: a }, intent: { kind: 'history', index: 0 } });
+    expect(back).toMatchObject({ kind: 'shown' });
+    expect(previews.run('v1')?.filePath).toBe(a);
+    expect((await previews.refresh('v1')).update?.parent).toMatchObject({ panelId: 'ed1' });
+    // …and opening a.csv again now only focuses it.
+    expect(await openFrom(a, true)).toEqual({ kind: 'focused', panelId: 'v1' });
+  });
+
+  it('unsaved grid edits on b.csv are asked about first; Open in new preview keeps them and places a.csv beside its editor', async () => {
+    const { a, b } = await previewThenEditor();
+    expect(await openFrom(b, false)).toEqual({ kind: 'navigated', panelId: 'v1' });
+    expect(await grid.edit({ panelId: 'v1', filePath: b, operation: setB2('four') })).toEqual({ ok: true, dirty: true });
+
+    expect(await openFrom(a, true)).toEqual({ kind: 'unsavedGrid', panelId: 'v1' });
+    const res = await previews.open(REQUESTER, {
+      absPath: a,
+      projectId: 'P',
+      hasParentLocally: true,
+      target: { mode: 'lastActive', reusePanelId: 'v1' },
+      unsavedChoice: 'new',
+    });
+    expect(res).toMatchObject({ kind: 'placeLocally', besidePanelId: 'ed1' });
+    expect(previews.run('v1')?.filePath).toBe(b);
+    expect(coord.getContent(gridDocumentIdFor('v1'))).toMatchObject({ text: 'p,q\n3,four\n', dirty: true });
+  });
+
+  it('a New Preview Panel request still places a second preview beside the editor (047 FR-014)', async () => {
+    const { a, b } = await previewThenEditor();
+    expect(await openFrom(b, false)).toEqual({ kind: 'navigated', panelId: 'v1' });
+    const res = await previews.open(REQUESTER, { absPath: a, projectId: 'P', hasParentLocally: true, target: { mode: 'new', reusePanelId: null } });
+    expect(res).toMatchObject({ kind: 'placeLocally', besidePanelId: 'ed1' });
   });
 });
 

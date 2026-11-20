@@ -482,7 +482,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     if (real === null) return { kind: 'refused', reason: 'no-file' };
     if (!real) return { kind: 'refused', reason: 'outside-project' };
 
-    // Everything below is one synchronous turn, so two opens racing for a path cannot both reserve it.
+    // Everything below is one synchronous turn, so two opens racing for a path cannot both reserve it — except where a
+    // Last Active reuse awaits its move (step 4, and step 3's Preview Editor case, which then asks again from the top).
     const key = canon(absPath);
     // 047 FR-081 — echoed on whichever message this open sends, which the window acts on too.
     const keepFocus = req.keepFocus === true ? ({ keepFocus: true } as const) : {};
@@ -504,6 +505,18 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
 
     // 3. The file has a document: beside its parent, wherever that lives (FR-010).
     const doc = this.deps.documents.documentFor(absPath);
+    // 073 T078 (FR-060) — except for a Preview EDITOR (an editable provider: the CSV grid). The Last Preview Panel
+    // of its type in the requesting window's visible tab is moved to the file, as Last Active does for a file with no
+    // editor, and the move re-pairs it with the file's editor (047 FR-016a): one CSV preview, never a second beside
+    // the editor. A read-only preview (Markdown) still opens beside its editor (047 FR-012). The unsaved-grid
+    // question and its `new` answer are step 4's; an answer of `new`, or no reusable panel, places beside the editor.
+    if (doc && provider.editable === true && this.hasReusableRun(fromWebContentsId, req)) {
+      const reused = await this.reuseLastActive(fromWebContentsId, req);
+      if (reused !== null) return reused;
+      // Not moved (the reader chose `new`, or the move was refused): a fresh placement beside the editor. Asked
+      // again from the top, because steps 1–3 must judge the file as it stands after this one waited.
+      return this.open(fromWebContentsId, { ...req, target: { mode: 'new', reusePanelId: null } });
+    }
     const reservation = this.token('reservation');
     if (doc && req.hasParentLocally) {
       this.reserve(key, reservation, fromWebContentsId, false);
@@ -550,7 +563,20 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // 047 US2, R8 (contracts/preview-ipc-047.md §1, FR-010–FR-016) — Last Active reuse first: a live
     // run named by `target.reusePanelId`, VIEWED BY THE REQUESTING WINDOW, is moved to `absPath` in
     // place rather than a new panel placed. `target` plays no part in steps 1–3 above (FR-012): a
-    // parented placement is exactly what it was before this spec.
+    // parented placement is exactly what it was before this spec (073 T078 excepted: a Preview Editor, above).
+    const reused = await this.reuseLastActive(fromWebContentsId, req);
+    if (reused !== null) return reused;
+    this.reserve(key, reservation, fromWebContentsId, false);
+    return { kind: 'placeLocally', reservation, besidePanelId: null };
+  }
+
+  /**
+   * 047 US2, R8 — Last Active reuse: move the run `target.reusePanelId` names to `req.absPath` in place, when it is live
+   * and viewed by the requesting window. `null` when nothing was reused, and the caller places a panel instead.
+   * Called after `open`'s step 2 (no preview of the file exists or is being placed); it reserves nothing.
+   */
+  private async reuseLastActive(fromWebContentsId: number, req: PreviewOpenRequest): Promise<PreviewOpenResponse | null> {
+    const { absPath } = req;
     if (req.target?.mode === 'lastActive' && req.target.reusePanelId) {
       const reuse = this.runs.get(req.target.reusePanelId);
       // 073 T035 (FR-033, FR-033b) — a CSV Preview Editor holding unsaved grid edits is not reused until the reader has
@@ -580,8 +606,13 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         // renderer has no `navigated`-branch handling for. Fall through to a fresh placement.
       }
     }
-    this.reserve(key, reservation, fromWebContentsId, false);
-    return { kind: 'placeLocally', reservation, besidePanelId: null };
+    return null;
+  }
+
+  /** The run `target.reusePanelId` names, live and viewed by the requesting window — what `reuseLastActive` may move. */
+  private hasReusableRun(fromWebContentsId: number, req: PreviewOpenRequest): boolean {
+    if (req.target?.mode !== 'lastActive' || !req.target.reusePanelId) return false;
+    return this.runs.get(req.target.reusePanelId)?.viewers.has(fromWebContentsId) === true;
   }
 
   /**
