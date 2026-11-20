@@ -1107,6 +1107,13 @@
   min-height: 0;
 }
 
+/* The editor's theme scope (`editor.css`'s `.editor-panel`, 007 FR-021a), laid out as a column so the editor inside
+   still takes the tab's height and scrolls within it. */
+.json-tab > .editor-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .standalone-editor {
   flex: 1 1 auto;
   min-height: 200px;

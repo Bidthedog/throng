@@ -422,6 +422,8 @@ sub-workspace's identity and working window controls, with no OS-drawn title bar
   all JSON).
 - **FR-021**: The JSON editors MUST use throng's built-in code editor and MUST be independent of one
   another and of every other editor in the application (no shared document/buffer).
+- **FR-021a** *(2026-11-20)*: The JSON editors MUST be themed exactly as an editor panel is, from the active theme's
+  editor tokens: background, text, caret, gutter, active line, and selection with and without focus.
 - **FR-022**: Toggling from JSON back to UI (and vice versa) MUST preserve the current applied
   configuration and reflect it in the newly shown mode.
 - **FR-022a**: In JSON mode, the Settings and Key Bindings tabs each edit their single file, while the

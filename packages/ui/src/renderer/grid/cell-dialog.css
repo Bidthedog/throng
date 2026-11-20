@@ -18,7 +18,14 @@
   flex-direction: column;
 }
 
+/* The theme scope is a column too, so the editor fills the box and scrolls within it. */
+.cell-dialog__editor > .editor-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .cell-dialog__editor .standalone-editor {
+  flex: 1 1 auto;
   height: 100%;
   min-height: 0;
   /* The preferences JSON tab's frame (`preferences.css`) belongs to that tab; here the dialog's box is the frame. */

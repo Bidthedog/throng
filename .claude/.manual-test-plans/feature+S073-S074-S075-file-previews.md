@@ -64,6 +64,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-103 | [General] Print… shown everywhere, enabled only where it prints | untested | | | |
 | MT-104 | [General] The middle mouse button never pastes | untested | | | |
 | MT-105 | [General] Open files in and Open previews in, both ways | untested | | | |
+| MT-106 | [General] The Preferences JSON editors are themed like an editor | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -984,3 +985,18 @@ Paths: `packages/ui/src/renderer/preview/open-in-editor.ts`, `packages/ui/src/re
 - A file already open in an editor anywhere is focused there, whichever **Open files in** says; it is never opened twice.
 - A CSV Preview Editor is never chosen as the "last active editor" an Open in Editor reuses.
 - A preview's **Go to Editor** (when it already has an editor) only focuses that editor, under either setting.
+
+## MT-106: [General] The Preferences JSON editors are themed like an editor
+
+Covers: 007 FR-021a
+Paths: `packages/ui/src/renderer/preferences/json-tab.tsx`, `packages/ui/src/renderer/preferences/preferences.css`, `packages/ui/src/renderer/editor/editor.css`
+
+### Steps
+1. Choose the shipped dark theme (throng) and open a text file in an editor panel.
+2. Open Preferences, go to Settings and switch to JSON. The JSON editor has the editor panel's background, text colour, caret and line-number gutter, and the text is easy to read.
+3. Press Ctrl+A. The selection is the editor panel's selection colour and the selected text stays readable. Click outside the editor: the selection dims to the editor's kept-selection colour.
+4. Scroll the JSON to its end: it scrolls inside the tab, and the whole document can be reached.
+5. Switch to the Light theme and repeat steps 2 to 4 on the Key Bindings JSON. It matches the light editor panel throughout.
+
+### Negative cases
+- No JSON editor draws a pale selection over a dark background, a black caret, or a light gutter beside dark text.

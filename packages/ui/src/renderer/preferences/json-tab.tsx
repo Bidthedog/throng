@@ -351,7 +351,11 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
   return (
     <div className="json-tab" data-testid={`json-tab-${docId.kind}`}>
       {loadedKey === docKey ? (
-        <StandaloneEditor value={text} onChange={onChange} testId={`json-editor-${docId.kind}`} />
+        // Inside `.editor-panel`, so `editor.css` themes it exactly as an editor panel: background, text, gutter, caret,
+        // active line and both selection colours, from the theme's editor tokens (007 FR-021a).
+        <div className="editor-panel">
+          <StandaloneEditor value={text} onChange={onChange} testId={`json-editor-${docId.kind}`} />
+        </div>
       ) : null}
 
       {external !== null ? (
