@@ -51,7 +51,13 @@ beforeEach(() => {
     newId: () => 'job-1',
   });
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(async () => {
+  // A window closed by the test saves its settings on the way out (FR-070), and nothing in the test awaits that write.
+  // Deleting the folder under it raced the write's temporary file: ENOTEMPTY on macOS (pipeline 44773457424). The
+  // store's read waits for every queued write, so the folder is deleted only once they have landed.
+  await store.read([]);
+  rmSync(dir, { recursive: true, force: true });
+});
 
 /** `count` pages as the window draws them for the printer: an A4 image each. */
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
