@@ -16,6 +16,8 @@ export const imageProvider: PreviewProviderDescriptor = {
   kind: 'binary',
   // 074 FR-103 — drawn as the preview icon with this type's mark.
   previewIcon: 'previewImage',
+  // 075 FR-075a (the maintainer, 2026-11-20) — the picture, fitted to the page and never past its own size.
+  print: 'document',
   sourceMimeTypes: ['image/png', 'image/apng', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp', 'image/x-icon'],
   defaultOpenAction: 'preview',
   filesNoun: 'images',

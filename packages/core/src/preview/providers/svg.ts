@@ -16,6 +16,8 @@ export const svgProvider: PreviewProviderDescriptor = {
   displayName: 'SVG',
   extensions: ['.svg'],
   kind: 'text',
+  // 075 FR-075a (the maintainer, 2026-11-20) — the drawing, fitted to the page and never past its own size.
+  print: 'document',
   // 074 FR-103 — drawn as the preview icon with this type's mark.
   previewIcon: 'previewSvg',
   defaultOpenAction: 'preview',

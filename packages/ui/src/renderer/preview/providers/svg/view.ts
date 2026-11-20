@@ -27,4 +27,7 @@ export const svgView: PreviewProviderView = {
   findable: false,
   load: () => import('./svg-body.js').then((m) => m.SvgBody),
   exportHtml: (selection) => htmlExporter().then((exportHtml) => exportHtml(selection)),
+  // 075 FR-075a — the picture, fitted to the page and never past its own size.
+  printable: (body, { title }) =>
+    import('../../print/printable.js').then((m) => m.buildPrintable(body, { title, fit: 'page', noUpscale: true })),
 };

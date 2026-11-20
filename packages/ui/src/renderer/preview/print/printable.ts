@@ -43,6 +43,11 @@ export interface PrintableOptions {
   readonly stylesheets?: string;
   /** The base URL relative assets (KaTeX's fonts) resolve against; defaults to the window's. */
   readonly baseHref?: string;
+  /**
+   * 075 FR-075a — a picture prints no larger than its own size (an image's pixels, an SVG's width and height):
+   * fitted down to the page, never up. Print Preview's Scale still enlarges it, as it enlarges everything.
+   */
+  readonly noUpscale?: boolean;
 }
 
 /** The window's readable stylesheets as one text, skipping any it cannot read. */
@@ -73,7 +78,7 @@ interface PrintedPicture {
  * Replace each drawn diagram with its SVG, sized for the page; a failed one keeps only its notice. Returns the picture
  * wrappers among them, whose `<image>` may name a `blob:` URL ({@link inlinePictures}).
  */
-function flattenDiagrams(live: HTMLElement, clone: HTMLElement, fit: 'width' | 'page'): PrintedPicture[] {
+function flattenDiagrams(live: HTMLElement, clone: HTMLElement, fit: 'width' | 'page', noUpscale = false): PrintedPicture[] {
   const pictures: PrintedPicture[] = [];
   const liveHosts = [...live.querySelectorAll<HTMLElement>(`.${DIAGRAM_HOST_CLASS}`)];
   const cloneHosts = [...clone.querySelectorAll<HTMLElement>(`.${DIAGRAM_HOST_CLASS}`)];
@@ -93,10 +98,19 @@ function flattenDiagrams(live: HTMLElement, clone: HTMLElement, fit: 'width' | '
     copy.removeAttribute('height');
     copy.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     if (svg.hasAttribute('data-throng-picture')) pictures.push({ live: svg, copy });
+    const natural = noUpscale ? naturalWidthOf(svg) : null;
+    if (natural !== null) copy.style.maxWidth = `${natural}px`;
     figure.append(copy);
     host.replaceWith(figure);
   });
   return pictures;
+}
+
+/** A drawing's own width in CSS pixels: its viewBox's, else its width attribute's; `null` when it names none. */
+function naturalWidthOf(svg: SVGSVGElement): number | null {
+  const box = (svg.getAttribute('viewBox') ?? '').trim().split(/[\s,]+/).map(Number);
+  const width = box.length === 4 && Number.isFinite(box[2]) && box[2]! > 0 ? box[2]! : Number.parseFloat(svg.getAttribute('width') ?? '');
+  return Number.isFinite(width) && width > 0 ? width : null;
 }
 
 /** `blob` as a `data:` URL. */
@@ -143,9 +157,10 @@ function expandAll(root: HTMLElement): void {
 export function printableClone(
   body: HTMLElement,
   fit: 'width' | 'page',
+  noUpscale = false,
 ): { root: HTMLElement; remoteImages: string[]; pictures: PrintedPicture[] } {
   const root = body.cloneNode(true) as HTMLElement;
-  const pictures = flattenDiagrams(body, root, fit);
+  const pictures = flattenDiagrams(body, root, fit, noUpscale);
   // FR-043a — what was still loading prints as itself: an equation as written, an image as the image.
   for (const el of root.querySelectorAll<HTMLElement>(`[${MATH_PENDING_ATTRIBUTE}]`)) {
     el.textContent = mathLiteralOf(el);
@@ -193,9 +208,9 @@ function contentSecurityPolicy(remoteImages: readonly string[]): string {
   return `default-src 'none'; img-src ${images}; style-src 'unsafe-inline'; font-src file: throng-asset: data:`;
 }
 
-/** The printable output of `body`, as Markdown and Mermaid hand it to `throng.print.open`. */
+/** The printable output of `body`, as Markdown, Mermaid, Image and SVG hand it to `throng.print.open`. */
 export async function buildPrintable(body: HTMLElement, options: PrintableOptions): Promise<PrintableOutput> {
-  const { root, remoteImages, pictures } = printableClone(body, options.fit);
+  const { root, remoteImages, pictures } = printableClone(body, options.fit, options.noUpscale === true);
   await inlinePictures(pictures);
   const stylesheets = options.stylesheets ?? collectStylesheets(body.ownerDocument);
   const base = options.baseHref ?? body.ownerDocument.baseURI;

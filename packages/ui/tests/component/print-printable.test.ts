@@ -84,6 +84,30 @@ describe('the printable clone', () => {
   });
 });
 
+describe('an Image or SVG preview prints its picture fitted to the page, never past its own size (075 FR-075a)', () => {
+  const picture = (attrs: string) =>
+    body(
+      `<div class="preview-diagram-host"><div class="preview-diagram-frame__layer" style="transform: scale(4)"><svg data-throng-picture="" ${attrs}><image href="throng-preview://source/p1" width="320" height="200"></image></svg></div></div>`,
+    );
+
+  it('caps the picture at its own width, and fits it to the page', () => {
+    const { root } = printableClone(picture('viewBox="0 0 320 200" width="1280" height="800"'), 'page', true);
+    const svg = root.querySelector<SVGSVGElement>('.throng-print__diagram--page svg')!;
+    expect(svg.style.maxWidth).toBe('320px');
+    expect(svg.getAttribute('preserveAspectRatio')).toBe('xMidYMid meet');
+  });
+
+  it('takes the width attribute when there is no viewBox', () => {
+    const { root } = printableClone(picture('width="96" height="48"'), 'page', true);
+    expect(root.querySelector<SVGSVGElement>('svg')!.style.maxWidth).toBe('96px');
+  });
+
+  it('a Mermaid diagram is not capped: it fills the page as before (FR-075)', () => {
+    const { root } = printableClone(picture('viewBox="0 0 320 200"'), 'page');
+    expect(root.querySelector<SVGSVGElement>('svg')!.style.maxWidth).toBe('');
+  });
+});
+
 describe('a picture drawn from a blob: an SVG block, or a reduced-motion first frame (074 x 075 FR-066)', () => {
   /** A diagram host holding a picture wrapper whose `<image>` is a `blob:` URL, its bytes registered as 074 does. */
   function pictureBody(): HTMLElement {
