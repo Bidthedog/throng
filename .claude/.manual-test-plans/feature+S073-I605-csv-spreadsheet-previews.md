@@ -200,7 +200,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 ## MT-10: A CSV and its editor in step; toggle looks
 
 Covers: FR-033c, FR-033d, FR-007a
-Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/editor/status-strip.tsx`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/preview/provider.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/editor/**`, `packages/ui/src/renderer/preview/markdown/**`
+Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/editor/status-strip.tsx`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/preview/provider.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/editor/**`, `packages/ui/src/renderer/preview/providers/markdown/**`
 
 ### Steps
 1. Open a 2,000-row CSV in the text editor and choose Open Preview. The preview opens linked to the editor (its title bar shows the link as a Markdown preview's does).
