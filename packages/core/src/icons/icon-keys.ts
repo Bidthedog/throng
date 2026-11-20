@@ -180,6 +180,8 @@ export const ICON_KEYS = [
   'wrapCells',
   'lockFirstRow',
   'lockFirstColumn',
+  // 073 FR-050a — the workbook preview's Read-only marker.
+  'readOnly',
   // 075 FR-024 — one per canonical callout type.
   'calloutNote',
   'calloutAbstract',
@@ -555,6 +557,8 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on the CSV Preview Editor status bar toggle and the panel menu item that locks the first row in place.',
   lockFirstColumn:
     'The icon on the CSV Preview Editor status bar toggle and the panel menu item that locks the first column in place.',
+  readOnly:
+    'The padlock on a spreadsheet preview\'s status bar that marks the workbook read-only, and flashes when an edit is tried.',
   calloutNote:
     'The icon at the start of a note callout’s title row in a document preview.',
   calloutAbstract:

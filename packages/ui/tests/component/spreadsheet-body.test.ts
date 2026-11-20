@@ -19,6 +19,7 @@ import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { PREVIEW_LOADING_CLASS } from '../../src/renderer/preview/loading-placeholder.js';
 import { PRINT_UNAVAILABLE } from '../../src/renderer/preview/print/print-command.js';
+import { WORKBOOK_READ_ONLY_TITLE, subscribeReadOnlyFlash } from '../../src/renderer/preview/read-only-marker.js';
 
 function book(sheets: Record<string, string[][]>, hidden: string[] = []): ArrayBuffer {
   const wb = XLSX.utils.book_new();
@@ -167,8 +168,6 @@ describe('SpreadsheetBody', () => {
   describe('header menus (FR-037e, FR-006a)', () => {
     const colHead = (c: number): HTMLElement => document.querySelector<HTMLElement>(`[role="columnheader"][data-col="${c}"]`)!;
     const rowHead = (r: number): HTMLElement => document.querySelector<HTMLElement>(`[role="rowheader"][data-row="${r}"]`)!;
-    const labels = (): string[] =>
-      [...document.querySelectorAll('[role="menuitem"]')].map((el) => (el.getAttribute('data-testid') ?? '').replace(/^menu-item-/, ''));
 
     it('every grid menu offers Print…, disabled with the reason, since a workbook cannot print (075 FR-062, FR-063)', async () => {
       mount('throng-preview://source/s1?rev=1');
@@ -183,17 +182,22 @@ describe('SpreadsheetBody', () => {
       }
     });
 
-    it('a column header and a row header menu each offer Copy, and never Cut or Paste', async () => {
+    // 073 FR-050c (2026-11-20), superseding FR-037e's "offers Copy only": the editing rows are there, disabled, saying why.
+    it('every grid menu offers Copy, and shows Cut, Paste and the Insert rows disabled with the read-only reason', async () => {
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
-      fireEvent.contextMenu(colHead(0), { clientX: 5, clientY: 5 });
-      expect(labels()).toContain('Copy');
-      expect(labels()).not.toContain('Cut');
-      expect(labels()).not.toContain('Paste');
-      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
-      fireEvent.contextMenu(rowHead(0), { clientX: 5, clientY: 5 });
-      expect(labels()).toContain('Copy');
-      expect(labels()).not.toContain('Cut');
+      const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;
+      const editing = ['Cut', 'Paste', 'Insert Row Above', 'Insert Row Below', 'Insert Column Left', 'Insert Column Right'];
+      for (const target of [cellEl, () => rowHead(0), () => colHead(0)]) {
+        fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
+        expect(screen.getByTestId('menu-item-Copy').getAttribute('aria-disabled')).not.toBe('true');
+        for (const label of editing) {
+          const row = screen.getByTestId(`menu-item-${label}`);
+          expect(row.getAttribute('aria-disabled'), label).toBe('true');
+          expect(row.getAttribute('title'), label).toBe(WORKBOOK_READ_ONLY_TITLE);
+        }
+        fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      }
     });
 
     it('draws a themeable icon on every item with a picture, and none on Column Width… (FR-037g)', async () => {
@@ -294,5 +298,21 @@ describe('SpreadsheetBody', () => {
     await waitFor(() => expect(cell(0, 0)).toBe('h1'));
     fireEvent.keyDown(screen.getByTestId('spreadsheet-grid-s1'), { key: 'Enter' });
     expect(screen.queryByLabelText('Cell value')).toBeNull();
+  });
+});
+
+// 073 FR-050b — an edit tried on the workbook's grid flashes this panel's Read-only marker, and edits nothing.
+describe('an edit attempt flashes the Read-only marker (FR-050b)', () => {
+  it('Enter on a cell asks for the flash and opens no editor', async () => {
+    mount('throng-preview://source/s1?rev=1');
+    await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+    const flashed = vi.fn();
+    const stop = subscribeReadOnlyFlash('s1', flashed);
+    const grid = document.querySelector<HTMLElement>('[role="grid"]')!;
+    grid.focus();
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    stop();
+    expect(flashed).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('textarea')).toBeNull();
   });
 });

@@ -23,6 +23,7 @@ import { createGridWorker } from '../../../grid/worker-factory.js';
 import { useAppSettings } from '../../../config/config-store.js';
 import { useContextMenu } from '../../../context-menu-provider.js';
 import type { MenuAction } from '../../../workspace/context-menu.js';
+import { WORKBOOK_READ_ONLY_TITLE, requestReadOnlyFlash } from '../../read-only-marker.js';
 import type { WorkbookRead, WorkbookRefusal, WorkbookSheet } from './workbook-read.js';
 import type { WorkbookParseReply } from './spreadsheet-handler.js';
 import { Spinner } from '../../../common/loading.js';
@@ -196,11 +197,26 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
       if (grid === null) return;
       const sel = grid.getSelection();
       const range = rangeOf(sel, colCount);
-      // FR-037e — Copy only: this grid is read-only. Every menu carries it, header menus included.
+      // FR-037e — every menu carries Copy, header menus included. FR-050c (2026-11-20, superseding FR-037e's "Copy
+      // only") — and the editing rows a CSV's menus carry, shown disabled with the reason: a workbook is read-only.
+      const readOnly = (label: string, icon: MenuAction['icon'], section: MenuAction['section']): MenuAction => ({
+        label,
+        ...(icon !== undefined ? { icon } : {}),
+        section,
+        disabled: true,
+        title: WORKBOOK_READ_ONLY_TITLE,
+        onClick: () => {},
+      });
       const copies: MenuAction[] = [
+        readOnly('Cut', 'cut', 'content'),
         { label: 'Copy', icon: 'copy', section: 'content', onClick: () => copy(range) },
         { label: 'Copy as Rich Text', section: 'content', onClick: () => copy(range, 'rich') },
         { label: 'Copy as Plain Text', section: 'content', onClick: () => copy(range, 'plain') },
+        readOnly('Paste', 'paste', 'content'),
+        readOnly('Insert Row Above', 'insertRowAbove', 'create'),
+        readOnly('Insert Row Below', 'insertRowBelow', 'create'),
+        readOnly('Insert Column Left', 'insertColumnLeft', 'create'),
+        readOnly('Insert Column Right', 'insertColumnRight', 'create'),
       ];
       const items: MenuAction[] =
         target.kind === 'column'
@@ -269,6 +285,8 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
         getCell={getCell}
         columnHeader={columnHeader}
         editable={false}
+        // FR-050b — an edit tried here flashes this panel's Read-only marker.
+        onEditAttempt={() => requestReadOnlyFlash(panelId)}
         columnWidths={sheetWidths}
         onColumnWidthChange={setWidth}
         zoom={zoom}

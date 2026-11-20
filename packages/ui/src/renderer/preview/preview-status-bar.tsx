@@ -40,6 +40,8 @@ import type { PreviewProviderKind } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
 import { SyncScrollButton } from './sync-scroll-button.js';
+import { ReadOnlyMarker } from './read-only-marker.js';
+import './preview.css';
 import { SettingToggleButton } from '../common/setting-toggle-button.js';
 import { BAR_GAP, readoutText, type Readout } from '../editor/status-strip.js';
 import { fitReadouts, labelShortens, type LabelForm, type ReadoutId, type SegmentId, type SegmentWidth } from '../editor/status-strip-fit.js';
@@ -74,6 +76,8 @@ export interface PreviewStatusBarProps {
   /** 073 FR-039a — a provider whose grid locks its first row / column: whether each is on for THIS panel, and the toggle's click. */
   lockFirstRow?: { on: boolean; onToggle: () => void };
   lockFirstColumn?: { on: boolean; onToggle: () => void };
+  /** 073 FR-050a — a read-only grid (a workbook): the bar carries the permanent **Read-only** marker. */
+  readOnly?: boolean;
   /** FR-118 — the hovered or focused link's target; omitted, `null` or empty shows nothing. */
   readout?: string | null;
   /** FR-118a — the drawn document's counts, or `null` until they settle (no counts are drawn). */
@@ -112,6 +116,7 @@ function PreviewStatusBarView({
   wrap,
   lockFirstRow,
   lockFirstColumn,
+  readOnly = false,
   readout,
   metrics = null,
   selection = null,
@@ -126,7 +131,9 @@ function PreviewStatusBarView({
   // 044 FR-015e — a binary provider's bar offers no editor route, and is not shown while it would carry nothing.
   // 074 FR-022, FR-062 — what it can carry is the body's readout (an image's size, a PDF's page).
   if (providerKind !== 'text') {
-    if (readout === null || readout === undefined || readout === '') return null;
+    const hasReadout = readout !== null && readout !== undefined && readout !== '';
+    // 073 FR-050a — a read-only grid's bar always carries its marker, so it is drawn for it alone.
+    if (!hasReadout && !readOnly) return null;
     return (
       <div
         className={`editor-status-strip preview-status-bar${focusMode ? ` ${FOCUS_MODE_STRIP_CLASS}` : ''}`}
@@ -134,8 +141,13 @@ function PreviewStatusBarView({
       >
         <FocusModeBadge panelId={panelId} active={focusMode} />
         <div className="editor-status-strip__group editor-status-strip__group--readouts">
-          <LinkTargetReadout testId={`preview-status-readout-${panelId}`} target={readout} />
+          {hasReadout ? <LinkTargetReadout testId={`preview-status-readout-${panelId}`} target={readout} /> : null}
         </div>
+        {readOnly ? (
+          <div className="editor-status-strip__group editor-status-strip__group--controls">
+            <ReadOnlyMarker panelId={panelId} />
+          </div>
+        ) : null}
       </div>
     );
   }

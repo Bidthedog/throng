@@ -1974,6 +1974,8 @@ export function PreviewPanel({
   }, [ws, panelId, wrapEffective]);
   // 073 FR-039a — a provider whose grid can lock its first row / column: each on for THIS panel by its own choice, else by the setting.
   const hasLockToggles = (state ? registry.get(state.providerId) : undefined)?.lockToggles === true;
+  // 073 FR-050a — a provider whose grid is read-only (a workbook): its bar carries the Read-only marker.
+  const readOnlyGrid = (state ? registry.get(state.providerId) : undefined)?.readOnly === true;
   const lockFirstRowChoice = config?.lockFirstRow;
   const lockFirstColumnChoice = config?.lockFirstColumn;
   const lockRowEffective = lockFirstRowOn(lockFirstRowChoice, state ? settings.editor.previews.providers[state.providerId]?.lockFirstRow : undefined);
@@ -2771,7 +2773,7 @@ export function PreviewPanel({
       />
       {/* FR-015a — the editor's bar, under the editor's setting; FR-015e — none for a binary provider. FR-118 —
           its one readout, the hovered or focused link's target, is shown only while the bar is. */}
-      {settings.editor.showStatusBar && (onEditorRoute !== undefined || (providerKind === 'binary' && linkReadout !== null)) ? (
+      {settings.editor.showStatusBar && (onEditorRoute !== undefined || (providerKind === 'binary' && (linkReadout !== null || readOnlyGrid))) ? (
         <PreviewStatusBar
           panelId={panelId}
           providerKind={providerKind}
@@ -2785,6 +2787,7 @@ export function PreviewPanel({
           wrap={hasWrapToggle ? { on: wrapEffective, onToggle: onToggleWrap } : undefined}
           lockFirstRow={hasLockToggles ? { on: lockRowEffective, onToggle: onToggleLockRow } : undefined}
           lockFirstColumn={hasLockToggles ? { on: lockColumnEffective, onToggle: onToggleLockColumn } : undefined}
+          readOnly={readOnlyGrid}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}
           metrics={documentMetrics}

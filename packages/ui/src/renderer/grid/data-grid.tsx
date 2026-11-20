@@ -135,6 +135,11 @@ export interface DataGridProps {
   /** Header strip label for a column. Default: `columnLabel(col)` (A, B, … Z, AA). */
   columnHeader?(col: number): string;
   editable: boolean;
+  /**
+   * 073 FR-050b — a read-only grid's report that an edit was tried: a printable key, Enter, F2, a double-click on a
+   * cell, Delete, Backspace, Cut, Paste, Undo or Redo. The grid edits nothing either way.
+   */
+  onEditAttempt?(): void;
   /** Missing = default width. Widths are at zoom 1. */
   columnWidths: Readonly<Record<number, number>>;
   /** On resize-drag end, with the width at zoom 1 clamped to 40–2000. */
@@ -455,6 +460,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     getCell,
     columnHeader,
     editable,
+    onEditAttempt,
     columnWidths,
     onColumnWidthChange,
     zoom,
@@ -943,6 +949,11 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     // FR-012a — a row number's double-click does nothing: there is no row resize.
     if (target.closest('[data-grid-rowheader]')) return;
     const cellEl = target.closest('[data-grid-cell]');
+    // FR-050b — a read-only grid reports the attempt.
+    if (cellEl && !editable) {
+      onEditAttempt?.();
+      return;
+    }
     if (cellEl && editable) {
       const row = numAttr(cellEl, 'data-row');
       const col = numAttr(cellEl, 'data-col');
@@ -1039,6 +1050,12 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         commitSel(selectAll(rows, cols), false);
         return;
       }
+      // FR-050b — Undo and Redo on a read-only grid are edit attempts.
+      if (!editable && (k === 'z' || k === 'y')) {
+        consume();
+        onEditAttempt?.();
+        return;
+      }
       if (editable && onHistory) {
         if (k === 'z' && !e.shiftKey) {
           consume();
@@ -1098,6 +1115,12 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       if (onEscape?.() === true) consume();
       return;
     }
+    // FR-050b — on a read-only grid, every key that would edit is reported instead.
+    if (!editable && (e.key === 'Enter' || e.key === 'F2' || e.key === 'Delete' || e.key === 'Backspace' || isPrintableKey(e))) {
+      consume();
+      onEditAttempt?.();
+      return;
+    }
     if (e.key === 'Enter' || e.key === 'F2') {
       if (editable) {
         consume();
@@ -1127,7 +1150,15 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     onCopy(selRef.current, rangeNow());
   };
   const onCutEvent = (e: ReactClipboardEvent<HTMLDivElement>): void => {
-    if ((e.target as HTMLElement).tagName === 'TEXTAREA' || !editable || !onCut) return;
+    if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
+    if (!editable) {
+      // FR-050b — Cut on a read-only grid is an edit attempt; nothing is cut.
+      e.preventDefault();
+      e.stopPropagation();
+      onEditAttempt?.();
+      return;
+    }
+    if (!onCut) return;
     e.preventDefault();
     e.stopPropagation();
     onCut(selRef.current, rangeNow());
@@ -1140,7 +1171,15 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       e.stopPropagation();
       return;
     }
-    if ((e.target as HTMLElement).tagName === 'TEXTAREA' || !editable || !onPaste) return;
+    if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
+    if (!editable) {
+      // FR-050b — Paste on a read-only grid is an edit attempt; nothing is pasted.
+      e.preventDefault();
+      e.stopPropagation();
+      onEditAttempt?.();
+      return;
+    }
+    if (!onPaste) return;
     e.preventDefault();
     e.stopPropagation();
     // FR-037f: a paste lands at the selection's top-left (column 0 for whole rows), never at its active cell.

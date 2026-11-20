@@ -34,7 +34,7 @@ const EXPECTED_KEYS = [
   // 076 FR-002: the terminal status bar's three per-panel toggles.
   'rememberCommand', 'rememberDirectory', 'terminalNotifications',
   'cellDialog',
-  'insertRowAbove', 'insertRowBelow', 'insertColumnLeft', 'insertColumnRight', 'resetColumnWidth', 'goToRow', 'wrapCells', 'lockFirstRow', 'lockFirstColumn',
+  'insertRowAbove', 'insertRowBelow', 'insertColumnLeft', 'insertColumnRight', 'resetColumnWidth', 'goToRow', 'wrapCells', 'lockFirstRow', 'lockFirstColumn', 'readOnly',
   // 075 FR-024 — one per canonical callout type.
   'calloutNote', 'calloutAbstract', 'calloutInfo', 'calloutTodo', 'calloutTip', 'calloutSuccess', 'calloutQuestion',
   'calloutWarning', 'calloutFailure', 'calloutDanger', 'calloutBug', 'calloutExample', 'calloutQuote',
@@ -49,9 +49,9 @@ describe('icon keys (069 FR-010 to FR-012)', () => {
   // 074 FR-062c added a PDF preview's three page layouts: `pageLayoutSingle`, `pageLayoutTwo`, `pageLayoutWrap`.
   // 074 FR-103 added a preview icon per shipped preview type, beside `preview`.
   // 075 FR-024 added the thirteen callout icons, FR-063 `print`, and FR-068a `pagePrevious` and `pageNext`.
-  it('is the 191 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076, twelve from 073 (the CSV cell dialog toggle, the grid menu icons and the CSV and Spreadsheet preview icons), nine from 074 and sixteen from 075', () => {
+  it('is the 192 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076, thirteen from 073 (the CSV cell dialog toggle, the grid menu icons, the CSV and Spreadsheet preview icons and the workbook Read-only marker), nine from 074 and sixteen from 075', () => {
     expect([...ICON_KEYS]).toEqual(EXPECTED_KEYS);
-    expect(ICON_KEYS).toHaveLength(191);
+    expect(ICON_KEYS).toHaveLength(192);
     expect(ICON_KEYS).not.toContain('notifications');
   });
 

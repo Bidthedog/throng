@@ -769,7 +769,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
     Cut. A later edit, undo or redo, from any view, disarms it. The clipboard keeps the cut values.
   - **FR-037e** *(Q11, 2026-11-19)*: The right-click menu of a cell, a selection, a row header and a
     column header MUST each offer **Cut**, **Copy** and **Paste**, acting on the selection the right-click
-    leaves (the read-only spreadsheet preview offers Copy only). Cutting whole columns MUST clear their
+    leaves (the read-only spreadsheet preview offers Copy only — *superseded by FR-050c, 2026-11-20: the editing
+    rows are shown disabled*). Cutting whole columns MUST clear their
     values without removing the columns.
   - **FR-037f** *(Q12, 2026-11-19)*: Pasting tab-separated text, by chord or menu, onto a selection MUST
     overwrite from the selection's top-left cell (column A for whole rows), extending the table only where
@@ -845,6 +846,19 @@ Markdown and Mermaid pattern, each setting working as labelled.
 
 - **FR-050**: A **Spreadsheet** binary provider MUST accept `.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`,
   `.fods` and `.numbers`.
+- **FR-050a** *(maintainer's design, approved 2026-11-20)*: A spreadsheet preview's status bar MUST carry a
+  permanent **Read-only** marker: a padlock from the active icon set and the words, coloured from theme tokens,
+  whose hover reads "Workbooks open read-only. Copy cells and paste them into a CSV to edit them." The bar is
+  shown for it alone (044 FR-015e: it now carries something). No title suffix and no banner.
+- **FR-050b** *(maintainer's design, approved 2026-11-20)*: Any edit tried on a spreadsheet preview's grid —
+  a printable key, Enter, F2 or a double-click on a cell, Delete, Backspace, Cut (Ctrl/Cmd+X), Paste
+  (Ctrl/Cmd+V), Undo or Redo (Ctrl/Cmd+Z, Ctrl/Cmd+Y) — MUST edit nothing and MUST flash that marker, as a
+  repeated notice flashes: one condition, one notice, no toast and no second notice. A repeat while a flash
+  runs is absorbed into it.
+- **FR-050c** *(maintainer's design, approved 2026-11-20)*: A spreadsheet preview's grid menus MUST show
+  **Cut**, **Paste** and **Insert Row Above / Below**, **Insert Column Left / Right** — the editing rows a CSV
+  grid's menus carry — present but disabled, each giving FR-050a's hover as its reason; **Copy** stays
+  enabled. *(Supersedes FR-037e's "the read-only spreadsheet preview offers Copy only".)*
 - **FR-051**: The preview MUST show a sheet switcher listing every sheet in the file's order, hidden
   sheets included and marked hidden, opening on the workbook's first visible sheet. Switching sheet MUST
   keep each sheet's scroll position for the life of the panel.

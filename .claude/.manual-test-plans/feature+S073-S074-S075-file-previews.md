@@ -25,6 +25,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-12 | [CSV] Print… and Go to Row in the grid menus | untested | | | |
 | MT-13 | [CSV] Loading placeholders for workbooks and large CSVs | untested | | | |
 | MT-14 | [CSV] The cell dialog is themed like an editor | untested | | | |
+| MT-15 | [CSV] A workbook preview says it is read-only | untested | | | |
 | MT-20 | [Media] Open … in, for every preview type | untested | | | carried from 074 MT-01; no sign-off survives the merge |
 | MT-21 | [Media] Image Preview | untested | | | carried from 074 MT-02; no sign-off survives the merge |
 | MT-22 | [Media] SVG Preview beside its editor | untested | | | carried from 074 MT-03; no sign-off survives the merge |
@@ -328,6 +329,24 @@ Paths: `packages/ui/src/renderer/grid/cell-dialog.tsx`, `packages/ui/src/rendere
 
 ### Negative cases
 - The dialog's text is never drawn on a background other than the editor's, and no selection is a pale colour over a dark editor or the other way round.
+
+## MT-15: [CSV] A workbook preview says it is read-only
+
+Covers: 073 FR-050a, 073 FR-050b, 073 FR-050c, 073 FR-037e
+Paths: `packages/ui/src/renderer/preview/read-only-marker.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/grid/data-grid.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`
+
+### Steps
+1. Open a workbook (.xlsx) as a preview. Its status bar shows a padlock and **Read-only** at the right. Hover it: "Workbooks open read-only. Copy cells and paste them into a CSV to edit them."
+2. Click a cell and type a letter. Nothing is typed, and the Read-only marker flashes once.
+3. Press Enter, then F2, then Delete, then Backspace, then double-click a cell, each a moment apart. Nothing changes, and the marker flashes for each.
+4. Press Ctrl+X, Ctrl+V, Ctrl+Z and Ctrl+Y. Nothing changes, and the marker flashes for each. Press several keys in quick succession: the marker flashes once, not over and over.
+5. Right-click a cell, a row number and a column letter. Each menu shows Copy enabled, and Cut, Paste, Insert Row Above, Insert Row Below, Insert Column Left and Insert Column Right greyed out; hovering one gives the read-only reason.
+6. Choose Copy, open a CSV in the CSV Preview Editor, and paste. The cells arrive there.
+
+### Negative cases
+- No toast, banner or second notice appears for an edit attempt; the marker is the only thing that reacts.
+- The workbook's title has no read-only suffix.
+- Arrow keys, Tab, Ctrl+A and Ctrl+C do not flash the marker.
 
 ## MT-20: [Media] Open … in, for every preview type
 

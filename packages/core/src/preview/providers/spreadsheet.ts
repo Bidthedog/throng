@@ -27,6 +27,8 @@ export const spreadsheetProvider: PreviewProviderDescriptor = {
   previewIcon: 'previewSpreadsheet',
   // 073 FR-043a — Ctrl+G and the menus' Go to open the grid's Go to Row dialog.
   goTo: 'row',
+  // 073 FR-050a — workbooks open read-only, and say so on the status bar.
+  readOnly: true,
   extensions: ['.xlsx', '.xlsm', '.xlsb', '.xls', '.ods', '.fods', '.numbers'],
   kind: 'binary',
   // Q5 — "Open spreadsheets in": Throng Preview · Default OS Program (binary, so no editor; 074 FR-016).

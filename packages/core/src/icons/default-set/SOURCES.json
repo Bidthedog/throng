@@ -537,6 +537,9 @@
     "lockFirstColumn": {
       "throng": "A table whose left column is drawn heavy: the first column is held in place"
     },
+    "readOnly": {
+      "lucide": "lock"
+    },
     "calloutNote": {
       "lucide": "notebook-pen"
     },

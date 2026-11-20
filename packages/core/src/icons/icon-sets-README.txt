@@ -275,6 +275,7 @@ goToRow.svg - The icon on the grid menu row that asks for a row number and goes 
 wrapCells.svg - The icon on the CSV Preview Editor status bar toggle and the panel menu item that wraps cells, so every row shows its whole content.
 lockFirstRow.svg - The icon on the CSV Preview Editor status bar toggle and the panel menu item that locks the first row in place.
 lockFirstColumn.svg - The icon on the CSV Preview Editor status bar toggle and the panel menu item that locks the first column in place.
+readOnly.svg - The padlock on a spreadsheet preview's status bar that marks the workbook read-only, and flashes when an edit is tried.
 calloutNote.svg - The icon at the start of a note callout’s title row in a document preview.
 calloutAbstract.svg - The icon at the start of an abstract callout’s title row in a document preview (also written summary or tldr).
 calloutInfo.svg - The icon at the start of an info callout’s title row in a document preview.
