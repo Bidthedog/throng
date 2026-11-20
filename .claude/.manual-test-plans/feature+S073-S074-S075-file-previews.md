@@ -53,6 +53,10 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-61 | [Print] Printing an editor | untested | | | |
 | MT-62 | [Print] Print… across every preview type | untested | | | |
 | MT-63 | [Print] What prints from a Markdown preview | untested | | | |
+| MT-64 | [Print] Printing an Image or SVG preview | untested | | | |
+| MT-65 | [Print] Printing a PDF preview | untested | | | |
+| MT-66 | [Print] Printing a CSV or a workbook's sheet | untested | | | |
+| MT-67 | [Print] Printing an editor of any file type | untested | | | |
 | MT-80 | [Settings] A size in MB on the slider, exactly in bytes in the box | untested | | | |
 | MT-81 | [Settings] Durations shown in their unit | untested | | | |
 | MT-82 | [Settings] Typing a value past a limit, or no number | untested | | | |
@@ -753,6 +757,9 @@ Paths: `packages/ui/src/renderer/print-preview/**`, `packages/ui/src/renderer/pr
 1l. Type "abc" into Copies and wait a moment. The box is outlined red and Print is disabled; type 2 and both clear.
 1m. The title bar shows Close only — no maximise or restore.
 1n. Add a printer in the OS's printer settings while Print Preview is open. Within a few seconds it appears in the Printer list.
+1p. Open **Paper size**. Each option reads its size in mm, width first: "A4 (210 × 297 mm)". Choose Landscape: they read "A4 (297 × 210 mm)", and so on for every size.
+1q. Set Margins to Custom, then switch Orientation between Portrait and Landscape, and Paper size between A4, Letter and Legal. The drawn page turns and takes each paper's shape; the gap round it stays even, and at the window's smallest size nothing scrolls.
+1r. **Centre on page** is unticked for a Markdown file. Tick it with a small image in the document: the image moves to the middle of the text column; the text does not move.
 1o. Print `MT-01-callouts.md` with Pages set to 1. One page prints, matching the preview exactly; print all pages and compare each sheet with its preview page — same breaks, nothing lost between pages.
 2. Change paper to Letter, orientation to Landscape, margins to Minimum. Within two seconds of each change the pages lay out again, with "Laying out pages…" meanwhile.
 3. Untick **Fit to page width**, set Scale to 50. The pages shrink. Set Pages to `1` and confirm only page 1 is shown, as "Page 1 of 1" with **Back** and **Forward** both greyed. Set Pages to `2, 4`: **Forward** steps from document page 2 to document page 4, reading "Page 2 of 2".
@@ -791,13 +798,13 @@ Paths: `packages/ui/src/renderer/print/text-printable.ts`, `packages/ui/src/rend
 ## MT-62: [Print] Print… across every preview type
 
 Covers: 075 FR-060, 075 FR-061, 075 FR-062, 075 FR-063, 075 FR-064
-Paths: `packages/core/src/preview/provider.ts`, `packages/core/src/preview/providers/*.ts`, `packages/ui/src/renderer/preview/providers/*/view.ts`, `packages/ui/src/renderer/preview/print/print-command.ts`, `packages/ui/src/renderer/preview/content-menu.ts`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`
+Paths: `packages/ui/src/renderer/grid/grid-print-row.ts`, `packages/core/src/preview/provider.ts`, `packages/core/src/preview/providers/*.ts`, `packages/ui/src/renderer/preview/providers/*/view.ts`, `packages/ui/src/renderer/preview/print/print-command.ts`, `packages/ui/src/renderer/preview/content-menu.ts`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`
 
 ### Steps
 1. Open a `.mmd` preview and choose **Print…** from its header menu. Print Preview shows the diagram fitted to one page; print it and the paper matches.
-2. Open, one at a time, a CSV, an `.xlsx` workbook, a PNG, an SVG, a PDF and an HTML file in their previews. Each preview's header menu and right-click menu show **Print…** greyed, with the hover "This preview type cannot be printed."
-3. In each of those previews press **Ctrl+P**. Nothing opens: no Print Preview, and no browser print dialog.
-4. Open the Panels list of a tab holding one of each preview type. Every row offers **Print…** the same way its panel's menu does: enabled for Markdown and Mermaid, greyed for the rest.
+2. Open, one at a time, a CSV, an `.xlsx` workbook, a PNG, an SVG and a PDF in their previews. Each preview's header menu and right-click menu (for a grid: a cell's, a row header's and a column header's) show **Print…** enabled, and choosing it opens Print Preview.
+3. Open an HTML file's preview. Its menus show **Print…** greyed, with the hover "This preview type cannot be printed."; **Ctrl+P** there opens nothing — no Print Preview, and no browser print dialog.
+4. Open the Panels list of a tab holding one of each preview type. Every row offers **Print…** the same way its panel's menu does: enabled for every type but HTML.
 
 ### Negative cases
 - Ctrl+P in a CSV cell being edited types nothing and opens nothing.
@@ -814,6 +821,62 @@ Paths: `packages/ui/src/renderer/preview/print/printable.ts`, `packages/ui/src/r
 
 ### Negative cases
 - No printed page carries throng's own screen furniture: no sync bar, fold chevron or diagram button.
+
+## MT-64: [Print] Printing an Image or SVG preview
+
+Covers: 075 FR-075a, 075 FR-068f, 075 FR-066
+Paths: `packages/core/src/preview/providers/image.ts`, `packages/core/src/preview/providers/svg.ts`, `packages/ui/src/renderer/preview/providers/image/view.ts`, `packages/ui/src/renderer/preview/providers/svg/view.ts`, `packages/ui/src/renderer/preview/print/printable.ts`, `packages/ui/src/renderer/preview/diagram/diagram-frame.tsx`, `packages/ui/src/main/print-request-filter.ts`, `packages/ui/src/main/electron-print-engine.ts`, `packages/core/src/preview/print.ts`
+
+### Steps
+1. Open a large photo (wider than the page) in its preview and press **Ctrl+P**. Print Preview shows the whole photo on one page, its shape kept, in the middle of the sheet.
+2. Open a small icon (a 64 × 64 PNG) and print it. It shows at its own small size in the middle of the sheet, not blown up to fill the page.
+3. Untick **Centre on page**. The picture moves to the top left of the printable area. Close and reopen Print Preview on another picture: Centre on page is still unticked. Tick it again.
+4. Open an `.svg` file's preview and print it. The drawing shows on the page — not a blank page — fitted and centred.
+5. Print a Markdown file holding a ` ```svg ` fence, and one embedding a `.svg` file. Each SVG shows on its page.
+6. Set Scale to 200 % for the small icon: it prints twice its own size.
+
+### Negative cases
+- Zooming or panning the picture in its preview before printing changes nothing on the page.
+
+## MT-65: [Print] Printing a PDF preview
+
+Covers: 075 FR-075c, 075 FR-068f
+Paths: `packages/core/src/preview/providers/pdf.ts`, `packages/ui/src/renderer/preview/providers/pdf/view.ts`, `packages/ui/src/renderer/preview/print/pdf-printable.ts`, `packages/ui/src/renderer/preview/print/print-command.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`
+
+### Steps
+1. Open a multi-page PDF in its preview, scroll to page 3 and press **Ctrl+P**. Print Preview shows page 1 of the PDF on the first sheet, and as many sheets as the PDF has pages.
+2. Step through the sheets: each is one of the PDF's pages, whole, its shape kept, in the middle of the sheet.
+3. Print a PDF with a landscape page on portrait paper: that page is fitted whole across the sheet's width.
+4. Set Pages to `2-3` and print. The two sheets that print are the PDF's pages 2 and 3, matching the preview.
+
+### Negative cases
+- The PDF preview's own place (page 3, its zoom) is unchanged after Print Preview closes.
+
+## MT-66: [Print] Printing a CSV or a workbook's sheet
+
+Covers: 075 FR-075b, 075 FR-063
+Paths: `packages/ui/src/renderer/grid/grid-print.ts`, `packages/ui/src/renderer/grid/grid-print-row.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/csv/view.ts`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/view.ts`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/preview/providers/spreadsheet.ts`
+
+### Steps
+1. Open a CSV of a few hundred rows in the CSV Preview Editor with **Lock first row** on, and press **Ctrl+P**. Print Preview shows a table: the first row as the header at the top of every page, then every row, to the last.
+2. Widen one column in the grid and print again. That column is wider on the page in the same proportion; the table still fits the page width.
+3. A long cell wraps within its column on the page; no row is split across two pages.
+4. Turn **Lock first row** off and print. The first row prints as an ordinary row, and no header repeats.
+5. Right-click a cell, a row header and a column header: each menu's **Print…** opens Print Preview.
+6. Open a workbook with two sheets, switch to the second, and print. The second sheet prints; with **First row is header** on, its first row repeats at the top of every page.
+
+### Negative cases
+- A CSV of 100,000 rows prints every row; note how long Print Preview takes to open and whether the CSV Preview Editor stalls while it does (the table is built in one pass before Print Preview opens).
+
+## MT-67: [Print] Printing an editor of any file type
+
+Covers: 075 FR-064a
+Paths: `packages/ui/src/renderer/print/text-printable.ts`, `packages/ui/src/renderer/editor/editor-print.ts`
+
+### Steps
+1. Open a `.csv`, an `.html` and a `.json` file in editors (not previews) and print each. Each prints as its text, in the editor's font, coloured as code where the editor colours it, on white paper.
+2. In a dark theme, print a `.ts` file. The colours on the page are the print palette's, readable on white, not the theme's.
+3. Print a file of several megabytes. Print Preview opens; the text prints plain if it is too long to colour.
 
 ## MT-80: [Settings] A size in MB on the slider, exactly in bytes in the box
 
