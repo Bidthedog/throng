@@ -733,6 +733,12 @@ Markdown and Mermaid pattern, each setting working as labelled.
   show, at its bottom right, a toggle for the cell dialog that shows the panel's current state, is
   reachable by keyboard, and records the panel's choice with the panel's saved state, so it survives a
   restart; a panel that has never used it follows the setting.
+- **FR-036e** *(maintainer, 2026-11-20)*: The middle mouse button MUST NOT paste in the cell dialog, as it does
+  not in the grid (FR-008f): no primary-selection or clipboard paste on a middle press or release, and no paste
+  that arrives just after one. The reader's own paste (a key or the menu) is unaffected; Ctrl+middle-click stays
+  the zoom reset (Cmd on macOS). Reported from hand-testing on Linux: a middle-click in the dialog's editor
+  pasted. The maintainer's rule is wider — "Middle mouse should not paste in throng at all" — and belongs to
+  an app-wide requirement; this one covers what 073 added.
 - **FR-037**: Selection MUST cover text within a cell (while its editor is open), single cells, cell
   ranges and whole rows (by the row gutter). **Copy**, **Cut** and **Paste** MUST be offered on the
   grid's right-click menu and work by their chords.
