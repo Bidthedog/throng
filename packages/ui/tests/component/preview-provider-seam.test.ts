@@ -646,6 +646,7 @@ describe('S4 / S6a — the settings tab draws each provider’s generated settin
       'setting-editor.previews.maxWaitMs',
       // 044 FR-114 (iteration 2026-09-15) — static, so a test registry draws it too.
       'setting-editor.previews.syncScroll',
+      'setting-editor.previews.syncHighlightSeconds',
       'setting-editor.previews.copyFormat',
       // 054 FR-051 supersedes 047 US2's static `editor.previews.openTarget`: Open previews in is now each
       // provider's own leaf, in that provider's subsection, after its default open action.

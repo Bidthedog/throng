@@ -163,6 +163,46 @@ describe('scroll sync is its own capability (FR-033c)', () => {
   });
 });
 
+describe('the scroll-sync highlight duration (FR-033f)', () => {
+  const descriptor = () =>
+    previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).find((d) => d.key === 'editor.previews.syncHighlightSeconds');
+
+  it('ships 1.5 seconds', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).syncHighlightSeconds).toBe(1.5);
+  });
+
+  it('is a slider under Editor > Previews, 0 to 10 in half seconds, named "Scroll-sync highlight duration", beside Synchronise scrolling', () => {
+    expect(descriptor()).toMatchObject({
+      label: 'Scroll-sync highlight duration',
+      group: 'Editor',
+      subgroup: 'Previews',
+      control: 'slider',
+      min: 0,
+      max: 10,
+      step: 0.5,
+    });
+    const keys = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).map((d) => d.key);
+    expect(keys.indexOf('editor.previews.syncHighlightSeconds')).toBe(keys.indexOf('editor.previews.syncScroll') + 1);
+  });
+
+  it('says 0 shows no highlight, and that it is a visual guide only', () => {
+    expect(descriptor()?.description).toMatch(/0/);
+    expect(descriptor()?.description).toMatch(/Synchronise Scrolling/i);
+  });
+
+  it('parses a number in range as it is, clamps outside 0 to 10, and falls back to 1.5 for anything else', () => {
+    const parse = (v: unknown) => parsePreviewSettings({ syncHighlightSeconds: v }, SHIPPED_PREVIEW_PROVIDERS).syncHighlightSeconds;
+    expect(parse(4)).toBe(4);
+    expect(parse(0)).toBe(0);
+    expect(parse(0.5)).toBe(0.5);
+    expect(parse(-3)).toBe(0);
+    expect(parse(99)).toBe(10);
+    expect(parse('4')).toBe(1.5);
+    expect(parse(Number.NaN)).toBe(1.5);
+    expect(parse(undefined)).toBe(1.5);
+  });
+});
+
 describe('the Spreadsheet provider', () => {
   it('is a binary provider for every common workbook format', () => {
     for (const ext of ['xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'fods', 'numbers']) {

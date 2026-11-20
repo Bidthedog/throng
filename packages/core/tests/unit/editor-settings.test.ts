@@ -66,6 +66,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         copyFormat: 'rich',
         // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
         syncScroll: true,
+        syncHighlightSeconds: 1.5,
         providers: {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           // 047 FR-032b/FR-042d — the preview gutter (shipped ON) and the heading-jump duration
@@ -317,6 +318,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         copyFormat: 'rich',
         // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
         syncScroll: true,
+        syncHighlightSeconds: 1.5,
         providers: {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           // 047 FR-032b/FR-042d — the preview gutter (shipped ON) and the heading-jump duration

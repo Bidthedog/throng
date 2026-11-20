@@ -82,6 +82,8 @@ const PREFIX = 'editor.previews';
 const UPDATE_DELAY = { shipped: 300, min: 0, max: 5000, step: 50 } as const;
 const MAX_WAIT = { shipped: 1000, min: 0, max: 10000, step: 100 } as const;
 const COPY_FORMAT_SHIPPED: PreviewCopyFormat = 'rich';
+/** 073 FR-033f — how long the in-step highlight shows after the last sync scroll: 1.5 s, 0 – 10 s in half seconds, 0 = none. */
+const SYNC_HIGHLIGHT = { shipped: 1.5, min: 0, max: 10, step: 0.5 } as const;
 /** FR-114: editor → preview scroll sync ships on. */
 const SYNC_SCROLL_SHIPPED = true;
 const DEFAULT_OPEN_ACTION_SHIPPED: DefaultOpenAction = 'editor';
@@ -118,6 +120,7 @@ export function previewSettingsDefaults(registry: PreviewProviderRegistry): Prev
     maxWaitMs: MAX_WAIT.shipped,
     copyFormat: COPY_FORMAT_SHIPPED,
     syncScroll: SYNC_SCROLL_SHIPPED,
+    syncHighlightSeconds: SYNC_HIGHLIGHT.shipped,
     providers: Object.fromEntries(registry.list().map((p) => [p.id, providerDefaults(p)])),
   };
 }
@@ -198,6 +201,19 @@ export function previewSettingsDescriptors(
       group: GROUP,
       subgroup: SUBGROUP,
       control: 'toggle',
+    },
+    // 073 FR-033f — beside the setting it belongs to. A number of seconds, read live by the next scroll.
+    {
+      key: `${PREFIX}.syncHighlightSeconds`,
+      label: 'Scroll-sync highlight duration',
+      description:
+        'How long, in seconds, the soft highlight stays on the place a preview and its editor are in step at after Synchronise Scrolling moves one with the other, before it fades out. 0 shows no highlight at all. It is a visual guide only: scrolling is kept in step either way.',
+      group: GROUP,
+      subgroup: SUBGROUP,
+      control: 'slider',
+      min: SYNC_HIGHLIGHT.min,
+      max: SYNC_HIGHLIGHT.max,
+      step: SYNC_HIGHLIGHT.step,
     },
     // 054 contract order (menus-commands-controls-054.md "Preferences layout"): scrolling, then copy.
     {
@@ -344,6 +360,10 @@ export function parsePreviewSettings(raw: unknown, registry: PreviewProviderRegi
       ? (raw.copyFormat as PreviewCopyFormat)
       : COPY_FORMAT_SHIPPED,
     syncScroll: typeof raw.syncScroll === 'boolean' ? raw.syncScroll : SYNC_SCROLL_SHIPPED,
+    syncHighlightSeconds:
+      typeof raw.syncHighlightSeconds === 'number' && Number.isFinite(raw.syncHighlightSeconds)
+        ? Math.min(SYNC_HIGHLIGHT.max, Math.max(SYNC_HIGHLIGHT.min, raw.syncHighlightSeconds))
+        : SYNC_HIGHLIGHT.shipped,
     providers,
   };
 }

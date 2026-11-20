@@ -49,6 +49,11 @@ export interface PreviewSettings {
    * FR-114). Applies to every text provider, so no provider's enabled toggle governs it.
    */
   syncScroll: boolean;
+  /**
+   * 073 FR-033f — seconds the in-step highlight shows after the last sync scroll, `0` – `10`; `0` draws none in any view.
+   * Read live: the next scroll uses the new value. A visual guide only — sync itself does not depend on it.
+   */
+  syncHighlightSeconds: number;
   /*
    * 047 FR-015a's top-level `openTarget` is RETIRED by 054 FR-051: each text provider carries its own
    * (`ProviderSettings.openTarget`). It is absent from this shape on purpose — the parse migrates it and

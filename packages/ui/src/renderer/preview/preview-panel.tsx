@@ -1932,6 +1932,10 @@ export function PreviewPanel({
   const parentDocLines = useEditorDocLines(syncing ? parentId : null);
   const syncingRef = useRef(syncing);
   syncingRef.current = syncing;
+  /** 073 FR-033f — `editor.previews.syncHighlightSeconds` as the window holds it now, in ms; read at each sync scroll. */
+  const highlightMs = Math.round(settings.editor.previews.syncHighlightSeconds * 1000);
+  const highlightMsRef = useRef(highlightMs);
+  highlightMsRef.current = highlightMs;
   /*
    * 073 FR-033d — the place the pair is in step at, marked in both views while a sync scroll moves one with the other.
    * The editor leading is noticed here (its published top line moved, and not because this preview asked); this view
@@ -1945,7 +1949,7 @@ export function PreviewPanel({
     if (!syncing || parentId === null || parentTop === null || seen === null || seen === parentTop) return;
     if (parentTop.fromSync || seen.line === parentTop.line) return;
     // 073 FR-033e — the editor's centre line, not its top (sync itself keys on the top).
-    publishSyncMark(parentId, editorCentreLineOf(parentId) ?? parentTop.line);
+    publishSyncMark(parentId, editorCentreLineOf(parentId) ?? parentTop.line, highlightMsRef.current);
   }, [parentTop, parentId, syncing]);
   useEffect(() => {
     if (!syncing || parentId === null) return;
@@ -2057,7 +2061,7 @@ export function PreviewPanel({
     requestEditorTopLine(editor, line);
     // 073 FR-033d — this view led: the pair is in step at its top line.
     // 073 FR-033e — the mark names the line at the CENTRE of this view; sync itself keyed on the top.
-    publishSyncMark(editor, centreLine ?? line);
+    publishSyncMark(editor, centreLine ?? line, highlightMsRef.current);
     return true;
   }, []);
 

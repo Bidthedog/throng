@@ -18,7 +18,7 @@
  */
 import { useSyncExternalStore } from 'react';
 
-/** How long after the last sync scroll the mark starts to fade (073 FR-033d). */
+/** How long after the last sync scroll the mark starts to fade by default (073 FR-033d): the shipped `editor.previews.syncHighlightSeconds`. */
 export const SYNC_MARK_FADE_MS = 1500;
 /** How long the faded mark is kept after that, for the views' CSS transition to finish before it is dropped. */
 export const SYNC_MARK_REMOVE_MS = 700;
@@ -47,8 +47,18 @@ function stopTimers(editorId: string): void {
   removeTimers.delete(editorId);
 }
 
-/** A sync scroll happened for the pair whose editor is `editorId`, at source line `line`: show the mark and restart its fade. */
-export function publishSyncMark(editorId: string, line: number): void {
+/**
+ * A sync scroll happened for the pair whose editor is `editorId`, at source line `line`: show the mark and restart its fade.
+ *
+ * `fadeMs` is `editor.previews.syncHighlightSeconds` in milliseconds as the caller holds it NOW (073 FR-033f), so the next
+ * scroll after the setting changes uses the new value. 0 — or anything not a positive finite number — draws no mark in any
+ * view: nothing is stored, nobody is told, and one already showing comes down.
+ */
+export function publishSyncMark(editorId: string, line: number, fadeMs: number = SYNC_MARK_FADE_MS): void {
+  if (!(fadeMs > 0) || !Number.isFinite(fadeMs)) {
+    clearSyncMark(editorId);
+    return;
+  }
   const at = Math.max(0, Math.trunc(line));
   stopTimers(editorId);
   const held = marks.get(editorId);
@@ -71,7 +81,7 @@ export function publishSyncMark(editorId: string, line: number): void {
           if (marks.delete(editorId)) emit();
         }, SYNC_MARK_REMOVE_MS),
       );
-    }, SYNC_MARK_FADE_MS),
+    }, fadeMs),
   );
 }
 

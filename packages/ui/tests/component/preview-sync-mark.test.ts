@@ -191,3 +191,46 @@ describe('the preview gutter is Disabled (FR-033d, 047 FR-032b)', () => {
     await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P11']));
   });
 });
+
+describe('Scroll-sync highlight duration (FR-033f)', () => {
+  const seconds = (s: number) => ({ editor: { previews: { syncHighlightSeconds: s, providers: { markdown: { gutter: true } } } } });
+
+  it('at 4 seconds the mark stays bright for 4 s, in the editor store and the preview gutter, then fades', async () => {
+    await mountParented(seconds(4));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    editorScrolledTo(13);
+    act(() => void vi.advanceTimersByTime(3999));
+    expect(syncMarkOf('ed-1')?.on).toBe(true);
+    expect(marked()[0]).toHaveClass('preview-sync-mark--on');
+    act(() => void vi.advanceTimersByTime(1));
+    expect(syncMarkOf('ed-1')).toEqual({ line: 23, on: false });
+    expect(marked()[0]).not.toHaveClass('preview-sync-mark--on');
+  });
+
+  it('at 0 no highlight is drawn in any view, whichever view leads, while the preview still follows the editor', async () => {
+    await mountParented(seconds(0));
+    editorScrolledTo(13);
+    await waitFor(() => expect(host().scrollTop).toBe(240)); // sync itself is untouched
+    expect(syncMarkOf('ed-1')).toBeNull();
+    expect(marked()).toEqual([]);
+    await readerScrolls(500);
+    expect(ed1).toHaveBeenCalledWith(24);
+    expect(syncMarkOf('ed-1')).toBeNull();
+    expect(marked()).toEqual([]);
+  });
+
+  it('is read live: the next scroll after the setting changes uses the new value', async () => {
+    await mountParented(seconds(1.5));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    editorScrolledTo(13);
+    act(() => void vi.advanceTimersByTime(1500));
+    expect(syncMarkOf('ed-1')?.on).toBe(false);
+
+    m!.setSettings(seconds(4));
+    editorScrolledTo(30);
+    act(() => void vi.advanceTimersByTime(3999));
+    expect(syncMarkOf('ed-1')?.on).toBe(true);
+    act(() => void vi.advanceTimersByTime(1));
+    expect(syncMarkOf('ed-1')?.on).toBe(false);
+  });
+});

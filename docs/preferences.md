@@ -229,6 +229,7 @@ The settings in this table apply to every preview type.
 | Preview maximum wait | `editor.previews.maxWaitMs` | 1,000 | 0 – 10,000 ms, step 100 | The longest a preview goes without catching up while you keep typing. A value below the update delay behaves as the update delay. |
 | Preview copy format | `editor.previews.copyFormat` | `rich` | `rich` (Rich text) · `plain` (Plain text) | What Copy from a preview puts on the clipboard: formatted text that keeps headings, lists and links, or plain text. |
 | Synchronise preview and editor scrolling | `editor.previews.syncScroll` | on | on · off | Keep a preview and its editor at the same place, both ways: scrolling either scrolls the other, block by block. Also switched from either panel's right-click menu, the **Synchronise Scrolling** status-bar button, or the [`preview.toggleSyncScroll`](key-bindings.md#editor) command. |
+| Scroll-sync highlight duration | `editor.previews.syncHighlightSeconds` | 1.5 | 0 – 10 seconds, step 0.5 | How long the soft highlight stays on the place a preview and its editor are in step at after Synchronise Scrolling moves one with the other, in both views, before it fades out. `0` shows no highlight at all. A visual guide only: scrolling is kept in step either way. |
 
 #### Markdown
 

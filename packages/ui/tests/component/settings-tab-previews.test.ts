@@ -107,6 +107,7 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
       'setting-editor.previews.updateDelayMs',
       'setting-editor.previews.maxWaitMs',
       'setting-editor.previews.syncScroll',
+      'setting-editor.previews.syncHighlightSeconds',
       'setting-editor.previews.copyFormat',
     ]);
     const subsections = [...subsection().querySelectorAll(':scope > .fold-content > .settings-subgroup')].map((el) =>
@@ -151,6 +152,11 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
     expect(within(section).getByText('Markdown: Show front matter')).toBeInTheDocument();
     expect((control('editor.previews.syncScroll') as HTMLInputElement).checked).toBe(true);
     expect((control(`${MD}.showFrontMatter`) as HTMLInputElement).checked).toBe(true);
+    // 073 FR-033f: the highlight duration is drawn beside it, a 0 – 10 slider in half seconds showing its shipped 1.5.
+    expect(within(section).getByText('Scroll-sync highlight duration')).toBeInTheDocument();
+    const duration = [...screen.getByTestId('setting-editor.previews.syncHighlightSeconds').querySelectorAll('input')];
+    expect(duration.some((i) => i.getAttribute('step') === '0.5' && i.getAttribute('max') === '10' && i.getAttribute('min') === '0')).toBe(true);
+    expect(duration.some((i) => Number(i.value) === 1.5)).toBe(true);
 
     // The control for the Markdown-disabled case below: the same controls are LIVE while Markdown is on.
     expect(control(`${MD}.defaultOpenAction`).disabled).toBe(false);

@@ -108,6 +108,7 @@ describe('previewSettingsDefaults (FR-035b, FR-050, FR-060, FR-060a, FR-065, FR-
       copyFormat: 'rich',
       // FR-114 — ships on.
       syncScroll: true,
+      syncHighlightSeconds: 1.5,
       providers: {
         // 054 FR-051 — openTarget moved from the top level into each text provider, still 'lastActive'.
         markdown: {
@@ -412,6 +413,7 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
       maxWaitMs: 4000,
       copyFormat: 'plain',
       syncScroll: false,
+      syncHighlightSeconds: 1.5,
       providers: {
         // 054 FR-051 — openTarget kept on the provider.
         markdown: {
@@ -459,6 +461,7 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
       maxWaitMs: 2000,
       copyFormat: 'rich',
       syncScroll: true,
+      syncHighlightSeconds: 1.5,
       providers: {
         // 054 FR-051 — the provider's openTarget falls back to its own default, 'lastActive'.
         markdown: {
