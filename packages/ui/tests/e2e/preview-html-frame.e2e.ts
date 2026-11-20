@@ -14,7 +14,7 @@
  * The safe source is `https://safe.invalid`: a request to it is let through by every layer and then fails at name
  * resolution, so the test sees the filter allow it without the suite depending on the network.
  */
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
@@ -126,6 +126,11 @@ test('an edit updates the HTML page in place, in the same frame, keeping where t
   expect(await frame.getAttribute('data-e2e-mark'), 'the update replaced the frame instead of updating it').toBe('kept');
   const top = await frame.evaluate((el) => (el as HTMLIFrameElement).contentDocument!.scrollingElement!.scrollTop);
   expect(Math.abs(top - 1500), `the reader was at 1500px and is now at ${top}px`).toBeLessThanOrEqual(2);
+
+  // Saved, so the next test's file from the tree can open into this editor: one with unsaved edits is not replaced.
+  await focusEditor(win, editorId);
+  await win.keyboard.press('ControlOrMeta+S');
+  await expect.poll(() => readFileSync(join(root, 'long.html'), 'utf8'), { timeout: 10_000 }).toContain('Appended by an edit.');
 });
 
 test('Find searches the HTML page: every match highlighted in the page, the count shown, Next scrolls to it (FR-086b)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
@@ -188,9 +193,25 @@ test('a right-click in the HTML page opens the body menu for the selection there
   // A selection in the page reached the panel: the copy rows are live, not the empty-selection state.
   await expect(win.getByTestId('menu-item-Copy as Rich Text')).toHaveAttribute('aria-disabled', 'false');
   await win.getByTestId('menu-item-Select All').click();
+  // The whole page, first element to last — whatever an earlier test in this shared app appended to it (the
+  // in-place update test types a paragraph into long.html's editor), so the text's last line is not pinned.
   await expect
-    .poll(() => frame.evaluate((el) => (el as HTMLIFrameElement).contentDocument!.getSelection()!.toString()))
-    .toMatch(/^\s*Top[\s\S]*Paragraph 200\.[\s\S]*second needle\.\s*$/);
+    .poll(() =>
+      frame.evaluate((el) => {
+        const doc = (el as HTMLIFrameElement).contentDocument!;
+        const flat = (t: string | null | undefined): string => (t ?? '').replace(/\s+/g, ' ').trim();
+        const text = flat(doc.getSelection()!.toString());
+        // The first and last elements that hold text: the edit can leave an empty paragraph at the end.
+        const texts = [...doc.body.children].map((c) => flat(c.textContent)).filter((t) => t !== '');
+        const first = texts[0];
+        const last = texts.at(-1);
+        return first !== undefined && last !== undefined && text.startsWith(first) && text.endsWith(last);
+      }),
+    )
+    .toBe(true);
+  expect(await frame.evaluate((el) => (el as HTMLIFrameElement).contentDocument!.getSelection()!.toString())).toMatch(
+    /^\s*Top[\s\S]*Paragraph 200\.[\s\S]*second needle\./,
+  );
 });
 
 test('only a safe source reaches the network, a script from one never runs, and the rest is listed once with Allow this source (FR-072a, FR-093a, FR-090)', { tag: ['@extended', '@failure', '@reserve:runtime'] }, async () => {

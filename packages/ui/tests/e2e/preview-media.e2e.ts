@@ -25,7 +25,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { openApp, createProject, cleanupTemp, geom, type OpenApp } from './harness.js';
+import { openApp, createProject, cleanupTemp, geom, HOST_OS, type OpenApp } from './harness.js';
+
+/**
+ * The app's primary modifier for input sent through Electron's own input path: macOS binds Cmd where the others bind
+ * Ctrl (070 FR-029), so a chord sent with Ctrl there reaches nothing. Playwright's own keyboard says `ControlOrMeta`.
+ */
+const PRIMARY = HOST_OS === 'macos' ? ('meta' as const) : ('control' as const);
 import { byTitle } from './helpers/titles.js';
 import { longPdf } from './helpers/media-fixtures.js';
 
@@ -213,16 +219,16 @@ test('a click inside an HTML page activates its panel undimmed, and the zoom cho
 
   const zoom = (): Promise<string | null> => host.getAttribute('data-zoom');
   const before = await zoom();
-  await app.evaluate(({ BrowserWindow }) => {
+  await app.evaluate(({ BrowserWindow }, mod) => {
     const wc = BrowserWindow.getAllWindows()[0]!.webContents;
-    wc.sendInputEvent({ type: 'keyDown', keyCode: '=', modifiers: ['control', 'alt'] });
-    wc.sendInputEvent({ type: 'keyUp', keyCode: '=', modifiers: ['control', 'alt'] });
-  });
+    wc.sendInputEvent({ type: 'keyDown', keyCode: '=', modifiers: [mod, 'alt'] });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: '=', modifiers: [mod, 'alt'] });
+  }, PRIMARY);
   await expect.poll(zoom, { timeout: 10_000 }).not.toBe(before);
   const afterChord = await zoom();
   await app.evaluate(({ BrowserWindow }, pt) => {
-    BrowserWindow.getAllWindows()[0]!.webContents.sendInputEvent({ type: 'mouseWheel', x: pt.x, y: pt.y, deltaX: 0, deltaY: 120, wheelTicksY: 1, canScroll: true, modifiers: ['control'] });
-  }, { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) });
+    BrowserWindow.getAllWindows()[0]!.webContents.sendInputEvent({ type: 'mouseWheel', x: pt.x, y: pt.y, deltaX: 0, deltaY: 120, wheelTicksY: 1, canScroll: true, modifiers: [pt.mod] });
+  }, { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2), mod: PRIMARY });
   await expect.poll(zoom, { timeout: 10_000 }).not.toBe(afterChord);
 
   // FR-083 — zoomed, the frame still covers the whole space under the notice: its right edge is the body's.
@@ -238,9 +244,9 @@ test('a click inside an HTML page activates its panel undimmed, and the zoom cho
   // unzoomed page, which Playwright's own clicks into a frame need (they aim without the frame's scale).
   await app.evaluate(({ BrowserWindow }, pt) => {
     const wc = BrowserWindow.getAllWindows()[0]!.webContents;
-    wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'middle', clickCount: 1, modifiers: ['control'] });
-    wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'middle', clickCount: 1, modifiers: ['control'] });
-  }, { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) });
+    wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'middle', clickCount: 1, modifiers: [pt.mod] });
+    wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'middle', clickCount: 1, modifiers: [pt.mod] });
+  }, { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2), mod: PRIMARY });
   await expect.poll(zoom, { timeout: 10_000 }).toBe(before);
 });
 
@@ -261,6 +267,20 @@ test('a fitted SVG holds still at an app zoom whose rounding overflows it, and r
       // The zoom's relayout has settled — the viewport's outer box, which a scrollbar does not move — so a scale that
       // still changes in the sampling window below is the picture refitting itself, never the relayout.
       await geom(frame.locator('.preview-diagram-frame__viewport'));
+      // The box can read still twice before the zoom's relayout even begins (setZoomFactor returns first), and CI then
+      // sampled one refit to the new size as two scales (0.1025 then 0.1925, never back). So first wait for the fit
+      // itself to hold for 300 ms. A picture that refits without end never holds, and fails here instead.
+      await expect
+        .poll(
+          () =>
+            frame.evaluate(async (f) => {
+              const first = f.getAttribute('data-scale');
+              await new Promise((r) => setTimeout(r, 300));
+              return first !== null && f.getAttribute('data-scale') === first;
+            }),
+          { timeout: 10_000 },
+        )
+        .toBe(true);
       const seen = await frame.evaluate(async (f) => {
         const vp = f.querySelector('.preview-diagram-frame__viewport') as HTMLElement;
         const states = new Set<string>();
@@ -322,7 +342,7 @@ test('a zoomed SVG holds still at every step zoomed out from 100%, and the zoom 
     }
     // FR-020a — the reset chord returns the opening view (Fit, for a picture larger than its panel), not 100%.
     await frame.locator('.preview-diagram-frame__viewport').focus();
-    await win.keyboard.press('Control+Alt+0');
+    await win.keyboard.press('ControlOrMeta+Alt+0');
     await expect(frame).toHaveAttribute('data-mode', 'open');
     await expect(frame).toHaveAttribute('data-scale', opening!);
   } finally {
