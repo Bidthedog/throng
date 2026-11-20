@@ -12,6 +12,19 @@
  * (SC-004). A page is painted at the panel's zoom (`--throng-zoom-preview`, FR-034) times the device pixel ratio,
  * and painted AGAIN when the zoom changes, so it is sharp rather than a stretched bitmap (FR-062).
  *
+ * ══ SMOOTH (2026-11-20, FR-065a – FR-065c) ══
+ *
+ * Measured over a 500-page PDF: a steady scroll cost nothing (no long task, no layout shift), but a Fit resize
+ * dropped 13 frames in 2.6 s — every width the drag passed through refitted the zoom, and every new zoom cleared and
+ * repainted every page in view (175 canvas resets) and rebuilt its text. So:
+ * - Nothing paints on the scroll path. A page the scroll brings near is painted once scrolling has been still for
+ *   {@link PDF_SCROLL_SETTLE_MS}; a page that leaves before its paint is done has that paint cancelled.
+ * - A zoom change — a resize under Fit, a zoom step — resizes every page box at once and lets the drawn bitmap
+ *   stretch to it; the pages are drawn sharp once the zoom has been still for {@link PDF_ZOOM_SETTLE_MS}.
+ * - A paint draws off screen and swaps the finished bitmap in, so a page never shows blank while it redraws.
+ * - A page with nothing drawn yet shows a spinner once {@link PDF_PAGE_SPINNER_DELAY_MS} has passed.
+ * Every page keeps its placeholder's size throughout, so nothing below it moves while pages paint.
+ *
  * ══ LINKS ══
  *
  * Drawn here, over the canvas, from what `pdf-renderer.ts` admits: a page inside the document, or an
@@ -60,7 +73,8 @@ import { classifyPreviewLink, formatGrouped, logCaught } from '@throng/core';
 import type { PageLayout, PreviewBodyProps } from '../../provider-view.js';
 import { PAGE_LAYOUT_ROWS } from '../../content-menu.js';
 import { IconButton } from '../../../common/icon-button.js';
-import { Spinner } from '../../../common/loading.js';
+import { Spinner, useDelayedFlag } from '../../../common/loading.js';
+import { RESIZE_SETTLE_MS } from '../../resize-freeze.js';
 import { useKeybindings } from '../../../config/config-store.js';
 import { zoomPercent, zoomTitles } from '../../zoom-titles.js';
 import { ZoomIndicator } from '../../../workspace/zoom-indicator.js';
@@ -87,6 +101,34 @@ const PAGE_GAP_PX = 12;
 type PdfView = { mode: 'fit' } | { mode: 'zoom'; scale: number } | { mode: 'open' };
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
+/**
+ * FR-065a — how long scrolling must be still before the pages it brought near are painted: under the gap between two
+ * wheel notches or two key repeats (about 30 – 60 ms), a scroll in progress never paints; a reader who stops sees the
+ * pages start drawing within a tenth of a second.
+ */
+export const PDF_SCROLL_SETTLE_MS = 100;
+
+/** FR-065b — how long the zoom must be still before the pages are drawn sharp at it: the panel's own resize settle. */
+export const PDF_ZOOM_SETTLE_MS = RESIZE_SETTLE_MS;
+
+/**
+ * FR-065c — how long a page may take to draw before its spinner shows. A page of text draws well inside it, so a
+ * reader paging through an ordinary PDF sees no spinner flash; a page that takes longer (a scan, a dense drawing)
+ * shows one long before the second that a wait starts to feel like a stall.
+ */
+export const PDF_PAGE_SPINNER_DELAY_MS = 150;
+
+/** FR-065c — the spinner in a page that has nothing drawn yet, shown only once the delay has passed. */
+function PageSpinner({ panelId, page }: { panelId: string; page: number }): ReactElement | null {
+  const show = useDelayedFlag(PDF_PAGE_SPINNER_DELAY_MS);
+  if (!show) return null;
+  return (
+    <div className="preview-pdf__page-loading" data-testid={`pdf-page-loading-${panelId}-${page}`}>
+      <Spinner label={`Loading page ${formatGrouped(page)}`} />
+    </div>
+  );
+}
 
 /** FR-086c — pages whose text is laid out for Find in one idle moment. */
 const TEXT_BATCH_PAGES = 4;
@@ -181,6 +223,15 @@ export function PdfBody({
   const textLayers = useRef(new Map<number, () => void>());
   /** FR-086c — the pages whose text layer has been laid out, painted or not. */
   const textBuilt = useRef(new Set<number>());
+  /** FR-065a — each page's paint in progress, cancelled when the page leaves or is painted again. */
+  const paints = useRef(new Map<number, AbortController>());
+  /** FR-065c — the pages whose canvas holds a drawing, at any scale. */
+  const drawn = useRef(new Set<number>());
+  /** FR-065c — the pages being drawn for the first time: each shows a spinner once the delay has passed. */
+  const [drawing, setDrawing] = useState<ReadonlySet<number>>(() => new Set());
+  const lastScrollAt = useRef(Number.NEGATIVE_INFINITY);
+  const lastZoomAt = useRef(Number.NEGATIVE_INFINITY);
+  const paintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /*
    * FR-062a (amended 2026-11-19) — Fit FILLS the panel's width with the widest known page, enlarging a page narrower
@@ -337,9 +388,13 @@ export function PdfBody({
       opened = result.doc;
       const first = result.doc.pageCount > 0 ? await result.doc.page(1) : null;
       if (cancelled) return;
+      for (const controller of paints.current.values()) controller.abort();
+      paints.current.clear();
       painted.current.clear();
       visible.current.clear();
       textBuilt.current.clear();
+      drawn.current.clear();
+      setDrawing(new Set());
       setSizes(first === null ? {} : { 1: { width: first.width, height: first.height } });
       setLinks({});
       setLoaded({ kind: 'ready', doc: result.doc, size: first === null ? { width: 612, height: 792 } : first });
@@ -409,6 +464,29 @@ export function PdfBody({
     [],
   );
 
+  const setPageDrawing = useCallback((n: number, on: boolean): void => {
+    setDrawing((d) => {
+      if (d.has(n) === on) return d;
+      const next = new Set(d);
+      if (on) next.add(n);
+      else next.delete(n);
+      return next;
+    });
+  }, []);
+
+  /** FR-065a — stop page `n`'s paint in progress; it is painted again when it next comes near. */
+  const cancelPaint = useCallback(
+    (n: number): void => {
+      const controller = paints.current.get(n);
+      if (controller === undefined) return;
+      controller.abort();
+      paints.current.delete(n);
+      painted.current.delete(n);
+      setPageDrawing(n, false);
+    },
+    [setPageDrawing],
+  );
+
   /** Paint page `n` at the current zoom, unless it already is. */
   const paint = useCallback(
     (n: number): void => {
@@ -416,14 +494,25 @@ export function PdfBody({
       const scale = zoomRef.current;
       if (painted.current.get(n) === scale) return;
       painted.current.set(n, scale);
+      paints.current.get(n)?.abort();
+      const controller = new AbortController();
+      const { signal } = controller;
+      paints.current.set(n, controller);
+      // FR-065c — a page with a drawing keeps it while it redraws; only a page with nothing on it waits visibly.
+      if (!drawn.current.has(n)) setPageDrawing(n, true);
       const doc = loaded.doc;
       void doc
         .page(n)
         .then(async (page: PdfPage) => {
+          if (signal.aborted) return;
           setSizes((s) => (s[n]?.width === page.width && s[n]?.height === page.height ? s : { ...s, [n]: { width: page.width, height: page.height } }));
           const pageEl = pageEls.current.get(n);
           const canvas = pageEl?.querySelector('canvas');
-          if (canvas) await page.render(canvas, scale, window.devicePixelRatio || 1);
+          if (canvas) await page.render(canvas, scale, window.devicePixelRatio || 1, signal);
+          if (signal.aborted) return;
+          if (paints.current.get(n) === controller) paints.current.delete(n);
+          drawn.current.add(n);
+          setPageDrawing(n, false);
           // FR-068a — the selectable text, at the scale just painted; a layer still building for an older one stops.
           const text = pageEl?.querySelector<HTMLElement>('.preview-pdf__text');
           if (text && painted.current.get(n) === scale) {
@@ -436,11 +525,44 @@ export function PdfBody({
           setLinks((l) => (l[n] === undefined && found.length === 0 ? l : { ...l, [n]: found }));
         })
         .catch((error: unknown) => {
+          // A paint cancelled because the page left, or was painted again, is not a failure.
+          if (signal.aborted) return;
+          if (paints.current.get(n) === controller) paints.current.delete(n);
           painted.current.delete(n);
+          setPageDrawing(n, false);
           logCaught('pdf-body: paint a page', error);
         });
     },
-    [loaded, scheduleFindRefresh],
+    [loaded, scheduleFindRefresh, setPageDrawing],
+  );
+
+  /*
+   * FR-065a / FR-065b — paint the pages near the view once scrolling has been still. While the zoom is still moving
+   * (a resize under Fit), only a page with nothing on it is painted; the rest stretch until the zoom settles.
+   */
+  const schedulePaints = useCallback((): void => {
+    if (paintTimer.current !== null) return;
+    const flush = (): void => {
+      const now = performance.now();
+      const scrolling = now - lastScrollAt.current < PDF_SCROLL_SETTLE_MS;
+      if (scrolling) {
+        paintTimer.current = setTimeout(flush, lastScrollAt.current + PDF_SCROLL_SETTLE_MS - now);
+        return;
+      }
+      paintTimer.current = null;
+      const zoomSettled = now - lastZoomAt.current >= PDF_ZOOM_SETTLE_MS;
+      for (const n of visible.current) if (zoomSettled || !painted.current.has(n)) paint(n);
+    };
+    paintTimer.current = setTimeout(flush, Math.max(0, lastScrollAt.current + PDF_SCROLL_SETTLE_MS - performance.now()));
+  }, [paint]);
+  useEffect(
+    () => () => {
+      if (paintTimer.current !== null) clearTimeout(paintTimer.current);
+      paintTimer.current = null;
+      for (const controller of paints.current.values()) controller.abort();
+      paints.current.clear();
+    },
+    [],
   );
 
   // FR-086c — while there is a query, every page still without text gets its text layer (no canvas), a few pages per
@@ -489,15 +611,18 @@ export function PdfBody({
           const n = Number((entry.target as HTMLElement).dataset.pdfPage);
           if (entry.isIntersecting) {
             visible.current.add(n);
-            paint(n);
-          } else visible.current.delete(n);
+            schedulePaints();
+          } else {
+            visible.current.delete(n);
+            cancelPaint(n);
+          }
         }
       },
       { root: scrollerRef.current, rootMargin: '100% 0px' },
     );
     for (const el of pageEls.current.values()) observer.observe(el);
     return () => observer.disconnect();
-  }, [loaded, paint]);
+  }, [loaded, schedulePaints, cancelPaint]);
 
   // A text layer still building when the body goes stops there.
   useEffect(
@@ -508,14 +633,20 @@ export function PdfBody({
     [],
   );
 
-  // FR-062 — a zoom change repaints the pages in view at the new scale.
+  // FR-062 / FR-065b — a zoom change repaints the pages in view at the new scale, once the zoom has been still.
+  useLayoutEffect(() => {
+    lastZoomAt.current = performance.now();
+  }, [zoom]);
   useEffect(() => {
-    for (const n of visible.current) paint(n);
-  }, [zoom, paint]);
+    const timer = setTimeout(schedulePaints, PDF_ZOOM_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [zoom, schedulePaints]);
 
   // The page whose row starts last above the middle of the view is the current page — the first of that row, where a
   // row holds several (FR-062c).
   const onScroll = useCallback((): void => {
+    // FR-065a — a scroll in progress paints nothing.
+    lastScrollAt.current = performance.now();
     const scroller = scrollerRef.current;
     if (scroller === null) return;
     const middle = scroller.scrollTop + scroller.clientHeight / 2;
@@ -656,6 +787,7 @@ export function PdfBody({
             }
           >
             <canvas className="preview-pdf__canvas" aria-label={`Page ${formatGrouped(n)}`} />
+            {drawing.has(n) ? <PageSpinner panelId={panelId} page={n} /> : null}
             {/* FR-068a — PDF.js's text layer: selectable, transparent text over the canvas. */}
             <div className="preview-pdf__text" data-testid={`pdf-text-${panelId}-${n}`} />
 

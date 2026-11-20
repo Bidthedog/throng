@@ -15,7 +15,7 @@ import type { PdfDocument, PdfLink, PdfOpenResult } from '../../src/renderer/pre
 const openPdf = vi.hoisted(() => vi.fn<(bytes: Uint8Array) => Promise<PdfOpenResult>>());
 vi.mock('../../src/renderer/preview/providers/pdf/pdf-renderer.js', () => ({ openPdf }));
 
-import { PdfBody } from '../../src/renderer/preview/providers/pdf/pdf-body.js';
+import { PdfBody, PDF_PAGE_SPINNER_DELAY_MS, PDF_SCROLL_SETTLE_MS, PDF_ZOOM_SETTLE_MS } from '../../src/renderer/preview/providers/pdf/pdf-body.js';
 import { createCssHighlightPainter, createPreviewSearchController } from '../../src/renderer/preview/preview-search.js';
 import {
   __resetFindState,
@@ -32,6 +32,11 @@ import { PREVIEW_LOADING_CLASS } from '../../src/renderer/preview/loading-placeh
 
 const BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
 const renders: Array<{ page: number; scale: number }> = [];
+/** Each render's abort signal, by page, in the order the renders began. */
+const signals: Array<{ page: number; signal: AbortSignal | undefined }> = [];
+/** A render that takes as long as the test says: it resolves when `release(page)` is called. */
+let slowPages = new Set<number>();
+const releases = new Map<number, () => void>();
 const texts: Array<{ page: number; scale: number; container: HTMLElement }> = [];
 
 function fakeDoc(pageCount: number, links: Record<number, PdfLink[]> = {}): PdfDocument {
@@ -41,9 +46,14 @@ function fakeDoc(pageCount: number, links: Record<number, PdfLink[]> = {}): PdfD
       Promise.resolve({
         width: 600,
         height: 800,
-        render: (_canvas: HTMLCanvasElement, scale: number) => {
+        render: (_canvas: HTMLCanvasElement, scale: number, _ratio: number, signal?: AbortSignal) => {
           renders.push({ page: n, scale });
-          return Promise.resolve();
+          signals.push({ page: n, signal });
+          if (!slowPages.has(n)) return Promise.resolve();
+          return new Promise<void>((resolve, reject) => {
+            releases.set(n, resolve);
+            signal?.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')));
+          });
         },
         renderText: (container: HTMLElement, scale: number) => {
           texts.push({ page: n, scale, container });
@@ -68,6 +78,18 @@ function show(...elements: Element[]): void {
     if (entries.length > 0) o.callback(entries, {} as IntersectionObserver);
   }
 }
+
+/** The observer reports these elements as having left the viewport and its margin. */
+function hide(...elements: Element[]): void {
+  for (const o of observers) {
+    const entries = elements
+      .filter((el) => o.targets.includes(el))
+      .map((target) => ({ target, isIntersecting: false }) as unknown as IntersectionObserverEntry);
+    if (entries.length > 0) o.callback(entries, {} as IntersectionObserver);
+  }
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 function props(overrides: Partial<PreviewBodyProps> = {}): PreviewBodyProps {
   return {
@@ -103,6 +125,9 @@ const pages = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('[
 
 beforeEach(() => {
   renders.length = 0;
+  signals.length = 0;
+  slowPages = new Set();
+  releases.clear();
   texts.length = 0;
   observers.length = 0;
   openPdf.mockReset();
@@ -534,5 +559,104 @@ describe('Find across the whole document, pages not yet drawn included (FR-086c)
     await waitFor(() => expect(pages()).toHaveLength(5));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(texts).toEqual([]);
+  });
+});
+
+describe('smooth scrolling and resizing (FR-065a – FR-065c)', () => {
+  it('keeps every page at its placeholder size as pages paint: nothing below moves', async () => {
+    openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(4) });
+    mount(props());
+    await waitFor(() => expect(pages()).toHaveLength(4));
+    const before = pages().map((p) => `${p.style.width}x${p.style.height}`);
+    expect(before).toEqual(['600pxx800px', '600pxx800px', '600pxx800px', '600pxx800px']);
+    act(() => show(pages()[1]!, pages()[2]!));
+    await waitFor(() => expect(renders).toHaveLength(2));
+    expect(pages().map((p) => `${p.style.width}x${p.style.height}`)).toEqual(before);
+  });
+
+  it('paints a page the scroll brought near only once scrolling has been still (FR-065a)', async () => {
+    openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(3) });
+    mount(props());
+    await waitFor(() => expect(pages()).toHaveLength(3));
+    fireEvent.scroll(screen.getByTestId('preview-pdf-p1'));
+    act(() => show(pages()[2]!));
+    await sleep(PDF_SCROLL_SETTLE_MS / 2);
+    // Still scrolling, as far as the body knows: nothing is drawn on the scroll path.
+    fireEvent.scroll(screen.getByTestId('preview-pdf-p1'));
+    await sleep(PDF_SCROLL_SETTLE_MS / 2);
+    expect(renders).toEqual([]);
+    await waitFor(() => expect(renders).toEqual([{ page: 3, scale: 1 }]));
+  });
+
+  it('cancels a page’s paint when it leaves the view before it is drawn, and paints it again on its return (FR-065a)', async () => {
+    slowPages = new Set([2]);
+    openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(3) });
+    mount(props());
+    await waitFor(() => expect(pages()).toHaveLength(3));
+    act(() => show(pages()[1]!));
+    await waitFor(() => expect(signals).toHaveLength(1));
+    expect(signals[0]!.signal?.aborted).toBe(false);
+    act(() => hide(pages()[1]!));
+    expect(signals[0]!.signal?.aborted).toBe(true);
+    slowPages = new Set();
+    act(() => show(pages()[1]!));
+    await waitFor(() => expect(renders).toHaveLength(2));
+  });
+
+  it('draws a resize’s run of zooms once, sharp at the last, when the zoom has been still (FR-065b)', async () => {
+    openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(1) });
+    const { host } = mount(props(), '1');
+    await waitFor(() => expect(pages()).toHaveLength(1));
+    act(() => show(pages()[0]!));
+    await waitFor(() => expect(renders).toEqual([{ page: 1, scale: 1 }]));
+    for (const zoom of ['1.1', '1.2', '1.3', '1.4']) {
+      host.style.setProperty('--throng-zoom-preview', zoom);
+      await sleep(PDF_ZOOM_SETTLE_MS / 4);
+    }
+    // The page box follows every step at once — the drawn bitmap stretches to it until the zoom is still.
+    await waitFor(() => expect(pages()[0]!.style.width).toBe('840px'));
+    expect(renders).toEqual([{ page: 1, scale: 1 }]);
+    await waitFor(() => expect(renders).toEqual([{ page: 1, scale: 1 }, { page: 1, scale: 1.4 }]));
+    await sleep(PDF_ZOOM_SETTLE_MS * 2);
+    expect(renders).toHaveLength(2);
+  });
+
+  it('shows a spinner in a page still drawing once the delay has passed, and takes it away when drawn (FR-065c)', async () => {
+    slowPages = new Set([1]);
+    openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(2) });
+    mount(props());
+    await waitFor(() => expect(pages()).toHaveLength(2));
+    act(() => show(pages()[0]!));
+    await waitFor(() => expect(releases.has(1)).toBe(true));
+    await sleep(PDF_PAGE_SPINNER_DELAY_MS / 2);
+    expect(screen.queryByTestId('pdf-page-loading-p1-1')).toBeNull();
+    const spinner = await screen.findByTestId('pdf-page-loading-p1-1');
+    expect(pages()[0]!.contains(spinner)).toBe(true);
+    expect(spinner.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('Loading page 1');
+    act(() => releases.get(1)!());
+    await waitFor(() => expect(screen.queryByTestId('pdf-page-loading-p1-1')).toBeNull());
+  });
+
+  it('shows no spinner for a page drawn within the delay (FR-065c)', async () => {
+    openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(2) });
+    mount(props());
+    await waitFor(() => expect(pages()).toHaveLength(2));
+    act(() => show(pages()[0]!));
+    await waitFor(() => expect(renders).toHaveLength(1));
+    await sleep(PDF_PAGE_SPINNER_DELAY_MS * 2);
+    expect(screen.queryByTestId('pdf-page-loading-p1-1')).toBeNull();
+  });
+
+  it('shows no spinner over a page already drawn while it redraws at a new zoom (FR-065c)', async () => {
+    openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(1) });
+    const { host } = mount(props(), '1');
+    await waitFor(() => expect(pages()).toHaveLength(1));
+    act(() => show(pages()[0]!));
+    await waitFor(() => expect(renders).toHaveLength(1));
+    slowPages = new Set([1]);
+    host.style.setProperty('--throng-zoom-preview', '2');
+    await waitFor(() => expect(renders).toHaveLength(2));
+    await sleep(PDF_PAGE_SPINNER_DELAY_MS * 2);
+    expect(screen.queryByTestId('pdf-page-loading-p1-1')).toBeNull();
   });
 });

@@ -172,6 +172,13 @@ providers' options and shipped values.
 - Defects, no spec change: FR-012's limit is not applied to a parented SVG or HTML preview's unsaved text;
   FR-055's `![[x.png]]` / `![[x.svg|200]]` are not framed, and must be framed by the same code as
   `![alt](x.png)`; SC-003 and SC-004 have no test measuring them.
+- Q (17:57): "Can we reduce the juddering / make resizing and scrolling smooth for PDFs? If we scroll a long PDF,
+  can you use loading spinners to indicate that pages are loading in once settled?" → FR-065a – FR-065c. Measured
+  first, over a 500-page PDF: a steady scroll held every frame (no long task, no layout shift); a splitter-like resize
+  under Fit dropped 13 frames in 2.6 s, because every width refitted the zoom and every zoom cleared and repainted
+  every page in view (175 canvas resets) and rebuilt its text. *(The delays are derived: the scroll settle under the
+  gap between wheel notches, the zoom settle the panels' own resize settle (075 SC-006), the spinner delay above a
+  text page's draw.)*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -739,6 +746,19 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
 - **FR-065**: Pages MUST render on demand as they approach the viewport, so opening and scrolling a PDF
   of several hundred pages keeps the window responsive (Principle XII; SC-004). The renderer MUST load
   only when a PDF preview first needs it (054 FR-047's rule).
+- **FR-065a**: *(2026-11-20.)* Scrolling a PDF MUST draw nothing while it moves: a page the scroll brings near is
+  painted once scrolling has been still for 100 ms, and a page that leaves the view before its paint finishes has
+  that paint cancelled (painted again when it returns). Every page keeps its placeholder's size while pages paint,
+  so nothing below a page moves.
+- **FR-065b**: *(2026-11-20, refining FR-062's "rather than stretching a bitmap".)* A zoom change — a resize while
+  at Fit, a zoom step — MUST resize every page at once, the page's existing drawing stretching to it, and draw
+  the pages sharp at the new scale once the zoom has been still for the panels' resize settle (150 ms, 075
+  SC-006): one sharp redraw per resize, not one per width. A page being redrawn MUST keep its old drawing until
+  the new one is finished — never blank.
+- **FR-065c**: *(2026-11-20.)* A page with nothing drawn yet MUST show the app's loading spinner, centred in its
+  placeholder, from 150 ms after its paint starts (after scrolling settles, FR-065a) until it is drawn; a page
+  drawn within 150 ms shows none, and a page already drawn shows none while it redraws (FR-065b). The spinner
+  takes the theme's muted text colour and holds still for a reader who asked for reduced motion.
 - **FR-066**: Nothing in a PDF MUST execute or fetch: no embedded JavaScript, no open or page actions,
   no form submission or reset, no launch / file / sound / movie actions, no remote resource. An
   internal link MUST scroll to its target page; an external `http:`/`https:`/`mailto:` link MUST follow

@@ -113,6 +113,18 @@
   height: 100%;
 }
 
+/* 074 FR-065c — a page with nothing drawn yet, once its paint has taken longer than the spinner's delay. The glyph
+   holds still for a reader who asked for less motion (`busy-glyph.css`). */
+.preview-pdf__page-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--throng-colour-textMuted);
+}
+
 /*
  * 074 FR-068a — PDF.js's text layer (its own viewer's `.textLayer` rules, `pdfjs-dist/web/pdf_viewer.css`): spans laid
  * over the canvas at the page's scale, transparent so the canvas shows, selectable so the reader can copy. Sized by

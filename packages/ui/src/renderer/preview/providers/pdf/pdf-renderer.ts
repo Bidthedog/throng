@@ -31,8 +31,12 @@ import { loadPdfJs } from '../../pdf-library.js';
 export interface PdfPage {
   readonly width: number;
   readonly height: number;
-  /** Paint the page into `canvas` at `scale` CSS px per PDF px, times `pixelRatio` device pixels per CSS px. */
-  render(canvas: HTMLCanvasElement, scale: number, pixelRatio: number): Promise<void>;
+  /**
+   * Paint the page into `canvas` at `scale` CSS px per PDF px, times `pixelRatio` device pixels per CSS px. It is
+   * drawn off screen and copied in once finished, so `canvas` keeps its last drawing until then (074 FR-065b).
+   * Aborting `signal` cancels the paint, which rejects, and leaves `canvas` as it was (FR-065a).
+   */
+  render(canvas: HTMLCanvasElement, scale: number, pixelRatio: number, signal?: AbortSignal): Promise<void>;
   /** The page's followable links, rectangles in CSS px at scale 1 from the page's top-left. */
   links(): Promise<readonly PdfLink[]>;
   /**
@@ -111,11 +115,26 @@ export async function openPdf(bytes: Uint8Array): Promise<PdfOpenResult> {
       return {
         width: base.width,
         height: base.height,
-        async render(canvas, scale, pixelRatio) {
+        async render(canvas, scale, pixelRatio, signal) {
+          if (signal?.aborted) throw new DOMException('The page paint was cancelled', 'AbortError');
           const viewport = page.getViewport({ scale: scale * pixelRatio });
-          canvas.width = Math.max(1, Math.floor(viewport.width));
-          canvas.height = Math.max(1, Math.floor(viewport.height));
-          await page.render({ canvas, viewport, annotationMode: lib.AnnotationMode.ENABLE }).promise;
+          // Off screen: resizing the shown canvas clears it, and it would stay blank until the paint finished.
+          const off = document.createElement('canvas');
+          off.width = Math.max(1, Math.floor(viewport.width));
+          off.height = Math.max(1, Math.floor(viewport.height));
+          const task = page.render({ canvas: off, viewport, annotationMode: lib.AnnotationMode.ENABLE });
+          const cancel = (): void => task.cancel();
+          signal?.addEventListener('abort', cancel, { once: true });
+          try {
+            await task.promise;
+          } finally {
+            signal?.removeEventListener('abort', cancel);
+          }
+          if (signal?.aborted) throw new DOMException('The page paint was cancelled', 'AbortError');
+          // The swap: cleared and drawn in one task, so no frame shows the canvas empty.
+          canvas.width = off.width;
+          canvas.height = off.height;
+          canvas.getContext('2d')?.drawImage(off, 0, 0);
         },
         async renderText(container, scale) {
           const viewport = page.getViewport({ scale });
