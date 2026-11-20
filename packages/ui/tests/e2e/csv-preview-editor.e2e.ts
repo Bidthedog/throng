@@ -49,7 +49,10 @@ async function previewFromTree(win: Page, file: string): Promise<string> {
     .locator('[data-testid^="panel-title-"]')
     .filter({ hasText: new RegExp(`^${title.replace(/\./g, '\\.')}$`) })
     .first();
-  await expect(heading).toBeVisible({ timeout: 8000 });
+  // Attached, not visible: the preview opens beside the panels already there, and in a window of 1024 px or less (a
+  // hosted macOS runner's) each panel is too narrow for its header to show any of its title — the title box is 0 px
+  // wide, which Playwright reports as hidden although the panel is open and showing the file.
+  await expect(heading).toBeAttached({ timeout: 8000 });
   const testId = await heading.getAttribute('data-testid');
   if (!testId) throw new Error(`previewFromTree(${file}): no preview panel titled ${title}`);
   return testId.replace('panel-title-', '');
