@@ -1,6 +1,26 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 7.1.0 → 7.2.0
+Bump rationale: MINOR — one additive rule from the maintainer (2026-11-20): "default actions in any dialog or modal
+                should be highlighted in a different colour". Development Workflow & Quality Gates › Action controls
+                gains "Default dialog actions", beside the existing dialog-decision-buttons exception. No guarantee is
+                withdrawn.
+Modified principles: none.
+Modified sections: Development Workflow & Quality Gates › Action controls (new "Default dialog actions" sub-rule).
+Added sections: none. Removed sections: none.
+Audit (2026-11-20): the confirmation model (confirm-dialog.tsx, `.modal__confirm`), the Preferences name dialog and
+                the key-capture modal (`capture-modal__btn--primary`) already comply. One known gap, the CSV cell
+                dialog's Save (packages/ui/src/renderer/grid/cell-dialog.tsx), drawn as a Cancel-type button, is
+                fixed by spec 073 in the same change.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no control styling; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks registered.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 7.0.0 → 7.1.0
 Bump rationale: MINOR — two additive rules from the maintainer's spec 076 review (2026-11-19), and one bounded exception
                 to the PR-CI gate (Static analysis & linting): a pull request whose every changed file is one no gate reads
@@ -3460,6 +3480,13 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
     Their label *is* the statement of the consequence being consented to; replacing it with an icon
     would remove the very information the dialog exists to convey. Their colours MUST still derive
     from theme tokens.
+  - **Default dialog actions.** A dialog or modal that offers decision buttons MUST mark exactly one
+    as its **default action** — the button Enter performs (or the chord the dialog states for it, such
+    as Ctrl+Enter where the dialog holds an editor), which takes the consequence the dialog exists
+    for — by drawing it in the theme's **Confirm** button type (the `confirmButton*` tokens), or the
+    **Destroy** type when that default is destructive, so it stands apart from the other buttons'
+    **Cancel** type at a glance. Colours MUST come from theme tokens only. A dialog whose only button
+    dismisses it has no default and marks none (v7.2.0).
   - **Toast controls.** Every button a notice offers — a toast, or its entry in the Notifications
     panel — MUST sit in the card's single control group at its **top-right**, to the **left** of Copy
     and Dismiss, read right to left as Dismiss, Copy, then the notice's own controls. A button MUST NOT
@@ -3515,7 +3542,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 7.1.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-19
+**Version**: 7.2.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-20
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
