@@ -37,6 +37,17 @@
   overflow: hidden;
   border-right: 1px solid var(--throng-colour-border);
   background: var(--throng-colour-sidebarBg);
+  /*
+   * FR-069 — every row the same height on every platform. Left at normal, each label, select and box takes its
+   * height from the font's own metrics: Segoe UI on Windows stands taller than Linux's fallback, and the pane that
+   * fits at the window's minimum size there overflowed by 10 px on Windows (pipeline 44762998591).
+   */
+  line-height: 1.25;
+}
+
+/* Form controls take line-height: normal from the browser's own stylesheet, whatever the pane says. */
+.print-preview__controls :is(input, select, button) {
+  line-height: inherit;
 }
 
 .print-preview__field {
