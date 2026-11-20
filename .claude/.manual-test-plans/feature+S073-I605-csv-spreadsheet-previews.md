@@ -9,7 +9,7 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 | MT-03 | One document shared with the text editor | untested | | | |
 | MT-04 | Clipboard and column widths in the grid | needs retest | | | failed: If I mouse-over a column or row and double click, I would like the column or row to expand / collapse to fit the text that is in it. |
 | MT-05 | Workbook previews | untested | | | |
-| MT-06 | Open-in settings and turning a provider off | needs retest | | | failed: Open a CSV, customise column sizes, open another CSV: it replaces the first. Open the original again: it opens a new panel. CSV panels should reuse like Markdown previews. |
+| MT-06 | Open-in settings and turning a provider off | needs retest | | | failed: Opening a CSV in preview editor mode, then opening another, will use the same panel. However, if you open a CSV, then open its editor (using the status bar button), click back into the original CSV, then click BACK to the original CSV, two CSV previews will open. Only one CSV preview should exist at a time, unless the user explicitly opens another preview editor. |
 | MT-07 | Go to Row, Line and Page | untested | | | |
 | MT-08 | Wrapping cells | untested | | | |
 | MT-09 | Locking the first row and column | untested | | | |
