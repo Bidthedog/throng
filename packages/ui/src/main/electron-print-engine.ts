@@ -24,6 +24,7 @@ import {
   type PrintOptions,
   type PrintSendResult,
 } from '@throng/core';
+import { printRequestAllowed } from './print-request-filter.js';
 
 /** A partition of its own, so the host's request filter governs nothing else. */
 const PRINT_PARTITION = 'throng-print-host';
@@ -71,10 +72,7 @@ export class ElectronPrintEngine implements IPrintEngine {
       this.deps.registerPreviewRoute?.(s);
       s.webRequest.onBeforeRequest((details, callback) => {
         const host = [...this.hosts.values()].find((h) => h.window.webContents.id === details.webContentsId);
-        const url = details.url;
-        const ok =
-          host !== undefined &&
-          (url === pathToFileURL(host.file).href || host.allowed.has(url) || url.startsWith('data:') || url.startsWith('throng-preview:') || this.deps.isBundledAsset(url));
+        const ok = host !== undefined && printRequestAllowed(details.url, { fileUrl: pathToFileURL(host.file).href, allowed: host.allowed }, this.deps.isBundledAsset);
         callback({ cancel: !ok });
       });
     }

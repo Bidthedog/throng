@@ -57,7 +57,7 @@ import { firstBinding } from '@throng/core';
 import { useKeybindings } from '../../config/config-store.js';
 import { zoomTitles } from '../zoom-titles.js';
 import { registerDiagramActions } from './diagram-actions.js';
-import { rasteriseSvg } from './rasterise.js';
+import { rasteriseSvg, rasterSourceOf, registerRasterSource } from './rasterise.js';
 import { createPortal } from 'react-dom';
 import { IconButton } from '../../common/icon-button.js';
 import { ZoomIndicator } from '../../workspace/zoom-indicator.js';
@@ -499,6 +499,10 @@ export function DiagramFrame({
     (layer: HTMLDivElement | null): void => {
       if (layer === null) return;
       const drawn = svg.cloneNode(true) as SVGSVGElement;
+      // 075 FR-066 (the maintainer, 2026-11-20: "SVG Print preview does not show anything") — the clone is what is
+      // shown, so it is what Print… and Copy read: it carries the picture's own bytes, as the wrapper it copies does.
+      const read = rasterSourceOf(svg);
+      if (read !== undefined) registerRasterSource(drawn, read);
       drawn.setAttribute('width', String(natural.width));
       drawn.setAttribute('height', String(natural.height));
       drawn.style.removeProperty('max-width');
