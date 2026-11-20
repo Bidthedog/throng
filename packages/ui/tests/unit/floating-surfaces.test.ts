@@ -41,6 +41,11 @@ function walk(dir: string, match: RegExp): string[] {
  * Registered, not merely listed: the value is the ANSWER to "does this flip and clamp, and where?".
  */
 const REGISTERED: Readonly<Record<string, string>> = {
+  // 073 — both sit INSIDE the grid's own scroller or body, positioned against it, never over the page.
+  '.data-grid__editor':
+    'grid/data-grid.tsx — laid over its cell inside the grid canvas; it scrolls with the cell and cannot leave the panel',
+  '.preview-grid-width':
+    'grid/grid.css — anchored to the top-right corner of the grid body inside the panel; nothing to flip or clamp',
   '.context-menu':
     'workspace/context-menu.tsx — measures and flips X/Y against the viewport; submenus flip too',
   '.ctl__font-list':
@@ -123,6 +128,12 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — 054 FR-046l / FR-032: a diagram\'s focus ring and its Find in Files reveal mark (preview/diagram/diagram.css), ::after / ::before overlays inset over their own diagram box, which clips them (overflow: hidden), `pointer-events: none`; anchored to nothing, so nothing to flip away from',
   '.preview-diagram-host--revealed':
     'chrome — 054 FR-032\'s reveal mark, selected through the host it marks (`.preview-diagram-host--revealed .preview-diagram-frame::before`): the same inset overlay over its own diagram box as `.preview-diagram-frame` above',
+  '.preview-pdf__toolbar':
+    'chrome — 074 FR-062a\'s PDF view controls (preview/providers/pdf/pdf-body.tsx): pinned to the top-left INSIDE the PDF view, outside its scrolling pages; anchored to nothing that moves, so nothing to flip away from',
+  '.preview-pdf__text':
+    'chrome — 074 FR-068a\'s selectable text layer (PDF.js TextLayer): inset over its own page canvas, clamped to that page by construction; anchored to nothing, so nothing to flip away from',
+  '.preview-pdf__link':
+    'chrome — 074 FR-066\'s link hotspots: inset over their own page at the link\'s rectangle, clamped to that page by construction; anchored to nothing, so nothing to flip away from',
   '.zoom-indicator':
     'chrome — #486 / 054 FR-046n\'s zoom percentage (workspace/zoom-indicator.tsx): pinned to the top-right INSIDE the panel or diagram box that zoomed, which clips it, `pointer-events: none`, no controls; anchored to nothing that moves, so nothing to flip away from',
   '.title-tooltip':
@@ -133,8 +144,10 @@ const REGISTERED: Readonly<Record<string, string>> = {
 };
 
 /** A rule that leaves the flow AND lifts above the page is a floating surface, whatever it is called. */
-function floatingSelectors(css: string): string[] {
+function floatingSelectors(source: string): string[] {
   const found = new Set<string>();
+  // Comments first: a file name in one (`pdf.css`, `diagram-frame.tsx`) would otherwise read as a class selector.
+  const css = source.replace(/\/\*[\s\S]*?\*\//g, '');
   // Crude but honest block splitting: selectors up to `{`, declarations up to `}`.
   for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selector = (match[1] ?? '').trim();

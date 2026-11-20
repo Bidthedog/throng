@@ -45,11 +45,12 @@ const image: PreviewProviderDescriptor = {
 const REGISTRY = registryOf(notes, sketch, image);
 
 describe('Open previews in is per provider (FR-051 – FR-053)', () => {
-  it('ships lastActive on every text provider and no top-level leaf', () => {
+  // 074 FR-010 — every provider, binary included, now has its own Open previews in.
+  it('ships lastActive on every provider and no top-level leaf', () => {
     const d = previewSettingsDefaults(REGISTRY);
     expect(d.providers.notes?.openTarget).toBe('lastActive');
     expect(d.providers.sketch?.openTarget).toBe('lastActive');
-    expect('openTarget' in (d.providers.image ?? {})).toBe(false);
+    expect(d.providers.image?.openTarget).toBe('lastActive');
     expect('openTarget' in d).toBe(false);
   });
 
@@ -103,8 +104,11 @@ describe('the Previews descriptors (FR-050 – FR-052)', () => {
       'editor.previews.providers.notes.openTarget',
       'editor.previews.providers.notes.showOutline',
     ]);
+    // 074 FR-016 — a binary provider has Open <files> in and Open previews in too (supersedes 044 FR-051).
     expect(descriptors.filter((d) => d.subsection === 'Image').map((d) => d.key)).toEqual([
       'editor.previews.providers.image.enabled',
+      'editor.previews.providers.image.defaultOpenAction',
+      'editor.previews.providers.image.openTarget',
     ]);
   });
 
@@ -158,7 +162,8 @@ describe('what ships (FR-005, FR-041, FR-050)', () => {
       kind: 'text',
     });
     expect(SHIPPED_PREVIEW_PROVIDERS.forPath('D:/p/flow.MMD')?.id).toBe('mermaid');
-    expect(SHIPPED_PREVIEW_PROVIDERS.list().map((p) => p.id)).toEqual(['markdown', 'mermaid']);
+    // 073 adds CSV and Spreadsheet; 074 FR-001 — the four media providers follow.
+    expect(SHIPPED_PREVIEW_PROVIDERS.list().map((p) => p.id)).toEqual(['markdown', 'mermaid', 'csv', 'spreadsheet', 'image', 'svg', 'pdf', 'html']);
   });
 
   it('gives Markdown a Render Mermaid diagrams toggle, on by default', () => {
@@ -170,18 +175,20 @@ describe('what ships (FR-005, FR-041, FR-050)', () => {
       SETTINGS_METADATA.filter((d) => d.subgroup === 'Previews' && d.subsection === name).map((d) => d.label);
     expect(inSubsection('Markdown')).toEqual([
       'Markdown: Enabled',
-      'Markdown: Default open action',
+      // 074 FR-017 — renamed from "Markdown: Default open action".
+      'Open Markdown files in',
       'Markdown: Open previews in',
       'Markdown: Render Mermaid diagrams',
+      'Markdown: Typeset math',
       'Markdown: Load remote images',
       'Markdown: Show front matter',
       'Markdown: Preview gutter',
-      'Markdown: Heading jump scroll duration (ms)',
+      'Markdown: Heading jump scroll duration',
       'Markdown sections open',
     ]);
     expect(inSubsection('Mermaid')).toEqual([
       'Mermaid: Preview .mmd files',
-      'Mermaid: Default open action',
+      'Open Mermaid files in',
       'Mermaid: Open previews in',
     ]);
   });

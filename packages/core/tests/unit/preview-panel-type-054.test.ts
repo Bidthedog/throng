@@ -77,7 +77,7 @@ describe('the title falls back to the type label (FR-005)', () => {
 
   it('a preview with a file is still named after it', () => {
     expect(panelDisplayTitle(preview({ filePath: 'D:/p/a.md' }), { previewTypeLabel: 'Markdown Preview' })).toBe(
-      'a.md - Preview',
+      'a.md - Markdown Preview',
     );
   });
 });

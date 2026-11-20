@@ -127,6 +127,33 @@ describe('a panel that is not an editor (FR-070)', () => {
   });
 });
 
+describe('the CSV Preview Editor (073 FR-035a)', () => {
+  it('shows the same Save and Save As controls and separator as an editor, with the same tooltips', async () => {
+    const m = await mountMarkdownPreview('a,b\n1,2\n', 'D:/proj/data.csv', { providerId: 'csv' });
+    const save = await screen.findByTestId(`panel-save-${m.id}`);
+    const saveAs = screen.getByTestId(`panel-save-as-${m.id}`);
+    expect(screen.getByTestId(`panel-save-separator-${m.id}`)).toBeTruthy();
+    expect(save.getAttribute('title')).toBe(`Save (${firstBinding(DEFAULT_KEYBINDINGS, 'editor.save')})`);
+    expect(saveAs.getAttribute('title')).toBe(`Save As (${firstBinding(DEFAULT_KEYBINDINGS, 'editor.saveAs')})`);
+    m.unmount();
+  });
+
+  it('Save As asks for a location through the editor\'s own dialog, and cancelling saves nothing', async () => {
+    const m = await mountMarkdownPreview('a,b\n1,2\n', 'D:/proj/data.csv', { providerId: 'csv' });
+    const choose = vi.fn(async () => null);
+    const gridSave = vi.fn(async () => ({ ok: true }));
+    const throng = window.throng as unknown as { editor?: Record<string, unknown>; preview?: Record<string, unknown> };
+    throng.editor = { ...(throng.editor ?? {}), chooseSavePath: choose };
+    throng.preview = { ...(throng.preview ?? {}), gridSave };
+    // The body is loaded lazily and registers the save actions when it mounts: wait for the grid first.
+    await screen.findByTestId(`csv-grid-${m.id}`, undefined, { timeout: 5000 });
+    fireEvent.click(await screen.findByTestId(`panel-save-as-${m.id}`));
+    await waitFor(() => expect(choose).toHaveBeenCalledWith({ defaultDir: 'D:/proj', defaultName: 'data.csv' }));
+    expect(gridSave).not.toHaveBeenCalled();
+    m.unmount();
+  });
+});
+
 describe('what they do (FR-071)', () => {
   it('Save runs the same editor action the chord and the menu run', async () => {
     await mountWithHeader();

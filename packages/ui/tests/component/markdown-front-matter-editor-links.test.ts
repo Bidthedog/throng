@@ -233,7 +233,7 @@ describe('in a mounted preview (FR-132, FR-131)', () => {
   const BINARY = { action: 'refuse', reason: 'binary' };
 
   async function mountWith(settings: Record<string, unknown>): Promise<MountedPreviewWindow> {
-    const text = `${doc('logo: /img/logo.png', 'at: ./test.ts:3', 'phone: tel:+441234567890')}# Title`;
+    const text = `${doc('logo: /img/logo.zip', 'at: ./test.ts:3', 'phone: tel:+441234567890')}# Title`;
     m = await mountMarkdownPreview(text, `${ROOT}/README.md`, {
       settings,
       extras: [createElement(EditorOpenListener, { key: 'open' })],
@@ -242,12 +242,12 @@ describe('in a mounted preview (FR-132, FR-131)', () => {
     m.links.open.mockResolvedValue({ ok: true });
     m.links.follow.mockResolvedValue({
       kind: 'openInThrong',
-      link: { path: `${ROOT}/img/logo.png`, kind: 'file', inProject: true, executable: false, preview: 'none' },
+      link: { path: `${ROOT}/img/logo.zip`, kind: 'file', inProject: true, executable: false, preview: 'none' },
     });
     const linkUri = { openExternal: vi.fn() };
     Object.assign(window.throng as object, { linkUri });
     Object.assign((window.throng as unknown as { editor: object }).editor, { load: () => new Promise(() => {}) });
-    await screen.findByText('/img/logo.png', {}, COLD);
+    await screen.findByText('/img/logo.zip', {}, COLD);
     return m;
   }
 
@@ -260,17 +260,17 @@ describe('in a mounted preview (FR-132, FR-131)', () => {
 
   it('a link to a binary file, with the preference on, goes to the OS default program', async () => {
     const p = await mountWith({ explorer: { openUnsupportedInOs: true } });
-    fireEvent.click(screen.getByText('/img/logo.png'), { ctrlKey: true });
+    fireEvent.click(screen.getByText('/img/logo.zip'), { ctrlKey: true });
     await waitFor(() => expect(p.links.open).toHaveBeenCalledTimes(1));
     expect(p.links.follow).toHaveBeenCalledWith(
-      expect.objectContaining({ text: '/img/logo.png', kind: 'detectedPath', baseDirectory: ROOT, panelId: p.id }),
+      expect.objectContaining({ text: '/img/logo.zip', kind: 'detectedPath', baseDirectory: ROOT, panelId: p.id }),
     );
-    expect(p.links.open.mock.calls[0]![0]).toMatchObject({ text: '/img/logo.png' });
+    expect(p.links.open.mock.calls[0]![0]).toMatchObject({ text: '/img/logo.zip' });
   });
 
   it('with the preference off the editor is asked, and the OS is not', async () => {
     const p = await mountWith({ explorer: { openUnsupportedInOs: false } });
-    fireEvent.click(screen.getByText('/img/logo.png'), { ctrlKey: true });
+    fireEvent.click(screen.getByText('/img/logo.zip'), { ctrlKey: true });
     await waitFor(() => expect(p.links.follow).toHaveBeenCalledTimes(1));
     await act(async () => {
       await new Promise((r) => setTimeout(r, 20));

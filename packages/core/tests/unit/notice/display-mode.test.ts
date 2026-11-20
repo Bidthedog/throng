@@ -74,14 +74,22 @@ describe('the shipped defaults (FR-021b to FR-021d, FR-026c, FR-031d)', () => {
     expect(TOAST_WIDTH_DEFAULT_PX).toBe(520);
   });
 
+  /*
+   * 077 FR-016 supersedes 030 FR-010's "an out-of-range number resolves to the default" for the PARSE: since 031 the
+   * bounds guard runs before it on every read (`settings-read.ts`) and moves such a number to the nearer bound, so the
+   * parse's own range check never fired in the app. It keeps a number as it is; only what is no number takes the default.
+   */
   it.each([
-    ['below the minimum', 299],
-    ['above the maximum', 801],
     ['not a number', 'wide'],
     ['not finite', Number.POSITIVE_INFINITY],
     ['absent', undefined],
-  ])('resolves a toastWidthPx that is %s to the 520 default, as the other numeric preferences do (030 FR-010)', (_l, toastWidthPx) => {
+  ])('resolves a toastWidthPx that is %s to the 520 default', (_l, toastWidthPx) => {
     expect(parseNotificationSettings({ toastWidthPx }).toastWidthPx).toBe(520);
+  });
+
+  it('keeps an out-of-range toastWidthPx as it is, for the bounds guard (077 FR-016)', () => {
+    expect(parseNotificationSettings({ toastWidthPx: 299 }).toastWidthPx).toBe(299);
+    expect(parseNotificationSettings({ toastWidthPx: 801 }).toastWidthPx).toBe(801);
   });
 
   it('keeps a toastWidthPx inside 300–800, rounded to a whole pixel', () => {
@@ -94,8 +102,9 @@ describe('the shipped defaults (FR-021b to FR-021d, FR-026c, FR-031d)', () => {
     expect([NOTICE_HOVER_DELAY_MIN_MS, NOTICE_HOVER_DELAY_MAX_MS, NOTICE_HOVER_DELAY_DEFAULT_MS]).toEqual([0, 1500, 250]);
     expect(parseNotificationSettings({ hoverDelayMs: 0 }).hoverDelayMs).toBe(0);
     expect(parseNotificationSettings({ hoverDelayMs: 1500 }).hoverDelayMs).toBe(1500);
-    expect(parseNotificationSettings({ hoverDelayMs: 1501 }).hoverDelayMs).toBe(250);
-    expect(parseNotificationSettings({ hoverDelayMs: -1 }).hoverDelayMs).toBe(250);
+    // 077 FR-016 — the parse keeps a number as it is; the bounds guard, which runs first on every read, moves one past
+    // the descriptor's range to the nearer bound (`no-second-clamps-077.test.ts`).
+    expect(parseNotificationSettings({ hoverDelayMs: 1501 }).hoverDelayMs).toBe(1501);
     expect(parseNotificationSettings({ hoverDelayMs: 'soon' }).hoverDelayMs).toBe(250);
   });
 
@@ -145,14 +154,16 @@ describe('parseNotificationSettings — the contract truth table', () => {
   });
 
   it.each([
-    ['below the minimum', 999],
-    ['above the maximum', 30001],
-    ['negative', -1],
     ['NaN', Number.NaN],
     ['a string', '5000'],
     ['null', null],
-  ])('resolves an out-of-range toastDurationMs (%s) to 3000', (_l, toastDurationMs) => {
+  ])('resolves a toastDurationMs that is no number (%s) to 3000', (_l, toastDurationMs) => {
     expect(parseNotificationSettings({ toastDurationMs }).toastDurationMs).toBe(3000);
+  });
+
+  it('keeps an out-of-range toastDurationMs as it is, for the bounds guard (077 FR-016)', () => {
+    expect(parseNotificationSettings({ toastDurationMs: 999 }).toastDurationMs).toBe(999);
+    expect(parseNotificationSettings({ toastDurationMs: 30001 }).toastDurationMs).toBe(30001);
   });
 
   it('accepts the toast duration bounds and any integer between them, rounding a fraction', () => {
@@ -162,8 +173,8 @@ describe('parseNotificationSettings — the contract truth table', () => {
     expect(parseNotificationSettings({ toastDurationMs: 4000.6 }).toastDurationMs).toBe(4001);
   });
 
-  it.each([[19], [501], [0], [Number.NaN], ['100'], [null]])(
-    'resolves an out-of-range panelLimit (%p) to 100',
+  it.each([[Number.NaN], ['100'], [null]])(
+    'resolves a panelLimit that is no number (%p) to 100',
     (panelLimit) => {
       expect(parseNotificationSettings({ panelLimit }).panelLimit).toBe(100);
     },

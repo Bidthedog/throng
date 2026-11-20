@@ -131,7 +131,7 @@ describe('ResourceMonitorHost (055 T033, R1, R7)', () => {
     const s = make();
     s.host.start();
     const next = structuredClone(DEFAULT_APP_SETTINGS);
-    next.resourceMonitor.historyMinutes = 12;
+    next.resourceMonitor.historyMs = 12 * 60_000; // 077: stored in ms; the child is still told minutes
     s.setSettings(next);
     s.host.settingsChanged();
     expect(s.child().last('configure')).toEqual({ type: 'configure', intervalSeconds: 15, historyMinutes: 12 });

@@ -45,7 +45,8 @@ const testBinaryUnlisted: PreviewProviderDescriptor = {
   sourceMimeTypes: ['application/pdf'],
 };
 const registry = createPreviewProviderRegistry([
-  ...SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS,
+  // 074 ships Image and PDF providers claiming .png and .pdf; this test drives its own binary providers there.
+  ...SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.filter((p) => p.id !== 'image' && p.id !== 'pdf'),
   testBinary,
   testBinaryUnlisted,
 ]);

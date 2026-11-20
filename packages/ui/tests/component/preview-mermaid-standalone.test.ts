@@ -54,13 +54,13 @@ describe('a standalone Mermaid preview (FR-042, FR-043)', () => {
   it('draws the whole file as one diagram, in a frame with its view controls', async () => {
     await mount('graph TD; A-->B\n');
     await waitFor(() => expect(frame()?.querySelector('svg text')?.textContent).toBe('graph TD; A-->B'), COLD);
-    expect(within(frame()!).getByTitle('Fit diagram')).toBeInTheDocument();
+    expect(within(frame()!).getByTitle(/^Fit diagram \(/)).toBeInTheDocument();
     expect(mermaid.render).toHaveBeenCalledWith(expect.any(String), 'graph TD; A-->B\n');
   });
 
   it('offers no inline Maximise: the file is its one diagram, maximised from the panel header (FR-046f)', async () => {
     await mount('graph TD; A-->B\n');
-    await waitFor(() => expect(within(frame()!).getByTitle('Fit diagram')).toBeInTheDocument(), COLD);
+    await waitFor(() => expect(within(frame()!).getByTitle(/^Fit diagram \(/)).toBeInTheDocument(), COLD);
     expect(within(frame()!).queryByTitle('Enter Focus Mode')).toBeNull();
   });
 

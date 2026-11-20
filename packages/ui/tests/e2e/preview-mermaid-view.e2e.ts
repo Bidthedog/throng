@@ -85,7 +85,7 @@ async function previewFromEditor(win: Page, file: string, text: string): Promise
 /** Click a Mermaid file in the tree (its default open action is Preview); the preview panel's id. */
 async function previewFromTree(win: Page, file: string): Promise<string> {
   await win.getByTestId('file-explorer-tree').getByText(file, { exact: true }).click();
-  const title = `${file} - Preview`; // 054 FR-005a: the full file name
+  const title = `${file} - Mermaid Preview`; // 054 FR-005a: the full file name; 074 FR-104: its type
   const heading = win.locator('[data-testid^="panel-title-"]').filter({ hasText: new RegExp(`^${title.replace(/\./g, '\\.')}$`) }).first();
   await expect(heading).toBeVisible({ timeout: 8000 });
   const testId = await heading.getAttribute('data-testid');

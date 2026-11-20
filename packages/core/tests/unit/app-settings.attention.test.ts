@@ -18,7 +18,7 @@ describe('AppSettings attention settings (057)', () => {
       unseenOutput: false,
       outputQuiet: false,
     });
-    expect(t.quietSeconds).toBe(10);
+    expect(t.quietMs).toBe(10_000);
   });
 
   it('drops the unreleased delivery, toast and OS keys it no longer models (FR-111)', () => {
@@ -52,7 +52,7 @@ describe('AppSettings attention settings (057)', () => {
             unseenOutput: true,
             outputQuiet: true,
           },
-          quietSeconds: 60,
+          quietMs: 60_000,
         },
       },
     });
@@ -60,7 +60,7 @@ describe('AppSettings attention settings (057)', () => {
     expect(s.terminals.attention.enabled).toBe(false);
     expect(s.terminals.attention.signals.unseenOutput).toBe(true);
     expect(s.terminals.attention.signals.bell).toBe(false);
-    expect(s.terminals.attention.quietSeconds).toBe(60);
+    expect(s.terminals.attention.quietMs).toBe(60_000);
   });
 
   it('coerces booleans by typeof, so the string "false" is not read as off', () => {
@@ -79,9 +79,10 @@ describe('AppSettings attention settings (057)', () => {
     expect(parseAppSettings({ attention: { clearDelayMs: '900' } }).attention.clearDelayMs).toBe(1000);
     expect(parseAppSettings({ attention: { clearDelayMs: NaN } }).attention.clearDelayMs).toBe(1000);
     const q = (v: unknown) =>
-      parseAppSettings({ terminals: { attention: { quietSeconds: v } } }).terminals.attention.quietSeconds;
-    expect(q(30)).toBe(30);
-    expect(q('30')).toBe(10);
+      parseAppSettings({ terminals: { attention: { quietMs: v } } }).terminals.attention.quietMs;
+    expect(q(30_000)).toBe(30_000);
+    expect(q(30_000.4)).toBe(30_000);
+    expect(q('30000')).toBe(10_000);
   });
 
   it('falls back per field: one key set does not reset the others', () => {
@@ -89,7 +90,7 @@ describe('AppSettings attention settings (057)', () => {
     expect(s.terminals.attention.signals.bell).toBe(false);
     expect(s.terminals.attention.signals.processExited).toBe(true);
     expect(s.terminals.attention.enabled).toBe(true);
-    expect(s.terminals.attention.quietSeconds).toBe(10);
+    expect(s.terminals.attention.quietMs).toBe(10_000);
   });
 
   it('survives a defaults clone, and the clone shares nothing with the defaults', () => {

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 074 FR-044, FR-090 — every way an SVG can try to run script or load something. Previewed, it must draw its
+     static shapes and do nothing else: the blue circle, and the word "link" bottom left. The square draws EMPTY by
+     design — its stylesheet's remote paint (`rect { fill: url(https://…) }`) overrides its own fill and is refused,
+     which leaves it no paint at all. Every image in it is remote, local and missing, or inside the foreignObject. -->
+
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="200" height="100"
+     viewBox="0 0 200 100" onload="window.__throngHostileSvg = 'onload'">
+  <style>
+    @import url("https://hostile.invalid/import.css");
+    rect { fill: url("https://hostile.invalid/paint.svg#p"); }
+  </style>
+  <script>window.__throngHostileSvg = 'script';</script>
+  <script xlink:href="https://hostile.invalid/remote.js"/>
+  <rect x="10" y="10" width="80" height="80" fill="#3a7" onclick="window.__throngHostileSvg = 'click'"/>
+  <circle cx="150" cy="50" r="40" fill="#37a"/>
+  <image href="https://hostile.invalid/remote.png" x="0" y="0" width="10" height="10"/>
+  <image href="photo.png" x="10" y="0" width="10" height="10"/>
+  <a href="javascript:window.__throngHostileSvg='js-url'"><text x="10" y="98">link</text></a>
+  <foreignObject x="0" y="0" width="200" height="100">
+    <div xmlns="http://www.w3.org/1999/xhtml"><img src="https://hostile.invalid/foreign.png" onerror="window.__throngHostileSvg = 'foreign'"/></div>
+  </foreignObject>
+  <set attributeName="onmouseover" to="window.__throngHostileSvg = 'smil'"/>
+  <animate attributeName="href" to="javascript:window.__throngHostileSvg='animate'"/>
+</svg>

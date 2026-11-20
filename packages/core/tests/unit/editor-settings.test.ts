@@ -66,6 +66,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         copyFormat: 'rich',
         // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
         syncScroll: true,
+        syncHighlightMs: 1500,
         providers: {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           // 047 FR-032b/FR-042d — the preview gutter (shipped ON) and the heading-jump duration
@@ -77,6 +78,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
             openTarget: 'lastActive',
             // 054 FR-041 — Markdown's Render Mermaid diagrams, shipped ON.
             renderMermaid: true,
+            // 075 FR-042 — Typeset math, shipped on.
+            typesetMath: true,
             loadRemoteImages: true,
             showFrontMatter: true,
             gutter: true,
@@ -84,6 +87,14 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           },
           // 054 FR-005 — the shipped Mermaid provider (text, no own settings); ships Preview (MT-04).
           mermaid: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' },
+          // 073 — the CSV Preview Editor ships Preview (Q2); the binary Spreadsheet provider its own two leaves.
+          csv: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', editLongCellsInDialog: true, longCellThreshold: 50, multiLineCellsInDialog: true, wrapCells: false, lockFirstRow: false, lockFirstColumn: false },
+          spreadsheet: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', firstRowHeader: false, maxPreviewBytes: 25 * 1024 * 1024 },
+          // 074 FR-010, FR-011 — the four media providers, each shipping Throng Preview and its own size cap.
+          image: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 52428800, transparencyHatch: true },
+          svg: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 10485760, transparencyHatch: true },
+          pdf: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 104857600 },
+          html: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 10485760, safeSources: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'] },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
@@ -200,6 +211,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       // 054 FR-051 / FR-041 — the per-provider openTarget and Render Mermaid diagrams.
       openTarget: 'lastActive',
       renderMermaid: true,
+      typesetMath: true,
       loadRemoteImages: true,
       showFrontMatter: true,
       gutter: true,
@@ -211,7 +223,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
     expect(parseSettingsGuarded(off).value.editor.previews.syncScroll).toBe(false);
     expect(parseSettingsGuarded(off).value.editor.previews.providers.markdown.showFrontMatter).toBe(false);
     // The declared range reaches the preview leaves too, because their descriptors are in the registry.
-    expect(parseSettingsGuarded({ editor: { previews: { updateDelayMs: 99_999 } } }).value.editor.previews.updateDelayMs).toBe(5000);
+    // 077 research R6 — up to 10,000 ms can be typed; past it, the hard maximum.
+    expect(parseSettingsGuarded({ editor: { previews: { updateDelayMs: 99_999 } } }).value.editor.previews.updateDelayMs).toBe(10_000);
     // An unknown provider id survives the guarded read too, not just the bare parse.
     // 054 FR-005 — `mermaid` ships now, so the unknown id is a provider no build registers.
     expect(
@@ -314,6 +327,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         copyFormat: 'rich',
         // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
         syncScroll: true,
+        syncHighlightMs: 1500,
         providers: {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           // 047 FR-032b/FR-042d — the preview gutter (shipped ON) and the heading-jump duration
@@ -325,6 +339,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
             openTarget: 'lastActive',
             // 054 FR-041 — Markdown's Render Mermaid diagrams, shipped ON.
             renderMermaid: true,
+            // 075 FR-042 — Typeset math, shipped on.
+            typesetMath: true,
             loadRemoteImages: true,
             showFrontMatter: true,
             gutter: true,
@@ -332,6 +348,14 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           },
           // 054 FR-005 — the shipped Mermaid provider (text, no own settings); ships Preview (MT-04).
           mermaid: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' },
+          // 073 — the CSV Preview Editor ships Preview (Q2); the binary Spreadsheet provider its own two leaves.
+          csv: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', editLongCellsInDialog: true, longCellThreshold: 50, multiLineCellsInDialog: true, wrapCells: false, lockFirstRow: false, lockFirstColumn: false },
+          spreadsheet: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', firstRowHeader: false, maxPreviewBytes: 25 * 1024 * 1024 },
+          // 074 FR-010, FR-011 — the four media providers, at their shipped values.
+          image: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 52428800, transparencyHatch: true },
+          svg: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 10485760, transparencyHatch: true },
+          pdf: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 104857600 },
+          html: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 10485760, safeSources: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'] },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence

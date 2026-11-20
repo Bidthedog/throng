@@ -476,7 +476,7 @@ describe('DocumentLifecycleListener — changed and dirtyChanged on resets (T043
     ]);
   });
 
-  it('file deleted under a clean document: dirtyChanged(true) only', async () => {
+  it('file deleted under a clean document: changed (its file is gone, #696) + dirtyChanged(true)', async () => {
     const c = quiet();
     const path = join(root, 'a.txt');
     await writeFile(path, 'v1\n');
@@ -485,10 +485,10 @@ describe('DocumentLifecycleListener — changed and dirtyChanged on resets (T043
 
     c.markDeleted([path]);
 
-    expect(events).toEqual([{ kind: 'dirtyChanged', panelId: 'p1', dirty: true }]);
+    expect(events).toEqual([{ kind: 'changed', panelId: 'p1' }, { kind: 'dirtyChanged', panelId: 'p1', dirty: true }]);
   });
 
-  it('file restored holding the buffer text: dirtyChanged(false) only', async () => {
+  it('file restored holding the buffer text: changed (its file is back, #696) + dirtyChanged(false)', async () => {
     const c = quiet();
     const path = join(root, 'a.txt');
     await writeFile(path, 'v1\n');
@@ -498,14 +498,15 @@ describe('DocumentLifecycleListener — changed and dirtyChanged on resets (T043
 
     await c.markRestored([path]);
 
-    expect(events).toEqual([{ kind: 'dirtyChanged', panelId: 'p1', dirty: false }]);
+    expect(events).toEqual([{ kind: 'changed', panelId: 'p1' }, { kind: 'dirtyChanged', panelId: 'p1', dirty: false }]);
   });
 
   /*
    * Contract §3 (amended, adversarial review main item 1 + fix round 1 ruling): `changed` also fires once per
    * flip of `contentless` — the document has no content of its file to follow — text or no text, because a
    * parented preview shows FR-026's notice exactly while that holds. A document that was READ keeps its
-   * buffer when its file goes (FR-099) and never becomes contentless, so the cases above fire nothing extra.
+   * buffer when its file goes (FR-099) and never becomes contentless — but since #696 a flip of its file being
+   * gone (`fileMissing`, `unloadable`) fires `changed` too, because the preview shows the notice then as well.
    */
   it('a restore-time unloadable register whose file appears EMPTY: changed once (content to follow now), though no text changed', async () => {
     const c = quiet();
@@ -521,7 +522,7 @@ describe('DocumentLifecycleListener — changed and dirtyChanged on resets (T043
     expect(events).toEqual([{ kind: 'changed', panelId: 'p1' }]);
   });
 
-  it('a failed verify of a document that was read: nothing (it keeps content to follow)', async () => {
+  it('a failed verify of a document that was read: changed once (its file is gone, #696), no text or dirty change', async () => {
     const c = quiet();
     const dir = join(root, 'going');
     await mkdir(dir);
@@ -534,12 +535,12 @@ describe('DocumentLifecycleListener — changed and dirtyChanged on resets (T043
     await c.verifyPath('p1');
 
     expect(c.getContent('p1')).toMatchObject({ unloadable: true, contentless: false });
-    expect(events).toEqual([]);
+    expect(events).toEqual([{ kind: 'changed', panelId: 'p1' }]);
   });
 });
 
 describe('DocumentLifecycleListener — no dirtyChanged when nothing flipped (T043)', () => {
-  it('markDeleted on an already-dirty document', async () => {
+  it('markDeleted on an already-dirty document: changed (its file is gone, #696), no dirtyChanged', async () => {
     const c = quiet();
     const path = join(root, 'a.txt');
     await writeFile(path, 'v1\n');
@@ -549,10 +550,10 @@ describe('DocumentLifecycleListener — no dirtyChanged when nothing flipped (T0
 
     c.markDeleted([path]);
 
-    expect(events).toEqual([]);
+    expect(events).toEqual([{ kind: 'changed', panelId: 'p1' }]);
   });
 
-  it('markRestored when the restored file differs from the buffer', async () => {
+  it('markRestored when the restored file differs from the buffer: changed (its file is back, #696), no dirtyChanged', async () => {
     const c = quiet();
     const path = join(root, 'a.txt');
     await writeFile(path, 'v1\n');
@@ -564,10 +565,10 @@ describe('DocumentLifecycleListener — no dirtyChanged when nothing flipped (T0
     await c.markRestored([path]);
 
     expect(c.getContent('p1')?.dirty).toBe(true);
-    expect(events).toEqual([]);
+    expect(events).toEqual([{ kind: 'changed', panelId: 'p1' }]);
   });
 
-  it('a path coming back under a document holding the user’s own work', async () => {
+  it('a path coming back under a document holding the user’s own work: changed (its file is back, #696), no dirtyChanged', async () => {
     const c = quiet();
     const path = join(root, 'a.txt');
     await writeFile(path, 'v1\n');
@@ -579,7 +580,7 @@ describe('DocumentLifecycleListener — no dirtyChanged when nothing flipped (T0
     await c.verifyPath('p1');
 
     expect(c.getContent('p1')).toMatchObject({ text: 'mine\n', dirty: true, unloadable: false });
-    expect(events).toEqual([]);
+    expect(events).toEqual([{ kind: 'changed', panelId: 'p1' }]);
   });
 
   it('saving a clean document', async () => {
@@ -749,7 +750,7 @@ describe('DocumentLifecycleListener — a throwing listener never aborts the coo
       { panelId: 'p1', deleted: true, dirty: true, unloadable: true },
       { panelId: 'p2', deleted: true, dirty: true, unloadable: true },
     ]);
-    expect(listener.thrown).toEqual(['dirtyChanged', 'dirtyChanged']);
+    expect(listener.thrown).toEqual(['changed', 'dirtyChanged', 'changed', 'dirtyChanged']);
   });
 
   it('markRestored restores and relays every affected document', async () => {
@@ -774,7 +775,7 @@ describe('DocumentLifecycleListener — a throwing listener never aborts the coo
     ]);
     expect(c.getContent('p1')?.dirty).toBe(false);
     expect(c.getContent('p2')?.dirty).toBe(false);
-    expect(listener.thrown).toEqual(['dirtyChanged', 'dirtyChanged']);
+    expect(listener.thrown).toEqual(['changed', 'dirtyChanged', 'changed', 'dirtyChanged']);
   });
 
   it('a dispatched edit relays its change and does not throw back into the caller', async () => {

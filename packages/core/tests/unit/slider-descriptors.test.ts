@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SETTINGS_METADATA, THEME_METADATA, type FieldDescriptor } from '../../src/index.js';
+import { DEFAULT_APP_SETTINGS, SETTINGS_METADATA, THEME_METADATA, type FieldDescriptor } from '../../src/index.js';
 
 /**
  * 018 / FR-034, FR-035 — the slider's bounds and step are DECLARED, and the declaration is honest.
@@ -89,5 +89,70 @@ describe('SC-007 — the CONVERSE: bounds imply a slider', () => {
       offenders,
       `these declare bounds but not the control those bounds exist for:\n${offenders.join('\n')}`,
     ).toEqual([]);
+  });
+});
+
+/**
+ * 077 FR-001, FR-005, FR-010, FR-011, FR-013 (SC-001) — every numeric SETTING (theme tokens are not settings) declares
+ * the unit it is stored in and shown in; its slider is a grid the shipped default sits on and whose right end is its
+ * maximum; and its label leaves the unit to the control.
+ */
+describe('077 — every numeric setting is consistent', () => {
+  const NUMERIC = SETTINGS_METADATA.filter((x) => x.control === 'slider');
+  const defaultOf = (key: string): unknown =>
+    key.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], DEFAULT_APP_SETTINGS);
+
+  it('declares its stored unit and its display unit', () => {
+    for (const d of NUMERIC) {
+      expect(d.storedUnit, `${d.key} declares no stored unit`).toBeDefined();
+      expect(d.display, `${d.key} declares no display unit`).toBeDefined();
+    }
+  });
+
+  it('stores every size in bytes shown in MB, and every duration in ms', () => {
+    for (const d of NUMERIC) {
+      if (d.storedUnit === 'bytes') expect(d.display, d.key).toBe('MB');
+      if (/Ms$|Bytes$/.test(d.key)) expect(['ms', 'bytes'], d.key).toContain(d.storedUnit);
+      expect(d.key, `${d.key} is stored in a unit 077 retired`).not.toMatch(/(Seconds|Minutes|Kb|Mb)$/);
+    }
+  });
+
+  it('shows a duration in the unit its range calls for (FR-005)', () => {
+    for (const d of NUMERIC.filter((x) => x.storedUnit === 'ms')) {
+      const max = d.max!;
+      const want = d.display === 'days' ? 'days' : max <= 2000 ? 'ms' : max <= 600_000 ? 's' : 'min';
+      expect(d.display, `${d.key}: maximum ${max} ms`).toBe(want);
+    }
+  });
+
+  it('reaches its maximum: the range is a whole number of steps', () => {
+    for (const d of NUMERIC) {
+      const k = (d.max! - d.min!) / d.step!;
+      expect(Number.isInteger(k), `${d.key}: (${d.max} − ${d.min}) / ${d.step} = ${k}`).toBe(true);
+    }
+  });
+
+  it('ships a default that is one of its stops', () => {
+    for (const d of NUMERIC) {
+      const v = defaultOf(d.key);
+      expect(typeof v, `${d.key} has no numeric default`).toBe('number');
+      const k = ((v as number) - d.min!) / d.step!;
+      expect(Number.isInteger(k) && (v as number) <= d.max!, `${d.key}: default ${String(v)} is off its slider grid`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('declares hard bounds that contain the slider', () => {
+    for (const d of NUMERIC) {
+      if (d.hardMin !== undefined) expect(d.hardMin, d.key).toBeLessThanOrEqual(d.min!);
+      if (d.hardMax !== undefined) expect(d.hardMax, d.key).toBeGreaterThanOrEqual(d.max!);
+    }
+  });
+
+  it('leaves the unit out of its label (FR-013)', () => {
+    for (const d of NUMERIC) {
+      expect(d.label, d.key).not.toMatch(/\((ms|s|MB|KB|bytes|%|px|seconds|minutes|days)\)/i);
+    }
   });
 });

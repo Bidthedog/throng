@@ -27,7 +27,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { FieldDescriptor } from '@throng/core';
+import { formatGrouped, type FieldDescriptor } from '@throng/core';
 import { SettingControl } from '../../src/renderer/preferences/form-controls.js';
 
 /**
@@ -211,33 +211,147 @@ describe('committing and refusing (FR-036, FR-017)', () => {
     expect(onCommit).toHaveBeenCalledWith(1500);
   });
 
-  it('marks a non-numeric entry invalid and commits nothing', async () => {
+  /*
+   * 077 FR-008, FR-009 supersede the refusals these three cases asserted (018 FR-036, 044 T163e): a value is checked
+   * AS IT IS TYPED, the message names the bound while the user is still typing, and confirming a value past a bound
+   * stores that bound. Only text that is no number is refused, and confirming it puts the stored value back.
+   */
+  it('says a non-numeric entry is not a number while it is typed, and on Enter stores nothing and keeps it', async () => {
     const { user, onCommit } = renderControl(bounded, 900);
     await user.clear(field(bounded.key));
-    await user.type(field(bounded.key), 'not-a-number{Enter}');
-    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toBeVisible();
+    await user.type(field(bounded.key), 'not-a-number');
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent('Not a whole number');
+    await user.keyboard('{Enter}');
     expect(onCommit).not.toHaveBeenCalled();
+    // Never discarded (040 FR-007): the entry and its message stay until corrected, or Escape restores.
+    expect(field(bounded.key).value).toBe('not-a-number');
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent('Not a whole number');
+    await user.keyboard('{Escape}');
+    expect(field(bounded.key).value).toBe('900');
+    expect(screen.queryByTestId(`control-${bounded.key}-invalid`)).toBeNull();
   });
 
-  it('refuses a value above the declared maximum, leaving the last valid one standing', async () => {
+  it('names the maximum while a value above it is typed, and stores the maximum on Enter', async () => {
     const { user, onCommit } = renderControl(bounded, 900);
     await user.clear(field(bounded.key));
-    await user.type(field(bounded.key), '999999{Enter}');
-    expect(onCommit).not.toHaveBeenCalled();
-    // …and SAYS so. 044 T163e moved `tab-settings.e2e.ts`'s "a value outside a declared range is
-    // refused" here, and that test asserted the marker as well as the unchanged file: a refusal
-    // the user cannot see reads as the field ignoring them.
-    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toBeVisible();
+    await user.type(field(bounded.key), '999999');
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent(`Up to ${formatGrouped(3000)}`);
+    await user.keyboard('{Enter}');
+    expect(onCommit).toHaveBeenCalledWith(3000);
   });
 
-  it('refuses a value below the declared minimum, and says so', async () => {
-    // The E2E's second half: `tabs.maxNameLength` is the Tabs setting with a non-zero minimum, and
-    // typing under it was refused. The minimum here is 100, so 40 is below it and still a number.
+  it('names the minimum while a value below it is typed, and stores the minimum on Enter', async () => {
     const { user, onCommit } = renderControl(bounded, 900);
     await user.clear(field(bounded.key));
-    await user.type(field(bounded.key), '40{Enter}');
+    await user.type(field(bounded.key), '40');
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent(`At least ${formatGrouped(100)}`);
+    await user.keyboard('{Enter}');
+    expect(onCommit).toHaveBeenCalledWith(100);
+  });
+
+  it('restores the stored value on Escape', async () => {
+    const { user, onCommit } = renderControl(bounded, 900);
+    await user.clear(field(bounded.key));
+    await user.type(field(bounded.key), '1700{Escape}');
     expect(onCommit).not.toHaveBeenCalled();
-    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toBeVisible();
+    expect(field(bounded.key).value).toBe('900');
+  });
+});
+
+/**
+ * 077 — one numeric control for every setting: the slider and the value shown in the setting's display unit, the box
+ * holding the exact stored value, and a slider greyed — but still live — while the stored value is off its grid
+ * (FR-004, FR-005, FR-007, FR-008, FR-009). Grouped digits are built with `formatGrouped` (locale separator).
+ */
+const MiB = 1024 * 1024;
+const sizeCap: FieldDescriptor = {
+  key: 'editor.maxOpenFileBytes',
+  label: 'Max open file size',
+  description: '',
+  group: 'Editor',
+  control: 'slider',
+  storedUnit: 'bytes',
+  display: 'MB',
+  min: 5 * MiB,
+  max: 250 * MiB,
+  step: 5 * MiB,
+  hardMin: 1024,
+  hardMax: 2048 * MiB,
+};
+const quiet: FieldDescriptor = {
+  key: 'terminals.attention.quietMs',
+  label: 'Quiet time',
+  description: '',
+  group: 'Terminal',
+  control: 'slider',
+  storedUnit: 'ms',
+  display: 's',
+  min: 10_000,
+  max: 600_000,
+  step: 10_000,
+  hardMin: 1000,
+  hardMax: 3_600_000,
+};
+const value = (key: string): HTMLElement => screen.getByTestId(`control-${key}-value`);
+
+describe('077 — a size in MB, or exactly in bytes (US1)', () => {
+  it('shows the value in MB beside its slider and the exact bytes, grouped, in the box', () => {
+    renderControl(sizeCap, 10 * MiB);
+    expect(value(sizeCap.key)).toHaveTextContent(`${formatGrouped(10)} MB`);
+    expect(field(sizeCap.key).value).toBe(formatGrouped(10 * MiB));
+    expect(slider(sizeCap.key)).toHaveAttribute('aria-valuetext', `${formatGrouped(10)} MB`);
+    expect(slider(sizeCap.key)).not.toHaveAttribute('data-overridden', 'true');
+  });
+
+  it('stores an exact byte count typed in the box, and greys the slider, which stays live', async () => {
+    const { user, onCommit } = renderBound(sizeCap, 10 * MiB);
+    await user.clear(field(sizeCap.key));
+    await user.type(field(sizeCap.key), `${formatGrouped(12_345_678)}{Enter}`);
+    expect(onCommit).toHaveBeenLastCalledWith(12_345_678);
+    expect(slider(sizeCap.key)).toHaveAttribute('data-overridden', 'true');
+    expect(slider(sizeCap.key)).toBeEnabled();
+    expect(value(sizeCap.key)).toHaveTextContent(`${formatGrouped(11.77)} MB`);
+  });
+
+  it('takes a value past the slider maximum, up to the hard maximum, with the slider greyed at its end', async () => {
+    const { user, onCommit } = renderBound(sizeCap, 10 * MiB);
+    await user.clear(field(sizeCap.key));
+    await user.type(field(sizeCap.key), `${1024 * MiB}{Enter}`);
+    expect(onCommit).toHaveBeenLastCalledWith(1024 * MiB);
+    expect(slider(sizeCap.key)).toHaveAttribute('data-overridden', 'true');
+    expect(slider(sizeCap.key).value).toBe(String(250 * MiB));
+  });
+
+  it('un-greys the slider when it is moved, storing that stop', () => {
+    const { onCommit } = renderBound(sizeCap, 12_345_678);
+    expect(slider(sizeCap.key)).toHaveAttribute('data-overridden', 'true');
+    fireEvent.change(slider(sizeCap.key), { target: { value: String(20 * MiB) } });
+    fireEvent.pointerUp(slider(sizeCap.key));
+    expect(onCommit).toHaveBeenLastCalledWith(20 * MiB);
+    expect(slider(sizeCap.key)).not.toHaveAttribute('data-overridden', 'true');
+    expect(field(sizeCap.key).value).toBe(formatGrouped(20 * MiB));
+  });
+
+  it('names the hard maximum in bytes while typing, and stores it on Enter', async () => {
+    const { user, onCommit } = renderControl(sizeCap, 10 * MiB);
+    await user.clear(field(sizeCap.key));
+    await user.type(field(sizeCap.key), '999999999999');
+    expect(screen.getByTestId(`control-${sizeCap.key}-invalid`)).toHaveTextContent(`Up to ${formatGrouped(2048 * MiB)} bytes`);
+    await user.keyboard('{Enter}');
+    expect(onCommit).toHaveBeenCalledWith(2048 * MiB);
+  });
+});
+
+describe('077 — a duration in its own unit, or exactly in ms (US2)', () => {
+  it('shows seconds beside the slider and ms in the box, and greys the slider for an off-grid value', async () => {
+    const { user, onCommit } = renderBound(quiet, 10_000);
+    expect(value(quiet.key)).toHaveTextContent(`${formatGrouped(10)} s`);
+    expect(field(quiet.key).value).toBe(formatGrouped(10_000));
+    await user.clear(field(quiet.key));
+    await user.type(field(quiet.key), `${formatGrouped(45_500)}{Enter}`);
+    expect(onCommit).toHaveBeenLastCalledWith(45_500);
+    expect(value(quiet.key)).toHaveTextContent(`${formatGrouped(45.5)} s`);
+    expect(slider(quiet.key)).toHaveAttribute('data-overridden', 'true');
   });
 });
 
@@ -262,13 +376,15 @@ const duration: FieldDescriptor = {
 } as FieldDescriptor;
 
 describe('the notification duration (030 FR-010, FR-011)', () => {
-  it('refuses a duration below the floor and above the ceiling', async () => {
+  // 077 FR-009 supersedes the refusal: a duration past the floor or the ceiling stores that bound.
+  it('holds a duration below the floor or above the ceiling to that bound', async () => {
     const { user, onCommit } = renderControl(duration, 5000);
-    for (const bad of ['2999', '30001']) {
-      await user.clear(field(duration.key));
-      await user.type(field(duration.key), `${bad}{Enter}`);
-    }
-    expect(onCommit).not.toHaveBeenCalled();
+    await user.clear(field(duration.key));
+    await user.type(field(duration.key), '2999{Enter}');
+    expect(onCommit).toHaveBeenLastCalledWith(3000);
+    await user.clear(field(duration.key));
+    await user.type(field(duration.key), '30001{Enter}');
+    expect(onCommit).toHaveBeenLastCalledWith(30_000);
   });
 
   it('accepts a duration inside the bounds', async () => {

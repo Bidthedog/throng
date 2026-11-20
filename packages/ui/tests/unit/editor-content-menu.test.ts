@@ -413,12 +413,12 @@ describe('Open Preview, in Navigate after Go To Line… (contracts/menus-and-con
     });
   }
 
-  it('sits immediately after Go To Line…, in the Navigate section, with the preview icon', () => {
+  it('sits immediately after Go To Line…, in the Navigate section, with the file type’s preview icon (074 FR-103)', () => {
     const items = menuWith({ affordance: affordance(), open: () => {} });
     const labels = items.map((m) => m.label);
     const at = labels.indexOf('Open Preview');
     expect(at).toBe(labels.indexOf('Go To Line…') + 1);
-    expect(items[at]).toMatchObject({ section: 'navigate', icon: 'preview' });
+    expect(items[at]).toMatchObject({ section: 'navigate', icon: 'previewMarkdown' });
     expect(items[at]?.disabled).toBeFalsy();
   });
 

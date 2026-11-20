@@ -149,7 +149,8 @@ describe('W5 — the sequence settles after ONE write (FR-013d)', () => {
     // where it would show, and it would show as an ever-climbing write count.
     for (let i = 0; i < 3; i += 1) {
       const settings = await readSettings(store);
-      expect(settings.behaviour.submenuHoverMs).toBe(2000);
+      // 077 research R6 — the hover dwell's hard maximum is 10,000 ms (its slider stops at 1,500).
+      expect(settings.behaviour.submenuHoverMs).toBe(10_000);
     }
 
     expect(writes.calls()).toBe(1);

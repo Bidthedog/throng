@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   TERMINAL_PANEL_TOGGLES,
   resolveTerminalToggles,
-  terminalToggleTitle,
 } from '../../src/terminal/panel-toggles.js';
+import { settingToggleTitle } from '../../src/config/setting-toggle.js';
 import { ICON_KEYS } from '../../src/icons/icon-keys.js';
 import { DEFAULT_ICON_SET } from '../../src/icons/default-icon-set.generated.js';
 import { COMMAND_SCOPES } from '../../src/config/keybindings.js';
@@ -54,9 +54,9 @@ describe('the terminal panel toggles (076 FR-001 – FR-003)', () => {
   });
 
   it('names each toggle and its state, with the chord when one is bound (FR-002)', () => {
-    expect(terminalToggleTitle('Remember the last running command', true)).toBe('Remember the last running command: enabled');
-    expect(terminalToggleTitle('Terminal notifications', false)).toBe('Terminal notifications: disabled');
-    expect(terminalToggleTitle('Reopen in the last directory', true, 'Ctrl+Alt+D')).toBe(
+    expect(settingToggleTitle('Remember the last running command', true)).toBe('Remember the last running command: enabled');
+    expect(settingToggleTitle('Terminal notifications', false)).toBe('Terminal notifications: disabled');
+    expect(settingToggleTitle('Reopen in the last directory', true, 'Ctrl+Alt+D')).toBe(
       'Reopen in the last directory: enabled (Ctrl+Alt+D)',
     );
   });

@@ -392,7 +392,7 @@ describe('SETTINGS_METADATA new-project + verb changes (011)', () => {
  * ══ WHY THE DEFAULTS ARE ASSERTED HERE AND NOT ONLY IN `app-settings.test.ts` ══
  *
  * Because a default is carried by the SCHEMA as well as by the constant, and the two can disagree
- * silently. FR-075 moves `settleMs` onto a slider whose stops are 50 ms apart: a shipped value
+ * silently. FR-075 moves `settleMs` onto a slider whose stops are 25 ms apart (077 R6; 50 ms at FR-075): a shipped value
  * BETWEEN two stops is reachable only by typing, so a user who drags the control can never get back
  * to what the application shipped with. That is a property of the constant and the descriptor
  * TOGETHER, and neither file's own tests can see it.
@@ -435,9 +435,11 @@ describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/
   });
 
   it('leaves the find bar’s own debounce where it was — the two keys are deliberately distinct', () => {
-    // FR-075 moves this one interval and no other. 120 ms times a re-scan of ONE buffer already in
+    // FR-075 moves this one interval and no other (077 R6 later nudged it 120 → 125 to sit on a 25 ms
+    // slider stop). 125 ms times a re-scan of ONE buffer already in
     // memory; 500 ms gates a walk over the whole project.
-    expect(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs).toBe(120);
+    expect(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs).toBe(125);
+    expect(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs).not.toBe(DEFAULT_APP_SETTINGS.search.inFiles.settleMs);
   });
 
   it('puts the shipped 500 exactly on a slider stop, so a drag can always return to it', () => {
@@ -445,7 +447,7 @@ describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/
     expect(d?.control).toBe('slider');
     expect(d?.min).toBe(0);
     expect(d?.max).toBe(2000);
-    expect(d?.step).toBe(50);
+    expect(d?.step).toBe(25); // 077 R6: debounces move in 25 ms steps
     const shipped = DEFAULT_APP_SETTINGS.search.inFiles.settleMs;
     expect(shipped).toBeGreaterThanOrEqual(d!.min!);
     expect(shipped).toBeLessThanOrEqual(d!.max!);
@@ -593,6 +595,6 @@ describe('the Attention settings in the registry (057 US4)', () => {
     const keys = terminalAttention.map((d) => d.key);
     expect(keys.filter((k) => k.startsWith('terminals.attention.signals.'))).toHaveLength(7);
     expect(keys).toContain('terminals.attention.enabled');
-    expect(keys).toContain('terminals.attention.quietSeconds');
+    expect(keys).toContain('terminals.attention.quietMs');
   });
 });

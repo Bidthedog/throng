@@ -93,7 +93,7 @@ describe('Attention settings, as drawn (057 US4)', () => {
       if (enabled) expect(control(d.key), d.key).not.toBeDisabled();
       else expect(control(d.key), d.key).toBeDisabled();
     }
-    if (enabled) expect(control('terminals.attention.quietSeconds')).not.toBeDisabled();
-    else expect(control('terminals.attention.quietSeconds')).toBeDisabled();
+    if (enabled) expect(control('terminals.attention.quietMs')).not.toBeDisabled();
+    else expect(control('terminals.attention.quietMs')).toBeDisabled();
   });
 });

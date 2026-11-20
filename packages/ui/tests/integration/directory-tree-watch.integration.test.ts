@@ -103,9 +103,17 @@ describe.skipIf(skipUnlessLinux('the per-directory watch is the strategy only Li
     start();
     watch();
     rmSync(root, { recursive: true });
-    await new Promise((r) => setTimeout(r, 200)); // the removal is noticed and the wait begins
+    // #696 — the removal is noticed, said once (the whole folder is gone), and the wait begins.
+    await reportedPath(join(root, '.'));
+    const whole = (): number => reported.filter((p) => p === join(root, '.')).length;
+    const saidGone = whole();
     mkdirSync(root);
-    await reportedPath(join(root, '.')); // the watch re-armed and said the whole folder is news
+    // The watch re-armed and said the whole folder is news: a SECOND report, after the one for its going.
+    const started = Date.now();
+    while (whole() <= saidGone) {
+      if (Date.now() - started > REPORT_BOUND_MS) throw new Error('the recreated root was never reported');
+      await new Promise((r) => setTimeout(r, 20));
+    }
 
     const file = join(root, 'after-return.txt');
     writeFileSync(file, 'x');

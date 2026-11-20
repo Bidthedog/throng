@@ -182,11 +182,13 @@ describe('013 as-you-type debounce setting (Principle X, SC-007)', () => {
    * `parseAppSettings` used to substitute the default for a negative debounce and accept ANY
    * positive one, so a mistyped 60000 made the search look broken with nothing to say why. The
    * descriptor declared 0–1000 the whole time; the guarded read path is now what enforces it, and
-   * an out-of-range value is CORRECTED to the nearest bound rather than thrown away.
+   * an out-of-range value is CORRECTED to the nearest bound rather than thrown away. 077 R6 widened
+   * the declared range to 0–2000.
    */
-  it('bounds the debounce at its declared 0–1000 on the guarded read path (FR-015)', () => {
+  it('bounds the debounce at its declared 0–10,000 hard range on the guarded read path (FR-015; 077 R6)', () => {
     expect(parseSettingsGuarded({ search: { asYouTypeDebounceMs: -5 } }).value.search.asYouTypeDebounceMs).toBe(0);
-    expect(parseSettingsGuarded({ search: { asYouTypeDebounceMs: 60_000 } }).value.search.asYouTypeDebounceMs).toBe(1000);
+    expect(parseSettingsGuarded({ search: { asYouTypeDebounceMs: 60_000 } }).value.search.asYouTypeDebounceMs).toBe(10_000);
+    expect(parseSettingsGuarded({ search: { asYouTypeDebounceMs: 5000 } }).value.search.asYouTypeDebounceMs).toBe(5000);
   });
 
   it('is exposed in the Settings editor (completeness)', () => {

@@ -14,6 +14,7 @@ import { EditorView } from '@codemirror/view';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetEditorScrollStore,
+  editorCentreLineOf,
   editorDocLinesOf,
   editorTopLineOf,
   requestEditorTopLine,
@@ -492,5 +493,39 @@ describe('R-E4 — held until the view has placed itself; gone when it unmounts 
     expect(editorTopLineOf('ed-2')).toEqual({ line: 5, fromSync: false });
     expect(requestEditorTopLine('ed-2', 20)).toBe(true);
     expect(two.dispatched).toEqual([scrollTo(20)]);
+  });
+});
+
+describe('073 T075 — the centre line costs nothing until a sync mark asks for it', () => {
+  it('a scroll frame and a keystroke each read the view once (the top line), never the centre', () => {
+    const fake = fakeView({ top: 5 });
+    const read = vi.spyOn(fake.view, 'posAtCoords');
+    const relay = attachEditorScrollRelay(fake.view, 'ed-1', frames);
+    read.mockClear();
+
+    fake.userScroll(10);
+    frames.frame();
+    relay.onUpdate({ docChanged: true, geometryChanged: false }); // a keystroke
+    frames.frame();
+
+    expect(read).toHaveBeenCalledTimes(2); // one layout read per published frame, not two
+  });
+
+  it('is read at the moment a mark is published, from the view as it stands then', () => {
+    const fake = fakeView({ top: 5 });
+    const read = vi.spyOn(fake.view, 'posAtCoords');
+    attachEditorScrollRelay(fake.view, 'ed-1', frames);
+    read.mockClear();
+    fake.moveTo(30);
+
+    expect(editorCentreLineOf('ed-1')).toBe(30);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('is forgotten with the view', () => {
+    const fake = fakeView({ top: 5 });
+    const relay = attachEditorScrollRelay(fake.view, 'ed-1', frames);
+    relay.dispose();
+    expect(editorCentreLineOf('ed-1')).toBeNull();
   });
 });

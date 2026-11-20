@@ -258,6 +258,12 @@ describe('fix round 1 (item 7) — a link title cannot be reordered by bidi cont
       expect(message).toMatch(/gnp\.exe\.md|install/);
     }
   });
+
+  it('a Back/Forward refused for unsaved grid edits says so (073 FR-033a)', () => {
+    expect(linkNoticeMessage({ kind: 'history-refused', target: 'D:/proj/a.csv', reason: 'unsaved' }, 'D:/proj')).toBe(
+      'This grid has unsaved changes. Save them to go back or forward.',
+    );
+  });
 });
 
 describe('Ctrl+click follows, a plain click does not (FR-094)', () => {

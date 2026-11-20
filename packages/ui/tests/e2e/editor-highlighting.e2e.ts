@@ -278,6 +278,12 @@ test('switching theme repaints code LIVE — no reopen, no view rebuild', { tag:
 
 test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, raise no error (SHOULD)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
+  // 074 FR-016 (Q5) — an HTML file opens in its preview by default; this test wants its EDITOR from the tree.
+  const cfgHtml = mkdtempSync(join(tmpdir(), 'throng-cfg-highlight-html-'));
+  writeFileSync(
+    join(cfgHtml, 'settings.json'),
+    JSON.stringify({ editor: { previews: { providers: { html: { defaultOpenAction: 'editor' } } } } }),
+  );
   try {
     await runApp(async (_app, win) => {
       const errors: string[] = [];
@@ -299,8 +305,9 @@ test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, rais
         .toBeGreaterThan(1);
 
       expect(errors, `a mixed-language file must never raise an error: ${errors.join('; ')}`).toEqual([]);
-    });
+    }, { env: { THRONG_CONFIG_ROOT: cfgHtml } });
   } finally {
+    cleanupTemp(cfgHtml);
     cleanupTemp(root);
   }
 });

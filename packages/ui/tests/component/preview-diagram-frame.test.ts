@@ -12,9 +12,10 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { WINDOWS_HOST_TRAITS, configureHostTraits, macosHostTraits } from '@throng/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DIAGRAM_MAX_SCALE,
+  DIAGRAM_RESIZE_DEBOUNCE_MS,
   DIAGRAM_MIN_SCALE,
   DiagramFrame,
 } from '../../src/renderer/preview/diagram/diagram-frame.js';
@@ -87,7 +88,7 @@ function mount(width = 800, height = 300) {
   const frame = (): HTMLElement => screen.getByTestId('diagram-frame-p1-diagram-0');
   const layer = (): HTMLElement => frame().querySelector<HTMLElement>('.preview-diagram-frame__layer')!;
   const viewport = (): HTMLElement => frame().querySelector<HTMLElement>('.preview-diagram-frame__viewport')!;
-  const button = (title: string): HTMLElement => within(frame()).getByTitle(title);
+  const button = (title: string): HTMLElement => within(frame()).getByTitle((t) => t === title || t.startsWith(`${title} (`));
   return { view, frame, layer, viewport, button };
 }
 
@@ -99,7 +100,7 @@ function mountFilling(width = 800, height = 300) {
   const frame = (): HTMLElement => screen.getByTestId('diagram-frame-p1-diagram-0');
   const layer = (): HTMLElement => frame().querySelector<HTMLElement>('.preview-diagram-frame__layer')!;
   const viewport = (): HTMLElement => frame().querySelector<HTMLElement>('.preview-diagram-frame__viewport')!;
-  const button = (title: string): HTMLElement => within(frame()).getByTitle(title);
+  const button = (title: string): HTMLElement => within(frame()).getByTitle((t) => t === title || t.startsWith(`${title} (`));
   return { view, frame, layer, viewport, button };
 }
 
@@ -144,6 +145,272 @@ describe('an inline diagram’s box height (FR-046m, 2026-10-13)', () => {
 function placeAtOrigin(el: HTMLElement): void {
   el.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: box.width, bottom: box.height, width: box.width, height: box.height, toJSON: () => ({}) });
 }
+
+/** An Image or SVG preview's picture (074): the wrapper `blocks/picture.ts` draws, marked as a picture. */
+function pictureOf(width: number, height: number): SVGSVGElement {
+  const svg = svgOf(width, height);
+  svg.setAttribute('data-throng-picture', '');
+  return svg;
+}
+
+/** 074 FR-031a — a picture filling its panel, whose viewport scrolls. */
+function mountScrolling(width: number, height: number, extra: { hatch?: boolean; initialMode?: 'fit' | 'actual' | 'open' } = {}) {
+  render(
+    createElement(DiagramFrame, {
+      svg: pictureOf(width, height),
+      panelId: 'p1',
+      sectionId: 'diagram-0',
+      maximisable: false,
+      fillsPanel: true,
+      scrolls: true,
+      ...extra,
+    }),
+  );
+  const frame = (): HTMLElement => screen.getByTestId('diagram-frame-p1-diagram-0');
+  const layer = (): HTMLElement => frame().querySelector<HTMLElement>('.preview-diagram-frame__layer')!;
+  const stage = (): HTMLElement => frame().querySelector<HTMLElement>('.preview-diagram-frame__stage')!;
+  const viewport = (): HTMLElement => frame().querySelector<HTMLElement>('.preview-diagram-frame__viewport')!;
+  const hatch = (): HTMLElement | null => screen.queryByTestId('diagram-hatch-p1-diagram-0');
+  const button = (title: string): HTMLElement => within(frame()).getByTitle((t) => t === title || t.startsWith(`${title} (`));
+  return { frame, layer, stage, viewport, hatch, button };
+}
+
+describe('following the panel as it resizes (074, 2026-11-19)', () => {
+  let notify: (() => void) | null = null;
+  let frames: FrameRequestCallback[] = [];
+  beforeEach(() => {
+    notify = null;
+    frames = [];
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: () => void) {
+          notify = cb;
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+  const flushFrame = (): void => {
+    const due = frames.splice(0);
+    act(() => due.forEach((cb) => cb(0)));
+  };
+
+  it('an Image or SVG preview refits on the next frame of a drag, not once the drag pauses', () => {
+    const { frame } = mountScrolling(800, 100); // 400 wide → 0.5
+    expect(Number(frame().getAttribute('data-scale'))).toBe(0.5);
+    box = { width: 800, height: 200 };
+    act(() => notify!());
+    act(() => notify!()); // coalesced: one measure per frame
+    expect(frames).toHaveLength(1);
+    flushFrame();
+    expect(Number(frame().getAttribute('data-scale'))).toBe(1);
+  });
+
+  it('a diagram in a document still refits once the drag pauses (054 B5)', () => {
+    render(createElement(DiagramFrame, { svg: svgOf(800, 100), panelId: 'p1', sectionId: 'diagram-0' }));
+    const frame = screen.getByTestId('diagram-frame-p1-diagram-0');
+    expect(Number(frame.getAttribute('data-scale'))).toBe(0.5);
+    box = { width: 800, height: 200 };
+    act(() => notify!());
+    flushFrame();
+    expect(Number(frame.getAttribute('data-scale'))).toBe(0.5);
+    act(() => vi.advanceTimersByTime(DIAGRAM_RESIZE_DEBOUNCE_MS));
+    expect(Number(frame.getAttribute('data-scale'))).toBe(1);
+  });
+});
+
+describe('a picture that scrolls (074 FR-031a, 2026-11-19)', () => {
+  // FR-020a (2026-11-20) — the zoom reset returns a picture to the view it opened in, not to Fit.
+  it('the zoom reset returns a small picture to 100% and a large one to Fit: its opening view', () => {
+    const small = mountScrolling(100, 100, { initialMode: 'open' });
+    fireEvent.click(small.button('Fit diagram'));
+    expect(Number(small.frame().getAttribute('data-scale'))).toBe(2);
+    small.viewport().focus();
+    expect(zoomFocusedDiagram('reset')).toBe(true);
+    expect(small.frame().getAttribute('data-mode')).toBe('open');
+    expect(Number(small.frame().getAttribute('data-scale'))).toBe(1);
+    document.body.replaceChildren();
+    const large = mountScrolling(800, 100, { initialMode: 'open' });
+    large.viewport().focus();
+    expect(zoomFocusedDiagram('in')).toBe(true);
+    expect(zoomFocusedDiagram('reset')).toBe(true);
+    expect(Number(large.frame().getAttribute('data-scale'))).toBe(0.5);
+  });
+
+  it('names the zoom reset chord on Zoom 100% for a picture, on Fit for a diagram', () => {
+    const { frame } = mountScrolling(100, 100, { initialMode: 'open' });
+    expect(within(frame()).getByTitle(/^Zoom 100% \(/)).toBeInTheDocument();
+    expect(within(frame()).getByTitle('Fit diagram')).toBeInTheDocument();
+  });
+
+  it('a fitted view clips rather than scrolls, so rounding never raises a scrollbar; a chosen zoom scrolls', () => {
+    const { viewport, button } = mountScrolling(800, 100, { initialMode: 'open' });
+    expect(viewport()).toHaveClass('preview-diagram-frame__viewport--fitted');
+    fireEvent.click(button('Zoom in'));
+    expect(viewport()).not.toHaveClass('preview-diagram-frame__viewport--fitted');
+    fireEvent.click(button('Fit diagram'));
+    expect(viewport()).toHaveClass('preview-diagram-frame__viewport--fitted');
+  });
+
+  it('Fit fills the panel with a small picture, enlarged and centred, with nothing to scroll (FR-031b)', () => {
+    // 100×100 in 400×200: Fit fills, held by the height → scale 2, 200×200, centred across at (100, 0).
+    const { frame, layer, stage } = mountScrolling(100, 100);
+    expect(frame()).toHaveClass('preview-diagram-frame--scrolls');
+    expect(Number(frame().getAttribute('data-scale'))).toBe(2);
+    expect(layer().style.transform).toBe('translate(100px, 0px) scale(2)');
+    // The stage is the picture's extent, never less than the viewport (a CSS minimum, not a measured width).
+    expect(stage().style.width).toBe('200px');
+    expect(stage().style.height).toBe('200px');
+    expect(stage().style.minWidth).toBe('100%');
+    expect(stage().style.minHeight).toBe('100%');
+  });
+
+  // FR-020a (2026-11-19) — the opening view: 100% where the picture fits, Fit where it is larger than the viewport.
+  it('opens a picture smaller than the panel at 100%, centred', () => {
+    const { frame, layer } = mountScrolling(100, 100, { initialMode: 'open' });
+    expect(frame().getAttribute('data-mode')).toBe('open');
+    expect(Number(frame().getAttribute('data-scale'))).toBe(1);
+    expect(layer().style.transform).toBe('translate(150px, 50px) scale(1)');
+  });
+
+  it('opens a picture larger than the panel on either axis at Fit, and Fit stays there', () => {
+    // 800×100 in 400×200: too wide → 0.5. 100×400: too tall → 0.5.
+    expect(Number(mountScrolling(800, 100, { initialMode: 'open' }).frame().getAttribute('data-scale'))).toBe(0.5);
+    document.body.replaceChildren();
+    const { frame, button } = mountScrolling(100, 400, { initialMode: 'open' });
+    expect(Number(frame().getAttribute('data-scale'))).toBe(0.5);
+    fireEvent.click(button('Zoom in'));
+    expect(frame().getAttribute('data-mode')).toBe('zoom');
+    expect(Number(frame().getAttribute('data-scale'))).toBe(0.625);
+  });
+
+  it('Fit after the opening view fills the panel, enlarging a small picture (FR-031b)', () => {
+    const { frame, button } = mountScrolling(100, 100, { initialMode: 'open' });
+    fireEvent.click(button('Fit diagram'));
+    expect(Number(frame().getAttribute('data-scale'))).toBe(2);
+  });
+
+  it('Zoom 100% shows a small picture at its own size in the centre', () => {
+    const { layer, button } = mountScrolling(100, 100);
+    fireEvent.click(button('Zoom 100%'));
+    expect(layer().style.transform).toBe('translate(150px, 50px) scale(1)');
+  });
+
+  it('a tiny picture fitted far past the usual zoom ceiling can still be zoomed in from Fit', () => {
+    // 4×2 in 400×200 → Fit 100; a step in goes to 125, not down to the ceiling of 8.
+    const { frame, button } = mountScrolling(4, 2);
+    expect(Number(frame().getAttribute('data-scale'))).toBe(100);
+    fireEvent.click(button('Zoom in'));
+    expect(Number(frame().getAttribute('data-scale'))).toBe(125);
+  });
+
+  it('a middle-button drag moves a picture smaller than the panel, on each axis it fits (FR-031c)', () => {
+    const { layer, viewport, button } = mountScrolling(100, 100);
+    fireEvent.click(button('Zoom 100%')); // 100×100 at (150, 50) in 400×200: fits both ways
+    fireEvent.pointerDown(viewport(), { button: 1, buttons: 4, clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(viewport(), { buttons: 4, clientX: 60, clientY: 130, pointerId: 1 });
+    fireEvent.pointerUp(viewport(), { button: 1, clientX: 60, clientY: 130, pointerId: 1 });
+    expect(layer().style.transform).toBe('translate(110px, 80px) scale(1)');
+    expect(viewport().scrollLeft).toBe(0);
+    // Fit puts it back in the middle.
+    fireEvent.click(button('Fit diagram'));
+    expect(layer().style.transform).toBe('translate(100px, 0px) scale(2)');
+  });
+
+  it('dragging a picture wider than the panel but shorter scrolls across and moves it up and down', () => {
+    // 800×100 at 100% in 400×200: overflows across, fits down.
+    const { layer, viewport } = mountScrolling(800, 100, { initialMode: 'actual' });
+    const fromLeft = viewport().scrollLeft;
+    fireEvent.pointerDown(viewport(), { button: 1, buttons: 4, clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(viewport(), { buttons: 4, clientX: 80, clientY: 120, pointerId: 1 });
+    expect(viewport().scrollLeft).toBe(fromLeft + 20);
+    expect(layer().style.transform).toBe('translate(0px, 70px) scale(1)');
+  });
+
+  it('a picture larger than the panel at actual size gets a stage its size, scrolled to its centre', () => {
+    const { layer, stage, viewport } = mountScrolling(800, 400, { initialMode: 'actual' });
+    expect(stage().style.width).toBe('800px');
+    expect(stage().style.height).toBe('400px');
+    // Larger on both axes, so the picture starts at the stage's corner and the scroll position centres it.
+    expect(layer().style.transform).toBe('translate(0px, 0px) scale(1)');
+    expect(viewport().scrollLeft).toBe(200);
+    expect(viewport().scrollTop).toBe(100);
+  });
+
+  it('zooming about the pointer scrolls so the point under it stays put', () => {
+    // Fit: 800×300 in 400×200 → 0.5, drawn 400×150 at (0, 25). The pointer at (300, 150) is over drawing (600, 250).
+    const { stage, viewport } = mountScrolling(800, 300);
+    placeAtOrigin(viewport());
+    viewport().focus();
+    act(() => {
+      zoomFocusedDiagramRaw('in', viewport(), { clientX: 300, clientY: 150 });
+    });
+    // At 0.625 the drawing is 500×187.5: wider than the viewport, so the stage is 500 wide and drawing x 600 sits at
+    // 375 — scrolled 75 to stay under the pointer.
+    expect(stage().style.width).toBe('500px');
+    expect(viewport().scrollLeft).toBe(75);
+  });
+
+  it('a middle-button drag scrolls instead of moving the picture, and prevents the platform autoscroll', () => {
+    const { layer, viewport, button } = mountScrolling(800, 400, { initialMode: 'actual' });
+    const before = layer().style.transform;
+    fireEvent.click(button('Zoom in'));
+    const fromLeft = viewport().scrollLeft;
+    const fromTop = viewport().scrollTop;
+    const down = fireEvent.pointerDown(viewport(), { button: 1, buttons: 4, clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(viewport(), { buttons: 4, clientX: 70, clientY: 90, pointerId: 1 });
+    fireEvent.pointerUp(viewport(), { button: 1, clientX: 70, clientY: 90, pointerId: 1 });
+    expect(down).toBe(false);
+    expect(viewport().scrollLeft).toBe(fromLeft + 30);
+    expect(viewport().scrollTop).toBe(fromTop + 10);
+    expect(before).toBe('translate(0px, 0px) scale(1)');
+    expect(layer().style.transform).toBe('translate(0px, 0px) scale(1.25)');
+  });
+
+  it('Fit after a zoom returns the scroll to the start, with the picture centred again', () => {
+    const { layer, viewport, button } = mountScrolling(100, 100);
+    fireEvent.click(button('Zoom in'));
+    fireEvent.click(button('Zoom in'));
+    fireEvent.click(button('Zoom in'));
+    fireEvent.click(button('Fit diagram'));
+    expect(layer().style.transform).toBe('translate(100px, 0px) scale(2)');
+    expect(viewport().scrollLeft).toBe(0);
+    expect(viewport().scrollTop).toBe(0);
+  });
+});
+
+describe('the transparency hatch (074 FR-027b, 2026-11-19)', () => {
+  it('lies under a picture, the size of the picture at its scale, where the picture is', () => {
+    const { hatch } = mountScrolling(100, 100);
+    expect(hatch()).not.toBeNull();
+    expect(hatch()!.style.width).toBe('200px');
+    expect(hatch()!.style.height).toBe('200px');
+    expect(hatch()!.style.transform).toBe('translate(100px, 0px)');
+  });
+
+  it('follows the zoom at screen scale rather than being scaled with the picture', () => {
+    const { hatch, button } = mountScrolling(100, 100);
+    fireEvent.click(button('Zoom in'));
+    expect(hatch()!.style.width).toBe('250px');
+    expect(hatch()!.style.transform).not.toContain('scale');
+  });
+
+  it('is absent when the setting is off, and under a drawing that is not a picture', () => {
+    expect(mountScrolling(200, 100, { hatch: false }).hatch()).toBeNull();
+    document.body.replaceChildren();
+    mount(200, 100);
+    expect(screen.queryByTestId('diagram-hatch-p1-diagram-0')).toBeNull();
+  });
+});
 
 describe('zooming about a point (FR-046l, 2026-10-13)', () => {
   it('Ctrl+wheel keeps the point under the pointer where it is', () => {
@@ -201,10 +468,10 @@ describe('the toolbar (FR-046b, FR-046h)', () => {
     const buttons = within(toolbar).getAllByRole('button');
     // Zoom 100% sits between the two zoom steps (A2); there is no "Fill the panel" any more.
     expect(buttons.map((b) => b.getAttribute('title'))).toEqual([
-      'Fit diagram',
-      'Zoom in',
+      'Fit diagram (Ctrl+Alt+Numpad0)',
+      'Zoom in (Ctrl+Alt++)',
       'Zoom 100%',
-      'Zoom out',
+      'Zoom out (Ctrl+Alt+-)',
       'Enter Focus Mode',
     ]);
     for (const b of buttons) {
@@ -431,7 +698,7 @@ describe('Maximise (FR-046f)', () => {
 
   it('maximises the diagram as a section of its panel, drawn in the maximise layer with its view kept', () => {
     const { frame } = mountWithLayer();
-    fireEvent.click(within(frame()).getByTitle('Zoom in'));
+    fireEvent.click(within(frame()).getByTitle(/^Zoom in \(/));
     fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
 
     expect(getMaximiseStack('t1')).toEqual([expect.objectContaining({ kind: 'section', panelId: 'p1', sectionId: 'diagram-0' })]);
@@ -446,7 +713,7 @@ describe('Maximise (FR-046f)', () => {
 
   it('its control becomes Minimise, which — like Esc — returns it to its place with the same zoom', () => {
     const { frame } = mountWithLayer();
-    fireEvent.click(within(frame()).getByTitle('Zoom in'));
+    fireEvent.click(within(frame()).getByTitle(/^Zoom in \(/));
     fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
     const inLayer = within(screen.getByTestId('maximise-layer'));
     expect(inLayer.queryByTitle('Restore')).toBeNull();
@@ -465,7 +732,7 @@ describe('Maximise (FR-046f)', () => {
 
   it('centres the diagram in the maximised viewport on both axes (A4)', () => {
     const { frame } = mountWithLayer();
-    fireEvent.click(within(frame()).getByTitle('Zoom in')); // scale 0.625 → 500×187.5
+    fireEvent.click(within(frame()).getByTitle(/^Zoom in \(/)); // scale 0.625 → 500×187.5
     box = { width: 600, height: 400 }; // the maximised viewport is bigger than the inline one
     fireEvent.click(within(frame()).getByTitle('Enter Focus Mode'));
 

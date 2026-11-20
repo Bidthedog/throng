@@ -25,6 +25,15 @@ describe('the renderer registers a view for exactly the providers core registers
     }
   });
 
+  it('gives every provider that declares print a printable (075 FR-060)', () => {
+    for (const provider of SHIPPED_PREVIEW_PROVIDERS.list()) {
+      if (provider.print === undefined) continue;
+      expect(typeof PREVIEW_PROVIDER_VIEWS[provider.id]?.printable, provider.id).toBe('function');
+    }
+    // Anti-vacuity: Markdown declares it.
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('markdown')?.print).toBe('document');
+  });
+
   it('loads each body lazily — registering a view imports no body', () => {
     // `load` is the R21 seam: the body (and markdown-it behind it) arrive on first use. A view whose
     // `load` is not a function would have to have imported its body eagerly to exist at all.

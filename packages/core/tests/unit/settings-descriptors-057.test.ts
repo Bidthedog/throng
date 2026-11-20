@@ -49,7 +49,7 @@ const NEW_KEYS: readonly { key: string; governs: string }[] = [
     governs: `whether a ${name} event raises a mark (FR-061)`,
   })),
   {
-    key: 'terminals.attention.quietSeconds',
+    key: 'terminals.attention.quietMs',
     governs: 'how long a terminal is silent before Output went quiet fires (FR-061)',
   },
 ];

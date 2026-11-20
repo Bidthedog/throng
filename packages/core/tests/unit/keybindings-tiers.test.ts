@@ -86,6 +86,11 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   // 054 FR-013 — unbound, so no chord to judge; the group's tier.
   'markdown.collapseAllInside': 'tier2',
   'markdown.expandAllInside': 'tier2',
+  // 073 FR-038 — unbound, so no chord to judge; preview-only, like the Markdown group.
+  'grid.insertRowAbove': 'tier2',
+  'grid.insertRowBelow': 'tier2',
+  'grid.insertColumnLeft': 'tier2',
+  'grid.insertColumnRight': 'tier2',
   'terminal.scrollLineUp': 'tier2',
   'terminal.scrollLineDown': 'tier2',
   'editor.saveAs': 'tier2', // recorded exception (the Save pair)
@@ -102,6 +107,8 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'search.replaceCurrent': 'tier3',
   'navigate.gotoLine': 'tier3',
   'preview.goToHeading': 'tier3', // 047 research R7 — shares Ctrl+G with navigate.gotoLine on a disjoint scope
+  'preview.print': 'tier3', // 075 FR-064 — Ctrl+P is readline's previous-history; {preview} only, never live in a terminal
+  'editor.print': 'tier3', // Print… for an editor's document: Ctrl+P like the preview's, {editor} only, never live in a terminal
   'navigate.back': 'tier3',
   'navigate.forward': 'tier3',
   'preview.followLink': 'tier3',
@@ -181,22 +188,6 @@ const TIER_EXCEPTIONS: ReadonlySet<string> = new Set([
   'panel.toggleMaximise|Shift+Alt+Enter',
 ]);
 
-/**
- * Every action whose shipped default is a genuinely two-stroke chord (046 FR-091/FR-092; 047
- * research R5) — named rather than inferred from the token's shape, so a FUTURE two-stroke default
- * shipped on some OTHER action outside its tier still fails the tier check (review finding MINOR 6's
- * reasoning, widened from the single-action check this replaces).
- */
-const TWO_STROKE_EXEMPT_ACTIONS: ReadonlySet<string> = new Set([
-  'editor.toggleWordWrap',
-  'markdown.toggleSection',
-  'markdown.toggleAll',
-  'markdown.collapseSection',
-  'markdown.expandSection',
-  'markdown.collapseAll',
-  'markdown.expandAll',
-]);
-
 const GESTURE_NAMES = new Set(['WheelUp', 'WheelDown', 'MiddleClick']);
 
 function isGestureToken(token: string): boolean {
@@ -243,10 +234,9 @@ describe('the FR-101 tier guard', () => {
       if (tier === 'outside') continue;
       for (const token of DEFAULT_KEYBINDINGS.bindings[action] ?? []) {
         if (isGestureToken(token)) continue;
-        // The two-stroke exception is scoped to the NAMED actions FR-103 (and 047 research R5)
-        // actually list — not a blanket "any two-stroke token is fine" that would hide a future
-        // two-stroke default shipped on some OTHER action outside its tier (review finding MINOR 6).
-        if (isTwoStrokeToken(token) && TWO_STROKE_EXEMPT_ACTIONS.has(action)) continue;
+        // Constitution IV (7.4.0): a multi-stroke chord is categorically outside the modifier tiers. Its first
+        // stroke is still judged by the terminal tiers — the split chords' test below, and the reserved-key guard.
+        if (isTwoStrokeToken(token)) continue;
         const normalised = normalizeToken(token);
         if (TIER_EXCEPTIONS.has(`${action}|${normalised}`)) continue;
         if (!matchesTier(tier, normalised)) {
@@ -422,6 +412,15 @@ describe('the FR-101 tier guard', () => {
       'markdown.collapseAllInside': [],
       'markdown.expandAllInside': [],
       'preview.goToHeading': ['Ctrl+G'],
+      // 073 FR-038 — unbound.
+      'grid.insertRowAbove': [],
+      'grid.insertRowBelow': [],
+      'grid.insertColumnLeft': [],
+      'grid.insertColumnRight': [],
+      // 075 FR-064 — new command, scoped to {preview}.
+      'preview.print': ['Ctrl+P'],
+      // Print… for an editor's document — new command, scoped to {editor}.
+      'editor.print': ['Ctrl+P'],
       // 059 FR-041 — unbound.
       'editor.reopenWithEncoding': [],
       'editor.changeEncoding': [],
