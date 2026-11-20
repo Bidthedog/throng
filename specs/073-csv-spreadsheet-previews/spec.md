@@ -201,6 +201,15 @@ the feedback, the code and precedent rather than stated by the maintainer.
   edge — the bottom of the locked row, the right of the locked column — that replaces the border already there, so no
   cell or the grid changes size or moves. *(derived)* The theme's accent colour, at the ordinary border's width.
   (FR-039b, refining FR-039a's separator)
+- Q38: While Synchronise Scrolling moves one view with the other, can both show where they are in step? → A: Yes, for
+  CSV and Markdown alike. A soft highlight marks the matching place in both views: in a CSV, the record's row in the
+  grid and its line in the editor; in Markdown, the line in the editor (the same highlight) and an indicator in the
+  preview's gutter level with the block that line shows. Neither view's focus, caret or selection changes. It matters
+  most where one view stops and the other carries on, through wrapping or content one shows differently.
+  *(derived)* The highlight marks the record or line at the scrolled view's top and its counterpart in the other view,
+  appears when a scroll moves the other view, and fades out 1.5 seconds after scrolling stops; theme tokens only; no
+  setting of its own (it follows Synchronise Scrolling); with the Markdown preview gutter disabled (047 FR-032b) the
+  preview shows no indicator. (FR-033d, extending 044 FR-114 for CSV and Markdown)
 
 ## Terminology
 
@@ -399,6 +408,13 @@ expected bytes: only the edited field differs.
 37. **Given** a CSV, **When** the user turns Lock first row and Lock first column on and off, **Then** a highlighted
     line runs along the bottom of row 1 and the right of column A while locked, and no cell moves or changes size
     either way (FR-039b).
+38. **Given** a long CSV in an editor and its linked preview with Synchronise Scrolling on, **When** the user
+    scrolls the editor, **Then** the editor's top line and that record's grid row both carry a soft highlight that
+    fades soon after scrolling stops; focus stays where it was. **When** the editor reaches its end while the grid
+    still has rows below, **Then** the highlight sits on the matching line part way down the editor (FR-033d).
+39. **Given** a Markdown file in an editor and its preview with Synchronise Scrolling on and the preview gutter
+    enabled, **When** the user scrolls either, **Then** the editor highlights the matching line and the preview's
+    gutter shows an indicator beside the block holding it (FR-033d).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -622,6 +638,15 @@ Markdown and Mermaid pattern, each setting working as labelled.
   the grid's top visible row and the editor's top visible line, a multi-line record mapped to its first line. The
   grid's Select All is unaffected and Go to Heading stays absent. *(Supersedes the CSV provider's "not a flowing
   document" exclusion of Synchronise Scrolling, 054's Mermaid rule, for CSV only.)*
+- **FR-033d** *(Q38, 2026-11-20)*: While **Synchronise Scrolling** is on and a scroll in one view moves the other, both
+  views MUST mark the place they are in step with a soft highlight, without changing either view's focus, caret,
+  selection or scroll: the record or line at the scrolled view's top, and its counterpart in the other view —
+  wherever that sits in its viewport, so a view that has run out of room still shows where the other one is. CSV:
+  the record's grid row (past any locked row, wrapped or not) and the record's first line in the editor. Markdown:
+  the line in the editor, drawn as the CSV editor's is, and an indicator in the preview gutter (047 FR-032a) level
+  with the rendered block holding that line; no indicator while the gutter is disabled. The marks fade out 1.5
+  seconds after the last scroll, use theme tokens only, and have no setting of their own. *(Extends 044 FR-114 for
+  CSV and Markdown previews and their editors.)*
 - **FR-033b** *(Q29, 2026-11-19)*: Opening or dropping another CSV onto a CSV Preview Editor whose document has
   unsaved edits only it shows MUST raise the editor's unsaved-changes prompt (006 US9), naming the grid's file
   and the arriving one, with **Save & open**, **Discard & open**, **Open in new preview** and **Cancel**. Save and
