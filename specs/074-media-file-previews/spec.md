@@ -536,6 +536,9 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
   file to the operating system's default program through the existing open-in-OS route (067 FR-018,
   its one failure notice included) and MUST NOT open a throng panel. Open In's explicit targets
   (New Editor, Preview, Open in OS Default Program) still do what they name (044 FR-055).
+- **FR-018a**: *(Extends 045 FR-168's destinations.)* In a preview, the gesture hint of a link to a file that
+  FR-018 hands to the OS MUST say so — "Ctrl+Click to open in OS default program" — never that it opens in a throng
+  editor or preview. An editor's or a terminal's link is outside FR-018: it opens an editor, and keeps that wording.
 - **FR-019**: *(Narrows 054 FR-030 – FR-033.)* A Find in Files result in a file whose type is set to
   **Default OS Program** MUST open an editor at the match, as for **Throng Editor**: an OS program
   cannot be taken to a match.

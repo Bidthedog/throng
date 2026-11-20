@@ -2279,6 +2279,8 @@ export function PreviewPanel({
     () => ({
       previewable: (absPath: string) =>
         defaultOpenActionFor(registry, settings.editor.previews, absPath) === 'preview',
+      // 074 FR-018a — main hands such a follow to the open router, which gives it to the OS (FR-018).
+      opensInOs: (absPath: string) => defaultOpenActionFor(registry, settings.editor.previews, absPath) === 'os',
       openTarget: settings.editor.openTarget === 'new' ? ('new' as const) : ('lastActive' as const),
     }),
     [registry, settings.editor.previews, settings.editor.openTarget],

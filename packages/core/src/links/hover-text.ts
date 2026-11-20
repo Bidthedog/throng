@@ -28,6 +28,8 @@ export type LinkHoverDestination =
   | { readonly kind: 'editor'; readonly openTarget: 'lastActive' | 'new' }
   /** An in-project file whose click opens a preview (FR-051, FR-110 clause 3). */
   | { readonly kind: 'preview' }
+  /** 074 FR-018a — an in-project file whose type opens in the OS default program, followed from a preview. */
+  | { readonly kind: 'osDefaultProgram' }
   /** Everything a click reveals rather than opens — a folder, or anything out of project (FR-168b). */
   | { readonly kind: 'osExplorer' }
   /** web, loopback (024, unchanged). */
@@ -45,6 +47,8 @@ export function linkHoverText(destination: LinkHoverDestination, chord: string):
       return `${chord}+Click to open in throng ${destination.openTarget === 'new' ? 'new' : 'active'} editor`;
     case 'preview':
       return `${chord}+Click to open in throng preview`;
+    case 'osDefaultProgram':
+      return `${chord}+Click to open in OS default program`;
     case 'osExplorer':
       return `${chord}+Click to show in OS Explorer`;
     case 'systemBrowser':
