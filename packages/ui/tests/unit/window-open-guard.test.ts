@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { IShellIntegration } from '@throng/core';
-import { windowOpenDecision, denyRendererWindows } from '../../src/main/window-open-guard.js';
+import { frameLinkOf, windowOpenDecision, denyRendererWindows } from '../../src/main/window-open-guard.js';
 
 /**
  * US7 / FR-019b (spec 024): a renderer-opened window is always denied; only an http(s)/mailto target
@@ -92,6 +92,64 @@ describe('denyRendererWindows (024 US7 / 044 FR-091)', () => {
     const { shell, opened } = fakeShellIntegration();
     denyRendererWindows(contents, shell);
     expect(fire('javascript:alert(1)')).toEqual({ action: 'deny' });
+    expect(opened).toEqual([]);
+  });
+});
+
+/**
+ * 074 research R6 — an HTML preview's links point at `throng-preview://follow/<panelId>?href=<link>`. A Ctrl+click
+ * on one (Chromium's background-tab disposition) is handed to that window's renderer as `throng:preview:frameLink`
+ * for the preview to follow; every follow URL is denied and never opened externally, whatever the disposition.
+ */
+describe('frameLinkOf and the follow route (074 FR-076, FR-079)', () => {
+  const follow = 'throng-preview://follow/panel-7?href=' + encodeURIComponent('https://example.test/a?b=1');
+
+  it('reads the panel and the original link from a Ctrl+click on a follow URL', () => {
+    expect(frameLinkOf({ url: follow, disposition: 'background-tab' })).toEqual({
+      panelId: 'panel-7',
+      href: 'https://example.test/a?b=1',
+    });
+  });
+
+  it('answers null for any other disposition, any other URL, or a follow URL with no href', () => {
+    expect(frameLinkOf({ url: follow, disposition: 'foreground-tab' })).toBeNull();
+    expect(frameLinkOf({ url: follow, disposition: 'new-window' })).toBeNull();
+    expect(frameLinkOf({ url: 'https://example.test', disposition: 'background-tab' })).toBeNull();
+    expect(frameLinkOf({ url: 'throng-preview://follow/panel-7', disposition: 'background-tab' })).toBeNull();
+    expect(frameLinkOf({ url: 'throng-preview://asset/panel-7/a.png?href=x', disposition: 'background-tab' })).toBeNull();
+  });
+
+  function fakeContentsWithSend(): {
+    contents: Parameters<typeof denyRendererWindows>[0];
+    fire(details: { url: string; disposition: string }): { action: string };
+    sent: [string, unknown][];
+  } {
+    let handler: ((details: { url: string; disposition: string }) => { action: 'deny' }) | undefined;
+    const sent: [string, unknown][] = [];
+    const contents = {
+      setWindowOpenHandler: (h: typeof handler) => {
+        handler = h;
+      },
+      send: (channel: string, payload: unknown) => sent.push([channel, payload]),
+    } as unknown as Parameters<typeof denyRendererWindows>[0];
+    return { contents, sent, fire: (details) => handler!(details) };
+  }
+
+  it('sends a Ctrl+clicked follow link to the renderer, denies the window and opens nothing', () => {
+    const { contents, fire, sent } = fakeContentsWithSend();
+    const { shell, opened } = fakeShellIntegration();
+    denyRendererWindows(contents, shell);
+    expect(fire({ url: follow, disposition: 'background-tab' })).toEqual({ action: 'deny' });
+    expect(sent).toEqual([['throng:preview:frameLink', { panelId: 'panel-7', href: 'https://example.test/a?b=1' }]]);
+    expect(opened).toEqual([]);
+  });
+
+  it('drops a plain target=_blank click on a follow link: denied, nothing sent, nothing opened', () => {
+    const { contents, fire, sent } = fakeContentsWithSend();
+    const { shell, opened } = fakeShellIntegration();
+    denyRendererWindows(contents, shell);
+    expect(fire({ url: follow, disposition: 'foreground-tab' })).toEqual({ action: 'deny' });
+    expect(sent).toEqual([]);
     expect(opened).toEqual([]);
   });
 });

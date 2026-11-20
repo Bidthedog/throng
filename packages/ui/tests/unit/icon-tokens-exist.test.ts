@@ -117,6 +117,14 @@ describe('every icon key has a render site, and every render site names a key (0
     'find-in-files/panel-type.ts',
     // 076 — the terminal status-bar toggles' icons, drawn by `terminal-status-bar.tsx` from this table.
     'terminal/panel-toggles.ts',
+    // 074 FR-103 — each shipped preview type's own preview icon, drawn through `previewIconOf` wherever that
+    // type's preview is named.
+    'preview/providers/markdown.ts',
+    'preview/providers/mermaid.ts',
+    'preview/providers/image.ts',
+    'preview/providers/svg.ts',
+    'preview/providers/pdf.ts',
+    'preview/providers/html.ts',
   ].map((rel) => fileURLToPath(new URL(`../../../core/src/${rel}`, import.meta.url)));
   const known = new Set<string>(ICON_KEYS);
   const siteSources = [...walk(RENDERER), ...CORE_SITES].map((f) => code(f));

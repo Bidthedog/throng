@@ -13,7 +13,7 @@
  * |-----|-------------------------------------------|--------------------------------------------------------------------|
  * | S1  | File Explorer Open In (`FileTree`)      | Preview for `.prvtxt` and `.prvbin`, none for `.txt`               |
  * | S2  | Editor status strip                       | the button for `.prvtxt`; none for `.prvbin` (no editor surface)  |
- * | —   | Default open action (`EditorOpenListener`)| binary: Preview while enabled, Editor while disabled (FR-051)      |
+ * | —   | Default open action (`EditorOpenListener`)| binary: Preview or OS while enabled, Editor while disabled (074) |
  * | S3  | Preview header menu (`PanelPlaceholder`)  | the binary menu is the text menu without Open in Editor           |
  * | S4  | Preferences → Editor → Previews           | text: enabled, default open action, own toggle; binary: enabled   |
  * | S5  | Settings completeness                     | defaults and descriptors declare the same leaves                   |
@@ -42,6 +42,7 @@ import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_ICON_SET,
   PREVIEW_KIND,
   collectPanels,
   createDefaultLayout,
@@ -94,6 +95,9 @@ const PROJECT = 'proj-seam';
 const ROOT = 'D:/proj';
 const TEXT_FILE = `${ROOT}/a.prvtxt`;
 const BINARY_FILE = `${ROOT}/a.prvbin`;
+
+/** Icon markup as the DOM serialises it once inlined, to compare with what an `<Icon>` drew. */
+const asDrawn = (markup: string): string => Object.assign(document.createElement('span'), { innerHTML: markup }).innerHTML;
 
 const TEXT_OFF = testPreviewSettings({ testText: { enabled: false } });
 const BINARY_OFF = testPreviewSettings({ testBinary: { enabled: false } });
@@ -335,6 +339,8 @@ describe('S2 / S6a — the editor status strip’s preview button (FR-001, FR-06
     const b = button() as HTMLElement;
     expect(b).toBeEnabled();
     expect(b).toHaveAttribute('title', 'Open Preview');
+    // 074 FR-103 — drawn with the provider's own preview icon.
+    expect(b.querySelector('.icon')?.innerHTML).toBe(asDrawn(DEFAULT_ICON_SET[TEST_TEXT.previewIcon!]));
     await userEvent.click(b);
     expect(opened).toEqual([{ absPath: TEXT_FILE, projectId: PROJECT, requesterPanelId: PANEL }]);
   });
@@ -548,7 +554,7 @@ describe('S3 / S7 — a preview of each kind mounts in the real panel, with the 
 
   afterEach(() => removeEditorState('ed-bin'));
 
-  it('S3 — the binary preview’s header menu is the text preview’s, less Open in Editor and Synchronise Scrolling', async () => {
+  it('S3 — the binary preview’s header menu is the text preview’s, less Open in Editor, Synchronise Scrolling and Go to Heading', async () => {
     const text = await mountPreview(TEXT_FILE);
     await screen.findByTestId(`test-body-testText-${text.id}`);
     const textLabels = await headerMenuLabels(text.user, text.id);
@@ -567,8 +573,10 @@ describe('S3 / S7 — a preview of each kind mounts in the real panel, with the 
     expect(binaryLabels).not.toContain('Open in Editor');
     expect(binaryLabels).not.toContain('Go to Editor');
     expect(binaryLabels).not.toContain('Synchronise Scrolling');
+    // 074 FR-062b — a binary body with neither headings nor pages has nothing to go to: no Go to Heading…, in the header
+    // menu as in its body menu (only a paged one, a PDF, offers Go to Page…).
     expect(binaryLabels).toEqual(
-      textLabels.filter((label) => label !== 'Open in Editor' && label !== 'Synchronise Scrolling'),
+      textLabels.filter((label) => label !== 'Open in Editor' && label !== 'Synchronise Scrolling' && label !== 'Go to Heading…'),
     );
   });
 
@@ -577,6 +585,10 @@ describe('S3 / S7 — a preview of each kind mounts in the real panel, with the 
     const body = await screen.findByTestId(`test-body-testText-${id}`);
     expect(body).toHaveAttribute('data-content-kind', 'text');
     expect(screen.getByTestId(`preview-status-bar-${id}`)).toBeInTheDocument();
+    // 074 FR-103 — the header names the type with the provider's own preview icon.
+    expect(screen.getByTestId(`panel-kind-${id}`).querySelector('.icon')?.innerHTML).toBe(
+      asDrawn(DEFAULT_ICON_SET[TEST_TEXT.previewIcon!]),
+    );
   });
 
   it('S7 — the binary body is handed a resource, with no status bar and no route to an editor, even with an editor open on the file', async () => {
@@ -590,7 +602,9 @@ describe('S3 / S7 — a preview of each kind mounts in the real panel, with the 
     expect(attach).toHaveBeenCalledWith({ panelId: id, projectId: PROJECT, filePath: BINARY_FILE });
 
     expect(screen.queryByTestId(`preview-status-bar-${id}`)).toBeNull();
-    await waitFor(() => expect(screen.getByTestId(`panel-title-${id}`).textContent).toBe(`${fileNameOf(BINARY_FILE)} - Preview`));
+    await waitFor(() => expect(screen.getByTestId(`panel-title-${id}`).textContent).toBe(`${fileNameOf(BINARY_FILE)} - ${TEST_BINARY.displayName} Preview`));
+    // 074 FR-103 — a provider that declares no icon is headed by the generic preview icon.
+    expect(screen.getByTestId(`panel-kind-${id}`).querySelector('.icon')?.innerHTML).toBe(asDrawn(DEFAULT_ICON_SET.preview));
     const labels = await headerMenuLabels(user, id);
     expect(labels).not.toContain('Go to Editor');
     expect(labels).not.toContain('Open in Editor');
@@ -654,11 +668,14 @@ describe('S4 / S6a — the settings tab draws each provider’s generated settin
       `setting-${TEXT_KEY}.openTarget`,
       `setting-${TEXT_KEY}.shout`,
       `setting-${BINARY_KEY}.enabled`,
+      // 074 FR-016 — a binary provider has Open <files> in and Open previews in too (supersedes 044 FR-051).
+      `setting-${BINARY_KEY}.defaultOpenAction`,
+      `setting-${BINARY_KEY}.openTarget`,
     ]);
     const section = screen.getByTestId(SUBSECTION);
     expect(within(section).getByText(`${TEST_TEXT.displayName}: Shout`)).toBeInTheDocument();
     expect(within(section).getByText(`${TEST_BINARY.displayName}: Enabled`)).toBeInTheDocument();
-    expect(within(section).queryByText(`${TEST_BINARY.displayName}: Default open action`)).toBeNull();
+    expect(within(section).getByText(`Open ${TEST_BINARY.displayName} files in`)).toBeInTheDocument();
   });
 
   it('S6a — draws testText’s default open action and own toggle DISABLED while it is off, and leaves its toggle live', async () => {
@@ -696,7 +713,8 @@ describe('S5 — every generated default has a descriptor, and every descriptor 
         'editor.previews.providers.testBinary.enabled',
       ]),
     );
-    expect(leaves).not.toContain('editor.previews.providers.testBinary.defaultOpenAction');
+    // 074 FR-016 — a binary provider now has Open <files> in (supersedes 044 FR-051).
+    expect(leaves).toContain('editor.previews.providers.testBinary.defaultOpenAction');
   });
 });
 

@@ -307,12 +307,12 @@ describe('where it lives and what it is drawn with (FR-001, 040 FR-023/FR-024)',
     expect(syncButton.nextElementSibling).toBe(inGroup);
   });
 
-  it('draws the theme’s `preview` icon token, and no text label', async () => {
+  it('draws the file type’s preview icon token — `previewMarkdown` for a Markdown file (074 FR-103) — and no text label', async () => {
     await strip({ filePath: FILE });
     const icon = (button() as HTMLElement).querySelector('.icon');
     expect(icon).not.toBeNull();
     expect(icon).toHaveAttribute('aria-hidden', 'true');
-    expect(icon?.innerHTML).toBe(markupFor('preview'));
+    expect(icon?.innerHTML).toBe(markupFor('previewMarkdown'));
     expect((button() as HTMLElement).textContent?.trim()).toBe('');
   });
 });

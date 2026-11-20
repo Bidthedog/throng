@@ -32,7 +32,7 @@ async function mountStandalone(): Promise<MountedPreview> {
 const panel = (): MountedPreview => m!;
 const title = (): string => screen.getByTestId(`panel-title-${panel().id}`).textContent ?? '';
 const dot = (): HTMLElement | null => screen.queryByTestId(`panel-unsaved-${panel().id}`);
-const STANDALONE_TITLE = `${fileNameOf(README)} - Preview`;
+const STANDALONE_TITLE = `${fileNameOf(README)} - Markdown Preview`; // 074 FR-104
 
 async function headerMenuLabels(): Promise<string[]> {
   fireEvent.contextMenu(screen.getByTestId(`panel-handle-${panel().id}`));

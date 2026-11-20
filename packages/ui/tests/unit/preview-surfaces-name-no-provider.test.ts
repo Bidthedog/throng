@@ -292,13 +292,18 @@ const ALLOWED: readonly Allowed[] = [
   { file: `${CORE_SRC}/icons/icon-keys.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — the icon key` },
   { file: `${CORE_SRC}/icons/icon-keys.ts`, kind: 'literal', token: 'The icon shown beside a Markdown document in the tree.', reason: `${FILE_ICON} — the key's description` },
   { file: `${CORE_SRC}/icons/default-icon-set.generated.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — the generated default set's key` },
-  {
-    file: `${CORE_SRC}/icons/icon-keys.ts`,
-    kind: 'literal',
-    token:
-      'The icon on the editor status bar button and menu rows that open a rendered, read-only view of a file such as a Markdown document, and at the head of that preview panel’s title.',
-    reason: 'user-facing copy for the `preview` icon key naming Markdown as an EXAMPLE of a previewable file; it selects nothing',
-  },
+  /*
+   * 074 FR-103 — the Markdown preview's own ICON KEY in the icon registry, beside every other themeable icon. The
+   * provider names it from its own descriptor (`previewIcon`) and every surface draws it through `previewIconOf`,
+   * so no surface selects it: a new provider's icon is a new key here, the icon registry's business, exactly as a
+   * file-type icon is.
+   */
+  ...allow(`${CORE_SRC}/icons/icon-keys.ts`, 'literal', ['previewMarkdown'], 'the Markdown preview icon key (074 FR-103), declared by the provider\'s own descriptor; no surface selects it'),
+  ...allow(`${CORE_SRC}/icons/icon-keys.ts`, 'identifier', ['previewMarkdown'], 'the Markdown preview icon key\'s description entry (074 FR-103); no surface selects it'),
+  ...allow(`${CORE_SRC}/icons/default-icon-set.generated.ts`, 'identifier', ['previewMarkdown'], 'the generated default set\'s art for the Markdown preview icon key (074 FR-103)'),
+  ...allow(`${CORE_SRC}/icons/icon-keys.ts`, 'literal', [
+    'The icon that names a Markdown preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with an M and a down arrow beneath its eye.',
+  ], 'user-facing copy for the Markdown preview icon key (074 FR-103): says what the icon is for; it selects nothing'),
   { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'literal', token: 'md', reason: `${FILE_ICON} — the extension it maps` },
   { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'literal', token: 'markdown', reason: `${FILE_ICON} — the extension it maps` },
   { file: `${UI_SRC}/renderer/explorer/tree-icons.ts`, kind: 'literal', token: 'fileMarkdown', reason: `${FILE_ICON} — the icon it maps to` },

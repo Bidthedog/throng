@@ -56,6 +56,7 @@ const project = (
   name: string,
   hiddenPaths: string[],
   searchExcludeGlobs: string[] = [],
+  htmlSafeSources: string[] = [],
 ): ProjectDto => ({
   id,
   name,
@@ -66,6 +67,7 @@ const project = (
   updatedAt: '2026-01-01T00:00:00.000Z',
   hiddenPaths,
   searchExcludeGlobs,
+  htmlSafeSources,
 });
 
 /**
@@ -84,6 +86,7 @@ function fakeDaemon(initial: ProjectDto[]) {
   const methods: string[] = [];
   const setHiddenCalls: { id: string; hiddenPaths: string[] }[] = [];
   const setSearchExcludesCalls: { id: string; searchExcludeGlobs: string[] }[] = [];
+  const setHtmlSafeSourcesCalls: { id: string; htmlSafeSources: string[] }[] = [];
 
   const bridge: ThrongBridge = {
     invoke<TResult>(method: string, params?: unknown): Promise<TResult> {
@@ -117,6 +120,13 @@ function fakeDaemon(initial: ProjectDto[]) {
           reply = { project: projects.find((p) => p.id === id) };
           break;
         }
+        case 'projects.setHtmlSafeSources': {
+          const { id, htmlSafeSources } = params as { id: string; htmlSafeSources: string[] };
+          setHtmlSafeSourcesCalls.push({ id, htmlSafeSources: [...htmlSafeSources] });
+          projects = projects.map((p) => (p.id === id ? { ...p, htmlSafeSources: [...htmlSafeSources] } : p));
+          reply = { project: projects.find((p) => p.id === id) };
+          break;
+        }
         case 'projects.delete': {
           const { id } = params as { id: string };
           projects = projects.filter((p) => p.id !== id);
@@ -130,7 +140,7 @@ function fakeDaemon(initial: ProjectDto[]) {
     },
   };
 
-  return { client: new ProjectsClient(bridge), methods, setHiddenCalls, setSearchExcludesCalls };
+  return { client: new ProjectsClient(bridge), methods, setHiddenCalls, setSearchExcludesCalls, setHtmlSafeSourcesCalls };
 }
 
 /**
@@ -168,7 +178,7 @@ function Host({ onClose }: { onClose: () => void }): ReactElement {
 }
 
 async function mount(initial: ProjectDto[]) {
-  const { client, methods, setHiddenCalls, setSearchExcludesCalls } = fakeDaemon(initial);
+  const { client, methods, setHiddenCalls, setSearchExcludesCalls, setHtmlSafeSourcesCalls } = fakeDaemon(initial);
   const onClose = vi.fn();
   const user = userEvent.setup({ delay: null });
   render(
@@ -177,7 +187,7 @@ async function mount(initial: ProjectDto[]) {
   // The store loads its list asynchronously on mount. Every test starts from a loaded store, so a
   // "no projects" assertion can never be a race with the first `projects.list`.
   await waitFor(() => expect(screen.getByTestId('store-state')).toHaveTextContent('ready'));
-  return { user, onClose, methods, setHiddenCalls, setSearchExcludesCalls };
+  return { user, onClose, methods, setHiddenCalls, setSearchExcludesCalls, setHtmlSafeSourcesCalls };
 }
 
 /**
@@ -757,5 +767,107 @@ describe('the per-row remove control is a themed icon with a title (FR-043a)', (
     expect(remove).toHaveAttribute('title', expect.stringContaining('a.txt'));
     expect(remove.querySelectorAll('.icon')).toHaveLength(1);
     expect(remove.textContent ?? '').not.toMatch(/remove/i);
+  });
+});
+
+const htmlSection = (): HTMLElement => sectionOf(/safe html preview sources/i);
+
+describe('the Safe HTML preview sources list (074 FR-072a)', () => {
+  const p = [project('p1', 'Demo', [], [], ['https://cdn.example.com', 'https://*.example.org'])];
+
+  it('is a third section that lists the project’s sources and names the global preference that also applies', async () => {
+    const { user, onClose } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+
+    expect(htmlSection()).toHaveTextContent('https://cdn.example.com');
+    expect(htmlSection()).toHaveTextContent('https://*.example.org');
+    const note = within(htmlSection()).getByTestId('project-settings-html-globals');
+    expect(note).toHaveTextContent('HTML: Safe preview sources');
+    expect(note).toHaveTextContent('Preferences → Editor → Previews → HTML');
+    // The shipped global sources are shown, as the other sections show their global lists.
+    expect(note).toHaveTextContent('https://fonts.googleapis.com');
+  });
+
+  it('says so when the project has none', async () => {
+    const { user, onClose } = await mount([project('p1', 'Demo', [])]);
+    await openProject(user, 'open-p1', onClose);
+
+    expect(screen.getByTestId('project-settings-html-empty')).toBeVisible();
+  });
+
+  it('adds a source on Enter in canonical form, keeping the others', async () => {
+    const { user, onClose, setHtmlSafeSourcesCalls } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+
+    await user.type(screen.getByTestId('html-source-add-input'), 'CDN.Other.com/styles.css{Enter}');
+
+    await waitFor(() => expect(htmlSection()).toHaveTextContent('https://cdn.other.com'));
+    expect(setHtmlSafeSourcesCalls).toEqual([
+      { id: 'p1', htmlSafeSources: ['https://cdn.example.com', 'https://*.example.org', 'https://cdn.other.com'] },
+    ]);
+  });
+
+  it('removes one by its icon, writing the WHOLE list minus it', async () => {
+    const { user, onClose, setHtmlSafeSourcesCalls } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+
+    await user.click(screen.getByTestId('html-source-remove-https://cdn.example.com'));
+
+    await waitFor(() => expect(htmlSection()).not.toHaveTextContent('https://cdn.example.com'));
+    expect(setHtmlSafeSourcesCalls).toEqual([{ id: 'p1', htmlSafeSources: ['https://*.example.org'] }]);
+  });
+
+  it('refuses http, writes nothing, and says what is wrong once', async () => {
+    const { user, onClose, setHtmlSafeSourcesCalls } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+
+    await user.type(screen.getByTestId('html-source-add-input'), 'http://cdn.example.net{Enter}');
+
+    expect(setHtmlSafeSourcesCalls).toEqual([]);
+    expect(screen.getAllByTestId('html-source-notice')).toHaveLength(1);
+    expect(screen.getByTestId('html-source-notice')).toHaveTextContent('Only https addresses can be sources');
+    // The text stays so it can be corrected.
+    expect(screen.getByTestId('html-source-add-input')).toHaveValue('http://cdn.example.net');
+  });
+
+  it('refuses something that is not an address at all, and clears the message on the next edit', async () => {
+    const { user, onClose, setHtmlSafeSourcesCalls } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+
+    await user.type(screen.getByTestId('html-source-add-input'), 'not an address{Enter}');
+    expect(setHtmlSafeSourcesCalls).toEqual([]);
+    expect(screen.getByTestId('html-source-notice')).toHaveTextContent(/not a web address/i);
+
+    await user.type(screen.getByTestId('html-source-add-input'), 'x');
+    expect(screen.queryByTestId('html-source-notice')).toBeNull();
+  });
+
+  it('adds nothing for a source already listed', async () => {
+    const { user, onClose, setHtmlSafeSourcesCalls } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+
+    await user.type(screen.getByTestId('html-source-add-input'), 'cdn.example.com{Enter}');
+
+    expect(setHtmlSafeSourcesCalls).toEqual([]);
+  });
+
+  it('keeps its list in its OWN scroll container, with the add row outside it', async () => {
+    const { user, onClose } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+
+    const list = within(htmlSection()).getByTestId('project-settings-html-list');
+    expect(list).toHaveClass('project-settings__list');
+    expect(list.contains(screen.getByTestId('html-source-add-input'))).toBe(false);
+    expect(list.contains(screen.getByTestId('project-settings-close'))).toBe(false);
+  });
+
+  it('draws icon controls with titles that name the entry', async () => {
+    const { user, onClose } = await mount(p);
+    await openProject(user, 'open-p1', onClose);
+
+    const remove = screen.getByTestId('html-source-remove-https://*.example.org');
+    expect(remove.querySelectorAll('.icon')).toHaveLength(1);
+    expect(remove).toHaveAttribute('title', expect.stringContaining('https://*.example.org'));
+    expect(screen.getByTestId('html-source-add').querySelectorAll('.icon')).toHaveLength(1);
   });
 });

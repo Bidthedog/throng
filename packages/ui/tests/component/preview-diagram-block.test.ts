@@ -144,7 +144,7 @@ describe('across live updates (FR-044, FR-046g)', () => {
     const two = (lead: string): string => `${lead}\`\`\`mermaid\ngraph A\n\`\`\`\n\n\`\`\`mermaid\ngraph B\n\`\`\``;
     const { rerender } = render(createElement(MarkdownBody, bodyProps(two(''))));
     await waitFor(() => expect(frame(1)?.querySelector('svg')).toBeTruthy(), COLD);
-    fireEvent.click(within(frame(1)!).getByTitle('Zoom in'));
+    fireEvent.click(within(frame(1)!).getByTitle(/^Zoom in \(/));
     expect(frame(1)!.getAttribute('data-mode')).toBe('zoom');
 
     rerender(createElement(MarkdownBody, bodyProps(two('A new paragraph above.\n\n'))));

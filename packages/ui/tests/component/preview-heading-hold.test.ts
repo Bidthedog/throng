@@ -28,7 +28,7 @@ const DOC = [
   '', //                  1
   '[Here](#usage)', //    2
   '', //                  3
-  '![pic](pic.png)', //   4
+  'A ![pic](pic.png) inline.', //   4
   '', //                  5
   '## Usage', //          6
   '', //                  7

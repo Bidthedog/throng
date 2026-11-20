@@ -83,7 +83,7 @@ async function previewFromEditor(win: Page, file: string, text: string): Promise
  */
 async function previewFromTree(win: Page, file: string): Promise<string> {
   await win.getByTestId('file-explorer-tree').getByText(file, { exact: true }).click();
-  const title = `${file} - Preview`; // 054 FR-005a: the full file name
+  const title = `${file} - Mermaid Preview`; // 054 FR-005a: the full file name; 074 FR-104: its type
   const heading = win.locator('[data-testid^="panel-title-"]').filter({ hasText: new RegExp(`^${title.replace(/\./g, '\\.')}$`) }).first();
   // Attached, not visible: this only finds the panel's id. A panel squeezed beside an earlier preview in a small
   // window (a hosted macOS runner's) draws its title too narrow to count as visible; the callers assert what the
@@ -131,7 +131,7 @@ test('a standalone .mmd file previews as one diagram through the Mermaid provide
   const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('.preview-diagram-frame__layer svg').first();
   await expect(svg).toBeVisible({ timeout: 15_000 });
   await expect(svg).toContainText('Begin here');
-  await expect(win.getByTestId(`panel-title-${id}`)).toHaveText('flow.mmd - Preview'); // 054 FR-005a, as Markdown
+  await expect(win.getByTestId(`panel-title-${id}`)).toHaveText('flow.mmd - Mermaid Preview'); // 054 FR-005a; 074 FR-104
 });
 
 test('MT-05: a large real-world flowchart in a folder with a space and capitals previews as a drawing', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {

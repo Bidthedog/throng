@@ -312,3 +312,30 @@ describe('one preview type per provider (054)', () => {
     expect(previews.run('v2')?.providerId).toBe('mermaid');
   });
 });
+
+/*
+ * 074 (maintainer report, 2026-11-19) — a reused binary preview must hand its body a source it has not seen. A PDF
+ * (or image) body reloads when its `resource` URL changes, and nothing else tells it the file did: the first move
+ * of a freshly attached run to another PDF built the SAME `?rev=` as the attach had, so the second PDF went on
+ * showing the first one's state — an encrypted first PDF's notice over a readable second one.
+ */
+describe('reusing a binary preview for another file (074)', () => {
+  it('hands the reused panel a source URL it has not had before, on the first move and every one after', async () => {
+    const a = await file('locked.pdf', '%PDF-1.7 encrypted');
+    const b = await file('readable.pdf', '%PDF-1.7 readable');
+    const c = await file('third.pdf', '%PDF-1.7 third');
+    const first = await attach('v1', a);
+    expect(first.content).toMatchObject({ kind: 'resource' });
+    const seen = [(first.content as { url: string }).url];
+
+    for (const next of [b, c]) {
+      push.clear();
+      expect(await open(next, { mode: 'lastActive', reusePanelId: 'v1' })).toEqual({ kind: 'navigated', panelId: 'v1' });
+      const moved = push.updates.filter((u) => u.update.panelId === 'v1' && u.update.filePath === next).at(-1);
+      expect(moved?.update.content).toMatchObject({ kind: 'resource' });
+      const url = (moved!.update.content as { url: string }).url;
+      expect(seen, `the move to ${next} reused a source URL the panel already had`).not.toContain(url);
+      seen.push(url);
+    }
+  });
+});

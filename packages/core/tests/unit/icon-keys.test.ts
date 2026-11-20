@@ -20,10 +20,13 @@ const EXPECTED_KEYS = [
   'windowClose', 'cut', 'copy', 'paste', 'selectAll', 'undo', 'redo', 'language', 'keybindings',
   'themes', 'about', 'hide', 'showHidden', 'resourceMonitor', 'resourceCpu', 'resourceMemory',
   'resourceGpu', 'resourceIo', 'resourceHideIdle', 'resourceKill', 'resourceKillBelow',
-  'chevronLeft', 'chevronRight', 'chevronDown', 'preview', 'refresh', 'navigateBack',
+  'chevronLeft', 'chevronRight', 'chevronDown', 'preview',
+  // 074 FR-103: each shipped preview type's own preview icon.
+  'previewMarkdown', 'previewMermaid', 'previewImage', 'previewSvg', 'previewPdf', 'previewHtml',
+  'refresh', 'navigateBack',
   'navigateForward', 'syncScroll', 'unload', 'category', 'foldSectionExpanded',
   'foldSectionCollapsed', 'foldPreviewExpanded', 'foldPreviewCollapsed', 'panelMaximise',
-  'panelRestore', 'diagramFit', 'diagramZoomReset', 'diagramFullPane', 'warning', 'whitespace',
+  'panelRestore', 'diagramFit', 'diagramZoomReset', 'diagramFullPane', 'pageLayoutSingle', 'pageLayoutTwo', 'pageLayoutWrap', 'warning', 'whitespace',
   'busy', 'groupFolderTree', 'projectSettings', 'searchExclusions', 'help', 'activate',
   'resourceHideEnded', 'resourceNetwork', 'dragHandle', 'menuChecked', 'overrideIcon',
   // 076 FR-002: the terminal status bar's three per-panel toggles.
@@ -34,9 +37,11 @@ describe('icon keys (069 FR-010 to FR-012)', () => {
   // 069 FR-055 added `deleteFile`: the File Explorer's Delete as a rubbish bin, apart from `destroy`'s ✕.
   // 069 FR-056 added the sixteen file and folder kinds Lucide draws that the tree did not.
   // 069 FR-057 added a key per common programming language.
-  it('is the 154 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069 and three from 076', () => {
+  // 074 FR-062c added a PDF preview's three page layouts: `pageLayoutSingle`, `pageLayoutTwo`, `pageLayoutWrap`.
+  // 074 FR-103 added a preview icon per shipped preview type, beside `preview`.
+  it('is the 163 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076 and nine from 074', () => {
     expect([...ICON_KEYS]).toEqual(EXPECTED_KEYS);
-    expect(ICON_KEYS).toHaveLength(154);
+    expect(ICON_KEYS).toHaveLength(163);
     expect(ICON_KEYS).not.toContain('notifications');
   });
 

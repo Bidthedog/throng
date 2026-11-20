@@ -84,6 +84,11 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           },
           // 054 FR-005 — the shipped Mermaid provider (text, no own settings); ships Preview (MT-04).
           mermaid: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' },
+          // 074 FR-010, FR-011 — the four media providers, each shipping Throng Preview and its own size cap.
+          image: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 52428800, transparencyHatch: true },
+          svg: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 10485760, transparencyHatch: true },
+          pdf: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 104857600 },
+          html: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 10485760, safeSources: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'] },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
@@ -332,6 +337,11 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           },
           // 054 FR-005 — the shipped Mermaid provider (text, no own settings); ships Preview (MT-04).
           mermaid: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive' },
+          // 074 FR-010, FR-011 — the four media providers, at their shipped values.
+          image: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 52428800, transparencyHatch: true },
+          svg: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 10485760, transparencyHatch: true },
+          pdf: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 104857600 },
+          html: { enabled: true, defaultOpenAction: 'preview', openTarget: 'lastActive', maxFileBytes: 10485760, safeSources: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'] },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence

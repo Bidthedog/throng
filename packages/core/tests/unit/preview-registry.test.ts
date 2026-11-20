@@ -244,9 +244,9 @@ describe('previewAffordance — the six-row decision table (data-model §2)', ()
 });
 
 describe('the shipped registration (FR-065, FR-080)', () => {
-  it('registers exactly Markdown then Mermaid, Markdown for .md and .markdown, as a text provider', () => {
-    // 054 FR-005 — Mermaid is the second shipped provider, registered after Markdown.
-    expect(SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((p) => p.id)).toEqual(['markdown', 'mermaid']);
+  it('registers Markdown, Mermaid, then 074 Image, SVG, PDF and HTML; Markdown for .md and .markdown, as text', () => {
+    // 054 FR-005 — Mermaid is the second shipped provider; 074 FR-001 adds four more, in Preferences order.
+    expect(SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((p) => p.id)).toEqual(['markdown', 'mermaid', 'image', 'svg', 'pdf', 'html']);
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown');
     expect(md?.kind).toBe('text');
     expect(md?.extensions).toEqual(['.md', '.markdown']);

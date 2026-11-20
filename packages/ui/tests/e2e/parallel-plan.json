@@ -64,6 +64,8 @@
     "panel-type-form.e2e.ts": "FOCUS",
     "panel-zoom.e2e.ts": "FOCUS",
     "performance.e2e.ts": "TIMING",
+    "preview-media-performance.e2e.ts": "TIMING",
+    "preview-html-frame.e2e.ts": "FOCUS",
     "phase9.e2e.ts": "FOCUS",
     "preferences-fonts-and-sliders.e2e.ts": "FOCUS",
     "preferences-json.e2e.ts": "FOCUS",

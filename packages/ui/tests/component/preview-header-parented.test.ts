@@ -183,24 +183,24 @@ afterEach(() => {
 });
 
 describe('the title names the file, parented or not (054 FR-005a, superseding 044 FR-031)', () => {
-  it('reads `<file name> - Preview`, extension included, whatever the parent editor is called', async () => {
+  it('reads `<file name> - <Type> Preview` (074 FR-104), extension included, whatever the parent editor is called', async () => {
     const { id, push } = await mountPreview();
     push(update({ revision: 2, content: null, parent: { panelId: 'ed', title: 'My Notes' } }));
-    expect(title(id).textContent).toBe('notes.prvtxt - Preview');
+    expect(title(id).textContent).toBe('notes.prvtxt - Test text Preview');
   });
 
   it('a rename of the parent editor leaves it alone', async () => {
     const { id, push } = await mountPreview();
     push(update({ revision: 2, content: null, parent: { panelId: 'ed', title: 'notes' } }));
     push(update({ revision: 3, content: null, parent: { panelId: 'ed', title: 'Release plan' } }));
-    expect(title(id).textContent).toBe('notes.prvtxt - Preview');
+    expect(title(id).textContent).toBe('notes.prvtxt - Test text Preview');
   });
 
   it('is the same once the parent goes away (FR-013b)', async () => {
     const { id, push } = await mountPreview();
     push(update({ revision: 2, content: null, parent: { panelId: 'ed', title: 'Release plan' } }));
     push(update({ revision: 3, content: null, parent: null }));
-    expect(title(id).textContent).toBe('notes.prvtxt - Preview');
+    expect(title(id).textContent).toBe('notes.prvtxt - Test text Preview');
   });
 
   it('hovering the header shows the file’s full path', async () => {
