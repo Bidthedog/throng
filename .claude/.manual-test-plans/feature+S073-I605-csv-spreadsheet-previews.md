@@ -13,7 +13,7 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 | MT-07 | Go to Row, Line and Page | untested | | | |
 | MT-08 | Wrapping cells | untested | | | |
 | MT-09 | Locking the first row and column | untested | | | |
-| MT-10 | A CSV and its editor in step; toggle looks | untested | | | |
+| MT-10 | A CSV and its editor in step; toggle looks | needs retest | | | failed: I do not see the highlight in the editor any more - just on the CSV preview. |
 
 ## MT-01: A CSV opens as a grid
 
@@ -199,7 +199,7 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 
 ## MT-10: A CSV and its editor in step; toggle looks
 
-Covers: FR-033c, FR-033d, FR-033e, FR-007a
+Covers: FR-033c, FR-033d, FR-033e, FR-033f, FR-007a
 Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/editor/status-strip.tsx`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/preview/provider.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/editor/**`, `packages/ui/src/renderer/preview/providers/markdown/**`
 
 ### Steps
@@ -211,6 +211,7 @@ Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/s
 6. With the CSV editor and preview side by side and Synchronise Scrolling on, scroll the editor: a soft highlight marks the line in the middle of the editor and the same record's row in the grid, while the tops of the two views stay in step, and fades about a second and a half after you stop. Keyboard focus stays in the editor. Scroll the grid: the same, the other way.
 7. Scroll the grid with Wrap on, so its rows are taller than the editor's lines: the highlight sits on the row in the middle of the grid, and on the matching line in the editor wherever that is, not necessarily its middle.
 8. Do the same with a long Markdown file and its preview, the preview gutter enabled: the editor highlights the matching line and the preview's gutter shows a marker beside the matching block. Turn the Markdown preview gutter off in Preferences: no marker, the editor highlight remains.
+9. Preferences › Editor › Previews › **Scroll-sync highlight duration** shows 1.5. Set it to 4: both highlights stay about four seconds after you stop scrolling. Set it to 0: no highlight in either view.
 
 ### Negative cases
 - A CSV preview has no Go to Heading; Ctrl+G still opens Go to Row.
