@@ -124,3 +124,58 @@ Preview providers "markdown" and "notes" both claim ".md"
 
 The shipped registry is built at module load in core, so the throw happens on the first import in
 every process — a unit test (`preview-registry.test.ts`) pins the message.
+
+## Amendment — spec 074 (2026-11-18)
+
+- **§2 descriptors** gain provider-neutral fields: `filesNoun`, `previewOptionLabel` (the "Open <files> in"
+  preference, 074 `contracts/open-in-preference.md`, which supersedes 044 FR-050/FR-051 — every provider, binary
+  included, has `defaultOpenAction` and `openTarget`), `maxFileBytesSetting`, `assetMimeTypes` and
+  `revealsMatches`.
+- **§4 binary size limit**: the source route is capped by `maxFileBytesFor(registry, settings, providerId,
+  editor.maxOpenFileBytes)` — the provider's own Maximum file size where it declares one — and main refuses a file
+  over it before reading, with `{ kind: 'too-large', size, limit }`.
+- **Body props** gain `onStatusReadout` (the status bar's readout slot; a binary preview's bar shows it and nothing
+  else) and `readSource(asset?)` (the run's source, or one of its assets, through the protocol handler).
+
+## Amendment — spec 073 (2026-11-19, recorded at the 073/074/075 merge 2026-11-20)
+
+- **§2 descriptors** gain provider-neutral fields, each read by the chrome and never by a provider id:
+  - `editable` (073 FR-030) — a text provider whose preview edits its document (the CSV Preview Editor): main shows
+    its edits at once, the chrome lets its body own paste, cut and drop, and its run may open the file as a document
+    of its own. Supersedes 044 FR-020/FR-025 for such a provider only.
+  - `sizeLimitSetting` (073 FR-061, FR-062) — names the provider setting that caps what its preview reads, in place of
+    the editor's limit; resolved through 074's `maxFileBytesFor`.
+  - `cellDialog`, `wrapToggle`, `lockToggles` (073 FR-036b, FR-013, FR-039a) — the grid's per-panel toggles, each
+    drawn on the preview status bar and in the panel menu when the descriptor declares it.
+  - `scrollSync` (073 FR-033c) — a text provider takes part in Synchronise Scrolling without being a flowing document;
+    absent reads `isFlowingDocument`.
+  - `goTo: 'row'` (073 FR-043a) beside 074's `'page'` — what `previewGoToKind` answers, so every surface labels the
+    Go to row Go to Row….
+  - `previewIcon` (074 FR-103) — `previewCsv` and `previewSpreadsheet` for the two grid providers.
+- **Body props** gain `registerGoTo(open)` (the shared Go to dialog, 073 FR-043b) and `syncMark` / `syncMarkSource`
+  (the in-step highlight, 073 FR-033d–FR-033g). The grid bodies read their source through `readSource` as every
+  binary body does.
+
+## Amendment — spec 075 (2026-11-20, recorded at the 073/074/075 merge)
+
+- **§2 descriptors** gain `print?: 'document' | 'pages'` (075 FR-060 – FR-062): whether, and how, a provider's previews
+  print — `document`, a flowing document throng paginates; `pages`, ready-made PDF pages. Absent, they cannot print,
+  and **Print…** is drawn on every surface, disabled, with the reason. Every surface reads it through `canPrint`, never
+  a provider id. Markdown and Mermaid declare `document`; no 073 or 074 provider declares it yet.
+- **§1 views** gain `printable?(body, { title })` → `Promise<PrintableOutput>`: the body as drawn, handed to Print
+  Preview. A descriptor that declares `print` obliges its view to supply it — `provider-views.test.ts` fails
+  otherwise — and the shared builder (`preview/print/printable.ts`) is what both shipped views use.
+- **§3** is unchanged: the panel chrome and its menus reach printing through `canPrint` and the view's `printable`,
+  and name no provider (`preview-surfaces-name-no-provider.test.ts`).
+
+## Amendment — spec 077 (2026-11-20)
+
+- **§2 descriptors**: one size-cap field. `sizeLimitSetting` (073 above) is removed; every provider that caps its
+  reads, the Spreadsheet included (`maxPreviewBytes`), names its cap with `maxFileBytesSetting`, a `number` setting
+  stored in bytes and shown in MB (077 FR-001, FR-018). The registry refuses a `maxFileBytesSetting` that names
+  anything else. A provider setting declaration may carry `storedUnit`, `display`, `unitLabel`, `hardMin` and
+  `hardMax`, passed through to its Preferences descriptor.
+- **§4 binary size limit**: `hasOwnSizeCap` and `maxFileBytesFor` read `maxFileBytesSetting` alone, for the source
+  route, the pre-read check and the parented-text check alike. The refusal is
+  `{ kind: 'too-large', size, limit, limitKey }`: `limitKey` (`maxFileBytesKeyFor`) names the setting that set
+  `limit`, so the notice quotes it as Preferences shows it (077 FR-015).
