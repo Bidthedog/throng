@@ -14,4 +14,6 @@ export const pdfView: PreviewProviderView = {
   id: 'pdf',
   textSelection: true,
   load: () => import('./pdf-body.js').then((m) => m.PdfBody),
+  // 075 FR-075c — the PDF's own pages, one per sheet, fitted whole.
+  printable: (_body, { title, readSource }) => import('../../print/pdf-printable.js').then((m) => m.buildPdfPrintable(readSource, title)),
 };

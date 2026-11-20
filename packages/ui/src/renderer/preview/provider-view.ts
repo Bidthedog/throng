@@ -290,6 +290,13 @@ export interface PageLayoutControl {
 
 export type PreviewBody = ComponentType<PreviewBodyProps>;
 
+/** 075 FR-060 — what a view's `printable` is told besides the body. */
+export interface PrintableContext {
+  readonly title: string;
+  /** 075 FR-075c — the previewed file's bytes, through the source route; absent where the chrome offers none. */
+  readonly readSource?: () => Promise<{ ok: true; bytes: Uint8Array } | { ok: false; status: number }>;
+}
+
 export interface PreviewProviderView {
   /** The id of the core descriptor this view draws. */
   id: string;
@@ -318,5 +325,5 @@ export interface PreviewProviderView {
    * 075 FR-060 — what Print Preview prints for what `body` shows now. Required when the core descriptor declares
    * `print` (`provider-views.test.ts`); a provider without it cannot print, and Print… says so (FR-062).
    */
-  printable?(body: HTMLElement, context: { readonly title: string }): Promise<PrintableOutput>;
+  printable?(body: HTMLElement, context: PrintableContext): Promise<PrintableOutput>;
 }

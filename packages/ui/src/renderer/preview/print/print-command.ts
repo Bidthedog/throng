@@ -7,7 +7,7 @@
  * declares no `print` cannot be printed, and every surface draws its row disabled with {@link PRINT_UNAVAILABLE}.
  */
 import { logCaught, type PrintJobRequest } from '@throng/core';
-import type { PreviewProviderView } from '../provider-view.js';
+import type { PreviewProviderView, PrintableContext } from '../provider-view.js';
 
 /** The hover on a disabled Print… row (FR-062): what is wrong, not what the user may not do. */
 export const PRINT_UNAVAILABLE = 'This preview type cannot be printed.';
@@ -21,6 +21,8 @@ export interface PrintTarget {
   readonly body: HTMLElement | null;
   /** The previewed file's absolute path, whose name titles the job. */
   readonly filePath: string;
+  /** 075 FR-075c — the file's bytes, for a provider that prints from them (a PDF). */
+  readonly readSource?: PrintableContext['readSource'];
 }
 
 /** The file name a print job is titled with. */
@@ -37,7 +39,7 @@ export async function printPreviewPanel(target: PrintTarget, open: PrintOpen | u
   if (view?.printable === undefined || body === null || open === undefined) return false;
   try {
     const title = printTitle(target.filePath);
-    const output = await view.printable(body, { title });
+    const output = await view.printable(body, { title, ...(target.readSource !== undefined ? { readSource: target.readSource } : {}) });
     await open({ title, output });
     return true;
   } catch (error) {

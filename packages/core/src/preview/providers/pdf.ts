@@ -16,6 +16,8 @@ export const pdfProvider: PreviewProviderDescriptor = {
   displayName: 'PDF',
   extensions: ['.pdf'],
   kind: 'binary',
+  // 075 FR-075c (the maintainer, 2026-11-20) — the PDF's own pages, one per sheet of paper, each fitted whole.
+  print: 'document',
   // 074 FR-103 — drawn as the preview icon with this type's mark.
   previewIcon: 'previewPdf',
   sourceMimeTypes: ['application/pdf'],

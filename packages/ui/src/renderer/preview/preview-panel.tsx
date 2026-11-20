@@ -1179,9 +1179,15 @@ export function PreviewPanel({
   const printPanel = useCallback((): boolean => {
     const current = stateRef.current;
     if (!current || !canPrint(registry.get(current.providerId))) return false;
-    void printPreviewPanel({ view: viewRef.current, body: bodyHostRef.current, filePath: current.filePath });
+    void printPreviewPanel({
+      view: viewRef.current,
+      body: bodyHostRef.current,
+      filePath: current.filePath,
+      // 075 FR-075c — a PDF prints its own pages, read from its file.
+      readSource: () => window.throng?.preview?.readSource?.(panelId) ?? Promise.resolve({ ok: false as const, status: 404 }),
+    });
     return true;
-  }, [registry]);
+  }, [registry, panelId]);
 
   const onHeadingOutlineClose = useCallback((): void => {
     setHeadingOutlineOpen(false);
