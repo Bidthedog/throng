@@ -628,7 +628,13 @@ async function launch(files: readonly SeedFile[]): Promise<{ h: OpenApp; done: (
   // SC-009 runs to 50 MB; the editor refuses files over `editor.maxOpenFileBytes` (10 MiB shipped), so
   // the limit is raised the way a user would raise it.
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-calib-cfg-'));
-  writeSettingsAtomic(cfgRoot, { editor: { maxOpenFileBytes: 64 * 1024 * 1024 } });
+  // 075 FR-093a — a Markdown preview opened from an editor reuses the tab's last active one unless the user asks for
+  // a new one. A benchmark opens one preview per document, side by side, so it asks the way a user would: the
+  // Markdown provider's *Open previews in* set to New (047 FR-010). Without it every preview after the first
+  // reused the first, and `openPreview` waited for a panel that never came (pipeline 44762998591, Windows).
+  writeSettingsAtomic(cfgRoot, {
+    editor: { maxOpenFileBytes: 64 * 1024 * 1024, previews: { providers: { markdown: { openTarget: 'new' } } } },
+  });
   const cleanup = (): void => {
     cleanupTemp(root);
     cleanupTemp(cfgRoot);
