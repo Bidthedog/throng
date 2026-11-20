@@ -93,9 +93,10 @@ function takesKeys(target: EventTarget | null): boolean {
 }
 
 /**
- * The margins drawing's page, in em: its longer side, and the least height it may have. FR-069 (pipeline 44791444200):
- * at 7em the drawing pushed the settings pane 33 px past the window's minimum size; at 5em, with the pane's rows
- * tightened, it fits with 24 px to spare (measured at 640 × 680 in Chromium, every paper and orientation).
+ * The margins drawing's page, in em: its longer side when the pane has room, and the least height it may shrink to.
+ * FR-069 — the drawing is the one part of the settings pane that gives way (print-preview.css): when a two-line
+ * message or a wider font leaves the pane short at the window's minimum size (pipelines 44791444200, 44800348820), the
+ * page shrinks towards {@link SHEET_MIN_HEIGHT_EM} rather than the pane overflowing.
  */
 const SHEET_LONG_EM = 5;
 /** A side margin's box and its "mm" below it stand about 3.3em: a page shorter than that leaves an uneven gap. */
@@ -114,12 +115,33 @@ export function sheetSizeEm(settings: Pick<PrintSettings, 'pageSize' | 'orientat
   return { width: width * scale, height: height * scale };
 }
 
+/**
+ * The drawn page's height, shape and least height as custom properties, set on the drawing (whose grid reads the least
+ * height) and inherited by the page; the stylesheet takes the page's width from its height.
+ */
 function sheetSize(settings: PrintSettings): CSSProperties {
   const { width, height } = sheetSizeEm(settings);
   return {
-    '--print-sheet-width': `${width.toFixed(3)}em`,
     '--print-sheet-height': `${height.toFixed(3)}em`,
+    '--print-sheet-ratio': (width / height).toFixed(4),
+    '--print-sheet-min-height': `${SHEET_MIN_HEIGHT_EM}em`,
   } as CSSProperties;
+}
+
+/**
+ * A malformed page range's message. FR-069 — short enough for the Pages box's one line (print-preview.css): the longer
+ * "Enter pages as numbers and ranges, such as 1-3, 5." wrapped onto a second line, and the pane overflowed the window's
+ * minimum size on Windows (pipeline 44800348820).
+ */
+export const RANGE_HINT = 'Enter pages such as 1-3, 5.';
+
+/** A message under the page range: one line, its whole text the tooltip should a wider font cut it short. */
+function RangeMessage({ text }: { text: string }): ReactElement {
+  return (
+    <span className="print-preview__message" title={text}>
+      {text}
+    </span>
+  );
 }
 
 export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPreviewProps): ReactElement {
@@ -472,7 +494,7 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
               </label>
               {settings.margins.preset === 'custom' && (
                 // 2026-11-20 — drawn as the page: a box at each edge, in millimetres, round a white sheet.
-                <div className="print-preview__margins-page" role="group" aria-label="Custom margins" data-testid="print-margins-page">
+                <div className="print-preview__margins-page" role="group" aria-label="Custom margins" data-testid="print-margins-page" style={sheetSize(settings)}>
                   {EDGES.map((side) => (
                     <span key={side} className={`print-preview__margin-edge print-preview__margin-edge--${side}`} data-edge={side}>
                       <NumberField
@@ -488,7 +510,7 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                       </span>
                     </span>
                   ))}
-                  <span className="print-preview__margins-sheet" aria-hidden="true" style={sheetSize(settings)} />
+                  <span className="print-preview__margins-sheet" aria-hidden="true" />
                 </div>
               )}
               <label className="print-preview__field print-preview__field--inline">
@@ -567,11 +589,9 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                     data-testid="print-pages-text"
                   />
                 </label>
-                {!rangeValid(settings) && <span className="print-preview__message">Enter pages as numbers and ranges, such as 1-3, 5.</span>}
+                {!rangeValid(settings) && <RangeMessage text={RANGE_HINT} />}
                 {rangeValid(settings) && rangePastEnd !== null && (
-                  <span className="print-preview__message">
-                    This document has {formatGrouped(rangePastEnd.pageCount)} page{rangePastEnd.pageCount === 1 ? '' : 's'}.
-                  </span>
+                  <RangeMessage text={`This document has ${formatGrouped(rangePastEnd.pageCount)} page${rangePastEnd.pageCount === 1 ? '' : 's'}.`} />
                 )}
               </fieldset>
               <label className="print-preview__field">

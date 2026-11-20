@@ -119,8 +119,10 @@ test('Ctrl+P opens one modal Print Preview whose pages render, and its settings 
     );
     expect(onTop, 'Print Preview is not kept above other windows').toBe(true);
 
-    // FR-069 (2026-11-20) — the settings never scroll: with every control shown (custom margins and scale, a range)
-    // in the smallest window Print Preview allows, nothing overflows the pane either way.
+    // FR-069 (2026-11-20) — the settings never scroll: with every control shown (custom margins and scale, a range,
+    // and the message an empty range raises) in the smallest window Print Preview allows, nothing overflows the pane
+    // either way. The margins drawing is the part that gives way when the pane runs short (pipeline 44800348820), so
+    // its contents must still fit inside it: spilling over the rows beneath would leave the pane's own size unchanged.
     await print.getByTestId('print-margins').selectOption('custom');
     await print.getByTestId('print-pages-range').check();
     await print.getByTestId('print-fit-width').uncheck();
@@ -137,10 +139,11 @@ test('Ctrl+P opens one modal Print Preview whose pages render, and its settings 
             overflowX: pane.scrollWidth - pane.clientWidth,
             overflowY: pane.scrollHeight - pane.clientHeight,
             scrolls: getComputedStyle(pane).overflowY !== 'hidden' || getComputedStyle(pane).overflowX !== 'hidden',
+            drawingSpills: ((d) => d.scrollHeight - d.clientHeight)(pane.querySelector('[data-testid="print-margins-page"]')!),
           })),
-        { timeout: 5000, message: 'the settings pane overflows, or would offer a scrollbar' },
+        { timeout: 5000, message: 'the settings pane overflows, would offer a scrollbar, or its margins drawing spills' },
       )
-      .toEqual({ overflowX: 0, overflowY: 0, scrolls: false });
+      .toEqual({ overflowX: 0, overflowY: 0, scrolls: false, drawingSpills: 0 });
 
     // FR-068b (the maintainer, 2026-11-20 17:21) — the left and right boxes carry "mm" BELOW them, so they take no
     // width beside the page; and the page fills the space between the four boxes, the same gap on every side.

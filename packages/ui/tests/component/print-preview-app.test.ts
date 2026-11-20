@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_PRINT_SETTINGS, PRINT_PAGE_SIZES, formatGrouped, type PrintJobView, type PrintSettings } from '@throng/core';
 import type { PrintPages } from '../../src/renderer/print-preview/print-pages.js';
-import { PRINTER_REFRESH_MS, PrintPreview, RENDER_DEBOUNCE_MS, VALIDATE_IDLE_MS, sheetSizeEm } from '../../src/renderer/print-preview/print-preview-app.js';
+import { PRINTER_REFRESH_MS, PrintPreview, RANGE_HINT, RENDER_DEBOUNCE_MS, VALIDATE_IDLE_MS, sheetSizeEm } from '../../src/renderer/print-preview/print-preview-app.js';
 
 /** PDF.js stands outside jsdom: the window's pages module is a fake whose draws the test can hold (074's pattern). */
 const pdf = vi.hoisted(() => ({
@@ -180,10 +180,36 @@ describe('Print Preview', () => {
     });
     await settle();
     expect(screen.getByTestId('print-pages-text').getAttribute('aria-invalid')).toBe('true');
-    expect(screen.getByText('This document has 3 pages.')).toBeTruthy();
+    expect(screen.getByText('This document has 3 pages.').getAttribute('title')).toBe('This document has 3 pages.');
     expect((screen.getByTestId('print-print') as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByTestId('print-notice')).toBeNull();
     expect(screen.getByTestId('print-status').textContent).not.toBe('Laying out pages…');
+  });
+
+  /*
+   * FR-069 (pipeline 44800348820) — on Windows the pane overflowed the window's minimum size by 2 px with the range
+   * chosen and empty: "Enter pages as numbers and ranges, such as 1-3, 5." wrapped onto a second line. The message and
+   * every choice now stand one line tall whatever their text or the platform's font; jsdom lays nothing out, so the
+   * rules are pinned here and print-preview.e2e measures the pane.
+   */
+  it('keeps the range message and every choice to one line, the message whole in its tooltip (FR-069)', async () => {
+    await mount();
+    fireEvent.click(screen.getByTestId('print-pages-range'));
+    await settle();
+    const message = screen.getByText(RANGE_HINT);
+    expect(message.getAttribute('title')).toBe(RANGE_HINT);
+    expect(RANGE_HINT.length, 'the wording fits the Pages box on one line').toBeLessThanOrEqual(28);
+
+    const css = readFileSync(join(__dirname, '../../src/renderer/print-preview/print-preview.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = (selector: string): string => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return [...css.matchAll(new RegExp(`(?:^|[},])\\s*${escaped}\\s*\\{([^}]*)\\}`, 'gm'))].map((m) => m[1]).join(';');
+    };
+    for (const selector of ['.print-preview__controls select', '.print-preview__pages .print-preview__message']) {
+      expect(rule(selector), selector).toMatch(/white-space:\s*nowrap/);
+      expect(rule(selector), selector).toMatch(/overflow:\s*hidden/);
+      expect(rule(selector), selector).toMatch(/text-overflow:\s*ellipsis/);
+    }
   });
 
   it('stops saying it is laying out when a range becomes malformed before the layout starts', async () => {
@@ -441,11 +467,18 @@ describe('the settings form (FR-066, FR-069; 2026-11-20)', () => {
       expect(rule(`.print-preview__margin-edge--${side}`), `the ${side} box`).toMatch(/flex-direction:\s*column/);
     }
     const sheet = rule('.print-preview__margins-sheet');
-    expect(sheet).toMatch(/justify-self:\s*stretch/);
-    expect(sheet).toMatch(/align-self:\s*stretch/);
-    // 18:10 — its size is the paper's, turned for the orientation (set inline, below).
-    expect(sheet).toMatch(/width:\s*var\(--print-sheet-width\)/);
-    expect(sheet).toMatch(/height:\s*var\(--print-sheet-height\)/);
+    // 18:10 — its size is the paper's, turned for the orientation (set inline, below): a height, and the width from it.
+    expect(sheet).toMatch(/(?:^|[;{\s])height:\s*var\(--print-sheet-height\)/);
+    expect(sheet).toMatch(/aspect-ratio:\s*var\(--print-sheet-ratio\)/);
+    // FR-069 (pipeline 44800348820) — the drawing is the one part of the pane that gives way: the page never stands
+    // taller than its row, which may shrink to a side box's height, and never narrower than its column, so the four
+    // gaps stay even while it does. jsdom lays nothing out; print-preview.e2e measures the pane at the minimum size.
+    expect(sheet).toMatch(/max-height:\s*100%/);
+    expect(sheet).toMatch(/min-width:\s*100%/);
+    const page = rule('.print-preview__margins-page');
+    expect(page).toMatch(/flex:\s*0 1 auto/);
+    expect(page).toMatch(/min-height:\s*0/);
+    expect(page).toMatch(/grid-template-rows:\s*auto minmax\(var\(--print-sheet-min-height\), auto\) auto/);
   });
 
   /*
@@ -470,11 +503,12 @@ describe('the settings form (FR-066, FR-069; 2026-11-20)', () => {
   // landscape", and "For 'Paper size', show the size in mm next to each option, depending on the orientation selected".
   it('draws the margins page in the paper\'s shape, and labels each paper size in mm, both turned with the orientation (FR-068b)', async () => {
     await mount(bridge({ ...JOB, settings: { ...JOB.settings, pageSize: 'A4', orientation: 'portrait', margins: { preset: 'custom', custom: { top: 10, right: 10, bottom: 10, left: 10 } } } }));
-    const sheet = (): HTMLElement => screen.getByTestId('print-margins-page').querySelector<HTMLElement>('.print-preview__margins-sheet')!;
-    const size = (): { w: number; h: number } => ({
-      w: Number.parseFloat(sheet().style.getPropertyValue('--print-sheet-width')),
-      h: Number.parseFloat(sheet().style.getPropertyValue('--print-sheet-height')),
-    });
+    // Set on the drawing, whose grid reads the least height; the page inherits them.
+    const drawing = (): HTMLElement => screen.getByTestId('print-margins-page');
+    const size = (): { w: number; h: number } => {
+      const h = Number.parseFloat(drawing().style.getPropertyValue('--print-sheet-height'));
+      return { w: h * Number.parseFloat(drawing().style.getPropertyValue('--print-sheet-ratio')), h };
+    };
     const label = (value: string): string | null => (screen.getByTestId('print-page-size') as HTMLSelectElement).querySelector(`option[value="${value}"]`)!.textContent;
 
     expect(size().h).toBeGreaterThan(size().w);

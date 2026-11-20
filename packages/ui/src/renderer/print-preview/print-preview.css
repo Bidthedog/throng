@@ -68,6 +68,17 @@
   min-width: 0;
 }
 
+/*
+ * FR-069 (pipeline 44800348820) — a choice stands one line tall whatever its text. Chromium wraps a select's text that
+ * is wider than the box, so a long printer name stood the Printer row a line taller, by how wide the platform's font
+ * sets it; the name is cut short instead, and the open list shows it whole.
+ */
+.print-preview__controls select {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .print-preview__field--inline input[type='text'] {
   flex: 1 1 auto;
   width: 0;
@@ -120,7 +131,15 @@
 .print-preview__margins-page {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  grid-template-rows: auto auto auto;
+  /*
+   * FR-069 (pipeline 44800348820) — the drawing gives way, nothing else does. It is the one row of the pane allowed to
+   * shrink, so a two-line message under Pages, or a font that sets wider, takes its height from the page drawn here
+   * rather than overflowing the pane. Its middle row keeps at least a side box's height (--print-sheet-min-height).
+   */
+  flex: 0 1 auto;
+  /* Past that least height its contents would spill over the rows beneath it: print-preview.e2e checks they do not. */
+  min-height: 0;
+  grid-template-rows: auto minmax(var(--print-sheet-min-height), auto) auto;
   grid-template-areas:
     '. top .'
     'left sheet right'
@@ -179,11 +198,18 @@
  */
 .print-preview__margins-sheet {
   grid-area: sheet;
-  justify-self: stretch;
-  align-self: stretch;
-  /* 18:10 — the paper's shape, turned for the orientation (set inline by the form). */
-  width: var(--print-sheet-width);
+  justify-self: center;
+  align-self: center;
+  /*
+   * 18:10 — the paper's shape, turned for the orientation (set inline by the form): its height, and its width from
+   * that. FR-069 — never taller than its row, which shrinks when the pane runs short; never narrower than its
+   * column, so a squeezed portrait page turns squarer rather than leaving wider gaps at its sides.
+   */
+  width: auto;
   height: var(--print-sheet-height);
+  max-height: 100%;
+  min-width: 100%;
+  aspect-ratio: var(--print-sheet-ratio);
   background: var(--print-paper);
   border: 1px solid var(--throng-colour-border);
   border-radius: 2px;
@@ -213,6 +239,17 @@
 
 .print-preview__message {
   color: var(--throng-colour-textMuted);
+}
+
+/*
+ * FR-069 — the page range's message (FR-068e) takes one line, so it never stands the pane taller than the window's
+ * minimum size allows (pipeline 44800348820: its old wording wrapped onto a second line and the pane overflowed by
+ * 2 px). The wording fits the line; a font that sets it wider cuts it short, and the whole text is its tooltip.
+ */
+.print-preview__pages .print-preview__message {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .print-preview__notice {
