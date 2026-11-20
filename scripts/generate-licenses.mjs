@@ -107,15 +107,14 @@ function licenceUrl(id, project) {
     : project;
 }
 
-// Run only when invoked as a script, so a test can import the helpers above.
-// Both sides are real paths: through a symlinked checkout argv[1] is the link while import.meta.url is
-// the target, and comparing them as given made the script silently do nothing.
-if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
-  const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
-
-  // Collect every production package in the install tree. Lockfile v3 keys are install paths
-  // ("node_modules/foo", "node_modules/a/node_modules/b"); `dev` marks dev-only, `link` marks a
-  // workspace symlink. Dedupe by name@version so a package pinned once appears once.
+/**
+ * Every production package in a lockfile's install tree. Lockfile v3 keys are install paths
+ * ("node_modules/foo", "node_modules/a/node_modules/b"); `dev` marks dev-only, `link` marks a workspace
+ * symlink. Deduped by name@version so a package pinned once appears once. Keyed on the install path,
+ * never on `resolved`, so a package installed from a URL tarball (073: SheetJS, from its own CDN) is
+ * listed like a registry one. `readPackage` returns the installed package.json, or null when unreadable.
+ */
+export function collectNpmEntries(lock, readPackage) {
   const byId = new Map();
   for (const [path, meta] of Object.entries(lock.packages ?? {})) {
     const at = path.lastIndexOf('node_modules/');
@@ -125,12 +124,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
     const id = `${name}@${meta.version}`;
     if (byId.has(id)) continue;
 
-    let pkg;
-    try {
-      pkg = JSON.parse(readFileSync(join(root, path, 'package.json'), 'utf8'));
-    } catch {
-      pkg = { version: meta.version, license: meta.license };
-    }
+    const pkg = readPackage(path) ?? { version: meta.version, license: meta.license };
     const licence = licenceId(pkg);
     const project = projectUrl(pkg);
     byId.set(id, {
@@ -141,8 +135,24 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
       projectUrl: project,
     });
   }
+  return [...byId.values()];
+}
 
-  const entries = mergeEntries([...byId.values()], vendoredEntries());
+/** The installed package.json at a lockfile install path under `base`, or null. */
+function readInstalled(base, path) {
+  try {
+    return JSON.parse(readFileSync(join(base, path, 'package.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Run only when invoked as a script, so a test can import the helpers above.
+// Both sides are real paths: through a symlinked checkout argv[1] is the link while import.meta.url is
+// the target, and comparing them as given made the script silently do nothing.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
+  const entries = mergeEntries(collectNpmEntries(lock, (path) => readInstalled(root, path)), vendoredEntries());
 
   // Written into the UI's built output so it ships as a plain file (electron-builder bundles
   // packages/*/dist/**), read by main via resolveFromHere('../third-party-licenses.json').
