@@ -34,7 +34,7 @@
  * Every panel action has a menu item (Principle VI): the route is on the body menu's and the header menu's Navigate
  * section, the toggle is their *Synchronise Scrolling*, and each calls the one function the panel hands in.
  */
-import { useRef, type ReactElement } from 'react';
+import { memo, useRef, type ReactElement } from 'react';
 import { FOCUS_MODE_STRIP_CLASS, FocusModeBadge, usePanelInFocusMode } from '../workspace/focus-mode-badge.js';
 import type { PreviewProviderKind } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
@@ -99,7 +99,7 @@ const WRAP_LABEL = 'Wrap cells';
 const LOCK_ROW_LABEL = 'Lock first row';
 const LOCK_COLUMN_LABEL = 'Lock first column';
 
-export function PreviewStatusBar({
+function PreviewStatusBarView({
   panelId,
   providerKind,
   parented,
@@ -251,3 +251,22 @@ export function PreviewStatusBar({
     </div>
   );
 }
+
+type Toggle = { on: boolean; onToggle: () => void } | undefined;
+const sameToggle = (a: Toggle, b: Toggle): boolean => a === b || (a !== undefined && b !== undefined && a.on === b.on && a.onToggle === b.onToggle);
+
+/**
+ * The bar re-measures its ruler after EVERY render (`useStripMeasure`): a dozen rectangle reads, each a forced layout in
+ * a browser. The panel chrome above re-renders once a frame while a pair scrolls in step (the editor's top line moves),
+ * and the toggles' props are fresh objects each time, so a plain `memo` would never hold. Compare them by value: a frame
+ * that changes nothing the bar draws re-renders and re-measures nothing (073 T077).
+ */
+export const PreviewStatusBar = memo(PreviewStatusBarView, (a, b) => {
+  const { cellDialog: ac, wrap: aw, lockFirstRow: ar, lockFirstColumn: al, readoutPrefs: ap, ...ra } = a;
+  const { cellDialog: bc, wrap: bw, lockFirstRow: br, lockFirstColumn: bl, readoutPrefs: bp, ...rb } = b;
+  if (!sameToggle(ac, bc) || !sameToggle(aw, bw) || !sameToggle(ar, br) || !sameToggle(al, bl)) return false;
+  if (ap !== bp && (ap?.showCursorPosition !== bp?.showCursorPosition || ap?.showCounts !== bp?.showCounts)) return false;
+  const keys = new Set([...Object.keys(ra), ...Object.keys(rb)] as (keyof typeof ra)[]);
+  for (const key of keys) if (!Object.is(ra[key], rb[key])) return false;
+  return true;
+});
