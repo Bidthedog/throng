@@ -4,6 +4,7 @@ import {
   ENCODING_CHOICES,
   encodingLabel,
   isFlowingDocument,
+  previewIconOf,
   lineEndingLabel,
   type EncodingId,
   type HeadingRecord,
@@ -373,7 +374,8 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       ? [
           {
             label: 'Open Preview',
-            icon: 'preview' as const,
+            // 074 FR-103 — the provider's own preview icon.
+            icon: previewIconOf(args.openPreview.affordance.provider),
             section: 'navigate' as const,
             shortcut: args.openPreview.chord,
             disabled: args.openPreview.affordance.state === 'disabled',

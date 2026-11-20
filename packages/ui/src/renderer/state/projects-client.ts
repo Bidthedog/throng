@@ -15,6 +15,7 @@ import type {
   ProjectsReorderResult,
   ProjectsSetActiveResult,
   ProjectsSetHiddenResult,
+  ProjectsSetHtmlSafeSourcesResult,
   ProjectsSetSearchExcludesResult,
   ProjectsUpdateParams,
   ProjectsUpdateResult,
@@ -70,6 +71,15 @@ export class ProjectsClient {
     const result = await this.bridge.invoke<ProjectsSetSearchExcludesResult>(
       'projects.setSearchExcludes',
       { id, searchExcludeGlobs },
+    );
+    return result.project;
+  }
+
+  /** 074 FR-072a — REPLACE a project's own safe HTML preview sources. */
+  async setHtmlSafeSources(id: string, htmlSafeSources: string[]): Promise<ProjectDto> {
+    const result = await this.bridge.invoke<ProjectsSetHtmlSafeSourcesResult>(
+      'projects.setHtmlSafeSources',
+      { id, htmlSafeSources },
     );
     return result.project;
   }

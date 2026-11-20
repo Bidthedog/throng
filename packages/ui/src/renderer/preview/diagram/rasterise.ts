@@ -16,8 +16,53 @@ function naturalSize(svg: SVGSVGElement): { width: number; height: number } {
   return { width: Number.parseFloat(svg.getAttribute('width') ?? '') || 300, height: Number.parseFloat(svg.getAttribute('height') ?? '') || 150 };
 }
 
+/**
+ * 074 R2 — a picture drawn as a one-`<image>` wrapper is rasterised from its OWN bytes, not by serialising the
+ * wrapper: an SVG loaded as an image cannot load the `<image>` inside it, and a `throng-preview:` picture would
+ * taint the canvas. The renderer that built the wrapper registers how to read those bytes.
+ */
+const rasterSources = new WeakMap<SVGSVGElement, () => Promise<Blob>>();
+
+/** Register `read` as `wrapper`'s raster source (see {@link rasterSources}). */
+export function registerRasterSource(wrapper: SVGSVGElement, read: () => Promise<Blob>): void {
+  rasterSources.set(wrapper, read);
+}
+
+/** A raster picture through `createImageBitmap`; an SVG (which it cannot decode) through an image of its blob. */
+async function decodeBlob(blob: Blob): Promise<ImageBitmap> {
+  if (blob.type !== 'image/svg+xml') return createImageBitmap(blob);
+  const url = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    return await createImageBitmap(image);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function rasteriseBlob(doc: Document, blob: Blob): Promise<string> {
+  const bitmap = await decodeBlob(blob);
+  try {
+    const canvas = doc.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d');
+    if (context === null) throw new Error('No canvas to draw the picture on.');
+    context.drawImage(bitmap, 0, 0);
+    const png = canvas.toDataURL('image/png');
+    if (!DIAGRAM_PNG_DATA_URI.test(png)) throw new Error('The picture could not be encoded.');
+    return png;
+  } finally {
+    bitmap.close();
+  }
+}
+
 export async function rasteriseSvg(svg: SVGSVGElement): Promise<string> {
   const doc = svg.ownerDocument;
+  const source = rasterSources.get(svg);
+  if (source !== undefined) return rasteriseBlob(doc, await source());
   const { width, height } = naturalSize(svg);
   const copy = svg.cloneNode(true) as SVGSVGElement;
   copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');

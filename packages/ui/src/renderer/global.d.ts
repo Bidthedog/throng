@@ -781,6 +781,8 @@ declare global {
         detach: (panelId: string) => void;
         /** The panel no longer exists (FR-042, FR-110). Never prompts, never touches the document. */
         destroyed: (panelId: string) => void;
+        /** 074 FR-072a — register the safe sources the panel's HTML frame (`throng-html-<panelId>`) may load from; [] forgets. */
+        setFrameSources: (panelId: string, origins: string[]) => void;
         navigate: (
           req: import('@throng/core').PreviewNavigateRequest,
         ) => Promise<import('@throng/core').PreviewNavigateResponse>;
@@ -803,6 +805,11 @@ declare global {
          * resolved and confined by main against the panel's own document and project. At most 50 per call.
          */
         readEmbeds?: (panelId: string, refs: string[]) => Promise<{ results: import('@throng/core').PreviewEmbedRead[] }>;
+        /** 074 R4 — a binary provider's source bytes (PDF.js, Copy Image), confined as the protocol confines them. */
+        readSource?: (
+          panelId: string,
+          asset?: string,
+        ) => Promise<{ ok: true; bytes: Uint8Array; mime: string } | { ok: false; status: number }>;
         /**
          * 054 FR-022 – FR-029 (contracts/preview-ipc-054.md) — toggle a task-list checkbox in the source.
          * Main locates the marker in the CURRENT text and edits one character; the preview never writes.
@@ -817,6 +824,8 @@ declare global {
         /** FR-091 — open a preview link's `http:`/`https:`/`mailto:` URL; main re-checks the scheme. */
         openExternal: (url: string) => void;
         onUpdate: (cb: (update: import('@throng/core').PreviewUpdate) => void) => () => void;
+        /** 074 R6 — a Ctrl+clicked link in a preview's sandboxed page, by the panel it was clicked in. */
+        onFrameLink?: (cb: (link: { panelId: string; href: string }) => void) => () => void;
         onOpenChanged: (cb: (evt: import('@throng/core').PreviewOpenChanged) => void) => () => void;
         onPathChanged: (cb: (evt: import('@throng/core').PreviewPathChanged) => void) => () => void;
         onFocus: (cb: (evt: import('@throng/core').PreviewFocusMessage) => void) => () => void;

@@ -22,6 +22,8 @@ export const mermaidProvider: PreviewProviderDescriptor = {
   displayName: 'Mermaid',
   extensions: ['.mmd', '.mermaid'],
   kind: 'text',
+  // 074 FR-103 — drawn as the preview icon with this type's mark.
+  previewIcon: 'previewMermaid',
   defaultOpenAction: 'preview',
   // One diagram, not a document: no Select All, Go to Heading or Synchronise Scrolling.
   flowingDocument: false,

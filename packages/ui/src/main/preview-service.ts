@@ -38,6 +38,8 @@ import {
   createSettleScheduler,
   editorAutoTitle,
   effectiveMaxWaitMs,
+  defaultOpenActionFor,
+  maxFileBytesFor,
   enabledProviderFor,
   isUnderPath,
   logCaught,
@@ -177,7 +179,8 @@ export interface PreviewServiceDeps {
   documents: PreviewDocuments;
   /** `EditorService.load` — the standalone read path (FR-025). */
   reader: Pick<EditorService, 'load'>;
-  fs: Pick<IFileSystem, 'exists' | 'stat' | 'realpath'>;
+  /** `size` (074 FR-012) — optional, so a harness without it simply skips the provider size cap. */
+  fs: Pick<IFileSystem, 'exists' | 'stat' | 'realpath'> & Partial<Pick<IFileSystem, 'size'>>;
   fileWatcher: IFileWatcher;
   /** Read live: a changed delay, max wait, size limit or provider toggle applies to the next use. */
   settings: () => AppSettings;
@@ -277,6 +280,13 @@ const canon = (path: string): string => normaliseForCompare(path);
 
 export class PreviewService implements DocumentLifecycleListener, PreviewLookup {
   private readonly runs = new Map<string, PreviewRun>();
+  /**
+   * 074 (2026-11-19) — the `?rev=` of every binary source URL, from one counter, so no read ever hands a panel a URL it
+   * has had: a binary body reloads only when its URL changes. It was `run.revision + 1`, which an attach (answered at
+   * the run's revision, not a new one) and the run's first move to another file both produced, so a reused PDF panel
+   * kept showing the file before.
+   */
+  private sourceSeq = 0;
   /**
    * 047 FR-041d, data-model.md "FoldState" — the per-history-entry fold snapshot: what a run's fold
    * state was on the entry it is LEAVING, so Back/Forward can restore it. Held here, not in
@@ -705,8 +715,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         return { update: (await this.showUnloadable(run, { repeat: true })) ?? this.snapshot(run) };
       }
       run.documentContentless = false;
-      if (current) run.lastSent = { kind: 'text', text: current.text };
       run.notice = this.providerNotice(run);
+      if (current) run.lastSent = this.documentContent(run, current.text);
       return { update: this.emit(run, run.lastSent) };
     }
     const update = await this.readAndApply(run, { force: true, repeat: true });
@@ -773,6 +783,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // 3. No enabled provider: an editor, as from File Explorer.
     const provider = enabledProviderFor(this.deps.registry, this.previewSettings(), target);
     if (!provider) return { kind: 'openedInEditor' };
+    // 074 FR-018 — a target whose type opens in the OS default program goes back the same way: the renderer's
+    // open router hands it to the OS, as from File Explorer.
+    if (defaultOpenActionFor(this.deps.registry, this.previewSettings(), target) === 'os') return { kind: 'openedInEditor' };
 
     // 4. One preview per file (FR-012): focus the one that exists.
     const other = this.runForPath(canon(target));
@@ -999,7 +1012,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // A document that cannot read the target is the only way a document-sourced read fails (`documentRead`).
     run.documentContentless = doc !== null && !read.ok;
     if (read.ok) {
-      run.lastSent = read.content;
+      // A document's unsaved text passes the provider's cap as every other way onto it does (FR-012).
+      run.lastSent = doc !== null && read.content.kind === 'text' ? this.documentContent(run, read.content.text) : read.content;
     } else {
       run.lastSent = CLEARED_CONTENT;
       run.notice = read.notice;
@@ -1104,9 +1118,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private showReadableDocument(run: PreviewRun, current: PreviewDocumentContent): PreviewUpdate {
     run.readSeq += 1; // any classification still in flight describes a document that is gone
     run.documentContentless = false;
-    run.lastSent = { kind: 'text', text: current.text };
     run.dirty = current.dirty;
     run.notice = this.providerNotice(run);
+    run.lastSent = this.documentContent(run, current.text);
     return this.emit(run, run.lastSent);
   }
 
@@ -1467,7 +1481,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       run.source = { kind: 'document', documentPanelId: doc.panelId };
       const current = this.deps.documents.getContent(doc.panelId);
       run.dirty = current?.dirty ?? false;
-      run.lastSent = current ? { kind: 'text', text: current.text } : null;
+      run.lastSent = current ? this.documentContent(run, current.text) : null;
       if (current?.contentless === true) {
         // Parented to a document that could not read this file: FR-026's notice, never its empty text.
         run.documentContentless = true;
@@ -1616,6 +1630,32 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   }
 
   /** FR-027 — the notice a run carries while no ENABLED provider claims its current file. */
+/**
+   * 074 FR-012 — a parented run's document text as the preview may show it: past the provider's Maximum file size
+   * (measured in UTF-8 bytes, as the file would be), the run says so — one too-large notice naming the size and the
+   * limit — and shows nothing; back under it, the notice the size cap raised clears. Every path that turns a
+   * document's text into the run's content comes through here.
+   */
+  private documentContent(run: PreviewRun, text: string): PreviewContent {
+    const over = this.bufferOverLimit(run.providerId, text);
+    if (over !== null) {
+      run.notice = over;
+      return CLEARED_CONTENT;
+    }
+    if (run.notice?.kind === 'too-large') run.notice = this.providerNotice(run);
+    return { kind: 'text', text };
+  }
+
+  private bufferOverLimit(providerId: string, text: string): PreviewNotice | null {
+    if (this.deps.registry.get(providerId)?.maxFileBytesSetting === undefined) return null;
+    const settings = this.deps.settings();
+    const limit = maxFileBytesFor(this.deps.registry, settings.editor.previews, providerId, settings.editor.maxOpenFileBytes);
+    // Cheap bound first: a UTF-8 string is at most 3 bytes per UTF-16 unit, at least 1.
+    if (text.length * 3 <= limit) return null;
+    const size = Buffer.byteLength(text, 'utf8');
+    return size > limit ? { kind: 'too-large', size, limit } : null;
+  }
+
   private providerNotice(run: PreviewRun): PreviewNotice | null {
     return enabledProviderFor(this.deps.registry, this.previewSettings(), run.filePath)
       ? null
@@ -1649,8 +1689,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     if (this.runs.get(run.panelId) !== run || run.source.kind !== 'document') return;
     const current = this.deps.documents.getContent(run.source.documentPanelId);
     if (!current) return;
-    if (run.lastSent?.kind === 'text' && run.lastSent.text === current.text) return;
-    run.lastSent = { kind: 'text', text: current.text };
+    if (run.lastSent?.kind === 'text' && run.lastSent.text === current.text && run.notice?.kind !== 'too-large') return;
+    const before = run.notice;
+    const content = this.documentContent(run, current.text);
+    if (run.notice === before && run.lastSent?.kind === 'text' && content.kind === 'text' && run.lastSent.text === content.text) return;
+    run.lastSent = content;
     this.emit(run, run.lastSent);
   }
 
@@ -1667,7 +1710,6 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // `registered` carries no dirtyChanged: the initial state is read, not assumed (§3).
     const current = this.deps.documents.getContent(documentPanelId);
     run.dirty = current?.dirty ?? false;
-    if (current) run.lastSent = { kind: 'text', text: current.text };
     // A document that could not read the file — a restore of a deleted file, the FR-106d stand-in — is not
     // the file: the run keeps saying what is wrong (FR-026) rather than showing that document's empty text.
     // Nothing is emitted until the disk has said why, so the notice already on screen never blinks off.
@@ -1677,6 +1719,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     }
     run.documentContentless = false;
     run.notice = this.providerNotice(run);
+    if (current) run.lastSent = this.documentContent(run, current.text);
     this.emit(run, run.lastSent);
   }
 
@@ -1733,6 +1776,25 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     run.source = { kind: 'disk', watch };
   }
 
+  /**
+   * 074 FR-012, SC-005 — a provider with its own Maximum file size refuses a file over it BEFORE anything is read:
+   * the notice names the size and the limit. `null` when the provider has no such setting, the file is within it,
+   * or its size cannot be asked (the read that follows reports that).
+   */
+  private async overProviderLimit(path: string, providerId: string): Promise<PreviewNotice | null> {
+    if (this.deps.registry.get(providerId)?.maxFileBytesSetting === undefined || this.deps.fs.size === undefined) return null;
+    const settings = this.deps.settings();
+    const limit = maxFileBytesFor(this.deps.registry, settings.editor.previews, providerId, settings.editor.maxOpenFileBytes);
+    let size: number;
+    try {
+      size = await this.deps.fs.size(path);
+    } catch (error) {
+      logExpected('preview-service: size before read', 'a file may vanish or be unreadable; the read reports it', error);
+      return null;
+    }
+    return size > limit ? { kind: 'too-large', size, limit } : null;
+  }
+
   private readDisk(run: PreviewRun): Promise<DiskRead> {
     return this.readPath(run, run.filePath, run.providerId);
   }
@@ -1740,9 +1802,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   /** Read `path` for `run` as provider `providerId` would show it — the run's own file or a link's target. */
   private async readPath(run: PreviewRun, path: string, providerId: string): Promise<DiskRead> {
     const provider = this.deps.registry.get(providerId);
+    const tooLarge = await this.overProviderLimit(path, providerId);
+    if (tooLarge !== null) return { ok: false, notice: tooLarge };
     if (provider?.kind === 'binary') {
       if (!(await this.isFile(path))) return { ok: false, notice: { kind: 'deleted' } };
-      const url = `throng-preview://source/${encodeURIComponent(run.panelId)}?rev=${run.revision + 1}`;
+      const url = `throng-preview://source/${encodeURIComponent(run.panelId)}?rev=${++this.sourceSeq}`;
       return { ok: true, content: { kind: 'resource', url } };
     }
     let result: LoadResult;

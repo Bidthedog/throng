@@ -26,6 +26,7 @@
  */
 import { Text as CodeMirrorText } from '@codemirror/state';
 import { editorMatches, type Match, type MatchModes } from '@throng/core';
+import { logExpected } from '@throng/core';
 
 /** DOM's own node-type constants, restated so this file needs no `Node` global (Node-environment tests). */
 const ELEMENT_NODE = 1;
@@ -37,9 +38,15 @@ const TEXT_NODE = 3;
  */
 export interface TextModelNode {
   readonly nodeType: number;
+  readonly nodeName?: string;
   readonly nodeValue?: string | null;
   readonly childNodes: ArrayLike<TextModelNode>;
   getAttribute?(name: string): string | null;
+  /**
+   * 074 FR-086b (R6d) — an `<iframe>`'s document: a same-origin frame's (an HTML Preview's page) is walked as part
+   * of the body, so its text is found like any other; a cross-origin frame's reads `null` and is skipped.
+   */
+  readonly contentDocument?: { readonly body: TextModelNode | null } | null;
 }
 
 /** One contiguous run of the model's text that came from a single DOM text node. */
@@ -61,6 +68,20 @@ function hasClass(node: TextModelNode, name: string): boolean {
   return raw.split(/\s+/).includes(name);
 }
 
+/** Elements whose text content is never drawn as text. */
+const NOT_TEXT = new Set(['STYLE', 'SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'TITLE']);
+
+/** A same-origin `<iframe>`'s body, or `null` (not a frame, cross-origin, not loaded). */
+function frameBody(node: TextModelNode): TextModelNode | null {
+  if (node.nodeName?.toUpperCase() !== 'IFRAME') return null;
+  try {
+    return node.contentDocument?.body ?? null;
+  } catch (error) {
+    logExpected('preview-search-model: read a frame', 'a browser may throw rather than answer null for a cross-origin frame; there is nothing to read', error);
+    return null;
+  }
+}
+
 /**
  * The default exclusion (R1): the fold gutter/toggle controls (`.preview-fold-toggle`,
  * `.preview-fold-gutter` — `contracts/menus-commands-controls.md` "Gutter controls"), and anything
@@ -68,6 +89,8 @@ function hasClass(node: TextModelNode, name: string): boolean {
  */
 export function defaultPreviewSearchExclusion(node: TextModelNode): boolean {
   return (
+    // 074 R6d — what a page carries but never draws as text (an HTML Preview's page keeps its own `<style>`).
+    NOT_TEXT.has(node.nodeName?.toUpperCase() ?? '') ||
     node.getAttribute?.('aria-hidden') === 'true' ||
     hasClass(node, 'preview-fold-toggle') ||
     hasClass(node, 'preview-fold-gutter') ||
@@ -92,6 +115,11 @@ export function buildPreviewTextModel(
         entries.push({ from: text.length, to: text.length + value.length, node });
         text += value;
       }
+      return;
+    }
+    const inner = node.nodeType === ELEMENT_NODE ? frameBody(node) : null;
+    if (inner !== null) {
+      walk(inner);
       return;
     }
     for (let i = 0; i < node.childNodes.length; i += 1) walk(node.childNodes[i]!);

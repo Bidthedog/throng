@@ -99,6 +99,7 @@ import {
 } from 'react';
 import { diagramActionsAt } from './diagram/diagram-actions.js';
 import {
+  classifyPreviewLink,
   collapseAll as foldCollapseAll,
   defaultOpenActionFor,
   enabledProviderFor,
@@ -134,6 +135,7 @@ import {
   countCharacters,
   expandWithin,
   isFlowingDocument,
+  previewGoToKind,
 } from '@throng/core';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -158,6 +160,7 @@ import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSec
 import { docDirectory, openPreviewLinkMenu } from './preview-link-menu.js';
 import { focusLocalPanel, requestPreviewOpen } from './open-preview.js';
 import { FindBar } from '../search/find-bar.js';
+import { setPanelUnsearchable } from './unsearchable-panels.js';
 import { attachPanelSearch, closeFind, getFindSession, openFind, updateCount } from '../search/search-store.js';
 import { unregisterPanelSearch } from '../search/search-controller.js';
 import { clearPanel } from './highlight-registry.js';
@@ -240,8 +243,9 @@ import {
 import { pairStart } from './scroll-sync-policy.js';
 import { usePreviewProviders } from './provider-registry-context.js';
 import { clearPreviewReservation, previewReservationFor } from './preview-reservations.js';
+import { useMiddleDragScroll } from './middle-drag-scroll.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
-import type { PreviewBody, PreviewBodyProps } from './provider-view.js';
+import type { PageLayout, PageLayoutControl, PreviewBody, PreviewBodyProps } from './provider-view.js';
 import {
   TASK_NOTICE_ACTION,
   taskNoticeMessage,
@@ -676,6 +680,8 @@ export function PreviewPanel({
   const bodyHostRef = useRef<HTMLDivElement | null>(null);
   // 054 — whether this preview is a flowing document (`isFlowingDocument`); set each render, read by handlers.
   const flowingRef = useRef(true);
+  /** 074 FR-062b — what this preview's Go to command goes to (`previewGoToKind`), as of the last render. */
+  const goToKindRef = useRef<'page' | 'heading' | null>('heading');
   const panelRootRef = useRef<HTMLDivElement | null>(null);
   /** Whether the body is covered by a file notice right now — read by the focus callback below. */
   const bodyCoveredRef = useRef(false);
@@ -931,7 +937,10 @@ export function PreviewPanel({
   useEffect(() => {
     setLinkTargets((current) => (current.hover === null && current.focus === null ? current : { hover: null, focus: null }));
   }, [shownFile]);
-  const linkReadout = linkTargets.hover ?? linkTargets.focus;
+  // 074 R8 — the body's own readout (an image's size, a PDF's page), shown when no link names a target.
+  const [bodyReadout, setBodyReadout] = useState<string | null>(null);
+  const onStatusReadout = useCallback((text: string | null): void => setBodyReadout(text), []);
+  const linkReadout = linkTargets.hover ?? linkTargets.focus ?? bodyReadout;
 
   /*
    * MT-02 (review, 2026-09-28) — a NAVIGATION onto another file (a Last Active open, a followed link, a
@@ -1118,7 +1127,30 @@ export function PreviewPanel({
     return currentHeadingSlug(positions, 0);
   }, []);
 
+  /** 074 FR-062b — what opens the body's Go to Page modal, while a paged body (PDF) is mounted. */
+  // 074 FR-062c — a paged body's layout, for the body menu's layout rows.
+  const bodyPageLayout = useRef<PageLayoutControl | null>(null);
+  const registerPageLayout = useCallback((control: PageLayoutControl | null): void => {
+    bodyPageLayout.current = control;
+  }, []);
+  // 074 FR-085a — a framed page's own document holds its selection.
+  const bodySelectionHost = useRef<(() => HTMLElement | null) | null>(null);
+  const registerSelectionHost = useCallback((host: (() => HTMLElement | null) | null): void => {
+    bodySelectionHost.current = host;
+  }, []);
+  /** Where the body's selection lives: the page's own document for a framed page, else the body host. */
+  const selectionHost = useCallback((): HTMLElement | null => bodySelectionHost.current?.() ?? bodyHostRef.current, []);
+  const bodyGoToPage = useRef<(() => void) | null>(null);
+  const registerGoToPage = useCallback((open: (() => void) | null): void => {
+    bodyGoToPage.current = open;
+  }, []);
+
   const openHeadingOutlineHandler = useCallback((): void => {
+    // 074 FR-062b — the same command, on a paged document, goes to a page.
+    if (goToKindRef.current === 'page') {
+      bodyGoToPage.current?.();
+      return;
+    }
     // A single picture (a Mermaid preview) has no headings to go to.
     if (!flowingRef.current) return;
     setHeadingOutlineCurrentSlug(computeCurrentHeadingSlug());
@@ -1657,6 +1689,22 @@ export function PreviewPanel({
     [panelId, panel.originProjectId, raiseLinkNotice, clearLinkNotice, revealFragmentIn, placeLeft],
   );
 
+  /*
+   * 074 research R6 (FR-079) — a link Ctrl+clicked inside a body's SANDBOXED page (an HTML preview's frame, which
+   * the panel cannot reach into) arrives from main's window-open guard, addressed by panel id. It is classified
+   * exactly as a link in a Markdown preview is — against this document's folder and project — and followed.
+   */
+  useEffect(() => {
+    const subscribe = window.throng?.preview?.onFrameLink;
+    if (subscribe === undefined) return undefined;
+    return subscribe(({ panelId: from, href }) => {
+      if (from !== panelId) return;
+      const root = projectRootRef.current;
+      if (root === null) return;
+      onFollow(classifyPreviewLink(href, { docPath: stateRef.current?.filePath ?? mountFile.current, projectRoot: root }));
+    });
+  }, [panelId, onFollow]);
+
   /* ── Back and Forward (044 US7: FR-102, FR-106b–d, FR-107) ───────────────────────────────────── */
 
   /**
@@ -1847,23 +1895,34 @@ export function PreviewPanel({
   );
 
   const selectAll = useCallback((): void => {
-    const host = bodyHostRef.current;
+    const host = selectionHost();
     if (host === null) return;
     // Focus FIRST: moving focus into the host collapses a selection made before it (observed in jsdom, and
-    // the order is harmless in Chromium), so the keyboard lands in the body and the selection survives.
-    host.focus({ preventScroll: true });
+    // the order is harmless in Chromium), so the keyboard lands in the body and the selection survives. A framed
+    // page (074 FR-085a) takes focus through its own window.
+    if (host.ownerDocument === document) host.focus({ preventScroll: true });
+    else host.ownerDocument.defaultView?.focus();
     selectAllIn(host);
-  }, []);
+  }, [selectionHost]);
 
   /* ── The body menu (FR-015b, FR-035, FR-095, FR-096d) ────────────────────────────────────────── */
 
   const { openMenu, updateMenu } = useContextMenu();
   const textSelection = view?.textSelection ?? false;
+  // 074 FR-086 — a body find cannot read: Find is shown disabled here, in the header menu and on the chord.
+  const searchable = view?.searchable !== false;
+  // 074 FR-086a — a body with no text at all (a picture): no Find anywhere, the chord consumed.
+  const findable = view?.findable !== false;
+  useEffect(() => {
+    setPanelUnsearchable(panelId, !findable ? 'absent' : !searchable);
+    return () => setPanelUnsearchable(panelId, false);
+  }, [panelId, searchable, findable]);
   const providerKind =
     (state ? registry.get(state.providerId) : undefined)?.kind ?? registry.forPath(mountFile.current)?.kind ?? 'text';
   // 054 — a provider that draws one picture (Mermaid) has no Select All, Go to Heading or scroll sync.
   const flowing = isFlowingDocument((state ? registry.get(state.providerId) : undefined) ?? registry.forPath(mountFile.current));
   flowingRef.current = flowing;
+  goToKindRef.current = previewGoToKind((state ? registry.get(state.providerId) : undefined) ?? registry.forPath(mountFile.current));
   const parented = state?.parent != null;
 
   /*
@@ -2139,7 +2198,7 @@ export function PreviewPanel({
    */
   const openBodyMenu = useCallback(
     (link: PreviewLink | null, point: { x: number; y: number }, target: Node | null = null): void => {
-      const host = bodyHostRef.current;
+      const host = selectionHost();
       const captured = host === null ? null : captureSelection(host);
       const selectionEmpty = captured === null;
 
@@ -2150,6 +2209,8 @@ export function PreviewPanel({
             copyFormat: copyFormatRef.current,
             copy: (format) => copySelection(captured, format),
             selectAll,
+            // 074 FR-085a — a framed page has Select All though it is not a flowing document.
+            pageSelectAll: bodySelectionHost.current !== null,
           }
         : null;
       const editorRoute: PreviewEditorRouteItem | null =
@@ -2170,9 +2231,18 @@ export function PreviewPanel({
               }
             : null,
         // 047 US1 (FR-007) — always offered, whatever is under the pointer.
-        find: { run: () => openFind(panelId, 'preview'), chord: firstBinding(keybindings, 'search.find') },
+        find: {
+          run: () => openFind(panelId, 'preview'),
+          chord: firstBinding(keybindings, 'search.find'),
+          ...(searchable ? {} : { disabled: true }),
+          ...(findable ? {} : { absent: true }),
+        },
         // 047 US4 — always offered too, even with no headings (the pop-down itself says so).
-        goToHeading: { run: openHeadingOutlineHandler, chord: firstBinding(keybindings, 'preview.goToHeading') },
+        goToHeading: {
+          run: openHeadingOutlineHandler,
+          chord: firstBinding(keybindings, 'preview.goToHeading'),
+          kind: goToKindRef.current,
+        },
         // 047 US3 (T048, FR-036) — the fold rows, resolved at the point the menu opened.
         fold: buildFoldMenuArgs(target),
         // 048 — the Split submenu, splitting this panel.
@@ -2180,6 +2250,10 @@ export function PreviewPanel({
         // 054 FR-074 — this panel's inline diagram is maximised over the document.
         focusLocked: isPanelSectionMaximised(panelId),
         flowingDocument: flowingRef.current,
+        pageLayout: (() => {
+          const control = bodyPageLayout.current;
+          return control === null ? null : { value: control.get(), set: (layout: PageLayout) => control.set(layout) };
+        })(),
         diagram: (() => {
           const found = diagramActionsAt(target);
           return found
@@ -2188,6 +2262,7 @@ export function PreviewPanel({
                 copyImage: () => found.copyImage(),
                 toggleFocus: () => found.toggleFocus(),
                 ...(found.focusChord !== undefined ? { focusChord: found.focusChord } : {}),
+                ...(found.picture === true ? { picture: true } : {}),
               }
             : null;
         })(),
@@ -2208,6 +2283,9 @@ export function PreviewPanel({
       panelId,
       openHeadingOutlineHandler,
       buildFoldMenuArgs,
+      searchable,
+      findable,
+      selectionHost,
     ],
   );
 
@@ -2244,14 +2322,14 @@ export function PreviewPanel({
    */
   const onRootCopy = useCallback(
     (e: ReactClipboardEvent<HTMLDivElement>): void => {
-      const host = bodyHostRef.current;
+      const host = selectionHost();
       if (host === null || selectionRangeIn(host) === null) return;
       e.preventDefault();
       // 054 FR-074 — the document is covered by its maximised diagram: nothing is copied from it.
       if (isPanelSectionMaximised(panelId)) return;
       copySelection(captureSelection(host), copyFormatRef.current);
     },
-    [copySelection, panelId],
+    [copySelection, panelId, selectionHost],
   );
 
   /** Paste and cut change a document; a preview has none to change. */
@@ -2276,6 +2354,9 @@ export function PreviewPanel({
   );
 
   /** Ctrl+A selects the body, not the window. */
+  // 074 (2026-11-19) — middle-button drag scrolls whatever scrolls under the pointer (middle-drag-scroll.ts).
+  const middleDrag = useMiddleDragScroll();
+
   const onHostKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>): void => {
       const selectAllKey = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a';
@@ -2452,6 +2533,7 @@ export function PreviewPanel({
             onKeyDown={onHostKeyDown}
             onKeyUp={onHostKeyUp}
             onBlur={onHostBlur}
+            {...middleDrag}
           >
         {Body !== null && state?.content ? (
           <Body
@@ -2477,6 +2559,14 @@ export function PreviewPanel({
             onLinkTarget={onLinkTarget}
             onDrawn={onDrawn}
             onBodyFailure={onBodyFailure}
+            onStatusReadout={onStatusReadout}
+            // 074 R4 — a pure passthrough, as readEmbeds is.
+            registerGoToPage={registerGoToPage}
+            registerPageLayout={registerPageLayout}
+            registerSelectionHost={registerSelectionHost}
+            readSource={(asset) =>
+              window.throng?.preview?.readSource?.(panelId, asset) ?? Promise.resolve({ ok: false as const, status: 404 })
+            }
             // 047 US6 (T063) — a pure passthrough to main's channel; no chrome-level decision (see
             // provider-view.ts's doc comment on why this one differs from onFollow/onFoldChange).
             readEmbeds={(refs) =>
@@ -2527,12 +2617,13 @@ export function PreviewPanel({
       />
       {/* FR-015a — the editor's bar, under the editor's setting; FR-015e — none for a binary provider. FR-118 —
           its one readout, the hovered or focused link's target, is shown only while the bar is. */}
-      {settings.editor.showStatusBar && onEditorRoute !== undefined ? (
+      {settings.editor.showStatusBar && (onEditorRoute !== undefined || (providerKind === 'binary' && linkReadout !== null)) ? (
         <PreviewStatusBar
           panelId={panelId}
           providerKind={providerKind}
           parented={parented}
-          onEditorRoute={onEditorRoute}
+          // 074 — a binary preview's bar (its readout only) draws no editor route, so none is needed.
+          onEditorRoute={onEditorRoute ?? (() => undefined)}
           editorRouteDisabled={movedOutTo !== null}
           syncScroll={settings.editor.previews.syncScroll}
           showSyncScroll={flowing}

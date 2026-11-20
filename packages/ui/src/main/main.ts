@@ -107,7 +107,8 @@ import { ICON_SETS_CHANNELS, registerIconSetsIpc } from './icon-sets-ipc.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { installNavigationGuards, installRendererRequestFilter } from './renderer-request-filter.js';
-import { createPreviewProtocolHandler, PREVIEW_SCHEME } from './preview-protocol.js';
+import { createFrameSources, registerFrameSourcesIpc } from './frame-sources.js';
+import { createPreviewProtocolHandler, PREVIEW_SCHEME, readPreviewSource } from './preview-protocol.js';
 import { PreviewService } from './preview-service.js';
 import { previewPurgePredicate, purgeUnloadedPreviews } from './preview-purge.js';
 import { heldRecords, walkMovedLayouts } from './moved-layout-walk.js';
@@ -1208,11 +1209,15 @@ if (isPrimaryInstance)
   // 044 Layer 4 (contracts/security-policy.md): installed here, before ANY window exists, so no
   // renderer ever makes a request the filter did not see. The settings getter is read on every request
   // (FR-092); `rendererDir` is the directory every window's `index.html` loads from.
+  // 074 FR-072a — each HTML Preview frame's safe sources, registered by its renderer, read by the filter.
+  const frameSources = createFrameSources();
+  registerFrameSourcesIpc(ipcMain, frameSources);
   installRendererRequestFilter(
     session.defaultSession,
     () => currentSettings,
     SHIPPED_PREVIEW_PROVIDERS,
     resolveFromHere('../renderer'),
+    frameSources,
   );
   // The active theme, kept fresh by `broadcast` below. Every window's preload pulls
   // it SYNCHRONOUSLY before first paint and applies it to <html>, so no window or
@@ -1810,7 +1815,8 @@ if (isPrimaryInstance)
   const projectsByRoot = new Map<
     string,
     // 060 #532 — `searchExcludeGlobs` rides the same list call: Find in Files reads it at scan time.
-    { id: string; rootFolder: string; hiddenPaths: string[]; searchExcludeGlobs: string[] }
+    // 074 FR-072a — `htmlSafeSources`, the project's own safe HTML preview sources, rides the same call.
+    { id: string; rootFolder: string; hiddenPaths: string[]; searchExcludeGlobs: string[]; htmlSafeSources: string[] }
   >();
   let attentionOnProjectsListed: ((projectIds: ReadonlySet<string>) => void) | null = null;
   const sameHidden = (a: readonly string[], b: readonly string[]): boolean =>
@@ -1823,6 +1829,7 @@ if (isPrimaryInstance)
       rootFolder: string;
       hiddenPaths?: string[];
       searchExcludeGlobs?: string[];
+      htmlSafeSources?: string[];
     };
     let projects: ListedProject[];
     try {
@@ -1852,6 +1859,7 @@ if (isPrimaryInstance)
         rootFolder: p.rootFolder,
         hiddenPaths,
         searchExcludeGlobs: [...(p.searchExcludeGlobs ?? [])],
+        htmlSafeSources: [...(p.htmlSafeSources ?? [])],
       });
     }
     for (const [key, gone] of [...projectsByRoot]) {
@@ -2212,6 +2220,17 @@ if (isPrimaryInstance)
     },
   });
   previewService = previews;
+  /*
+   * 044 — the `throng-preview:` protocol handler. 074 R4: the same handler also answers `preview.readSource`,
+   * so a renderer that needs a binary provider's BYTES (PDF.js, Copy Image) gets them through exactly the
+   * confinement, MIME allowlist and size cap an `<img>` request meets — one code path, no second reader.
+   */
+  const previewProtocol = createPreviewProtocolHandler({
+    fs: fileSystem,
+    previews,
+    settings: () => currentSettings,
+    registry: SHIPPED_PREVIEW_PROVIDERS,
+  });
   // 054 US2 — a task checkbox in a preview edits its source through the editor authority (FR-024).
   registerPreviewIpc(
     ipcMain,
@@ -2222,6 +2241,7 @@ if (isPrimaryInstance)
       (panelId) => previews.run(panelId),
       () => currentSettings.editor.fallbackEncoding,
     ),
+    (panelId, asset) => readPreviewSource(previewProtocol, panelId, asset),
   );
   // A window that has gone views no preview any more; the runs themselves live until `destroyed`.
   app.on('web-contents-created', (_event, contents) => {
@@ -2233,15 +2253,7 @@ if (isPrimaryInstance)
    * for the panel id in the URL, never from the URL itself. Handled here, once the service exists and
    * well before the first window is created below, so no window can load a preview URL unhandled.
    */
-  protocol.handle(
-    PREVIEW_SCHEME,
-    createPreviewProtocolHandler({
-      fs: fileSystem,
-      previews,
-      settings: () => currentSettings,
-      registry: SHIPPED_PREVIEW_PROVIDERS,
-    }),
-  );
+  protocol.handle(PREVIEW_SCHEME, previewProtocol);
   /*
    * 043 US4 — the replace commit, and the whole of `throng:fileSearch:*` (T086, T094).
    *

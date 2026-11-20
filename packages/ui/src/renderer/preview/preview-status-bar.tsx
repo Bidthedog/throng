@@ -100,7 +100,22 @@ export function PreviewStatusBar({
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const measured = useStripMeasure(barRef, controlsRef, rulerRef);
-  if (providerKind !== 'text') return null;
+  // 044 FR-015e — a binary provider's bar offers no editor route, and is not shown while it would carry nothing.
+  // 074 FR-022, FR-062 — what it can carry is the body's readout (an image's size, a PDF's page).
+  if (providerKind !== 'text') {
+    if (readout === null || readout === undefined || readout === '') return null;
+    return (
+      <div
+        className={`editor-status-strip preview-status-bar${focusMode ? ` ${FOCUS_MODE_STRIP_CLASS}` : ''}`}
+        data-testid={`preview-status-bar-${panelId}`}
+      >
+        <FocusModeBadge panelId={panelId} active={focusMode} />
+        <div className="editor-status-strip__group editor-status-strip__group--readouts">
+          <LinkTargetReadout testId={`preview-status-readout-${panelId}`} target={readout} />
+        </div>
+      </div>
+    );
+  }
 
   // The preferences filter BEFORE the fit and the ruler: a readout switched off reserves no width (040 FR-014) and is
   // absent from the accessibility tree rather than hidden in it (FR-017).

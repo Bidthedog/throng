@@ -22,7 +22,9 @@ export type PreviewContent =
  */
 export type PreviewNotice = (
   // `utf32` — 059 FR-006: named, rather than called not text.
-  | { kind: 'unreadable' | 'deleted' | 'too-large' | 'not-text' | 'utf32' }
+  | { kind: 'unreadable' | 'deleted' | 'not-text' | 'utf32' }
+  /** 074 FR-012 — `size` and `limit` in bytes, when the provider's own Maximum file size decided it. */
+  | { kind: 'too-large'; size?: number; limit?: number }
   // 059 FR-014, FR-053 — the editor's wording, which names the encoding the file claims.
   | { kind: 'not-decodable'; encoding: EncodingId }
   | { kind: 'no-provider' }

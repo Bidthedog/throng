@@ -381,6 +381,24 @@
     "preview": {
       "lucide": "scan-eye"
     },
+    "previewMarkdown": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with the Markdown mark, an M and a down arrow, in strokes beneath it in place of the lower corners"
+    },
+    "previewMermaid": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with a flowchart, a box joined to a diamond, in strokes beneath it in place of the lower corners"
+    },
+    "previewImage": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with Lucide image's hills and sun in strokes beneath it in place of the lower corners"
+    },
+    "previewSvg": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with a vector curve between two square nodes beneath it in place of the lower corners"
+    },
+    "previewPdf": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with the letters PDF in strokes beneath it in place of the lower corners"
+    },
+    "previewHtml": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with Lucide code-xml's angle brackets and slash beneath it in place of the lower corners"
+    },
     "refresh": {
       "lucide": "refresh-cw"
     },
@@ -425,6 +443,15 @@
     },
     "diagramFullPane": {
       "lucide": "expand"
+    },
+    "pageLayoutSingle": {
+      "throng": "Drawn on Lucide's grid: one page"
+    },
+    "pageLayoutTwo": {
+      "throng": "Drawn on Lucide's grid: two pages side by side"
+    },
+    "pageLayoutWrap": {
+      "throng": "Drawn on Lucide's grid: small pages wrapping into rows"
     },
     "warning": {
       "lucide": "triangle-alert"

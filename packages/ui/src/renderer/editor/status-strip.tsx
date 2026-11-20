@@ -10,6 +10,7 @@ import {
   isFlowingDocument,
   languageName,
   lineEndingLabel,
+  previewIconOf,
 } from '@throng/core';
 import { usePanelCaret, type PanelCaret } from './caret-store.js';
 import { useEditorHoveredLink } from './editor-hovered-link-store.js';
@@ -317,7 +318,8 @@ function PreviewButton({
         />
       ) : null}
       <IconButton
-        token="preview"
+        // 074 FR-103 — the provider's own preview icon, else the generic one.
+        token={previewIconOf(affordance.provider)}
         className="editor-status-strip__preview"
         testId={`editor-preview-${panelId}`}
         title={

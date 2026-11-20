@@ -10,6 +10,7 @@ interface ProjectRow {
   is_active: number;
   hidden_paths: string | null;
   search_exclude_globs: string | null;
+  html_safe_sources: string | null;
   category_id: string;
   created_at: string;
   updated_at: string;
@@ -37,6 +38,7 @@ function toProject(row: ProjectRow): Project {
     hiddenPaths: parseHidden(row.hidden_paths),
     // 060 #532 — the same JSON string array shape, so the same tolerant read.
     searchExcludeGlobs: parseHidden(row.search_exclude_globs),
+    htmlSafeSources: parseHidden(row.html_safe_sources),
     categoryId: row.category_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -51,7 +53,7 @@ function toProject(row: ProjectRow): Project {
  */
 const SELECT_RESOLVED = `
   SELECT p.id, p.owner_user, p.name, p.colour, p.root_folder, p.is_active, p.hidden_paths,
-         p.search_exclude_globs,
+         p.search_exclude_globs, p.html_safe_sources,
          p.created_at, p.updated_at, COALESCE(own.id, def.id, '') AS category_id
     FROM projects p
     LEFT JOIN project_categories own ON own.owner_user = p.owner_user AND own.id = p.category_id
@@ -114,8 +116,8 @@ export class ProjectRepository implements IProjectStore {
       .get(project.ownerUser) as { pos: number };
     this.db
       .prepare(
-        `INSERT INTO projects (id, owner_user, name, colour, root_folder, is_active, hidden_paths, search_exclude_globs, created_at, updated_at, position, category_id)
-         VALUES (@id, @owner_user, @name, @colour, @root_folder, @is_active, @hidden_paths, @search_exclude_globs, @created_at, @updated_at, @position,
+        `INSERT INTO projects (id, owner_user, name, colour, root_folder, is_active, hidden_paths, search_exclude_globs, html_safe_sources, created_at, updated_at, position, category_id)
+         VALUES (@id, @owner_user, @name, @colour, @root_folder, @is_active, @hidden_paths, @search_exclude_globs, @html_safe_sources, @created_at, @updated_at, @position,
                  COALESCE(
                    NULLIF(@category_id, ''),
                    (SELECT id FROM project_categories WHERE owner_user = @owner_user AND is_default = 1),
@@ -144,7 +146,8 @@ export class ProjectRepository implements IProjectStore {
         `UPDATE projects
             SET name = @name, colour = @colour, root_folder = @root_folder,
                 is_active = @is_active, hidden_paths = @hidden_paths,
-                search_exclude_globs = @search_exclude_globs, updated_at = @updated_at
+                search_exclude_globs = @search_exclude_globs, html_safe_sources = @html_safe_sources,
+                updated_at = @updated_at
           WHERE owner_user = @owner_user AND id = @id`,
       )
       .run(this.toRow(project));
@@ -177,6 +180,7 @@ export class ProjectRepository implements IProjectStore {
       is_active: project.isActive ? 1 : 0,
       hidden_paths: JSON.stringify(project.hiddenPaths ?? []),
       search_exclude_globs: JSON.stringify(project.searchExcludeGlobs ?? []),
+      html_safe_sources: JSON.stringify(project.htmlSafeSources ?? []),
       category_id: project.categoryId ?? '',
       created_at: project.createdAt,
       updated_at: project.updatedAt,

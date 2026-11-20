@@ -98,6 +98,8 @@ import type { PreviewBodyProps } from '../../provider-view.js';
 import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../../link-dom.js';
 import { taskBoxOf, taskToggleFor } from '../../task-toggle.js';
 import { claimRenderedBlocks, type BlockRendererEntry } from '../../blocks/block-renderers.js';
+import { imageUrlEntry, prefersReducedMotion } from '../../blocks/picture.js';
+import { assetPathOf, claimFramedImages, inDocumentOrder, sizeFramedPicture, type FramedImageSize } from './framed-images.js';
 import { DiagramBlock } from '../../diagram/diagram-block.js';
 import { releaseDiagramSections } from '../../diagram/diagram-sections.js';
 import { diagramThemeFrom } from '../../diagram/diagram-theme.js';
@@ -123,7 +125,8 @@ import {
 } from './scroll-anchor.js';
 import { highlightCodeBlocks } from './highlight.js';
 import { applyFoldGutter } from './fold-gutter.js';
-import { applyWikiResolution } from './wikilinks.js';
+import { applyWikiResolution, WIKI_INDEX_ATTRIBUTE } from './wikilinks.js';
+import type { WikiHrefTarget } from './pipeline.js';
 import { applyImageEmbedResolution, EMBED_ATTRIBUTE, embedReadRefOf, embedRefOf } from './embeds.js';
 import { embedRefusalText, type PreviewEmbedRead } from '@throng/core';
 import {
@@ -182,6 +185,11 @@ export const FOCUSED_LINK_CLASS = 'preview-markdown__link--focused';
  * editor), and how long a resize waits for the resizing to pause. Rendering yields to input: the reader
  * sees the table a moment later rather than the panel lagging.
  */
+/** 074 R8a — a wiki target as one key: the same reference twice in a document is one answer. */
+function wikiTargetKey(target: WikiHrefTarget): string {
+  return `${target.rooted ? '/' : ''}${target.path}`;
+}
+
 const TABLE_LAYOUT_DEBOUNCE_MS = 120;
 const TABLE_RESIZE_DEBOUNCE_MS = 150;
 
@@ -380,6 +388,7 @@ export function MarkdownBody({
   resolveWikiTargets,
   readEmbeds,
   onToggleTask,
+  readSource,
 }: PreviewBodyProps): ReactElement {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const text = content.kind === 'text' ? content.text : null;
@@ -429,6 +438,13 @@ export function MarkdownBody({
   readEmbedsRef.current = readEmbeds;
   const embedsRef = useRef<{ filePath: string; reads: Map<string, PreviewEmbedRead> }>({ filePath, reads: new Map() });
   const [embedTick, setEmbedTick] = useState(0);
+  /*
+   * 074 FR-055 (R8a) — what main last answered for each `![[image]]` reference this FILE embeds, by reference.
+   * A draw gives every held image the answer already known BEFORE it claims its framed images, so a wiki image
+   * alone on its line is framed through the same `claimFramedImages` as `![alt](x.png)`; an answer that changes
+   * anything redraws once (the Mermaid-embed pattern above). A different file starts afresh.
+   */
+  const wikiImagesRef = useRef<{ filePath: string; known: Map<string, string | null> }>({ filePath, known: new Map() });
   /** This render's flat heading list (R2), for the fold gutter and `onRevealSection`. */
   const lastHeadingsRef = useRef<readonly HeadingRecord[]>([]);
   /**
@@ -459,13 +475,68 @@ export function MarkdownBody({
    * its portals new keys, so no diagram keeps the old file's last good render or view state (FR-044, 046g).
    */
   const diagramGenerationRef = useRef(0);
+  /*
+   * 074 FR-055 — a standalone local image is drawn in a diagram frame too. One entry for the body's life, so an
+   * unchanged image is never drawn again; its bytes (Copy Image, a reduced-motion first frame) are the asset's,
+   * read through the protocol, and its alternative text is the image's own.
+   */
+  const readSourceRef = useRef(readSource);
+  readSourceRef.current = readSource;
+  const imageAltsRef = useRef(new Map<string, string>());
+  const imageEntry = useMemo(
+    (): BlockRendererEntry =>
+      imageUrlEntry({
+        reducedMotion: prefersReducedMotion,
+        alt: (url) => imageAltsRef.current.get(url),
+        readBytes: async (url) => {
+          const asset = assetPathOf(url);
+          const reader = readSourceRef.current;
+          if (asset === null || reader === undefined) return null;
+          const read = await reader(asset);
+          return read.ok ? new Blob([read.bytes as Uint8Array<ArrayBuffer>], { type: read.mime }) : null;
+        },
+      }),
+    [],
+  );
+  /*
+   * 068 FR-056 — `![[x.png|200]]`'s size, drawn by the frame as the picture's own (R8a). The size is the EMBED's, so
+   * each size has an entry of its own (B1: `|100` and `|300` of one image are two drawings), kept for the body's life
+   * so a redraw hands the frame the same entry and an unchanged image is never drawn again.
+   */
+  const sizedEntriesRef = useRef(new Map<string, BlockRendererEntry>());
+  const sizedImageEntry = useCallback(
+    (size: FramedImageSize): BlockRendererEntry => {
+      const key = `${size.width ?? ''}x${size.height ?? ''}`;
+      const known = sizedEntriesRef.current.get(key);
+      if (known !== undefined) return known;
+      const sized: BlockRendererEntry = {
+        ...imageEntry,
+        load: async () => {
+          const renderer = await imageEntry.load();
+          return {
+            render: async (url, options) => {
+              const picture = await renderer.render(url, options);
+              sizeFramedPicture(picture, size);
+              return picture;
+            },
+          };
+        },
+      };
+      sizedEntriesRef.current.set(key, sized);
+      return sized;
+    },
+    [imageEntry],
+  );
   const claimDiagrams = useCallback((fragment: DocumentFragment, sameDocument: boolean, firstDraw: boolean): void => {
     if (!sameDocument) {
       diagramGenerationRef.current += 1;
       diagramHostsRef.current = [];
     }
     const generation = diagramGenerationRef.current;
-    const claimed = claimRenderedBlocks(fragment, (lang) => lang !== 'mermaid' || renderMermaidRef.current);
+    const claimed = inDocumentOrder(
+      claimRenderedBlocks(fragment, (lang) => lang !== 'mermaid' || renderMermaidRef.current),
+      claimFramedImages(fragment, imageEntry, imageAltsRef.current, sizedImageEntry),
+    );
     const mounts = claimed.map((block, ordinal): DiagramMount => {
       const host = diagramHostsRef.current[ordinal] ?? fragment.ownerDocument.createElement('div');
       host.className = DIAGRAM_HOST_CLASS;
@@ -487,7 +558,7 @@ export function MarkdownBody({
         ? prev
         : mounts,
     );
-  }, [panelId]);
+  }, [panelId, imageEntry, sizedImageEntry]);
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const setsRef = useRef(sets);
@@ -864,6 +935,18 @@ export function MarkdownBody({
         ) {
           first.classList.add(FRONT_MATTER_CLASS);
         }
+        // 074 FR-055 (R8a) — every held `![[image]]` main has already answered for draws now, so the claim below
+        // frames it exactly as it frames `![alt](x.png)`; one not answered yet stays held until the answer redraws.
+        if (wikiImagesRef.current.filePath !== filePath) wikiImagesRef.current = { filePath, known: new Map() };
+        const wikiImages = wikiImagesRef.current;
+        const heldImageRefs = new Set<string>();
+        for (const img of fragment.querySelectorAll(`img[${WIKI_INDEX_ATTRIBUTE}]`)) {
+          const target = wikiTargets[Number(img.getAttribute(WIKI_INDEX_ATTRIBUTE))];
+          if (target !== undefined) heldImageRefs.add(wikiTargetKey(target));
+        }
+        if (heldImageRefs.size > 0) {
+          applyImageEmbedResolution(fragment, wikiTargets.map((t) => wikiImages.known.get(wikiTargetKey(t))), projectRoot, panelId);
+        }
         for (const img of fragment.querySelectorAll<HTMLImageElement>(BLOCKED_IMAGE_SELECTOR)) showAltText(img);
         // 054 — each embed becomes the Mermaid fence its file holds (claimed below like any other), or its notice.
         if (embedsRef.current.filePath !== filePath) embedsRef.current = { filePath, reads: new Map() };
@@ -966,6 +1049,17 @@ export function MarkdownBody({
               applyWikiResolution(current, resolved, projectRoot);
               // 068 FR-011 — the same answer draws, or refuses, each held image embed.
               for (const img of applyImageEmbedResolution(current, resolved, projectRoot, panelId)) showAltText(img);
+              // 074 FR-055 (R8a) — an image answer this draw did not already hold redraws once, framing it.
+              let imagesChanged = false;
+              wikiTargets.forEach((target, i) => {
+                const key = wikiTargetKey(target);
+                if (!heldImageRefs.has(key)) return;
+                const answer = resolved[i] ?? null;
+                // A first answer of "no file" changes nothing a redraw would show: its alt text is already drawn.
+                if (wikiImages.known.has(key) ? wikiImages.known.get(key) !== answer : answer !== null) imagesChanged = true;
+                wikiImages.known.set(key, answer);
+              });
+              if (imagesChanged && wikiImagesRef.current === wikiImages) setEmbedTick((t) => t + 1);
             })
             // main unreachable: links stay unmarked rather than failing the draw
             .catch((error: unknown) => logCaught('markdown-body: resolve wikilink targets', error));

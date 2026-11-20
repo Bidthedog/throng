@@ -209,7 +209,23 @@ export function registerPreviewIpc(
   ipc: PreviewIpcMain,
   service: PreviewIpcService,
   taskToggle?: PreviewTaskToggle,
+  /** 074 R4 — a binary provider's source bytes, through the protocol handler. Absent: every read is refused. */
+  readSource?: (panelId: string, asset?: string) => Promise<{ ok: true; bytes: Uint8Array; mime: string } | { ok: false; status: number }>,
 ): void {
+  ipc.handle('throng:preview:readSource', async (_event, payload) => {
+    const panelId = text(record(payload).panelId);
+    const asset = record(payload).asset;
+    if (panelId === null || readSource === undefined) return { ok: false, status: 404 };
+    if (asset !== undefined && (typeof asset !== 'string' || asset.length === 0 || asset.length > 4096)) {
+      return { ok: false, status: 404 };
+    }
+    try {
+      return await (asset === undefined ? readSource(panelId) : readSource(panelId, asset));
+    } catch (error) {
+      logCaught('preview-ipc: readSource', error);
+      return { ok: false, status: 404 };
+    }
+  });
   // 054 FR-022 – FR-029 — the one input in a preview that changes the source. A malformed request never
   // reaches the service, and a throw is an answer rather than a rejection across the bridge.
   ipc.handle('throng:preview:toggleTask', async (_event, payload) => {

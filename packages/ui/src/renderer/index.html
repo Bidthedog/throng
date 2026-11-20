@@ -4,11 +4,14 @@
     <meta charset="utf-8" />
     <!-- specs/044-file-previews/contracts/security-policy.md Layer 3, pinned by
          tests/unit/renderer-csp.test.ts. style-src keeps 'unsafe-inline' because CodeMirror and the
-         theme provider mount <style> elements; connect-src, font-src and media-src stay on
-         default-src. Must precede every script and stylesheet it governs. -->
+         theme provider mount <style> elements, and admits the preview asset route because the HTML
+         preview's srcdoc frame inherits this policy and loads the page's own stylesheets from it (074
+         FR-072, FR-092); connect-src, font-src and media-src stay on default-src. frame-src admits only
+         the HTML preview's follow route, which answers 204 and serves no document (074 FR-092, research
+         R6). Must precede every script and stylesheet it governs. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: throng-preview: blob:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' throng-preview://asset https:; font-src 'self' throng-preview: https:; img-src 'self' https: throng-preview: blob:; object-src 'none'; frame-src throng-preview://follow; base-uri 'none'; form-action 'none'"
     />
     <title>throng</title>
   </head>

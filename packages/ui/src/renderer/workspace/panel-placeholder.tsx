@@ -12,6 +12,7 @@ import {
   panelDisplayTitle,
   panelRemovalVerb,
   previewTitleParts,
+  previewIconOf,
   previewPanelTypeLabel,
   previewPathOf,
   previewProviderIdOf,
@@ -27,6 +28,7 @@ import {
   type Panel,
   type PreviewPanelConfig,
   isFlowingDocument,
+  previewGoToKind,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
 import { PanelErrorBoundary } from './panel-error-boundary.js';
@@ -367,8 +369,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const titleTruncated = effectiveTitle !== fullTitle;
   /*
    * FR-032 — a preview's title in its two halves, so the header's truncation marker lands on the NAME
-   * (`name… - Preview`). The generic `--truncated` class draws its `…` after the whole title, which for
-   * a preview would read `name - Preview…` and mark the one half that is never cut.
+   * (`name… - Markdown Preview`). The generic `--truncated` class draws its `…` after the whole title, which for
+   * a preview would read `name - Markdown Preview…` and mark the one half that is never cut.
    */
   const previewTitle = previewTitleParts(panel, titleSources, maxNameLength);
 
@@ -611,6 +613,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         if (panel.kind === 'terminal') focusTerminal(panel.id);
       }}
       /*
+       * 074 FR-083a (2026-11-19) — a press INSIDE a frame (an HTML preview's sandboxed page) never reaches this
+       * element's pointer-down: the page is another document. Focus moving into the frame is told as a bubbling
+       * `focusin` from the frame element (`providers/html/frame-input.ts`, from the frame document's own focusin), so that activates the panel instead.
+       */
+      onFocus={(e) => {
+        if (!(e.target instanceof HTMLIFrameElement)) return;
+        ws.setActivePanel(tabId, panel.id);
+        setActivePane('workspace');
+      }}
+      /*
        * 044 FR-105 — the mouse's back (3) and forward (4) buttons over an editor or a preview step THIS panel,
        * the one under the pointer, whichever panel has focus. Default-prevented on both press and release, so
        * nothing else — Chromium's own history navigation included — acts on them. Performed on release, and
@@ -708,6 +720,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                       'text',
                     parented: previewUi?.parent != null,
                     flowingDocument: isFlowingDocument(
+                      (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
+                        previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
+                    ),
+                    goTo: previewGoToKind(
                       (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
                         previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
                     ),
@@ -956,7 +972,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   title={flavour ? `${typeLabel} · ${flavour}` : `Panel type: ${typeLabel}`}
                   aria-label={typeLabel}
                 >
-                  <Icon token={desc.icon} />
+                  {/* 074 FR-103 — a preview is headed by its provider's own preview icon. */}
+                  <Icon token={isPreview ? previewIconOf(previewProvider) : desc.icon} />
                 </span>
               );
             })()

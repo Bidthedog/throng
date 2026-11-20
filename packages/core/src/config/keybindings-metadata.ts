@@ -299,8 +299,8 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord(
     'preview.goToHeading',
     'Navigate',
-    'Go to Heading…',
-    'Open a searchable list of the preview’s headings and jump to one. Live in a preview only.',
+    'Go to Heading or Page…',
+    'Open a searchable list of the preview’s headings and jump to one; in a PDF preview, Go to Page. Live in a preview only.',
   ),
 
   // File Explorer (resolved while the File Explorer pane has focus)

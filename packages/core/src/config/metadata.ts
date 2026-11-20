@@ -272,6 +272,12 @@ export interface FieldDescriptor {
    */
   validate?: (value: unknown) => string | null;
   /**
+   * `array` of `text` only (074 FR-072c): the rule ONE entry must satisfy — `null` when acceptable, else a message
+   * naming what is wrong. The list editor refuses to write an entry it rejects and shows the message beside it; the
+   * read side drops such an entry. Absent means any text is an entry.
+   */
+  validateItem?: (item: string) => string | null;
+  /**
    * The control sits on its own line under the description, the full width of the row, rather than
    * in the narrow column beside it (053 FR-014) — for a value too long to read in that column.
    */

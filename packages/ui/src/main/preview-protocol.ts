@@ -6,6 +6,11 @@
  *
  *   throng-preview://asset/<previewPanelId>/<percent-encoded root-relative path>   an image beside the document
  *   throng-preview://source/<previewPanelId>?rev=<n>                              a binary provider's document
+ *   throng-preview://follow/<previewPanelId>?href=<link>                         074 — answers 204, always
+ *
+ * The `follow` route serves nothing. It is where an HTML preview's links point (research R6): a PLAIN click
+ * navigates the sandboxed frame there and Chromium does not commit a 204, so the page stays; a Ctrl+click is
+ * caught by main's window-open handler before any request is made.
  *
  * The URL never names a project root or a document. Both come from main's own run for that panel
  * ({@link PreviewLookup}), so a renderer cannot point this at an arbitrary folder by writing a URL.
@@ -23,6 +28,7 @@
  */
 import {
   logExpected,
+  maxFileBytesFor,
   PREVIEW_IMAGE_MIME_BY_EXTENSION,
   relPathUnderRoot,
   resolvePreviewAsset,
@@ -81,7 +87,10 @@ function refuse(status: 403 | 404 | 413 | 415): Response {
   return new Response(null, { status, headers: HARDENED_HEADERS });
 }
 
-type Route = { kind: 'asset'; panelId: string; relPath: string } | { kind: 'source'; panelId: string };
+type Route =
+  | { kind: 'asset'; panelId: string; relPath: string }
+  | { kind: 'source'; panelId: string }
+  | { kind: 'follow' };
 
 /** The route a URL names, or `null` when it names neither. Never throws. */
 function parseRoute(url: string): Route | null {
@@ -95,6 +104,7 @@ function parseRoute(url: string): Route | null {
   if (parsed.protocol !== `${PREVIEW_SCHEME}:`) return null;
   const path = parsed.pathname.replace(/^\//, '');
   try {
+    if (parsed.hostname === 'follow') return { kind: 'follow' };
     if (parsed.hostname === 'source') {
       return path.length > 0 && !path.includes('/')
         ? { kind: 'source', panelId: decodeURIComponent(path) }
@@ -116,6 +126,35 @@ function parseRoute(url: string): Route | null {
     return null;
   }
   return null;
+}
+
+/** 074 R4 — what `preview.readSource` answers: the source's bytes and type, or the status the protocol refused with. */
+export type PreviewSourceRead =
+  | { ok: true; bytes: Uint8Array; mime: string }
+  | { ok: false; status: number };
+
+/**
+ * 074 R4 — a binary provider's source bytes for run `panelId`, read by asking {@link createPreviewProtocolHandler}'s
+ * handler for its own source URL. Never throws: a refusal is `{ ok: false, status }`.
+ */
+export async function readPreviewSource(
+  handler: (request: Request) => Promise<Response>,
+  panelId: string,
+  /** A root-relative asset path: read that asset of the run instead, exactly as an `<img>` would load it. */
+  asset?: string,
+): Promise<PreviewSourceRead> {
+  const id = encodeURIComponent(panelId);
+  const url =
+    asset === undefined
+      ? `${PREVIEW_SCHEME}://source/${id}`
+      : `${PREVIEW_SCHEME}://asset/${id}/${encodeURIComponent(asset)}`;
+  const response = await handler(new Request(url));
+  if (!response.ok) return { ok: false, status: response.status };
+  return {
+    ok: true,
+    bytes: new Uint8Array(await response.arrayBuffer()),
+    mime: response.headers.get('Content-Type') ?? 'application/octet-stream',
+  };
 }
 
 export function createPreviewProtocolHandler(
@@ -141,6 +180,7 @@ function serveWith(deps: PreviewProtocolDeps): (request: Request) => Promise<Res
   return async (request) => {
     const route = parseRoute(request.url);
     if (route === null) return refuse(404);
+    if (route.kind === 'follow') return new Response(null, { status: 204, headers: HARDENED_HEADERS });
     const run = previews.run(route.panelId);
     if (run === undefined) return refuse(404);
 
@@ -149,7 +189,8 @@ function serveWith(deps: PreviewProtocolDeps): (request: Request) => Promise<Res
     const provider = registry.get(run.providerId);
     const mimeAllowlist =
       route.kind === 'asset'
-        ? PREVIEW_IMAGE_MIME_ALLOWLIST
+        ? // 074 FR-072 — a provider may widen ITS runs' asset types (an HTML page's stylesheets); nobody else's.
+          [...PREVIEW_IMAGE_MIME_ALLOWLIST, ...(provider?.assetMimeTypes ?? [])]
         : provider?.kind === 'binary'
           ? (provider.sourceMimeTypes ?? [])
           : [];
@@ -175,11 +216,17 @@ function serveWith(deps: PreviewProtocolDeps): (request: Request) => Promise<Res
 
     // Read the REAL path itself — the one the containment decision was made about — never a re-spelling.
     if ((await fs.stat(realPath)).kind !== 'file') return refuse(404);
-    if ((await fs.size(realPath)) > settings().editor.maxOpenFileBytes) return refuse(413);
+    // 074 FR-012 — the SOURCE is capped by its provider's own Maximum file size; an asset by the editor's limit.
+    const current = settings();
+    const cap =
+      route.kind === 'source'
+        ? maxFileBytesFor(registry, current.editor.previews, run.providerId, current.editor.maxOpenFileBytes)
+        : current.editor.maxOpenFileBytes;
+    if ((await fs.size(realPath)) > cap) return refuse(413);
     const bytes = await fs.readBytes(realPath);
     // The cap again, on what was actually read: a file that grew between the size check and the read
     // is refused rather than served past the limit.
-    if (bytes.byteLength > settings().editor.maxOpenFileBytes) return refuse(413);
+    if (bytes.byteLength > cap) return refuse(413);
 
     // A file read is backed by an ordinary ArrayBuffer, never a SharedArrayBuffer; `IFileSystem` types
     // it as the wider `ArrayBufferLike`, which `BodyInit` does not accept.

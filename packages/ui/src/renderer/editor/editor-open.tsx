@@ -34,6 +34,7 @@ import { maximisedPanelOf } from '../workspace/maximise-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
 import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
+import { OPEN_IN_OS_EVENT, useOpenInOs, type OpenInOsDetail } from '../links/use-open-in-os.js';
 
 /**
  * Open-from-tree orchestration (006 Phase B, US2/US9, FR-010/011a). Listens for
@@ -90,8 +91,18 @@ export function EditorOpenListener(): null {
   const previews = useAppSettings().editor.previews;
   const { registry } = usePreviewProviders();
   const openUnsupportedInOs = useAppSettings().explorer.openUnsupportedInOs;
-  const routeRef = useRef({ previews, registry, openUnsupportedInOs });
-  routeRef.current = { previews, registry, openUnsupportedInOs };
+  // 074 FR-018 — Open <files> in: Default OS Program, from the tree or a followed link.
+  const openInOs = useOpenInOs();
+  const routeRef = useRef({ previews, registry, openUnsupportedInOs, openInOs });
+  routeRef.current = { previews, registry, openUnsupportedInOs, openInOs };
+  useEffect(() => {
+    const onOpenInOs = (e: Event): void => {
+      const detail = (e as CustomEvent<OpenInOsDetail>).detail;
+      if (detail?.absPath) void routeRef.current.openInOs(detail.absPath, detail.projectId);
+    };
+    window.addEventListener(OPEN_IN_OS_EVENT, onOpenInOs);
+    return () => window.removeEventListener(OPEN_IN_OS_EVENT, onOpenInOs);
+  }, []);
   // 067 FR-131 — the one notice for the OS refusing a link's file, shaped as the other link surfaces shape it.
   const reportOsFailureRef = useRef<(outcome: Parameters<typeof linkFailureReport>[0], projectId: string | undefined) => void>(() => undefined);
   reportOsFailureRef.current = (outcome, ownerProjectId) =>
@@ -193,6 +204,7 @@ export function EditorOpenListener(): null {
           // no project to ask a preview for, and a layout's id is not one in a sub-workspace window.
           projectId,
           openInEditor: openFileInTab,
+          openInOs: (path) => routeRef.current.openInOs(path, projectId),
         },
         headingRevealTarget(absPath, headingFragment),
       );

@@ -767,6 +767,7 @@ export {
   sanitiseHiddenPaths,
   applyHiddenPaths,
   applySearchExcludeGlobs,
+  applyHtmlSafeSources,
   sanitiseSearchExcludeGlobs,
   assertOrderedIds,
 } from './projects/project.js';
@@ -1355,7 +1356,8 @@ export type {
   PreviewProviderDescriptor,
   PreviewProviderRegistry,
 } from './preview/provider.js';
-export { isFlowingDocument } from './preview/provider.js';
+export { isFlowingDocument, previewGoToKind, previewIconOf } from './preview/provider.js';
+export { isPageInput, resolveGotoPage } from './preview/go-to-page.js';
 export type {
   PreviewCopyFormat,
   DefaultOpenAction,
@@ -1387,12 +1389,17 @@ export {
 export {
   PREVIEW_COPY_FORMATS,
   DEFAULT_OPEN_ACTIONS,
+  // 074 FR-016 — what a provider's Open <files> in offers.
+  offeredOpenActions,
   // 047 (research R8/R11, FR-015a).
   PREVIEW_OPEN_TARGETS,
   previewSettingsDefaults,
   previewSettingsDescriptors,
   parsePreviewSettings,
   effectiveMaxWaitMs,
+  // 074 FR-012 — a provider's own size cap.
+  maxFileBytesFor,
+  htmlSafeSourcesFrom,
   defaultOpenActionFor,
   // 054 FR-051 — the file's own provider's Open previews in.
   previewOpenTargetFor,
@@ -1407,6 +1414,14 @@ export {
   languageForFenceInfo,
 } from './preview/links.js';
 export type { PreviewLink, PreviewImage } from './preview/links.js';
+export {
+  SHIPPED_HTML_SAFE_SOURCES,
+  matchesSafeSource,
+  normaliseSafeSource,
+  safeSourceFault,
+  safeSourceList,
+  sourceOf,
+} from './preview/safe-sources.js';
 export { decideRendererRequest, resolvePreviewAsset } from './preview/request-policy.js';
 export type { PreviewAssetResolution } from './preview/request-policy.js';
 export { createSettleScheduler } from './preview/settle-scheduler.js';

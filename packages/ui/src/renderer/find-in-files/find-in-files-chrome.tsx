@@ -117,7 +117,9 @@ export function FindInFilesChrome(): ReactElement | null {
       if (
         request.target === undefined &&
         owner !== undefined &&
-        defaultOpenActionFor(previewProviders.registry, previewSettings, absPath) === 'preview'
+        defaultOpenActionFor(previewProviders.registry, previewSettings, absPath) === 'preview' &&
+        // 074 FR-084 — a preview that cannot reveal a match (an isolated HTML page) is not asked to.
+        previewProviders.registry.forPath(absPath)?.revealsMatches !== false
       ) {
         void requestPreviewOpen({
           absPath,

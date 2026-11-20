@@ -57,10 +57,12 @@ import {
   type PreviewProviderKind,
   type SplitDirection,
   isFlowingDocument,
+  previewIconOf,
 } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
 import { splitSubmenu } from './split-menu.js';
 import { isPanelSectionMaximised, isPanelTabMaximised } from './maximise-store.js';
+import { isPanelFindAbsent, isPanelUnsearchable } from '../preview/unsearchable-panels.js';
 
 /**
  * The panel kinds that actually RENDER their zoom level (043 FR-062a, plan D2).
@@ -179,6 +181,8 @@ export interface PanelHeaderPreviewState {
   parented: boolean;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no Synchronise Scrolling. Absent reads `true`. */
   flowingDocument?: boolean;
+  /** 074 FR-062b — where the Go to row goes (`previewGoToKind`): `'page'` labels it Go to Page…. Absent: Go to Heading…. */
+  goTo?: 'page' | 'heading' | null;
 }
 
 /**
@@ -381,16 +385,20 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
           : { label: 'Open in Editor', icon: 'editorPanel' as const, section: 'navigate', disabled, onClick: () => actions.openInEditor() },
       );
     }
-    items.push({
+    // 074 FR-086a — a picture has no text: no Find row at all.
+    if (!isPanelFindAbsent(panel.id)) items.push({
       label: 'Find…',
       icon: 'search' as const,
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'search.find'),
       ...documentCovered,
+      // 074 FR-086 — a body the find bar cannot read (a sandboxed page) shows Find disabled.
+      ...(isPanelUnsearchable(panel.id) ? { disabled: true } : {}),
       onClick: () => actions.find(),
     });
-    items.push({
-      label: 'Go to Heading…',
+    // 074 FR-062b — nothing to go to (a single picture): no row, as the body menu has none.
+    if (args.preview?.goTo !== null) items.push({
+      label: args.preview?.goTo === 'page' ? 'Go to Page…' : 'Go to Heading…',
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'preview.goToHeading'),
       ...documentCovered,
@@ -539,7 +547,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     if (openPreview !== undefined && openPreview.state !== 'absent') {
       items.push({
         label: 'Open Preview',
-        icon: 'preview' as const,
+        // 074 FR-103 — the provider's own preview icon.
+        icon: previewIconOf(openPreview.provider),
         section: 'navigate',
         shortcut: firstBinding(keybindings, 'preview.open'),
         disabled: openPreview.state === 'disabled',

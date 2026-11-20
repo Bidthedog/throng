@@ -222,7 +222,13 @@ resourceKillBelow.svg - The icon on the Resource Monitor row that ends every pro
 chevronLeft.svg - The icon on the control at the left end of the tab strip that brings the tabs hidden off that edge back into view.
 chevronRight.svg - The icon on the control at the right end of the tab strip that brings the tabs hidden off that edge back into view.
 chevronDown.svg - The icon on the tab strip control that drops open a searchable list of every tab in the window, however many are on screen.
-preview.svg - The icon on the editor status bar button and menu rows that open a rendered, read-only view of a file such as a Markdown document, and at the head of that preview panel’s title.
+preview.svg - The icon on the editor status bar button and menu rows that open a rendered, read-only view of a file, and at the head of that preview panel’s title, for a kind of preview that has no icon of its own.
+previewMarkdown.svg - The icon that names a Markdown preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with an M and a down arrow beneath its eye.
+previewMermaid.svg - The icon that names a Mermaid preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with a box joined to a diamond, a flowchart, beneath its eye.
+previewImage.svg - The icon that names an Image preview: at the head of its panel’s title, in a tab’s list of panels and on the menu rows that open one. The preview icon with hills and a sun beneath its eye.
+previewSvg.svg - The icon that names an SVG preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with a curve between two nodes beneath its eye.
+previewPdf.svg - The icon that names a PDF preview: at the head of its panel’s title, in a tab’s list of panels and on the menu rows that open one. The preview icon with the letters PDF beneath its eye.
+previewHtml.svg - The icon that names an HTML preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with a pair of angle brackets and a slash beneath its eye.
 refresh.svg - The icon on the preview panel menu row that reads the file or its open document again and redraws the preview straight away.
 navigateBack.svg - The icon on the button at the top left of an editor or preview panel, and its menu row, that returns the panel to the file it showed before.
 navigateForward.svg - The icon on the button at the top left of an editor or preview panel, and its menu row, that moves the panel on again to a file you stepped back from.
@@ -238,6 +244,9 @@ panelRestore.svg - The icon on the Exit Focus Mode control of a panel or a diagr
 diagramFit.svg - The icon on a diagram's Fit control, which shrinks the diagram to fit the width of its box.
 diagramZoomReset.svg - The icon on a diagram's Zoom 100% control, which shows the diagram at its actual size, between the zoom-out and zoom-in controls.
 diagramFullPane.svg - The icon on a diagram's Enter Focus Mode control, which fills the whole middle section with the diagram and hides the side panes until you leave Focus Mode.
+pageLayoutSingle.svg - The icon on a PDF preview's Single Page control, which shows the pages one under another.
+pageLayoutTwo.svg - The icon on a PDF preview's Two Pages control, which shows the pages two to a row, like an open book.
+pageLayoutWrap.svg - The icon on a PDF preview's Pages Side by Side control, which lays the pages out in rows as many to a row as fit the panel.
 warning.svg - The marker on a folded Preferences section or subsection that hides a setting holding an invalid entry.
 whitespace.svg - The icon on the editor status bar toggle that shows or hides a symbol for every space, tab, line break and invisible character.
 busy.svg - The icon on the Find in Files cancel control while a search is running. It turns while the search runs; clicking it cancels.

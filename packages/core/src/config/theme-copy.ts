@@ -237,6 +237,16 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The colour of the File Explorer and Find in Files icon for a file whose kind throng does not recognise. Leave it empty and it takes the Icon Colour, like the folders.',
   },
+  'colours.pictureCanvas': {
+    label: 'Picture Preview Background',
+    description:
+      'The background an Image or SVG preview draws its picture on, filling the panel around it. Leave it empty and it is the editor background a shade toward the text colour, so the picture\'s edges stand out.',
+  },
+  'colours.pictureHatch': {
+    label: 'Picture Transparency Marker',
+    description:
+      'The colour of the diagonal hatching drawn behind the transparent parts of a picture in a preview. Leave it empty and it is mixed from the editor background and text colour. Turn the hatching off per preview type with its Hatch transparent areas setting.',
+  },
   'colours.titleBarSurface': {
     label: 'Title Bar Background',
     description:

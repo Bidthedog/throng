@@ -26,6 +26,7 @@ import {
   type AppSettings,
   type PreviewProviderRegistry,
 } from '@throng/core';
+import type { FrameSources } from './frame-sources.js';
 
 /** The part of a session the filter installs on. */
 export type RequestFilterSession = Pick<Session, 'webRequest'>;
@@ -48,6 +49,8 @@ export function installRendererRequestFilter(
   settings: () => AppSettings,
   registry: PreviewProviderRegistry,
   rendererDir: string,
+  /** 074 FR-072a — each HTML Preview frame's registered safe sources. Absent: a sub-frame reaches nothing remote. */
+  frameSources?: FrameSources,
 ): void {
   session.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
     // Either field marks a renderer's request; a contents that has since been destroyed still leaves
@@ -56,8 +59,16 @@ export function installRendererRequestFilter(
       callback({});
       return;
     }
+    // 074 FR-093 — a frame with a parent is a sub-frame: in throng, only the HTML preview's page.
+    const fromSubFrame = details.frame?.parent != null;
     const decision = decideRendererRequest(
-      { url: details.url, resourceType: details.resourceType },
+      {
+        url: details.url,
+        resourceType: details.resourceType,
+        fromSubFrame,
+        // 074 FR-072a, FR-092a — that frame's own safe sources, found by its `throng-html-<panelId>` name.
+        frameSources: fromSubFrame ? (frameSources?.sourcesFor(details.webContentsId, details.frame?.name) ?? []) : [],
+      },
       { rendererDir, remoteImages: remoteImagesPermitted(registry, settings().editor.previews) },
     );
     callback(decision === 'cancel' ? { cancel: true } : {});

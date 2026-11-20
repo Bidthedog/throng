@@ -241,6 +241,9 @@ const COLOUR_AREA: Record<string, string> = {
   sidebarBg: 'Projects / sidebar',
   // 046 iterate round 1 (FR-072) — the Projects pane's category header strip.
   categoryHeaderBackground: 'Projects / sidebar',
+  // 074 FR-027a, FR-027b — a picture preview's canvas and transparency hatch: drawn inside a panel.
+  pictureCanvas: 'Main panel / workspace',
+  pictureHatch: 'Main panel / workspace',
 };
 
 /**

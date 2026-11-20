@@ -579,6 +579,14 @@
   min-width: 0;
 }
 
+/* 074 FR-072c — a validated entry: its box, with the reason it was refused under it. */
+.ctl__array-item {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .ctl__array-btn,
 .ctl__array-add {
   padding: 4px 8px;

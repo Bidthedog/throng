@@ -32,6 +32,12 @@
   overflow: hidden;
 }
 
+/* 074 (2026-11-19) — a middle-button drag scrolling the preview: the move cursor wherever the pointer is. */
+.preview-panel__body--panning,
+.preview-panel__body--panning * {
+  cursor: move;
+}
+
 .preview-panel__body {
   /* 049 FR-029 — the anchor the match-frame layer scrolls with (match-frames.css). */
   position: relative;

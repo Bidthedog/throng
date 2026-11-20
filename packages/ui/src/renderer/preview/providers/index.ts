@@ -11,9 +11,20 @@
 import type { PreviewProviderView } from '../provider-view.js';
 import { markdownView } from './markdown/view.js';
 import { mermaidView } from './mermaid/view.js';
+import { pdfView } from './pdf/view.js';
+import { imageView } from './image/view.js';
+import { svgView } from './svg/view.js';
+import { htmlView } from './html/view.js';
 
 export const PREVIEW_PROVIDER_VIEWS: Readonly<Record<string, PreviewProviderView>> = {
   [markdownView.id]: markdownView,
   // 054 FR-042 — `.mmd` / `.mermaid`, drawn through the same diagram renderer as an embedded fence.
   [mermaidView.id]: mermaidView,
+  // 074 — an image and an SVG, each drawn as one picture in the diagram frame.
+  [imageView.id]: imageView,
+  [svgView.id]: svgView,
+  // 074 US4 — `.pdf`, drawn by PDF.js behind the view's dynamic import.
+  [pdfView.id]: pdfView,
+  // 074 US5 — `.html` / `.htm`, static markup in a sandboxed frame.
+  [htmlView.id]: htmlView,
 };

@@ -600,28 +600,114 @@ function ArrayControl(props: SettingControlProps): ReactElement {
   return isStringArray ? <StringArrayControl {...props} /> : <JsonArrayControl {...props} />;
 }
 
+/**
+ * One entry of a list whose descriptor declares `validateItem` (074 FR-072c). It holds its own draft and writes only
+ * on Enter or blur, and only an entry the rule accepts: a refused entry keeps its text and focus, and says why beside
+ * it. `onCommit` is told whether the entry was written. An entry still empty when let go of calls `onEmpty` instead —
+ * an added row nobody typed into is dropped, not complained about.
+ */
+function ValidatedArrayItem({
+  id,
+  value,
+  validate,
+  onCommit,
+  onEmpty,
+}: {
+  id: string;
+  value: string;
+  validate: (item: string) => string | null;
+  onCommit: (item: string) => void;
+  onEmpty?: () => void;
+}): ReactElement {
+  const [text, setText] = useState(value);
+  const [error, setError] = useState<string | null>(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) {
+      setText(value);
+      setError(null);
+    }
+  }, [value]);
+  const commit = (raw: string): boolean => {
+    if (raw.trim() === '' && onEmpty !== undefined) {
+      onEmpty();
+      return true;
+    }
+    const message = validate(raw);
+    setError(message);
+    if (message !== null) return false;
+    if (raw !== value) onCommit(raw);
+    return true;
+  };
+  return (
+    <span className="ctl__array-item">
+      <input
+        className={error !== null ? 'ctl__input ctl__input--invalid' : 'ctl__input'}
+        data-testid={id}
+        aria-invalid={error !== null}
+        aria-describedby={error !== null ? `${id}-invalid` : undefined}
+        // An added row takes focus, so typing follows the click on Add.
+        autoFocus={onEmpty !== undefined}
+        value={text}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onChange={(e) => {
+          setText(e.target.value);
+          setError(null);
+        }}
+        // A refused entry keeps focus, so the message is read where it was typed.
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && commit(e.currentTarget.value)) e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          focused.current = false;
+          commit(e.currentTarget.value);
+        }}
+      />
+      {error !== null ? (
+        <span className="ctl__error" id={`${id}-invalid`} data-testid={`${id}-invalid`}>
+          {error}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
   const items = Array.isArray(value) ? value.map(String) : [];
   const set = (next: string[]): void => onCommit(next);
+  const validate = descriptor.validateItem;
+  // 074 FR-072c — with a rule, Add opens an unsaved row: nothing is written until its entry passes.
+  const [adding, setAdding] = useState(false);
   return (
     <div className="ctl ctl--array" data-testid={testId(descriptor.key)}>
       {items.map((item, i) => (
         <div className="ctl__array-row" key={i}>
-          <input
-            className="ctl__input"
-            data-testid={`${testId(descriptor.key)}-item-${i}`}
-            value={item}
-            onChange={(e) => {
-              const next = [...items];
-              next[i] = e.target.value;
-              set(next);
-            }}
-            // Enter confirms, like every other box in the window. (This row already commits as you
-            // type, so Enter's job is to say "done" and let go of the field.)
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur();
-            }}
-          />
+          {validate !== undefined ? (
+            <ValidatedArrayItem
+              id={`${testId(descriptor.key)}-item-${i}`}
+              value={item}
+              validate={validate}
+              onCommit={(entry) => set(items.map((x, j) => (j === i ? entry : x)))}
+            />
+          ) : (
+            <input
+              className="ctl__input"
+              data-testid={`${testId(descriptor.key)}-item-${i}`}
+              value={item}
+              onChange={(e) => {
+                const next = [...items];
+                next[i] = e.target.value;
+                set(next);
+              }}
+              // Enter confirms, like every other box in the window. (This row already commits as you
+              // type, so Enter's job is to say "done" and let go of the field.)
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
+            />
+          )}
           <IconButton
             token="moveUp"
             className="ctl__array-btn"
@@ -653,12 +739,26 @@ function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps
           />
         </div>
       ))}
+      {validate !== undefined && adding ? (
+        <div className="ctl__array-row">
+          <ValidatedArrayItem
+            id={`${testId(descriptor.key)}-item-${items.length}`}
+            value=""
+            validate={validate}
+            onCommit={(entry) => {
+              setAdding(false);
+              set([...items, entry]);
+            }}
+            onEmpty={() => setAdding(false)}
+          />
+        </div>
+      ) : null}
       <IconButton
         token="add"
         className="ctl__array-add"
         testId={`${testId(descriptor.key)}-add`}
         title="Add an entry"
-        onClick={() => set([...items, ''])}
+        onClick={() => (validate !== undefined ? setAdding(true) : set([...items, '']))}
       />
     </div>
   );

@@ -38,7 +38,7 @@
  * what the reader may not do. The file's path is shown under it, as every panel's banner shows it.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { refusalMessage, toDisplayPath, type NoticeSubject, type OsName, type PreviewNotice } from '@throng/core';
+import { formatGrouped, refusalMessage, toDisplayPath, type NoticeSubject, type OsName, type PreviewNotice } from '@throng/core';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import type { PreviewFailure, PreviewPanelState } from './preview-store.js';
 
@@ -89,7 +89,10 @@ export function previewNoticeMessage(notice: FileNotice): string {
     case 'unreadable':
       return 'This file could not be read.';
     case 'too-large':
-      return 'This file is too large to preview.';
+      // 074 FR-012 — named with its size and the provider's limit, digit-grouped, when main measured them.
+      return notice.size !== undefined && notice.limit !== undefined
+        ? `This file is too large to preview: ${formatGrouped(notice.size)} bytes, over the limit of ${formatGrouped(notice.limit)} bytes set in Preferences.`
+        : 'This file is too large to preview.';
     // 059 FR-053 — core's one wording, which the editor says too.
     case 'not-text':
       return refusalMessage('binary');

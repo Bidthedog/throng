@@ -22,7 +22,8 @@
  */
 import { editorAutoTitle, fileNameOf } from '../editor/path-display.js';
 import { FIND_IN_FILES_KIND, findInFilesPanelType } from '../find-in-files/panel-type.js';
-import { PREVIEW_KIND } from '../preview/panel-type.js';
+import { PREVIEW_KIND, previewPanelTypeLabel } from '../preview/panel-type.js';
+import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 import { commandDisplay } from '../terminal/command-capture.js';
 import {
   DEFAULT_TERMINAL_TITLE_TEMPLATE,
@@ -52,8 +53,10 @@ export interface PanelTitleSources {
   previewFilePath?: string | null;
   /**
    * 054 FR-005 — the preview's panel type label ("Markdown Preview"), named when it has no file to be
-   * named after. An input rather than a lookup, as `previewParentTitle` is: the provider registry is the
-   * caller's, not this rule's.
+   * named after, and (074 FR-104) the suffix of a preview that has one: `<name> - Markdown Preview`.
+   * The caller that knows the run's provider hands it in. Absent, the shipped provider registry answers
+   * from the persisted provider or the file's extension (`previewProviderIdOf`), so a surface naming a
+   * panel with no live sources — the daemon, a notice, the tab popover — still names its type.
    */
   previewTypeLabel?: string | null;
   /**
@@ -92,8 +95,10 @@ export interface TerminalTitleValues {
 }
 
 /**
- * What every preview's name ends with (044 FR-031). Never truncated (FR-032): it is the half of the
- * name that says what the panel IS, and a long file name gives way to it.
+ * What a preview's name ends with when its type is not known (044 FR-031) — a parented preview whose
+ * editor has no file yet, or a file no registered provider claims. Every other preview names its type
+ * (074 FR-104): {@link previewTitleParts}. Never truncated either way (FR-032): the suffix is the half
+ * of the name that says what the panel IS, and a long file name gives way to it.
  */
 export const PREVIEW_TITLE_SUFFIX = ' - Preview';
 
@@ -127,10 +132,11 @@ function usable(value: unknown): string | null {
  *
  * ══ ONE EXCEPTION TO THE BOUND: A PREVIEW AT A SHORT LIMIT (044 FR-032) ══
  *
- * A preview's title is `<name> - Preview`, the suffix is never cut, and the name keeps at least one
- * character. So at a `maxNameLength` of 10 or less — the suffix's own length, and the setting's
- * minimum is 10 — the result is LONGER than the limit by the name characters that remain. That
- * supersedes 031 FR-037's hard bound for preview titles only: " - Preview" alone names nothing. A
+ * A preview's title is `<name> - <Type> Preview` (074 FR-104), the suffix is never cut, and the name
+ * keeps at least one character. So at a `maxNameLength` no longer than the suffix — " - Preview" is
+ * 10, the setting's minimum, and " - Markdown Preview" is 19 — the result is LONGER than the limit by
+ * the name characters that remain. That supersedes 031 FR-037's hard bound for preview titles only: the
+ * suffix alone names nothing. A
  * header that marks truncation must mark the NAME, not the end of the title; it gets the two halves
  * apart from {@link previewTitleParts}.
  *
@@ -152,9 +158,12 @@ export function panelDisplayTitle(
 export interface PreviewTitleParts {
   /** The name half, already bounded — the part a truncation marker belongs on. */
   name: string;
-  /** Always {@link PREVIEW_TITLE_SUFFIX}, whole. */
+  /**
+   * ` - <Type> Preview` (074 FR-104), or {@link PREVIEW_TITLE_SUFFIX} while the type is unknown — always
+   * whole.
+   */
   suffix: string;
-  /** Whether `name` was shortened to fit, so the header draws `name… - Preview`. */
+  /** Whether `name` was shortened to fit, so the header draws `name… - Markdown Preview`. */
   nameTruncated: boolean;
 }
 
@@ -171,8 +180,30 @@ export function previewTitleParts(
 ): PreviewTitleParts | null {
   const full = previewName(panel, sources);
   if (full === null) return null;
-  const name = boundPreviewName(full, maxNameLength);
-  return { name, suffix: PREVIEW_TITLE_SUFFIX, nameTruncated: name !== full };
+  const suffix = previewTitleSuffix(panel, sources);
+  const name = boundPreviewName(full, suffix, maxNameLength);
+  return { name, suffix, nameTruncated: name !== full };
+}
+
+/**
+ * The type a preview names (054 FR-005, 074 FR-104): the label the caller hands in — the run's provider,
+ * which the renderer knows — else the shipped registry's answer for the persisted provider or the file
+ * shown (the live path first, as {@link previewName} reads it). `null` when no provider is known.
+ */
+function previewTypeLabelOf(panel: Panel, sources: PanelTitleSources): string | null {
+  const handedIn = usable(sources.previewTypeLabel);
+  if (handedIn !== null) return handedIn;
+  const config = panel.config as PreviewPanelConfig | undefined;
+  const persisted = config?.providerId === undefined ? undefined : SHIPPED_PREVIEW_PROVIDERS.get(config.providerId);
+  const path = usable(sources.previewFilePath) ?? previewPathOf(config);
+  const provider = persisted ?? (path ? SHIPPED_PREVIEW_PROVIDERS.forPath(path) : undefined);
+  return provider === undefined ? null : previewPanelTypeLabel(provider);
+}
+
+/** 074 FR-104 — ` - Markdown Preview`, or the generic {@link PREVIEW_TITLE_SUFFIX} with no known type. */
+function previewTitleSuffix(panel: Panel, sources: PanelTitleSources): string {
+  const label = previewTypeLabelOf(panel, sources);
+  return label === null ? PREVIEW_TITLE_SUFFIX : ` - ${label}`;
 }
 
 /**
@@ -196,12 +227,13 @@ function previewName(panel: Panel, sources: PanelTitleSources): string | null {
  * A preview's NAME half, shortened so that name plus suffix fits `maxNameLength` (044 FR-032).
  *
  * The limit applies to the whole title wherever it leaves room for a name at all. At or below the
- * suffix's own length — and `tabs.maxNameLength`'s minimum, 10, is exactly that length — the name
- * keeps one character and the title runs over by it, as the amended FR-032 sanctions.
+ * suffix's own length — " - Preview" is exactly `tabs.maxNameLength`'s minimum, 10, and a typed suffix
+ * (074 FR-104) is longer — the name keeps one character and the title runs over by it, as the amended
+ * FR-032 sanctions.
  */
-function boundPreviewName(name: string, maxNameLength: number | undefined): string {
+function boundPreviewName(name: string, suffix: string, maxNameLength: number | undefined): string {
   if (maxNameLength === undefined) return name;
-  const budget = Math.max(1, Math.floor(maxNameLength) - countGraphemes(PREVIEW_TITLE_SUFFIX));
+  const budget = Math.max(1, Math.floor(maxNameLength) - countGraphemes(suffix));
   return truncateGraphemes(name, budget);
 }
 

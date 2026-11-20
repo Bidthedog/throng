@@ -13,6 +13,8 @@ export const markdownProvider: PreviewProviderDescriptor = {
   displayName: 'Markdown',
   extensions: ['.md', '.markdown'],
   kind: 'text',
+  // 074 FR-103 — drawn as the preview icon with this type's mark.
+  previewIcon: 'previewMarkdown',
   settings: [
     // 054 FR-041. First of the own settings: the contract places it straight after Open previews in.
     {

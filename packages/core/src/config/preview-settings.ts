@@ -23,6 +23,7 @@
  *
  * Pure: no OS, no DOM.
  */
+import { safeSourceList } from '../preview/safe-sources.js';
 import type { FieldDescriptor } from './metadata.js';
 import type {
   PreviewProviderDescriptor,
@@ -40,8 +41,30 @@ import type {
 /** The copy formats, in the order the control offers them (FR-035b). */
 export const PREVIEW_COPY_FORMATS: readonly PreviewCopyFormat[] = ['rich', 'plain'];
 
-/** A text provider's default open actions, in the order the control offers them (FR-050). */
-export const DEFAULT_OPEN_ACTIONS: readonly DefaultOpenAction[] = ['editor', 'preview'];
+/** Every "Open <files> in" value, in the order the control offers them (074 FR-016). */
+export const DEFAULT_OPEN_ACTIONS: readonly DefaultOpenAction[] = ['editor', 'preview', 'os'];
+
+/** 074 FR-016 — what a provider's "Open <files> in" offers: a binary provider has no editor. */
+export function offeredOpenActions(provider: Pick<PreviewProviderDescriptor, 'kind'>): readonly DefaultOpenAction[] {
+  return provider.kind === 'text' ? DEFAULT_OPEN_ACTIONS : DEFAULT_OPEN_ACTIONS.filter((a) => a !== 'editor');
+}
+
+/** The value a provider ships, and the one an unoffered stored value reads as (074 FR-016). */
+function shippedOpenAction(provider: PreviewProviderDescriptor): DefaultOpenAction {
+  const declared = provider.defaultOpenAction;
+  if (declared !== undefined && offeredOpenActions(provider).includes(declared)) return declared;
+  return provider.kind === 'text' ? DEFAULT_OPEN_ACTION_SHIPPED : 'preview';
+}
+
+/** 074 FR-017 — the option labels, in the contract's words. */
+function openActionLabels(provider: PreviewProviderDescriptor): Record<string, string> {
+  const labels: Record<string, string> = {
+    editor: 'Throng Editor',
+    preview: provider.previewOptionLabel ?? 'Throng Preview',
+    os: 'Default OS Program',
+  };
+  return Object.fromEntries(offeredOpenActions(provider).map((a) => [a, labels[a]!]));
+}
 
 const GROUP = 'Editor';
 const SUBGROUP = 'Previews';
@@ -81,12 +104,11 @@ function providerDefaults(provider: PreviewProviderDescriptor): ProviderSettings
   // Every provider ships ENABLED. FR-065 requires it of Markdown, and the descriptor has no field to
   // say otherwise — none is added until a provider actually needs to ship off.
   const out: ProviderSettings = { enabled: true };
-  if (provider.kind === 'text') {
-    // 044 FR-050 ships Editor; a provider may declare Preview instead (Mermaid, 054 MT-04).
-    out.defaultOpenAction = provider.defaultOpenAction ?? DEFAULT_OPEN_ACTION_SHIPPED;
-    out.openTarget = OPEN_TARGET_SHIPPED;
-  }
-  for (const s of provider.settings ?? []) out[s.leaf] = s.default;
+  // 074 FR-016 — every provider, text and binary, has Open <files> in and Open previews in. 044 FR-050 ships
+  // Editor for text; a provider may declare otherwise (Mermaid, 054 MT-04); a binary one ships Preview.
+  out.defaultOpenAction = shippedOpenAction(provider);
+  out.openTarget = OPEN_TARGET_SHIPPED;
+  for (const s of provider.settings ?? []) out[s.leaf] = Array.isArray(s.default) ? [...(s.default as readonly string[])] : s.default;
   return out;
 }
 
@@ -116,11 +138,18 @@ function ownSettingDescriptor(
     subsection: provider.displayName,
     // A bounded number takes the slider (018 SC-007's converse guard: bounds imply the control).
     control:
-      s.control === 'number' && typeof s.min === 'number' && typeof s.max === 'number'
-        ? 'slider'
-        : s.control,
+      s.control === 'list'
+        ? 'array'
+        : s.control === 'number' && typeof s.min === 'number' && typeof s.max === 'number'
+          ? 'slider'
+          : s.control,
     enabledWhen,
   };
+  if (s.control === 'list') {
+    d.itemControl = 'text';
+    d.clearable = true;
+    if (s.validateItem !== undefined) d.validateItem = s.validateItem;
+  }
   if (s.allowedValues !== undefined) d.allowedValues = s.allowedValues;
   if (s.optionLabels !== undefined) d.optionLabels = s.optionLabels;
   if (s.min !== undefined) d.min = s.min;
@@ -134,7 +163,7 @@ function ownSettingDescriptor(
  *
  * A provider's default open action and own settings carry `enabledWhen` on its enabled toggle, so
  * they are drawn DISABLED, not hidden, while it is off — the existing single-condition mechanism, and
- * no new descriptor field. A binary provider has no default-open-action descriptor at all (FR-051).
+ * no new descriptor field. Every provider, binary included, has an Open <files> in row (074 FR-016).
  */
 export function previewSettingsDescriptors(
   registry: PreviewProviderRegistry,
@@ -208,18 +237,25 @@ export function previewSettingsDescriptors(
       subsection,
       control: 'toggle',
     });
-    if (provider.kind === 'text') {
+    {
+      // 074 FR-016, FR-017 — "Open <files> in", for EVERY provider (superseding 044 FR-050's "Default open
+      // action" and FR-051's "no setting for a binary provider"); same key, so no stored value changes meaning.
+      const files = provider.filesNoun ?? `${provider.displayName} files`;
+      const offered = offeredOpenActions(provider);
+      const what = offered.includes('editor')
+        ? 'in a throng editor, in its throng preview, or in the operating system’s default program for it'
+        : 'in its throng preview, or in the operating system’s default program for it';
       out.push({
         key: providerKey(provider.id, 'defaultOpenAction'),
-        label: `${provider.displayName}: Default open action`,
-        // 054 FR-030 (T029) — Find in Files follows it now; only Open In's editor targets do not.
-        description: `What opening a ${provider.displayName} file from File Explorer, Quick Open or a Find in Files result does: open it in an editor, or open its preview. Open In's editor targets always open an editor.`,
+        label: `Open ${files} in`,
+        // 054 FR-030 — Find in Files follows it, except Default OS Program, which cannot show a match (074 FR-019).
+        description: `Where ${files} open from File Explorer, Quick Open and links: ${what}. A Find in Files result set to the default program opens an editor at the match. Open In's targets always do what they name.`,
         group: GROUP,
         subgroup: SUBGROUP,
         subsection,
         control: 'select',
-        allowedValues: DEFAULT_OPEN_ACTIONS,
-        optionLabels: { editor: 'Editor', preview: 'Preview' },
+        allowedValues: offered,
+        optionLabels: openActionLabels(provider),
         enabledWhen,
       });
       // 054 FR-051 – FR-053 — 047 FR-015a's "Open previews in", one per provider, labelled with its name
@@ -251,7 +287,12 @@ function nonNegative(v: unknown, fallback: number): number {
 }
 
 /** One declared own leaf, tolerant of a wrong type or an undeclared option. */
-function ownLeaf(s: ProviderSettingDeclaration, v: unknown): boolean | string | number {
+function ownLeaf(s: ProviderSettingDeclaration, v: unknown): boolean | string | number | readonly string[] {
+  if (s.control === 'list') {
+    const shipped = s.default as readonly string[];
+    if (!Array.isArray(v)) return [...shipped];
+    return s.leaf === 'safeSources' ? safeSourceList(v) : v.filter((x): x is string => typeof x === 'string');
+  }
   if (s.control === 'toggle') return typeof v === 'boolean' ? v : s.default;
   if (s.control === 'number') return typeof v === 'number' && Number.isFinite(v) ? v : s.default;
   if (typeof v !== 'string') return s.default;
@@ -273,19 +314,18 @@ function parseProvider(
 ): ProviderSettings {
   const fallback = providerDefaults(provider);
   if (!isRecord(raw)) {
-    if (provider.kind === 'text' && legacyOpenTarget !== undefined) fallback.openTarget = legacyOpenTarget;
+    if (legacyOpenTarget !== undefined) fallback.openTarget = legacyOpenTarget;
     return fallback;
   }
   const out: ProviderSettings = {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
   };
-  // FR-051: a binary provider has no such leaf, so one written by hand is not carried.
-  if (provider.kind === 'text') {
-    out.defaultOpenAction = DEFAULT_OPEN_ACTIONS.includes(raw.defaultOpenAction as DefaultOpenAction)
-      ? (raw.defaultOpenAction as DefaultOpenAction)
-      : fallback.defaultOpenAction;
-    out.openTarget = openTargetOf(raw.openTarget) ?? legacyOpenTarget ?? OPEN_TARGET_SHIPPED;
-  }
+  // 074 FR-016 — a value the provider does not offer (`editor` written by hand for a binary provider) reads as
+  // its shipped value.
+  out.defaultOpenAction = offeredOpenActions(provider).includes(raw.defaultOpenAction as DefaultOpenAction)
+    ? (raw.defaultOpenAction as DefaultOpenAction)
+    : fallback.defaultOpenAction;
+  out.openTarget = openTargetOf(raw.openTarget) ?? legacyOpenTarget ?? OPEN_TARGET_SHIPPED;
   for (const s of provider.settings ?? []) out[s.leaf] = ownLeaf(s, raw[s.leaf]);
   return out;
 }
@@ -321,18 +361,41 @@ export function parsePreviewSettings(raw: unknown, registry: PreviewProviderRegi
   };
 }
 
+/**
+ * 074 FR-012 — the byte cap on what provider `providerId`'s preview reads: its declared `maxFileBytesSetting` leaf
+ * when it has one (and the stored value is a positive number), else `editorLimit` (`editor.maxOpenFileBytes`).
+ */
+export function maxFileBytesFor(
+  registry: PreviewProviderRegistry,
+  s: PreviewSettings,
+  providerId: string,
+  editorLimit: number,
+): number {
+  const leaf = registry.get(providerId)?.maxFileBytesSetting;
+  if (leaf === undefined) return editorLimit;
+  const value = s.providers[providerId]?.[leaf];
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : editorLimit;
+}
+
+/**
+ * 074 FR-072a — the global **HTML: Safe preview sources**, canonical. The project's own list (Project Settings) is
+ * added to it by the caller that knows the project.
+ */
+export function htmlSafeSourcesFrom(s: PreviewSettings): string[] {
+  return safeSourceList(s.providers.html?.safeSources);
+}
+
 /** The maximum wait as it BEHAVES: never shorter than the update delay (FR-060a). */
 export function effectiveMaxWaitMs(s: PreviewSettings): number {
   return Math.max(s.maxWaitMs, s.updateDelayMs);
 }
 
 /**
- * What opening `path` does by default (FR-050 – FR-052, FR-062).
+ * What opening `path` does by default (044 FR-050 – FR-052, FR-062; 074 FR-016 – FR-018).
  *
- * `editor` unless the file's provider is ENABLED and its default open action is Preview. A binary
- * provider's default open action IS Preview (FR-051), so an enabled binary provider answers
- * `preview`. A disabled provider answers `editor` and leaves its stored choice exactly where it was,
- * so re-enabling restores it (FR-062).
+ * `editor` for a file no provider claims, or whose provider is DISABLED — which leaves the stored choice
+ * exactly where it was, so re-enabling restores it (FR-062). Otherwise the provider's stored Open <files>
+ * in value where the provider offers it, else its shipped value: `editor`, `preview` or `os`.
  */
 export function defaultOpenActionFor(
   registry: PreviewProviderRegistry,
@@ -343,8 +406,8 @@ export function defaultOpenActionFor(
   if (provider === undefined) return 'editor';
   const settings = s.providers[provider.id];
   if (settings?.enabled !== true) return 'editor';
-  if (provider.kind === 'binary') return 'preview';
-  return settings.defaultOpenAction === 'preview' ? 'preview' : 'editor';
+  const stored = settings.defaultOpenAction;
+  return stored !== undefined && offeredOpenActions(provider).includes(stored) ? stored : shippedOpenAction(provider);
 }
 
 /**

@@ -2,7 +2,7 @@
  * Every editor panel's DISPLAYED name, told to main (044 FR-031; contracts/preview-ipc.md §1
  * `publishEditorTitle`).
  *
- * A parented preview is titled `<parent editor's name> - Preview`, where the name is whatever that
+ * A parented preview is titled `<parent editor's name> - <Type> Preview`, where the name is whatever that
  * editor currently displays — a custom name, or the one derived from its file. The name is decided in
  * the renderer (`panelDisplayTitle` over the layout's title and the editor's live file) and main holds
  * the layout only as an opaque blob, so each window publishes what its editors are called; main keeps

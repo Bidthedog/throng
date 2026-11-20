@@ -200,6 +200,46 @@ export interface PreviewBodyProps {
    * lists never calls it.
    */
   onToggleTask?(task: TaskToggle): void;
+
+  /**
+   * 074 R8 (FR-022, FR-062) — a short sentence about what is drawn, for the status bar's readout slot: an image's
+   * pixel size and file size, a PDF's page. `null` clears it. A followed link's target, when there is one, is shown
+   * instead. Optional: a body that never calls it shows nothing there.
+   */
+  onStatusReadout?(text: string | null): void;
+
+  /**
+   * 074 R4 — this run's SOURCE bytes, read by main through the preview protocol's own handler (confined, MIME-checked,
+   * size-capped): what a binary provider needs when an `<img>` URL is not enough — PDF.js, or a bitmap for Copy
+   * Image. With `asset` (a root-relative path), that asset of the run instead, confined as an `<img>` load is. A
+   * passthrough to `window.throng.preview.readSource`. Optional: absent, every read is refused.
+   */
+  readSource?(asset?: string): Promise<{ ok: true; bytes: Uint8Array; mime: string } | { ok: false; status: number }>;
+  /**
+   * 074 FR-062b — a paged body (PDF) hands the panel what opens its Go to Page modal, and `null` when it unmounts;
+   * the panel runs it for `preview.goToHeading`'s chord and the menus' Go to Page…. Optional: a body without pages
+   * never calls it.
+   */
+  registerGoToPage?(open: (() => void) | null): void;
+  /**
+   * 074 FR-062c — a paged body (PDF) hands the panel its page layout, read and set, and `null` when it unmounts; the
+   * body menu draws one checked row per layout from it (every panel action has a menu item, Principle VI).
+   */
+  registerPageLayout?(control: PageLayoutControl | null): void;
+  /**
+   * 074 FR-085a — a body that draws its page in a same-origin frame (HTML) hands the panel the element whose
+   * selection is the page's — the frame document's body — and `null` when it goes. The panel's Copy, Copy as…,
+   * Select All, the copy gesture and the body menu read the selection there instead of in its own body host.
+   */
+  registerSelectionHost?(host: (() => HTMLElement | null) | null): void;
+}
+
+/** 074 FR-062c — how a paged body lays its pages out: one under another, two to a row, or as many as fit. */
+export type PageLayout = 'single' | 'two' | 'wrap';
+
+export interface PageLayoutControl {
+  get(): PageLayout;
+  set(layout: PageLayout): void;
 }
 
 export type PreviewBody = ComponentType<PreviewBodyProps>;
@@ -211,6 +251,16 @@ export interface PreviewProviderView {
   load(): Promise<PreviewBody>;
   /** The body menu offers Copy and Select All only when true (FR-035). */
   textSelection: boolean;
+  /**
+   * 074 FR-086 — whether the find bar can search the drawn body. Absent reads `true`. `false` (a page in an
+   * opaque, sandboxed frame) shows Find DISABLED on the panel's body menu, header menu and chord.
+   */
+  searchable?: boolean;
+  /**
+   * 074 FR-086a — `false`: the body has no text to search at all (a picture), so Find is not offered — absent from the
+   * body and header menus, its chord consumed. Absent reads `true`.
+   */
+  findable?: boolean;
   /**
    * FR-035a — the HTML a RICH copy puts on the clipboard, from a clone of the selected part of this
    * provider's body: the provider's own export profile, since only the provider knows what its DOM carries

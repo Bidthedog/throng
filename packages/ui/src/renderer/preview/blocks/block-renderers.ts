@@ -19,6 +19,7 @@
  */
 import type { DiagramTheme } from '../diagram/diagram-theme.js';
 import { DIAGRAM_HEIGHT_ATTRIBUTE, parseDiagramHeight } from '../diagram/diagram-host.js';
+import { svgBlockEntry } from './picture.js';
 
 export interface BlockRenderOptions {
   readonly theme: DiagramTheme;
@@ -32,6 +33,8 @@ export interface BlockRenderer {
 export interface BlockRendererEntry {
   /** The fence language, as `data-lang` carries it. */
   readonly lang: string;
+  /** 074 — what the renderer draws, for its notices ("This picture could not be drawn"). Absent reads "diagram". */
+  readonly noun?: string;
   load(): Promise<BlockRenderer>;
 }
 
@@ -89,4 +92,13 @@ export function claimRenderedBlocks(root: ParentNode, enabled: (lang: string) =>
 registerBlockRenderer({
   lang: 'mermaid',
   load: () => import('../diagram/mermaid-renderer.js').then((m) => m.mermaidBlockRenderer),
+});
+
+// 074 FR-054 (Q4) — a ```svg fence is drawn as an isolated picture (`picture.ts`, research R3), in the same frame.
+// Imported statically: the Markdown and Image previews already load `picture.ts` eagerly, so a lazy import here moved
+// nothing out of the bundle and only drew Rolldown's INEFFECTIVE_DYNAMIC_IMPORT warning.
+registerBlockRenderer({
+  lang: 'svg',
+  noun: 'SVG',
+  load: () => svgBlockEntry().load(),
 });
