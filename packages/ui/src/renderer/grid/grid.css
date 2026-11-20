@@ -357,3 +357,21 @@
 .data-grid[data-drag='cells'] * {
   cursor: default !important;
 }
+
+/* 073 FR-033d — the row Synchronise Scrolling has in step with the editor: a soft theme-token wash over the row's cells,
+   which fades out when the "on" class goes. An overlay on the row, so no cell changes size or moves, and a locked row
+   keeps its opaque ground beneath. */
+.data-grid__row--sync-mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--throng-colour-accent) 22%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease-out;
+}
+
+.data-grid__row--sync-mark-on::after {
+  opacity: 1;
+  transition-duration: 120ms;
+}

@@ -107,7 +107,7 @@ its failing test at the layer R10 names.
 - [x] T068 [US2] FR-007a: the CSV status-bar toggles (cell dialog, wrap, locks) and the shared Synchronise Scrolling button follow constitution v7.1.0 Setting toggles — muted glyph with a struck line when off, full-contrast on pressed when on, "<setting>: enabled|disabled" titles — reusing master's terminal toggle styling (076) rather than a copy
 - [x] T069 [US2] FR-033c: CSV previews link to their editor and Synchronise Scrolling works between them by record (grid top row ↔ editor top line) — a provider flag separate from flowingDocument so Go to Heading stays absent; sync button on both status bars
 - [x] T070 [US2] FR-039b: the locked strip's outside edge is the accent colour at the ordinary 1px border width, replacing the 2px separator
-- [ ] T071 [US2] FR-033d: scroll-sync highlights — a soft line highlight in the editor (CodeMirror decoration, no focus/selection change) and the matching grid row in a CSV preview, a gutter indicator in a Markdown preview (047 preview gutter); both on the synced pair, fading 1.5 s after the last scroll; theme tokens; component tests both directions for CSV and Markdown
+- [x] T071 [US2] FR-033d: scroll-sync highlights — a soft line highlight in the editor (CodeMirror decoration, no focus/selection change) and the matching grid row in a CSV preview, a gutter indicator in a Markdown preview (047 preview gutter); both on the synced pair, fading 1.5 s after the last scroll; theme tokens; component tests both directions for CSV and Markdown
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies

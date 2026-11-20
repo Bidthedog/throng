@@ -154,6 +154,35 @@
   outline: 2px solid var(--throng-colour-accent);
 }
 
+/*
+ * 073 FR-033d — the sync mark's indicator, in the gutter strip level with the block that holds the line the preview and
+ * its editor are in step at. A bar in the strip's own left edge, clear of the fold toggle (which sits from -1.5em to
+ * -0.25em): drawn from the `border` token, the one colour a preview rule may use besides its text, so it stays on the pairing
+ * every preview colour sits on (SC-005; the accent is the focus ring's alone). It fades when `--on` goes, and exists only with the gutter.
+ */
+.preview-markdown--gutter .preview-sync-mark {
+  position: relative;
+}
+
+.preview-markdown--gutter .preview-sync-mark::before {
+  content: '';
+  position: absolute;
+  left: -2em;
+  top: 0;
+  bottom: 0;
+  width: 0.25em;
+  border-radius: 0.125em;
+  border-left: 0.25em solid var(--throng-colour-border);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease-out;
+}
+
+.preview-markdown--gutter .preview-sync-mark--on::before {
+  opacity: 1;
+  transition-duration: 120ms;
+}
+
 .preview-markdown p,
 .preview-markdown ul,
 .preview-markdown ol,

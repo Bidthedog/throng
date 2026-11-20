@@ -235,3 +235,48 @@ describe('locks and wrap are respected (FR-033c)', () => {
     await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(3));
   });
 });
+
+describe('the sync mark: the grid row in step with the editor (FR-033d)', () => {
+  const markedRows = (): { row: number; on: boolean }[] =>
+    [...document.querySelectorAll<HTMLElement>('.data-grid__row--sync-mark')].map((el) => ({
+      row: Number(el.getAttribute('aria-rowindex')) - 2,
+      on: el.classList.contains('data-grid__row--sync-mark-on'),
+    }));
+
+  it('marks the row of the record the line falls in, and none without a mark', () => {
+    const m = mount(multi(60), { syncMark: null });
+    expect(markedRows()).toEqual([]);
+    m.update({ syncMark: { line: 5, on: true } }); // inside record 3 (lines 3 - 5)
+    expect(markedRows()).toEqual([{ row: 3, on: true }]);
+    m.update({ syncMark: { line: 8, on: true } }); // record 6 starts on line 8
+    expect(markedRows()).toEqual([{ row: 6, on: true }]);
+  });
+
+  it('is off while it fades, and clears with the mark', () => {
+    const m = mount(plain(100), { syncMark: { line: 4, on: true } });
+    m.update({ syncMark: { line: 4, on: false } });
+    expect(markedRows()).toEqual([{ row: 4, on: false }]);
+    m.update({ syncMark: null });
+    expect(markedRows()).toEqual([]);
+  });
+
+  it('marks the locked first row in its strip when the record is row 0', () => {
+    mount(plain(100), { syncMark: { line: 0, on: true }, lockFirstRowChoice: true });
+    expect(markedRows()).toEqual([{ row: 0, on: true }]);
+    expect(document.querySelector('.data-grid__row--locked')).toHaveClass('data-grid__row--sync-mark');
+  });
+
+  it('is the same row with wrap on', () => {
+    const text = '"a\nb\nc"\n' + Array.from({ length: 20 }, (_, i) => `v${i}`).join('\n') + '\n';
+    mount(text, { syncMark: { line: 3, on: true }, wrapChoice: true }); // record 1 starts on line 3
+    expect(markedRows()).toEqual([{ row: 1, on: true }]);
+  });
+
+  it('touches neither the selection nor the scroll', () => {
+    const m = mount(plain(300));
+    const before = top;
+    m.update({ syncMark: { line: 120, on: true } });
+    expect(top).toBe(before);
+    expect(document.querySelector('.data-grid__cell--active')?.getAttribute('data-row') ?? '0').toBe('0');
+  });
+});

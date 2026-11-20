@@ -123,6 +123,7 @@ import {
 } from './scroll-anchor.js';
 import { highlightCodeBlocks } from './highlight.js';
 import { applyFoldGutter } from './fold-gutter.js';
+import { applySyncMark } from './sync-mark.js';
 import { applyWikiResolution } from './wikilinks.js';
 import { applyImageEmbedResolution, EMBED_ATTRIBUTE, embedReadRefOf, embedRefOf } from './embeds.js';
 import { embedRefusalText, type PreviewEmbedRead } from '@throng/core';
@@ -364,6 +365,7 @@ export function MarkdownBody({
   syncEcho,
   onTopLineChange,
   onTopLineRead,
+  syncMark,
   placePolicy,
   onViewStateCapture,
   onFollow,
@@ -414,6 +416,9 @@ export function MarkdownBody({
   foldStateRef.current = foldState;
   const gutterRef = useRef(gutter);
   gutterRef.current = gutter;
+  /** 073 FR-033d — the sync mark's indicator, redrawn after every draw and whenever the mark or the gutter changes. */
+  const syncMarkRef = useRef(syncMark);
+  syncMarkRef.current = syncMark;
   const onFoldChangeRef = useRef(onFoldChange);
   onFoldChangeRef.current = onFoldChange;
   const onHeadingsRef = useRef(onHeadings);
@@ -936,6 +941,7 @@ export function MarkdownBody({
         // inserted. After the place above, not before: a toggle's own gutter offset must never be measured
         // as part of the scroll anchor's layout.
         drawFoldGutter(body, headings);
+        applySyncMark(body, syncMarkRef.current, gutterRef.current === true);
         // 048 FR-083 — the collapsed sections just hidden moved everything below them: a place applied above
         // lands again under the folded layout. In the same task, so the reader never sees the unfolded one.
         reanchor(scroller);
@@ -1016,9 +1022,17 @@ export function MarkdownBody({
     const body = bodyRef.current;
     if (body === null || shown.current === null) return;
     drawFoldGutter(body, lastHeadingsRef.current);
+    applySyncMark(body, syncMarkRef.current, gutterRef.current === true);
     // 048 FR-083 — fold state seeded late (main's answer after the draw) is a settle point too.
     reanchor(scrollerOf(body));
   }, [foldState, gutter, theme, sets, drawFoldGutter, reanchor]);
+
+  // 073 FR-033d — the sync mark moved or faded: the indicator beside the block holding its line, in the gutter only.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body === null || shown.current === null) return;
+    applySyncMark(body, syncMark, gutter === true);
+  }, [syncMark, gutter]);
 
   /*
    * FR-040 — the chrome's way to expand one section's collapsed ancestors and itself, and bring it to

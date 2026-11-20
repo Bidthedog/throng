@@ -234,6 +234,7 @@ import {
 } from './copy.js';
 import { PreviewStatusBar } from './preview-status-bar.js';
 import { toggleSyncScroll } from './sync-scroll-toggle.js';
+import { clearSyncMark, publishSyncMark, useSyncMark } from './sync-mark-store.js';
 import {
   editorDocLinesOf,
   editorTopLineOf,
@@ -1930,6 +1931,24 @@ export function PreviewPanel({
   const parentDocLines = useEditorDocLines(syncing ? parentId : null);
   const syncingRef = useRef(syncing);
   syncingRef.current = syncing;
+  /*
+   * 073 FR-033d — the place the pair is in step at, marked in both views while a sync scroll moves one with the other.
+   * The editor leading is noticed here (its published top line moved, and not because this preview asked); this view
+   * leading is marked where it asks the editor to follow (`onTopLineChange`). The first line seen is only recorded.
+   */
+  const syncMark = useSyncMark(syncing ? parentId : null);
+  const lastEditorLine = useRef<EditorTopLine | null>(null);
+  useEffect(() => {
+    const seen = lastEditorLine.current;
+    lastEditorLine.current = parentTop;
+    if (!syncing || parentId === null || parentTop === null || seen === null || seen === parentTop) return;
+    if (parentTop.fromSync || seen.line === parentTop.line) return;
+    publishSyncMark(parentId, parentTop.line);
+  }, [parentTop, parentId, syncing]);
+  useEffect(() => {
+    if (!syncing || parentId === null) return;
+    return () => clearSyncMark(parentId);
+  }, [syncing, parentId]);
 
   /** FR-121h — the body's way to read the line of the block at its top, for adoption. */
   const readTopLine = useRef<(() => number | null) | null>(null);
@@ -2034,6 +2053,8 @@ export function PreviewPanel({
     const passed = lastPassed.current;
     if (passed === null || passed.parent !== editor || passed.value !== editorTopLineOf(editor)) return false;
     requestEditorTopLine(editor, line);
+    // 073 FR-033d — this view led: the pair is in step at its top line.
+    publishSyncMark(editor, line);
     return true;
   }, []);
 
@@ -2525,6 +2546,7 @@ export function PreviewPanel({
             syncEcho={syncEcho}
             onTopLineChange={onTopLineChange}
             onTopLineRead={onTopLineRead}
+            syncMark={syncMark}
             placePolicy={placePolicy}
             onViewStateCapture={onViewStateCapture}
             onFollow={onFollow}

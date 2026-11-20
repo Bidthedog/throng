@@ -17,6 +17,8 @@ import type { DocumentSymbol, FoldState, PreviewContent, PreviewEmbedRead, Previ
 import type { PreviewLinkWording } from './link-dom.js';
 import type { TaskToggle } from './task-toggle.js';
 
+import type { SyncMark } from './sync-mark-store.js';
+
 export interface PreviewBodyProps {
   panelId: string;
   content: PreviewContent;
@@ -110,6 +112,13 @@ export interface PreviewBodyProps {
    * is drawn. Optional, like `onTopLineChange`.
    */
   onTopLineRead?(read: () => number | null): void;
+  /**
+   * 073 FR-033d — the source line (0-based) the preview and its editor are in step at, while a sync scroll moves one with
+   * the other: `on` while it is shown, false while it fades out. `null` when sync does not apply or nothing has moved.
+   * The body marks where that line is drawn — a CSV its row, Markdown a gutter indicator beside its block — and touches no
+   * focus, selection or scroll. Optional: a body that ignores it still conforms.
+   */
+  syncMark?: SyncMark | null;
   /**
    * 044 FR-121e, FR-121h (data-model §15.2) — how the body treats `initialViewState`:
    *

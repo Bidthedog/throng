@@ -1,0 +1,105 @@
+/**
+ * The place two views are in step at, while Synchronise Scrolling moves one with the other (073 FR-033d, extending
+ * 044 FR-114).
+ *
+ * When a scroll in one view moves the other, BOTH mark the place with a soft highlight: the record or line at the
+ * SCROLLED view's top, and its counterpart in the follower — wherever that sits in the follower's viewport, so a view
+ * that has run out of room (an editor at its last line while a wrapped grid carries on) still shows where the other
+ * one is. The mark is a source line (0-based, the numbering `data-source-line` and `syncLine` use): the editor draws it
+ * as a line, a CSV grid as the row of the record that starts there, a Markdown preview as an indicator in its gutter
+ * beside the block holding it. One mapping, then — the one sync already makes — and no second one here.
+ *
+ * Keyed by the EDITOR panel of the pair, which is what both sides can name: the preview as its parent, the editor as
+ * itself. Module state, so one per renderer window like `editor-scroll-store.ts`; the pair lives in one window.
+ *
+ * The mark is `on` from a sync scroll until {@link SYNC_MARK_FADE_MS} after the LAST one (each publish resets the
+ * timer), then `off` — a class flip the views' CSS transitions out — and gone a moment after that. It is a decoration:
+ * nothing here touches focus, a caret, a selection or a scroll position, and it has no setting of its own.
+ */
+import { useSyncExternalStore } from 'react';
+
+/** How long after the last sync scroll the mark starts to fade (073 FR-033d). */
+export const SYNC_MARK_FADE_MS = 1500;
+/** How long the faded mark is kept after that, for the views' CSS transition to finish before it is dropped. */
+export const SYNC_MARK_REMOVE_MS = 700;
+
+/** `line` is 0-based; `on` is false while the mark fades out. A new object is made whenever either changes. */
+export interface SyncMark {
+  line: number;
+  on: boolean;
+}
+
+const marks = new Map<string, SyncMark>();
+const fadeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const removeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const listeners = new Set<() => void>();
+
+function emit(): void {
+  for (const l of [...listeners]) l();
+}
+
+function stopTimers(editorId: string): void {
+  const fade = fadeTimers.get(editorId);
+  if (fade !== undefined) clearTimeout(fade);
+  fadeTimers.delete(editorId);
+  const remove = removeTimers.get(editorId);
+  if (remove !== undefined) clearTimeout(remove);
+  removeTimers.delete(editorId);
+}
+
+/** A sync scroll happened for the pair whose editor is `editorId`, at source line `line`: show the mark and restart its fade. */
+export function publishSyncMark(editorId: string, line: number): void {
+  const at = Math.max(0, Math.trunc(line));
+  stopTimers(editorId);
+  const held = marks.get(editorId);
+  if (held === undefined || held.line !== at || !held.on) {
+    marks.set(editorId, { line: at, on: true });
+    emit();
+  }
+  fadeTimers.set(
+    editorId,
+    setTimeout(() => {
+      fadeTimers.delete(editorId);
+      const m = marks.get(editorId);
+      if (m === undefined) return;
+      marks.set(editorId, { line: m.line, on: false });
+      emit();
+      removeTimers.set(
+        editorId,
+        setTimeout(() => {
+          removeTimers.delete(editorId);
+          if (marks.delete(editorId)) emit();
+        }, SYNC_MARK_REMOVE_MS),
+      );
+    }, SYNC_MARK_FADE_MS),
+  );
+}
+
+/** Drop the pair's mark at once — sync stopped, or a view went. */
+export function clearSyncMark(editorId: string): void {
+  stopTimers(editorId);
+  if (marks.delete(editorId)) emit();
+}
+
+export function syncMarkOf(editorId: string): SyncMark | null {
+  return marks.get(editorId) ?? null;
+}
+
+export function subscribeSyncMark(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** Subscribe a component to ONE pair's mark; a `null` editor id reads `null`. */
+export function useSyncMark(editorId: string | null): SyncMark | null {
+  return useSyncExternalStore(subscribeSyncMark, () => (editorId === null ? null : syncMarkOf(editorId)));
+}
+
+/** Test seam: forget every mark and timer. */
+export function __resetSyncMarks(): void {
+  for (const id of [...fadeTimers.keys(), ...removeTimers.keys()]) stopTimers(id);
+  marks.clear();
+  emit();
+}

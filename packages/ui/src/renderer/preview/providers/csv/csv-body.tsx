@@ -23,7 +23,7 @@
  * Column letters and the first record as row 1, always (FR-042). A document with an unterminated quote is
  * not drawn as a grid — one inline notice names its first bad line, with Open in Editor (FR-046).
  */
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react';
 import {
   cellDialogOn,
   wrapCellsOn,
@@ -42,7 +42,9 @@ import {
   logExpected,
   parseCsv,
   parseTsv,
+  recordAtLine,
   recordFieldCount,
+  recordStartLines,
   type CsvGridOperation,
   type CsvModel,
   type PreviewCopyFormat,
@@ -118,7 +120,7 @@ function useCsvModel(text: string): Parsed | null {
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark, onDrawn, onViewStateCapture, onOpenInEditor, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -438,6 +440,10 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   // FR-043a — Ctrl+G and the menus' Go to Row… open the shared Go to dialog for rows.
   // 073 FR-033c — scroll in step with the linked text editor, as a Markdown preview does.
   const onGridScroll = useCsvScrollSync(gridRef, parsed, { syncLine, syncEcho, onTopLineChange, onTopLineRead });
+  const markedRow = useMemo(
+    () => (syncMark === null || syncMark === undefined || model === null ? null : { row: recordAtLine(recordStartLines(model, modelText), syncMark.line), on: syncMark.on }),
+    [syncMark, model, modelText],
+  );
   const goTo = useGridGoTo(panelId, gridRef, rowCount, registerGoTo);
 
   /* ── Menus (contracts/grid-ui.md) ────────────────────────────────────────────────────────────── */
@@ -610,6 +616,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         onEscape={escapeCut}
         onContextMenu={onContextMenu}
         onScrollChange={onGridScroll}
+        syncMarkRow={markedRow}
       />
       {goTo.dialog}
       {cellDialog !== null ? (

@@ -175,6 +175,11 @@ export interface DataGridProps {
    */
   lockFirstRow?: boolean;
   lockFirstColumn?: boolean;
+  /**
+   * 073 FR-033d — the row Synchronise Scrolling has in step with the linked editor, softly highlighted while `on` and
+   * fading once it is not. Wherever the row sits in the viewport; the highlight touches no selection, focus or scroll.
+   */
+  syncMarkRow?: { row: number; on: boolean } | null;
 }
 
 interface EditingState {
@@ -372,6 +377,8 @@ interface RowProps {
   lockSize: number;
   /** The cell editor, when it edits a locked cell and so lives inside the strip it stays with. */
   editor: ReactElement | null;
+  /** FR-033d — this row is the sync mark: 0 no, 1 fading out, 2 shown. */
+  mark: 0 | 1 | 2;
 }
 
 /** One row of cells. A vertical scroll leaves every unchanged row's props equal, so those rows do not re-render. */
@@ -380,7 +387,12 @@ const GridRow = memo(function GridRow(p: RowProps): ReactElement {
     <div
       role="row"
       aria-rowindex={p.row + 2}
-      className={'data-grid__row' + (p.stickyTop !== null ? ' data-grid__row--locked' : '')}
+      className={
+        'data-grid__row' +
+        (p.stickyTop !== null ? ' data-grid__row--locked' : '') +
+        (p.mark !== 0 ? ' data-grid__row--sync-mark' : '') +
+        (p.mark === 2 ? ' data-grid__row--sync-mark-on' : '')
+      }
       style={
         p.stickyTop !== null
           ? { position: 'sticky', top: p.stickyTop, height: p.size, width: p.totalW }
@@ -456,6 +468,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     onEscape,
     wrap = false,
     lockFirstRow = false,
+    syncMarkRow = null,
     lockFirstColumn = false,
   } = props;
 
@@ -1210,6 +1223,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         stickyLeft={stickyLeft}
         lockSize={lockedColSize}
         editor={editing !== null && r.index === editing.row ? rowEditor : null}
+        mark={syncMarkRow?.row === r.index ? (syncMarkRow.on ? 2 : 1) : 0}
       />
     );
   };

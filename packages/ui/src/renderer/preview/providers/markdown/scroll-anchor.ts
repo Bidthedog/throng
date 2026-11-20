@@ -186,6 +186,22 @@ export function blockLineFor(body: BlockSource, line: number): number | null {
 }
 
 /**
+ * 073 FR-033d — the element of the block {@link blockLineFor} names for `line`: the greatest `data-source-line` at or
+ * before it. `null` when every block starts after the line.
+ */
+export function blockElementFor(root: ParentNode, line: number): HTMLElement | null {
+  let found: HTMLElement | null = null;
+  let foundAt = -1;
+  for (const el of root.querySelectorAll<HTMLElement>(SELECTOR)) {
+    const at = Number(el.getAttribute('data-source-line'));
+    if (!Number.isFinite(at) || at > line || at <= foundAt) continue;
+    found = el;
+    foundAt = at;
+  }
+  return found;
+}
+
+/**
  * 044 FR-121e — whether a history step's place is the very top of its document. Defined beside the rule that
  * reads it (`scroll-sync-policy.ts`), which the panel chrome imports; re-exported here with the other
  * readings of this body's places, so the chrome never imports a provider module (contracts/
