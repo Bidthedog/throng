@@ -16,7 +16,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp } from './harness.js';
+import { openApp, createProject, firstPanelId, cleanupTemp, pressAction, type OpenApp } from './harness.js';
 
 let root = '';
 let userDataDir = '';
@@ -53,7 +53,8 @@ function printWindows(app: ElectronApplication): Page[] {
 async function openPrintPreview(app: ElectronApplication, win: Page, previewId: string): Promise<Page> {
   await win.getByTestId(`preview-body-${previewId}`).click();
   const next = app.waitForEvent('window', { predicate: (w) => w.url().includes('printPreview='), timeout: 10_000 });
-  await win.keyboard.press('Control+P');
+  // The chord throng ships on this platform: Cmd+P on macOS, where a literal Control+P is nothing.
+  await pressAction(win, 'preview.print');
   const print = await next;
   await expect(print.getByTestId('print-preview')).toBeVisible({ timeout: 10_000 });
   return print;
@@ -91,7 +92,7 @@ test('Ctrl+P opens one modal Print Preview whose pages render, and its settings 
     await expect(print.getByTestId('print-status')).toHaveText(/^Page 2 of \d+$/);
 
     // FR-071 — a second Print… opens no second window.
-    await first.win.keyboard.press('Control+P');
+    await pressAction(first.win, 'preview.print');
     await expect.poll(() => printWindows(first!.app).length, { timeout: 3000 }).toBe(1);
 
     // FR-070 — what was chosen is saved on close (Cancel), the page range excepted.
