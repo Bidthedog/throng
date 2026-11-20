@@ -149,8 +149,12 @@ test('Ctrl+P opens one modal Print Preview whose pages render, and its settings 
       const sheet = box(diagram.querySelector('.print-preview__margins-sheet'));
       const edge = (side: string) => diagram.querySelector(`[data-edge="${side}"]`)!;
       const input = (side: string) => box(edge(side).querySelector('input'));
-      const unit = (side: string) => box(edge(side).querySelector('[aria-hidden="true"]'));
+      const unit = (side: string) => box(edge(side).querySelector('.print-preview__margin-unit'));
+      const centre = (r: DOMRect) => r.left + r.width / 2;
       return {
+        // 18:00 — the top and bottom boxes centred on the page by the box alone, their "mm" after them.
+        offCentre: (['top', 'bottom'] as const).map((s) => Math.round(Math.abs(centre(input(s)) - centre(sheet)))),
+        unitAfter: (['top', 'bottom'] as const).map((s) => Math.round(unit(s).left - input(s).right) >= 0),
         unitBelow: (['left', 'right'] as const).map((s) => Math.round(unit(s).top - input(s).bottom) >= 0),
         gaps: [
           Math.round(sheet.top - box(edge('top')).bottom),
@@ -162,6 +166,8 @@ test('Ctrl+P opens one modal Print Preview whose pages render, and its settings 
     });
     console.log(`[print margins] gaps top/right/bottom/left: ${geometry.gaps.join('/')}`);
     expect(geometry.unitBelow, 'a side margin’s "mm" is not below its box').toEqual([true, true]);
+    expect(geometry.unitAfter, 'a top or bottom margin’s "mm" does not follow its box').toEqual([true, true]);
+    expect(Math.max(...geometry.offCentre), `top/bottom boxes off the page's centre by ${geometry.offCentre.join('/')} px`).toBeLessThanOrEqual(1);
     expect(Math.max(...geometry.gaps) - Math.min(...geometry.gaps), `uneven gaps round the page: ${geometry.gaps.join('/')}`).toBeLessThanOrEqual(1);
   } finally {
     await second.close();

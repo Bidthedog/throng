@@ -451,7 +451,9 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                         onState={fieldState(`margin-${side}`)}
                         onCommit={(v) => update({ margins: { ...settings.margins, custom: { ...settings.margins.custom, [side]: v } } })}
                       />
-                      <span aria-hidden="true">mm</span>
+                      <span className="print-preview__margin-unit" aria-hidden="true">
+                        mm
+                      </span>
                     </span>
                   ))}
                   <span className="print-preview__margins-sheet" aria-hidden="true" />

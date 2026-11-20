@@ -647,6 +647,9 @@ ready-made pages; the first shows the print actions disabled, the second prints 
     margins should be underneath the box so they do not push the page sideways. The page can be a little larger
     so the spacing around it is uniform.")* The left and right boxes carry their "mm" below them, and the sheet
     fills the space between the four boxes, the same gap on every side; FR-069's no-scroll rule still holds.
+    *(18:00, the maintainer: "center align the top and bottom boxes, and have the 'mm' offset so the boxes are
+    aligned center, but the 'mm' follows them.")* The top and bottom boxes are centred on the page by the box
+    alone, each "mm" following just after its box without moving it.
   - **Scale** is a choice of 25, 50, 75, 100, 125, 150, 175 and 200 %, or **Custom**, which shows a box for any
     whole percentage in range. A stored scale that is not a choice shows as Custom.
   - Every number is typed as free text and checked once typing stops (half a second) or the field is left. A

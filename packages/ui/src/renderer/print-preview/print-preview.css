@@ -143,6 +143,19 @@
 .print-preview__margin-edge--right { grid-area: right; justify-self: start; flex-direction: column; gap: 1px; }
 .print-preview__margin-edge--bottom { grid-area: bottom; }
 
+/*
+ * FR-068b (the maintainer, 2026-11-20 18:00) — the top and bottom boxes are centred on the page by the box alone: their
+ * "mm" hangs just after the box, out of flow, so it neither widens the edge nor pushes the box off-centre.
+ */
+.print-preview__margin-edge--top .print-preview__margin-unit,
+.print-preview__margin-edge--bottom .print-preview__margin-unit {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 3px;
+}
+
 /* 077 FR-020 — a margin's message hangs below its box, so the page drawing keeps its shape. */
 .print-preview__margin-edge {
   position: relative;

@@ -446,6 +446,25 @@ describe('the settings form (FR-066, FR-069; 2026-11-20)', () => {
     expect(sheet, 'a fixed width leaves the sheet narrower than its column').not.toMatch(/(?:^|[;\s])width:/);
   });
 
+  // The maintainer, 2026-11-20 18:00 — "center align the top and bottom boxes, and have the 'mm' offset so the boxes are
+  // aligned center, but the 'mm' follows them": the unit hangs after the box, out of flow, so the box alone is centred.
+  it('centres the top and bottom boxes by the box alone, their "mm" following out of flow (FR-068b)', async () => {
+    await mount(bridge({ ...JOB, settings: { ...JOB.settings, margins: { preset: 'custom', custom: { top: 10, right: 12, bottom: 14, left: 16 } } } }));
+    for (const side of ['top', 'right', 'bottom', 'left']) {
+      const unit = screen.getByTestId('print-margins-page').querySelector(`[data-edge="${side}"] .print-preview__margin-unit`);
+      expect(unit?.textContent, `the ${side} box's unit`).toBe('mm');
+    }
+    const css = readFileSync(join(__dirname, '../../src/renderer/print-preview/print-preview.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({ selectors: m[1]!.split(',').map((s) => s.trim()), body: m[2]! }));
+    const declared = (selector: string): string =>
+      rules.filter((r) => r.selectors.includes(selector)).map((r) => r.body).join(';');
+    for (const side of ['top', 'bottom']) {
+      const unit = declared(`.print-preview__margin-edge--${side} .print-preview__margin-unit`);
+      expect(unit, `the ${side} box's unit`).toMatch(/position:\s*absolute/);
+      expect(unit, `the ${side} box's unit`).toMatch(/left:\s*100%/);
+    }
+  });
+
   it('offers scale as common choices, and a free box for a custom one', async () => {
     const b = await mount(bridge({ ...JOB, settings: { ...JOB.settings, scale: { fitWidth: false, percent: 100 } } }));
     const select = screen.getByTestId('print-scale') as HTMLSelectElement;
