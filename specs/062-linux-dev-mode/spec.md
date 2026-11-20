@@ -426,6 +426,10 @@ with the system's own tools, and any figure Linux cannot supply shows as unavail
 - **020 FR-038's clause** "the only platform on which throng currently runs" stops being true of dev mode. The
   requirement it carries, a Windows installer, is unchanged. #550 owns any change to packaging requirements.
 - **The v1.0.0 exclusion of Linux** was removed from the milestone at the maintainer's direction on 2026-11-02.
+- **FR-030's Linux middle-click paste** (the primary selection pasted by a plain middle-click, which `linux-editor.e2e.ts`
+  kept as its control): superseded by 073 FR-008g (maintainer, 2026-11-20: "Middle mouse should not paste in throng at
+  all"). The middle button pastes nowhere on any platform; Ctrl+middle-click stays the zoom reset (002 FR-039), and
+  FR-030's clipboard by key and menu is unchanged.
 
 ### Key Entities
 

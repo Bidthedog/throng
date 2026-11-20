@@ -615,7 +615,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
   zoom reset (Cmd on macOS) keep working. Stated here because no spec owns throng's clipboard behaviour app-wide;
   002 FR-039 owns the middle button's zoom gesture. *(Covers FR-008f's "MUST NOT paste" in the grid and FR-036e in the
   cell dialog, which remain as the surfaces where it was first reported; the terminal's inclusion awaits the
-  maintainer's confirmation.)*
+  maintainer's confirmation.)* *(Supersedes the Linux middle-click paste of the primary selection that 062 FR-030
+  carried — recorded in 062's Supersessions.)*
 - **FR-008d** *(Q30, 2026-11-19)*: A grid's selection MUST belong to the file it shows. When a panel shows
   another file (Last Preview Panel reuse, Back, Forward), the file it leaves keeps its selection in that
   history entry, and the file it shows gets back its own last selection, or A1 when it has none. Selections
