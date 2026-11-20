@@ -13,7 +13,7 @@ Spec: `specs/073-csv-spreadsheet-previews/spec.md`
 | MT-07 | Go to Row, Line and Page | untested | | | |
 | MT-08 | Wrapping cells | untested | | | |
 | MT-09 | Locking the first row and column | untested | | | |
-| MT-10 | A CSV and its editor in step; toggle looks | needs retest | | | failed: I do not see the highlight in the editor any more - just on the CSV preview. |
+| MT-10 | A CSV and its editor in step; toggle looks | needs retest | | | failed: When I have scroll-sync enabled in a very large file (3000+ lines, possibly less), scrolling and interacting with either editor is extremely slow and lagged. |
 
 ## MT-01: A CSV opens as a grid
 
