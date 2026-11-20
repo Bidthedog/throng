@@ -596,6 +596,9 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   content. For an editor (`editor.print`, editor scope) that is the whole document as it stands, unsaved edits
   included, in its font, wrapped at the page width, syntax-highlighted in the print palette where the document's
   language is known. A terminal is never offered it, and **Ctrl+P** there still reaches the shell.
+  *(Amended 2026-11-20.)* An editor's right-click body menu MUST offer **Print…** too, in its Navigate section
+  beside Go To Line… and Open Preview, as a preview's body menu does (FR-063): every panel action is reachable from
+  the panel's own menus.
 - **FR-065**: Printing MUST go through the platform seam (Principle II), so every print path is testable with
   no printer, and MUST work on Windows and Linux, and on macOS as far as CI proves it.
 - **FR-066**: Printing, and opening or closing print preview, MUST NOT change the preview's scroll position,

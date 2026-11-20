@@ -107,6 +107,7 @@ import { occurrenceCompartment, occurrenceExtensionFor } from './occurrence-high
 import { clearDocumentOverride, loadDocumentOverride, toRelPath } from './language-override.js';
 import { isSameDocument, subscribeDocumentLanguageChange } from './document-language-events.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
+import { printEditorPanel } from './editor-print.js';
 import {
   clampSelection,
   clearEditorViewState,
@@ -2133,6 +2134,11 @@ export function useEditor(params: UseEditorParams): void {
                   gotoLine: {
                     open: () => setNavigationModal({ kind: 'gotoLine', panelId }),
                     chord: firstBinding(keybindingsRef.current, 'navigate.gotoLine'),
+                  },
+                  // 075 FR-064a — the editor's Print…, as the header row and Ctrl+P run it.
+                  print: {
+                    run: () => void printEditorPanel(panelId),
+                    chord: firstBinding(keybindingsRef.current, 'editor.print'),
                   },
                   /*
                    * 044 FR-002 — Open Preview, decided at MENU-OPEN time for Go To Line's reason: the

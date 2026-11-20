@@ -667,3 +667,37 @@ describe('045 — where the run is hit-tested from (§5)', () => {
     expect(linkMenuPosition(v.view, rightClick())).toBeNull();
   });
 });
+
+/*
+ * 075 FR-064a (amended 2026-11-20) — every panel action is reachable from the panel's body menu, as the preview's
+ * Print… is (FR-063): the editor's body menu carries Print… too, in Navigate beside Go To Line… and Open Preview, the
+ * other ways out of the document. It runs the same command as the header row and Ctrl+P.
+ */
+describe('Print… in the editor\'s body menu (075 FR-064a)', () => {
+  const base = {
+    view: {} as EditorView,
+    panelId: 'panel-1',
+    viewId: 'view-1',
+    lineEnding: (): LineEndingId => 'lf',
+    wordWrap: { on: false, toggle: () => {} },
+    gotoLine: { open: () => {} },
+  };
+
+  it('offers Print… with the printer icon and the bound chord, in Navigate, and runs the editor\'s print', () => {
+    const run = vi.fn();
+    const items = editorContentMenu({ ...base, print: { run, chord: 'Ctrl+P' } });
+    const print = items.find((i) => i.label === 'Print…');
+    expect(print).toMatchObject({ icon: 'print', section: 'navigate', shortcut: 'Ctrl+P' });
+    expect(print?.disabled).toBeFalsy();
+    print!.onClick();
+    expect(run).toHaveBeenCalledTimes(1);
+    // After the other Navigate rows.
+    const labels = items.map((i) => i.label);
+    expect(labels.indexOf('Print…')).toBeGreaterThan(labels.indexOf('Go To Line…'));
+  });
+
+  it('draws none where the caller offers no print', () => {
+    expect(editorContentMenu(base).some((i) => i.label === 'Print…')).toBe(false);
+  });
+});
+

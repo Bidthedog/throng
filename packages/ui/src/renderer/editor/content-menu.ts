@@ -67,6 +67,11 @@ export interface ContentMenuArgs {
    * (FR-122a) — the affordance above decides that, so this is omitted or ignored everywhere else.
    */
   syncScroll?: { on: boolean; toggle: () => void; chord?: string };
+  /**
+   * 075 FR-064a — Print… (`editor.print`), the command the header row and the chord run, and its chord read at
+   * menu-open time. Absent draws none.
+   */
+  print?: { run: () => void; chord?: string };
   /** The document's effective language NAME, shown on the Set Language item so the menu states the
    *  current value as well as offering to change it (024 US1 follow-up). */
   languageName?: string;
@@ -380,6 +385,19 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
             shortcut: args.openPreview.chord,
             disabled: args.openPreview.affordance.state === 'disabled',
             onClick: () => args.openPreview?.open(),
+          },
+        ]
+      : []),
+    // 075 FR-064a, FR-063 — Print…, with the other ways out of the document, as a preview's body menu has it.
+    ...(args.print !== undefined
+      ? [
+          {
+            label: 'Print…',
+            icon: 'print' as const,
+            section: 'navigate' as const,
+            group: 'print',
+            shortcut: args.print.chord,
+            onClick: () => args.print?.run(),
           },
         ]
       : []),
