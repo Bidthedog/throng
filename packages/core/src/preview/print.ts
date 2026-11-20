@@ -135,6 +135,12 @@ export interface PrintSettings {
   readonly margins: { readonly preset: PrintMarginPreset; readonly custom: PrintMargins };
   readonly scale: { readonly fitWidth: boolean; readonly percent: number };
   readonly copies: number;
+  /**
+   * 075 FR-068e (the maintainer, 2026-11-20: "Add an option to 'center' print previews") — centre the content on the
+   * printable area, kept apart for the two kinds of printable: `page` (a picture or a PDF's pages, one per sheet:
+   * centred both ways) and `width` (a flowing document: anything narrower than the text column centred across it).
+   */
+  readonly centre: { readonly page: boolean; readonly width: boolean };
   readonly pages: { readonly all: true } | { readonly all: false; readonly ranges: string };
 }
 
@@ -159,6 +165,8 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = Object.freeze({
   margins: Object.freeze({ preset: 'default', custom: Object.freeze({ top: 10, right: 10, bottom: 10, left: 10 }) }),
   scale: Object.freeze({ fitWidth: true, percent: 100 }),
   copies: 1,
+  // A picture sits in the middle of its sheet; a document starts where a document starts.
+  centre: Object.freeze({ page: true, width: false }),
   pages: Object.freeze({ all: true }),
 }) as PrintSettings;
 
@@ -204,6 +212,10 @@ export function parsePrintSettings(raw: unknown, printers: readonly PrinterInfoL
       percent: inRange(scale.percent, SCALE_MIN, SCALE_MAX) ? Math.round(scale.percent as number) : d.scale.percent,
     },
     copies: Number.isInteger(o.copies) && inRange(o.copies, 1, COPIES_MAX) ? (o.copies as number) : d.copies,
+    centre: {
+      page: isObject(o.centre) && typeof o.centre.page === 'boolean' ? o.centre.page : d.centre.page,
+      width: isObject(o.centre) && typeof o.centre.width === 'boolean' ? o.centre.width : d.centre.width,
+    },
     pages: { all: true },
   };
 }
@@ -271,6 +283,8 @@ export interface PdfOptions {
   readonly pageRanges?: string;
   readonly printBackground: true;
   readonly preferCSSPageSize: false;
+  /** 075 FR-068e — lay the content out centred ({@link PRINT_CENTRE_CSS}). */
+  readonly centre: boolean;
 }
 
 /**
@@ -312,8 +326,11 @@ export function printSheetHtml(sheet: PrintSheet): string {
 
 const scaleOf = (s: PrintSettings): number => (s.scale.fitWidth ? 100 : s.scale.percent);
 
-/** `printToPDF`'s options for `s`; with `pageCount`, its page range is clipped to that many pages first. */
-export function toPdfOptions(s: PrintSettings, pageCount?: number): PdfOptions {
+/**
+ * `printToPDF`'s options for `s`; with `pageCount`, its page range is clipped to that many pages first. `fit` is the
+ * job's kind, which picks the Centre setting that applies (FR-068e).
+ */
+export function toPdfOptions(s: PrintSettings, pageCount?: number, fit: 'width' | 'page' = 'width'): PdfOptions {
   const m = marginsMm(s);
   const parsed = s.pages.all ? null : parsePageRanges(s.pages.ranges);
   const ranges = parsed !== null && pageCount !== undefined ? clipPageRanges(parsed, pageCount) : parsed;
@@ -325,8 +342,20 @@ export function toPdfOptions(s: PrintSettings, pageCount?: number): PdfOptions {
     ...(ranges !== null ? { pageRanges: formatPageRanges(ranges) } : {}),
     printBackground: true,
     preferCSSPageSize: false,
+    centre: s.centre[fit],
   };
 }
+
+/**
+ * 075 FR-068e — what Centre adds to a printable while it is laid out. A picture, a diagram and each of a PDF's pages
+ * sit in the middle of their sheet, both ways; in a flowing document, anything narrower than the text column — an
+ * image, a diagram, a table — sits in the middle of it. Text is never centred: it is not narrower than its column.
+ */
+export const PRINT_CENTRE_CSS = [
+  '.throng-print--fit-page .throng-print__diagram{display:flex;align-items:center;justify-content:center;min-height:95vh}',
+  '.throng-print__pdf-page{align-items:center;justify-content:center}',
+  '.throng-print--fit-width img,.throng-print--fit-width .throng-print__diagram svg,.throng-print--grid table{margin-left:auto;margin-right:auto}',
+].join('');
 
 /** How a {@link PrintSheet} goes to the printer; `null` when there is no printer to send to. */
 export function toPrintOptions(s: PrintSettings): PrintOptions | null {

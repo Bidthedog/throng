@@ -34,7 +34,7 @@ const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g,
 // No `@page`: the paper, margins and scale are Print Preview's (FR-066). Each page image is one sheet, fitted whole.
 const STYLE = `
 html, body { margin: 0; padding: 0; background: ${PRINT_PALETTE.surface}; }
-.throng-print__pdf-page { display: flex; justify-content: center; align-items: flex-start; height: 99vh;
+.throng-print__pdf-page { display: flex; justify-content: flex-start; align-items: flex-start; height: 99vh;
   break-after: page; page-break-after: always; break-inside: avoid; page-break-inside: avoid; }
 .throng-print__pdf-page:last-child { break-after: auto; page-break-after: auto; }
 .throng-print__pdf-page img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }

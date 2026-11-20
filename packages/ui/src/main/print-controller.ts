@@ -144,7 +144,7 @@ export class PrintController {
     const render = ++job.renders;
     try {
       const host = await this.hostOf(job);
-      const pdf = await this.pagesOf(host, settings);
+      const pdf = await this.pagesOf(host, settings, job.request.output.kind === 'document' ? job.request.output.fit : 'page');
       if (!(pdf instanceof Uint8Array)) {
         // Nothing the range names exists: nothing is shown, so nothing can print (SC-012).
         if (job.state !== 'closed' && render === job.renders) job.shown = null;
@@ -171,15 +171,19 @@ export class PrintController {
    * against the whole document first: past its end, the range is clipped to the pages there are, and a range left
    * with none says how many there are instead. A range covering every page is that first layout, laid out once.
    */
-  private async pagesOf(host: PrintHostHandle, settings: PrintSettings): Promise<Uint8Array | { outOfRange: true; pageCount: number }> {
+  private async pagesOf(
+    host: PrintHostHandle,
+    settings: PrintSettings,
+    fit: 'width' | 'page',
+  ): Promise<Uint8Array | { outOfRange: true; pageCount: number }> {
     const ranges = settings.pages.all ? null : parsePageRanges(settings.pages.ranges);
-    if (ranges === null) return this.deps.engine.pdf(host, toPdfOptions(settings));
-    const whole = await this.deps.engine.pdf(host, toPdfOptions({ ...settings, pages: { all: true } }));
+    if (ranges === null) return this.deps.engine.pdf(host, toPdfOptions(settings, undefined, fit));
+    const whole = await this.deps.engine.pdf(host, toPdfOptions({ ...settings, pages: { all: true } }, undefined, fit));
     const total = countPdfPages(whole);
     const kept = clipPageRanges(ranges, total);
     if (kept.length === 0) return { outOfRange: true, pageCount: total };
     if (kept.length === 1 && kept[0]!.from === 1 && kept[0]!.to === total) return whole;
-    return this.deps.engine.pdf(host, toPdfOptions(settings, total));
+    return this.deps.engine.pdf(host, toPdfOptions(settings, total, fit));
   }
 
   /**

@@ -1519,6 +1519,7 @@ export {
   PAGE_SIZE_MM,
   paperSizeLabel,
   paperSizeMm,
+  PRINT_CENTRE_CSS,
   PRINT_FIELDS,
   PRINT_PAGE_SIZES,
   SCALE_MAX,

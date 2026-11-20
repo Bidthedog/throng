@@ -490,6 +490,19 @@ describe('the settings form (FR-066, FR-069; 2026-11-20)', () => {
     }
   });
 
+  it('offers Centre on page, on for a picture and off for a document by default, and lays out with the choice (FR-068e)', async () => {
+    const picture = await mount(bridge({ ...JOB, fit: 'page', settings: { ...JOB.settings, centre: { page: true, width: false } } }));
+    const box = (): HTMLInputElement => screen.getByTestId('print-centre') as HTMLInputElement;
+    expect(box().checked).toBe(true);
+    fireEvent.click(box());
+    await idle();
+    expect(lastRendered(picture).centre).toEqual({ page: false, width: false });
+    cleanup();
+
+    await mount(bridge({ ...JOB, fit: 'width', settings: { ...JOB.settings, centre: { page: true, width: false } } }));
+    expect(box().checked).toBe(false);
+  });
+
   it('offers scale as common choices, and a free box for a custom one', async () => {
     const b = await mount(bridge({ ...JOB, settings: { ...JOB.settings, scale: { fitWidth: false, percent: 100 } } }));
     const select = screen.getByTestId('print-scale') as HTMLSelectElement;

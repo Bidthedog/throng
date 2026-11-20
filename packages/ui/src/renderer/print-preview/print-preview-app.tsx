@@ -483,6 +483,17 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                 <input type="checkbox" checked={settings.scale.fitWidth} onChange={(e) => update({ scale: { ...settings.scale, fitWidth: e.target.checked } })} data-testid="print-fit-width" />
                 <span>{job.fit === 'page' ? 'Fit to page' : 'Fit to page width'}</span>
               </label>
+              {/* 075 FR-068e — one checkbox, both directions: a picture has one middle, and a pair of boxes would offer
+                  half-centred layouts nobody asked for. It edits the setting for this job's kind. */}
+              <label className="print-preview__field print-preview__field--inline">
+                <input
+                  type="checkbox"
+                  checked={settings.centre[job.fit]}
+                  onChange={(e) => update({ centre: { ...settings.centre, [job.fit]: e.target.checked } })}
+                  data-testid="print-centre"
+                />
+                <span>Centre on page</span>
+              </label>
               {!settings.scale.fitWidth && (
                 <div className="print-preview__field">
                   <span id="print-scale-label">Scale</span>
