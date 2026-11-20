@@ -90,7 +90,7 @@ export function CellDialog({ cellLabel, initial, json, onSave, onCancel, returnF
           <button type="button" onClick={onCancel} data-testid="cell-dialog-cancel">
             Cancel
           </button>
-          <button type="button" onClick={() => onSave(text)} data-testid="cell-dialog-save">
+          <button type="button" className="modal__confirm" onClick={() => onSave(text)} data-testid="cell-dialog-save">
             Save
           </button>
         </div>

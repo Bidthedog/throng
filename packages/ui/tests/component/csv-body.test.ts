@@ -572,6 +572,15 @@ describe('CsvBody cell dialog (FR-036a, FR-036b, FR-060a)', () => {
     expect(document.activeElement).toBe(grid());
   });
 
+  // Constitution v7.2.0, Default dialog actions: Save (what Ctrl+Enter does) is drawn as the Confirm type; Cancel is not.
+  it('draws Save, the default action, as the Confirm button type and Cancel as the Cancel type', () => {
+    open();
+    select(2, 0);
+    fireEvent.keyDown(grid(), { key: 'Enter' });
+    expect(screen.getByTestId('cell-dialog-save')).toHaveClass('modal__confirm');
+    expect(screen.getByTestId('cell-dialog-cancel')).not.toHaveClass('modal__confirm');
+  });
+
   it('Save with the text unchanged writes nothing', async () => {
     open();
     select(1, 1);
