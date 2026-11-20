@@ -39,6 +39,7 @@ beforeEach(() => {
   vi.spyOn(window, 'getComputedStyle').mockImplementation((...a: Parameters<typeof gcs>) => ((styleReads += 1), gcs(...a)));
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
@@ -50,6 +51,8 @@ interface Frame {
   cellsAdded: number;
   /** Rows that entered the DOM and left it again within one frame. */
   churned: number;
+  /** Commits once the scrolling stops: the virtualiser's scroll-stop notice, run after the counted frames. */
+  settle: number;
   canvases: number;
   styleReads: number;
 }
@@ -77,6 +80,13 @@ async function scrollFrames(rows: number, wrap: boolean, axis: 'vertical' | 'hor
     ),
   );
   await frame();
+  /*
+   * The virtualiser reports "scrolling stopped" from a 150 ms timer that every scroll event restarts. On a slow runner a
+   * frame can outlast it, and the stop notice's commit then lands inside the counted frames (Windows CI: 31 commits in
+   * 30 frames) although the reader never stopped. Timers are held from the first scroll and run after the last frame,
+   * where that commit is counted on its own (`settle`).
+   */
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const scroller = view.container.querySelector<HTMLElement>('.data-grid__scroller')!;
   let top = 0;
   let left = 0;
@@ -90,6 +100,7 @@ async function scrollFrames(rows: number, wrap: boolean, axis: 'vertical' | 'hor
   if (from > 0) {
     at(0); // arrive at the start offset, then let it settle before counting
     await frame();
+    act(() => void vi.runOnlyPendingTimers());
   }
   let added = 0;
   const cellsIn = (n: Node): number => (n instanceof HTMLElement ? (n.hasAttribute('data-grid-cell') ? 1 : n.querySelectorAll('[data-grid-cell]').length) : 0);
@@ -117,9 +128,13 @@ async function scrollFrames(rows: number, wrap: boolean, axis: 'vertical' | 'hor
     await frame();
     drain();
   }
+  const counted = commits;
+  act(() => void vi.runOnlyPendingTimers());
+  const settle = commits - counted;
+  vi.useRealTimers();
   mo.disconnect();
   view.unmount();
-  return { commits, nested, cellRenders, cellsAdded: added, churned, canvases, styleReads };
+  return { commits: counted, nested, cellRenders, cellsAdded: added, churned, canvases, styleReads, settle };
 }
 
 describe.each([
@@ -131,6 +146,7 @@ describe.each([
     expect(f.cellsAdded).toBeGreaterThan(FRAMES); // rows really entered: the bounds below are not vacuous
     expect(f.nested).toBe(0); // was 0.4 a frame: a row entering at the estimate was sized in a second commit
     expect(f.commits).toBeLessThanOrEqual(FRAMES);
+    expect(f.settle).toBeLessThanOrEqual(1); // stopping costs one commit, not one per frame
     expect(f.churned).toBe(0); // a row drawn at the estimate and dropped once its neighbours were sized
     expect(f.styleReads).toBe(0); // the canvas font is read once per width/zoom/content, not once per frame that sizes a row
     expect(f.canvases).toBe(0);
@@ -141,6 +157,7 @@ describe.each([
     expect(f.cellsAdded).toBeGreaterThan(FRAMES);
     expect(f.nested).toBe(0);
     expect(f.commits).toBeLessThanOrEqual(FRAMES);
+    expect(f.settle).toBeLessThanOrEqual(1); // stopping costs one commit, not one per frame
     expect(f.churned).toBe(0);
     expect(f.styleReads).toBe(0);
   }, 120_000);
@@ -157,6 +174,7 @@ describe.each([
     expect(f.cellsAdded).toBeGreaterThan(FRAMES);
     expect(f.nested).toBe(0);
     expect(f.commits).toBeLessThanOrEqual(FRAMES);
+    expect(f.settle).toBeLessThanOrEqual(1); // stopping costs one commit, not one per frame
     expect(f.cellRenders).toBeLessThanOrEqual(f.cellsAdded); // a memoised cell that stays in the window is not rendered again
     expect(f.styleReads).toBe(0);
     expect(f.canvases).toBe(0);
@@ -172,6 +190,7 @@ describe.each([
     expect(f.cellsAdded).toBeGreaterThan(FRAMES);
     expect(f.nested).toBe(0);
     expect(f.commits).toBeLessThanOrEqual(FRAMES);
+    expect(f.settle).toBeLessThanOrEqual(1); // stopping costs one commit, not one per frame
     expect(f.cellRenders).toBeLessThanOrEqual(f.cellsAdded);
   }, 120_000);
 });
