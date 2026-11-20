@@ -15,6 +15,7 @@
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Icon } from '../common/icon.js';
+import './read-only-marker.css';
 
 /** The marker's hover, and the reason every disabled editing row in a workbook's menus gives (FR-050a, FR-050c). */
 export const WORKBOOK_READ_ONLY_TITLE = 'Workbooks open read-only. Copy cells and paste them into a CSV to edit them.';

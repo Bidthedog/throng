@@ -41,7 +41,6 @@ import { IconButton } from '../common/icon-button.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
 import { SyncScrollButton } from './sync-scroll-button.js';
 import { ReadOnlyMarker } from './read-only-marker.js';
-import './preview.css';
 import { SettingToggleButton } from '../common/setting-toggle-button.js';
 import { BAR_GAP, readoutText, type Readout } from '../editor/status-strip.js';
 import { fitReadouts, labelShortens, type LabelForm, type ReadoutId, type SegmentId, type SegmentWidth } from '../editor/status-strip-fit.js';

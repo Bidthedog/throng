@@ -33,7 +33,9 @@ test('Ctrl+middle-click in an editor resets its zoom without pasting, a plain mi
       await content.click();
       // Electron takes the clipboard type at runtime; the types this project compiles against name only the text.
       await app.evaluate(({ clipboard }, text) => (clipboard.writeText as (text: string, type: string) => void)(text, 'selection'), marker);
-      await app.evaluate(({ clipboard }, text) => clipboard.writeText(text), clip);
+      // Ctrl+V reads throng's clipboard seam, which the harness fills in memory (THRONG_E2E_CLIPBOARD=memory), not the
+      // OS clipboard Chromium's middle-click reads: so the clipboard text goes through the app's own write.
+      await win.evaluate((text) => window.throng?.clipboard?.write({ text, mode: 'verbatim' }), clip);
 
       await win.keyboard.down('Control');
       await content.click({ button: 'middle' });
