@@ -21,7 +21,7 @@ Under native Wayland, Preferences and About can go behind the main window when y
 
 The defaults are the same as on Windows. GNOME keeps `Ctrl+Shift+Alt` with the arrow keys, so move focus between panels with the keypad instead: `Ctrl+Shift+Alt` with 8, 2, 4 or 6, for up, down, left or right. The preferences list these as `Ctrl+Shift+Alt+ArrowUp` and so on, because that is what those keys report. A keyboard with no keypad needs [its own chords](key-bindings.md).
 
-The keypad's `+` and `-` do nothing with `Ctrl+Alt`, because those presses never reach throng. Zoom a panel with `Ctrl+Alt+=` and `Ctrl+Alt+-` on the main row, or `Ctrl+wheel`.
+Under XWayland, the keypad's `+` and `-` do nothing with `Ctrl+Alt`: the standard Linux keyboard layout makes those presses the X server's own video-mode switch, so XWayland keeps them and throng never sees them. Zoom a panel with `Ctrl+Alt+=` and `Ctrl+Alt+-` on the main row, or `Ctrl+wheel`. The keypad works for zoom under [native Wayland](preferences.md), or under XWayland once the layout's server keys are turned off: `gsettings set org.gnome.desktop.input-sources xkb-options "['srvrkeys:none']"` (on GNOME; add it to any options already set there).
 
 ## Terminals
 

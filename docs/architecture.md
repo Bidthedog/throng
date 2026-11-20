@@ -307,7 +307,7 @@ terminal, and the component that can see every panel in every project.
   `fileopUndo.*` and `panelName.*`.
 - `packages/persistence/src` holds `database.ts`, `migration-runner.ts`, `schema-guard.ts` and one
   repository per store (projects, project categories, workspace layouts, sub-workspaces, document
-  state, file-operation undo), with migrations in `migrations/v2…v10`.
+  state, file-operation undo), with migrations in `migrations/v2…v14`.
 - UI main's side of the wire is `daemon-client.ts` (requests), `daemon-events.ts` (the events
   socket), `daemon-lifecycle.ts` (spawn, adopt, retire) and `daemon-supervisor.ts` (reachability).
 
@@ -721,6 +721,31 @@ target's candidates, from the document's folder then the project root, come from
 `wikiCandidates`, and the first that exists wins. That one answer governs the link's click, hover text,
 context menu and readout, and an `![[image.png]]` embed's source. A candidate that leaves the project is
 never probed.
+
+**Printing.** A provider whose descriptor declares `print` (`document` or `pages`) supplies `printable`
+on its view; Markdown and Mermaid share `renderer/preview/print/printable.ts`, which clones the body,
+opens every fold, strips throng's controls and writes a self-contained document in the fixed print
+palette (`core/src/preview/print-palette.ts`). A panel that holds text prints through
+`renderer/print/text-printable.ts` instead: the whole text, escaped, highlighted with the editor's own style in
+the same palette; an editor reaches it through `renderer/editor/editor-print.ts`, and a future text panel joins
+by supplying its text, title and syntax tree the same way. Main's `print-controller.ts` owns the one job: it loads
+that document into a hidden host with JavaScript off (`electron-print-engine.ts`, behind core's
+`IPrintEngine`), hands the modal Print Preview window (`print-preview-window.ts`) the `printToPDF` of it, which
+the window draws one page at a time with PDF.js (`renderer/print-preview/print-pages.ts`), so stepping between
+pages lays nothing out again. **Print** sends what the window shows: it draws every page at 300 dpi
+(`print-pages.ts` `sheet()`), and the controller prints those images from a second host
+(`printSheetHtml`) silently, with no margin, scale or page range of its own, so the paper is the preview.
+Settings persist in `print-settings.json`; the window re-reads the OS's printers every few seconds.
+
+```mermaid
+flowchart LR
+  P["Preview body"] -->|printable| R["throng.print.open"]
+  R --> C["print-controller"]
+  C --> E["IPrintEngine: hidden host"]
+  E -->|printToPDF| W["Print Preview window"]
+  W -->|Print: the pages, drawn| C
+  C -->|print the sheet, silent| E
+```
 
 ### Adding a preview provider
 

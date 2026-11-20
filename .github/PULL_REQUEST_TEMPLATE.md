@@ -36,7 +36,7 @@ Closes #
 - [ ] `npm run test:integration` — green
 - [ ] `npm run test:contract` — green
 - [ ] E2E — green in a `pipeline.yml` dispatch on this branch (pull-request CI runs none) — link the run: `________`
-- [ ] Any user-facing UI change ships **passing E2E coverage** (constitution Principle V).
+- [ ] Every change ships passing coverage at the **lowest layer that can prove it**, and no E2E test is added for what a lower layer could assert (constitution Principle V).
 - [ ] New OS-abstraction seams have **contract tests**.
 - [ ] `@admin` / elevation-dependent behaviour verified by the `admin` job of a `pipeline.yml` dispatch, **or** N/A — link its run: `________`
 
