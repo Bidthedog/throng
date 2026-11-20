@@ -28,6 +28,7 @@ import {
   replaceInEditorPanel,
 } from './open-into-panel.js';
 import { headingRevealTarget, revealRangeInEditor, type RevealTarget } from './reveal-range.js';
+import type { PreviewEditorOpen } from '../preview/open-in-editor.js';
 import { openFromTree } from './open-router.js';
 import type { TreeOpenGesture } from '../explorer/explorer-context.js';
 import { requestPanelFlash } from '../workspace/panel-flash.js';
@@ -487,4 +488,25 @@ export async function openFileInPanel(
  */
 export function openFileInNewEditor(ws: Ws, tabId: string, absPath: string, ownerProjectId?: string): string {
   return createDedicatedEditor(ws, tabId, absPath, ownerProjectId);
+}
+
+/**
+ * 075 FR-093b (the maintainer, 2026-11-20) — "Open files in" = Last Active Editor, for an open that would otherwise
+ * place a new editor of its own (a preview's Open in Editor): open `absPath` through {@link openFileInTab}, which
+ * reuses the tab's last active editor as every other open does — one-buffer focus, a refusal, a maximised editor
+ * and the unsaved-changes prompt included. `null` when the tab holds no editor that open could reuse: the caller
+ * then places its own, rather than `openFileInTab`'s dedicated editor wherever it lands.
+ */
+export function reuseLastActiveEditor(ws: Ws, tabId: string, absPath: string, ownerProjectId?: string): Promise<boolean> | null {
+  const tab = ws.layout?.tabs.find((t) => t.id === tabId);
+  if (tab === undefined) return null;
+  const owner = openOwner(ws, tabId, ownerProjectId);
+  const reusable = editorPanelsInTab(tab.root).some((id) => owner === undefined || originOf(tab.root, id) === owner);
+  if (!reusable) return null;
+  return openFileInTab(ws, tabId, absPath, 'lastActive', undefined, ownerProjectId !== undefined ? { ownerProjectId } : {});
+}
+
+/** What a preview's Open in Editor needs of the editor side: the setting, and the resolver above over `ws`. */
+export function previewEditorOpen(ws: () => Ws, openTarget: EditorOpenTarget): PreviewEditorOpen {
+  return { openTarget, reuse: (tabId, absPath, ownerProjectId) => reuseLastActiveEditor(ws(), tabId, absPath, ownerProjectId) };
 }

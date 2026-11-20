@@ -169,7 +169,7 @@ Each project remembers for itself which side panes are expanded.
 | Show Open in OS Default Program | `explorer.showOpenInOsDefaultProgram` | on | on · off | Offer Open in OS Default Program on the File Explorer menu and on the panel title menu. |
 | File Explorer popover delay | `explorer.popoverDelayMs` | 500 ms | 0 – 1,500 ms, step 25 ms | How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path. |
 | Open files with | `editor.openOnClick` | `single` | `single` · `double` · `none` | Which file-tree click opens a file into the last active editor. |
-| Open files in | `editor.openTarget` | `lastActive` | `lastActive` · `new` | Where an opened file lands: the last active editor, reused, or a new editor panel. |
+| Open files in | `editor.openTarget` | `lastActive` | `lastActive` · `new` | Where an opened file lands: the last active editor, reused, or a new editor panel. A preview's **Open in Editor** follows it too. |
 | Delete files to | `explorer.deleteMode` | `recycle` | `recycle` · `permanent` | Send deleted files to the Recycle Bin, or delete them permanently. |
 | When Paste replaces an item | `explorer.replaceMode` | `recycle` | `recycle` · `permanent` | What happens to an item a paste or drag replaces after you choose **Replace**: the Recycle Bin, so undo can bring it back, or deleted for good. Independent of the delete setting. |
 | Excluded globs | `explorer.excludeGlobs` | `**/.git`, `**/.svn`, `**/.hg`, `**/CVS`, `**/.DS_Store`, `**/Thumbs.db`, `**/node_modules` | A list of root-relative glob patterns; may be empty | Entries hidden from the file tree (and, by default, from Quick Open). An empty list hides nothing. Find in Files does not use it — see *Excluded from search*. |

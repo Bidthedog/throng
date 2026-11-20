@@ -65,6 +65,7 @@ import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
 import { useCopyToClipboard } from '../common/use-copy.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
+import { previewEditorOpen } from '../editor/editor-open.js';
 import {
   getFindSession,
   openFind,
@@ -987,7 +988,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 },
                 // 044 FR-015b — the SAME function the status bar's button and the body menu's row run; it
                 // reads parented-or-standalone from the store when chosen, so both rows reach it.
-                openInEditor: () => runPreviewEditorRoute(panel, () => wsRef.current),
+                openInEditor: () =>
+                  runPreviewEditorRoute(panel, () => wsRef.current, previewEditorOpen(() => wsRef.current, settings.editor.openTarget)),
                 goToEditor: () => runPreviewEditorRoute(panel, () => wsRef.current),
                 // 044 FR-122 — the one command body, from the value this window holds when the menu opened.
                 toggleSyncScroll: () => void toggleSyncScroll(settings.editor.previews.syncScroll),

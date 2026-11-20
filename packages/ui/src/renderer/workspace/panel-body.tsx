@@ -10,7 +10,7 @@ import { EditorPanel } from '../editor/editor-panel.js';
 import { FindInFilesPanel } from '../find-in-files/find-in-files-panel.js';
 import { PanelDropTarget, type DropContext } from '../editor/drop-target.js';
 import { TreeDropTarget } from '../editor/tree-drop-target.js';
-import { openFileInPanel } from '../editor/editor-open.js';
+import { openFileInPanel, previewEditorOpen } from '../editor/editor-open.js';
 import { findEditorPanelByPath } from '../editor/editor-state.js';
 import { collectPanels, FIND_IN_FILES_KIND, PREVIEW_KIND } from '@throng/core';
 import { openFileInEmptyPanel, previewProjectForDrop } from './open-dropped-file.js';
@@ -51,6 +51,8 @@ export function PanelBody({
   const ws = useWorkspace();
   const wsRef = useRef(ws);
   wsRef.current = ws;
+  // 075 FR-093b — "Open files in", for a preview's Open in Editor.
+  const openTarget = useAppSettings().editor.openTarget;
   const { layout } = ws;
   const subWin = useSubWorkspaceWindow();
   const hasOrigin = typeof panel.originProjectId === 'string' && panel.originProjectId.length > 0;
@@ -216,7 +218,7 @@ export function PanelBody({
         onClose={onDestroy}
         // 044 FR-015 — Open in Editor / Go to Editor, the one function the header menu runs too. The store
         // is read through a ref when it runs: main's answer arrives renders after the click.
-        onEditorRoute={() => runPreviewEditorRoute(panel, () => wsRef.current)}
+        onEditorRoute={() => runPreviewEditorRoute(panel, () => wsRef.current, previewEditorOpen(() => wsRef.current, openTarget))}
       />
     );
   }

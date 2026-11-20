@@ -904,7 +904,9 @@ restart; Back again. Repeat in a preview by following links.
     menu, in the Navigate section — the same sections Open Preview occupies on an editor.
   - **FR-015c**: On a **standalone** preview the item and button are **Open in Editor**: they open
     the file in an editor panel placed beside the preview — splitting the preview's slot, with the
-    editor on the left — and the preview becomes parented to it in place (FR-013a).
+    editor on the left — and the preview becomes parented to it in place (FR-013a). *(Amended 2026-11-20 by
+    075 FR-093b: under **Open files in: Last Active Editor** the tab's last active editor takes the file; the
+    placement above holds under New Editor, or when the tab holds no editor.)*
   - **FR-015d**: On a **parented** preview the item and button are **Go to Editor**: the button shows
     pressed, and both focus the parent editor, bringing its tab to the front and focusing its window
     if needed (the mirror of FR-014).

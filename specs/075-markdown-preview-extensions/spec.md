@@ -58,6 +58,7 @@ image when it ships.
 | 047 FR-056, 068 FR-014 | **Unchanged.** Inside a callout as outside one, a note embed (`![[note.md]]`) still renders literally. | |
 | 021 FR-003 | **Extended by FR-021.** The closed set of Themes-editor areas gains **Markdown preview**, with a **Markdown preview · Callouts** sub-group. | #672 names the area. |
 | 069 FR-004, FR-009, FR-011, FR-012, FR-035 | **Unchanged; the new callout icon keys must meet them (FR-024).** | |
+| 044 FR-015c | **Superseded for Last Active Editor by FR-093b.** Open in Editor from a standalone preview follows **Open files in**: the tab's last active editor takes the file; a new editor beside the preview only under New Editor or when the tab has no editor. | The maintainer, 2026-11-20 17:00: "the 'Open files in' preference should control where the editor opens." |
 | 047 FR-012 | **Superseded for Last Active by FR-093a.** Opening a preview of a file open in an editor reuses the last active preview of its type, as every other route does; a new one opens beside the editor only when none exists in the tab, or under **New**. | The maintainer, 2026-11-20: "Only one markdown preview should exist unless the user explicitly opens a second one." |
 | 073 FR-060 (T078) | **Generalised by FR-093a.** 073 made the editor-opened preview reuse the Last Preview Panel for a Preview Editor (an editable provider) alone; FR-093a applies the same rule to every provider, so `preview-service.ts` holds one Last Active check before placement. 073 T035's unsaved-grid question still guards the move. | The 073/074/075 merge, 2026-11-20: two exceptions to 047 FR-012 for the same reason became one rule. |
 | 054 FR-046a – FR-046h | **Unchanged on screen.** Printing ignores a diagram's zoom, pan and Full Pane state (FR-075). | #484. |
@@ -717,6 +718,19 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   054 FR-007), which then pairs with that editor (044 FR-013). A new preview opens beside the editor only when
   no preview of that type exists there, under **New**, or from **Open In → New Preview Panel**. 047 FR-013 (a
   file already previewed is focused) and FR-016 (a reused preview leaves its earlier editor) stand.
+- **FR-093b**: *(2026-11-20; the maintainer: "When clicking 'open in editor' in any preview, the 'Open files in'
+  preference should control where the editor opens … This applies to all previews, and vice-versa for opening
+  previews from editors." Supersedes 044 FR-015c's placement for **Last Active Editor**.)* A standalone preview's
+  **Open in Editor** — every text provider's: its header menu, body menu and status-bar button, and the CSV
+  preview's grid menu and parse-error notice — MUST honour **Open files in** (`editor.openTarget`, 023
+  FR-025/FR-026) as the file tree does. Under **Last Active Editor** the file opens in the tab's most recently
+  active editor, by the same open the file tree and Quick Open use (one-buffer focus, refusal and the
+  unsaved-changes prompt included); only when the tab holds no editor does the preview place a new one beside it,
+  as FR-015c describes. Under **New Editor** it opens in a new editor beside the preview (FR-015c, unchanged). A
+  file already open in an editor is focused either way (006 FR-011a), and **Go to Editor** on a parented preview
+  (044 FR-015d) is unchanged. The other direction is FR-093a: an editor's Preview button, its menus' Open Preview
+  and `preview.open` follow the file's provider's **Open previews in** (047 FR-010). Following a link from a
+  preview already honoured **Open files in** (044 FR-090d) and is unchanged.
 
 ### Key Entities
 
