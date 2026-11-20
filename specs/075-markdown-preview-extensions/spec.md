@@ -643,7 +643,10 @@ ready-made pages; the first shows the print actions disabled, the second prints 
 
 - **FR-068b**: *(2026-11-20.)* The controls MUST read as follows:
   - **Custom margins** are drawn as a page: a white sheet with a millimetre box at each edge (top, right, bottom,
-    left), unlabelled beyond "mm".
+    left), unlabelled beyond "mm". *(Amended 2026-11-20 17:21, the maintainer: "the 'mm' for the left and right
+    margins should be underneath the box so they do not push the page sideways. The page can be a little larger
+    so the spacing around it is uniform.")* The left and right boxes carry their "mm" below them, and the sheet
+    fills the space between the four boxes, the same gap on every side; FR-069's no-scroll rule still holds.
   - **Scale** is a choice of 25, 50, 75, 100, 125, 150, 175 and 200 %, or **Custom**, which shows a box for any
     whole percentage in range. A stored scale that is not a choice shows as Custom.
   - Every number is typed as free text and checked once typing stops (half a second) or the field is left. A

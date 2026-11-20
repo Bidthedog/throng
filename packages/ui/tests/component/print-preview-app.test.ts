@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_PRINT_SETTINGS, formatGrouped, type PrintJobView, type PrintSettings } from '@throng/core';
 import type { PrintPages } from '../../src/renderer/print-preview/print-pages.js';
@@ -420,6 +422,28 @@ describe('the settings form (FR-066, FR-069; 2026-11-20)', () => {
       expect(input.closest('[data-edge]')?.getAttribute('data-edge')).toBe(side);
     }
     expect(diagram.textContent?.replace(/\s+/g, '')).toBe('mmmmmmmm');
+  });
+
+  /*
+   * The maintainer, 2026-11-20 17:21 — "the 'mm' for the left and right margins should be underneath the box so they
+   * do not push the page sideways. The page can be a little larger so the spacing around it is uniform." jsdom lays
+   * nothing out, so what is pinned here is the stylesheet that does: each side box stacks its unit below it, and the
+   * sheet fills its grid cell, so the grid's one gap is the space on every side. print-preview.e2e.ts measures it.
+   */
+  it('stacks a side margin\'s "mm" below its box, and the page fills the space between the boxes (FR-068b)', () => {
+    const css = readFileSync(join(__dirname, '../../src/renderer/print-preview/print-preview.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = (selector: string): string => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const blocks = [...css.matchAll(new RegExp(`(?:^|[},])\\s*${escaped}\\s*(?:,[^{]*)?\\{([^}]*)\\}`, 'gm'))].map((m) => m[1]);
+      return blocks.join(';');
+    };
+    for (const side of ['left', 'right']) {
+      expect(rule(`.print-preview__margin-edge--${side}`), `the ${side} box`).toMatch(/flex-direction:\s*column/);
+    }
+    const sheet = rule('.print-preview__margins-sheet');
+    expect(sheet).toMatch(/justify-self:\s*stretch/);
+    expect(sheet).toMatch(/align-self:\s*stretch/);
+    expect(sheet, 'a fixed width leaves the sheet narrower than its column').not.toMatch(/(?:^|[;\s])width:/);
   });
 
   it('offers scale as common choices, and a free box for a custom one', async () => {

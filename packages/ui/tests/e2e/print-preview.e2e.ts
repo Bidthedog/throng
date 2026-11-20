@@ -141,6 +141,28 @@ test('Ctrl+P opens one modal Print Preview whose pages render, and its settings 
         { timeout: 5000, message: 'the settings pane overflows, or would offer a scrollbar' },
       )
       .toEqual({ overflowX: 0, overflowY: 0, scrolls: false });
+
+    // FR-068b (the maintainer, 2026-11-20 17:21) — the left and right boxes carry "mm" BELOW them, so they take no
+    // width beside the page; and the page fills the space between the four boxes, the same gap on every side.
+    const geometry = await print.getByTestId('print-margins-page').evaluate((diagram) => {
+      const box = (el: Element | null) => el!.getBoundingClientRect();
+      const sheet = box(diagram.querySelector('.print-preview__margins-sheet'));
+      const edge = (side: string) => diagram.querySelector(`[data-edge="${side}"]`)!;
+      const input = (side: string) => box(edge(side).querySelector('input'));
+      const unit = (side: string) => box(edge(side).querySelector('[aria-hidden="true"]'));
+      return {
+        unitBelow: (['left', 'right'] as const).map((s) => Math.round(unit(s).top - input(s).bottom) >= 0),
+        gaps: [
+          Math.round(sheet.top - box(edge('top')).bottom),
+          Math.round(box(edge('right')).left - sheet.right),
+          Math.round(box(edge('bottom')).top - sheet.bottom),
+          Math.round(sheet.left - box(edge('left')).right),
+        ],
+      };
+    });
+    console.log(`[print margins] gaps top/right/bottom/left: ${geometry.gaps.join('/')}`);
+    expect(geometry.unitBelow, 'a side margin’s "mm" is not below its box').toEqual([true, true]);
+    expect(Math.max(...geometry.gaps) - Math.min(...geometry.gaps), `uneven gaps round the page: ${geometry.gaps.join('/')}`).toBeLessThanOrEqual(1);
   } finally {
     await second.close();
   }

@@ -138,8 +138,9 @@
 }
 
 .print-preview__margin-edge--top { grid-area: top; }
-.print-preview__margin-edge--left { grid-area: left; justify-self: end; }
-.print-preview__margin-edge--right { grid-area: right; justify-self: start; }
+/* FR-068b (the maintainer, 2026-11-20) — a side box carries its "mm" below it, so it takes no width beside the page. */
+.print-preview__margin-edge--left { grid-area: left; justify-self: end; flex-direction: column; gap: 1px; }
+.print-preview__margin-edge--right { grid-area: right; justify-self: start; flex-direction: column; gap: 1px; }
 .print-preview__margin-edge--bottom { grid-area: bottom; }
 
 /* 077 FR-020 — a margin's message hangs below its box, so the page drawing keeps its shape. */
@@ -159,11 +160,15 @@
   text-align: center;
 }
 
-/* The paper: the print palette's page colour, white in every theme. */
+/*
+ * The paper: the print palette's page colour, white in every theme. FR-068b — it fills its cell, as wide as the top
+ * and bottom boxes and at least a page's height, so the grid's one gap is the space on every side of it.
+ */
 .print-preview__margins-sheet {
   grid-area: sheet;
-  width: 30px;
-  height: 42px;
+  justify-self: stretch;
+  align-self: stretch;
+  min-height: 6.5em;
   background: var(--print-paper);
   border: 1px solid var(--throng-colour-border);
   border-radius: 2px;
