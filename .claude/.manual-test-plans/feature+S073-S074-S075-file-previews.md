@@ -24,6 +24,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-11 | [CSV] CSV and Spreadsheet preview icons and titles | untested | | | |
 | MT-12 | [CSV] Print… and Go to Row in the grid menus | untested | | | |
 | MT-13 | [CSV] Loading placeholders for workbooks and large CSVs | untested | | | |
+| MT-14 | [CSV] The cell dialog is themed like an editor | untested | | | |
 | MT-20 | [Media] Open … in, for every preview type | untested | | | carried from 074 MT-01; no sign-off survives the merge |
 | MT-21 | [Media] Image Preview | untested | | | carried from 074 MT-02; no sign-off survives the merge |
 | MT-22 | [Media] SVG Preview beside its editor | untested | | | carried from 074 MT-03; no sign-off survives the merge |
@@ -310,6 +311,21 @@ Paths: `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.
 ### Negative cases
 - Neither preview shows an empty panel or an empty grid while it loads.
 - A small CSV opens straight into its grid with no placeholder flash.
+
+## MT-14: [CSV] The cell dialog is themed like an editor
+
+Covers: 073 FR-036f
+Paths: `packages/ui/src/renderer/grid/cell-dialog.tsx`, `packages/ui/src/renderer/grid/cell-dialog.css`, `packages/ui/src/renderer/editor/editor.css`
+
+### Steps
+1. Choose the shipped dark theme (throng). Open a text file in an editor panel, and a CSV in the CSV Preview Editor beside it.
+2. Double-click a long or multi-line cell to open the cell dialog. Its text area has the same background, text colour and caret as the editor panel, and the text is easy to read.
+3. Press Ctrl+A in the dialog. The selection is the editor panel's selection colour and the selected text stays readable.
+4. Click the dialog's title, so its text loses focus. The selection turns the editor's dimmer, kept-selection colour and stays readable.
+5. Cancel, switch to the Light theme, and repeat steps 2 to 4. The dialog matches the light editor panel throughout.
+
+### Negative cases
+- The dialog's text is never drawn on a background other than the editor's, and no selection is a pale colour over a dark editor or the other way round.
 
 ## MT-20: [Media] Open … in, for every preview type
 

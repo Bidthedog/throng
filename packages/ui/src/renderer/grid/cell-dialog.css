@@ -12,12 +12,18 @@
   height: min(50vh, 420px);
   min-height: 8em;
   border: 1px solid var(--throng-colour-border);
-  background: var(--throng-colour-editorBg);
-  color: var(--throng-colour-editorFg);
+  /* A column, as an editor panel's wrap is: the `.editor-panel` inside fills it (`editor.css`), and its colours are
+     that panel's own (FR-036f). */
+  display: flex;
+  flex-direction: column;
 }
 
 .cell-dialog__editor .standalone-editor {
   height: 100%;
+  min-height: 0;
+  /* The preferences JSON tab's frame (`preferences.css`) belongs to that tab; here the dialog's box is the frame. */
+  border: none;
+  border-radius: 0;
 }
 
 .cell-dialog__hint {

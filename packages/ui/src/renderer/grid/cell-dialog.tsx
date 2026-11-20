@@ -83,7 +83,11 @@ export function CellDialog({ cellLabel, initial, json, onSave, onCancel, returnF
           Edit cell {cellLabel}
         </h3>
         <div className="cell-dialog__editor">
-          <StandaloneEditor value={text} onChange={setText} languageId={json ? 'json' : 'plaintext'} testId="cell-dialog-editor" />
+          {/* FR-036f — inside `.editor-panel`, so `editor.css` themes it exactly as an editor panel: background, text,
+              gutter, caret, active line and both selection colours, from the theme's editor tokens. */}
+          <div className="editor-panel">
+            <StandaloneEditor value={text} onChange={setText} languageId={json ? 'json' : 'plaintext'} testId="cell-dialog-editor" />
+          </div>
         </div>
         <p className="cell-dialog__hint">Line breaks are saved as single spaces. Ctrl+Enter saves, Esc cancels.</p>
         <div className="modal__buttons">

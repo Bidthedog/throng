@@ -749,6 +749,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
   the zoom reset (Cmd on macOS). Reported from hand-testing on Linux: a middle-click in the dialog's editor
   pasted. The maintainer's rule is wider — "Middle mouse should not paste in throng at all" — and belongs to
   an app-wide requirement; this one covers what 073 added. *(Covered by FR-008g, 2026-11-20.)*
+- **FR-036f** *(maintainer, 2026-11-20: "The CSV editor dialog should be themed like a normal throng editor")*: The
+  cell dialog's editor MUST be themed exactly as an editor panel is, from the active theme's editor tokens: its
+  background, text, caret, gutter, active line, and its selection both while it has focus and while it does not.
+  It MUST NOT draw any colour of its own. Reported from hand-testing: the text was hard to read against its
+  background and unreadable when selected (CodeMirror's default pale selection over a dark editor).
 - **FR-037**: Selection MUST cover text within a cell (while its editor is open), single cells, cell
   ranges and whole rows (by the row gutter). **Copy**, **Cut** and **Paste** MUST be offered on the
   grid's right-click menu and work by their chords.
