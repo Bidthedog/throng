@@ -75,8 +75,15 @@ th, td { border: 0.5pt solid ${PRINT_PALETTE.border}; padding: 2pt 4pt; text-ali
 th { background: ${PRINT_PALETTE.appBg}; font-weight: 600; }
 `;
 
-/** The table document for `source`. */
-export function gridPrintHtml(source: GridPrintSource, title: string): string {
+/** One row of the table. */
+function rowHtml(source: GridPrintSource, r: number): string {
+  let row = '<tr>';
+  for (let c = 0; c < source.colCount; c++) row += `<td>${escapeHtml(source.cell(r, c))}</td>`;
+  return `${row}</tr>`;
+}
+
+/** The document round `body`, the table's rows. */
+function documentHtml(source: GridPrintSource, title: string, body: string): string {
   const cols = columnShares(source)
     .map((share) => `<col style="width:${share.toFixed(4)}%">`)
     .join('');
@@ -84,26 +91,72 @@ export function gridPrintHtml(source: GridPrintSource, title: string): string {
     source.header === null
       ? ''
       : `<thead><tr>${Array.from({ length: source.colCount }, (_, c) => `<th>${escapeHtml(source.header?.[c] ?? '')}</th>`).join('')}</tr></thead>`;
+  // Concatenated, not joined: the rows are already one string, and a join would copy them whole again.
+  return (
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">` +
+    `<title>${escapeHtml(title)}</title>` +
+    `<style>${STYLE}</style>` +
+    '</head><body class="throng-print throng-print--grid">' +
+    `<table><colgroup>${cols}</colgroup>${head}<tbody>` +
+    body +
+    '</tbody></table></body></html>'
+  );
+}
+
+/** The table document for `source`, built in one go: for a test, or a table known to be small. */
+export function gridPrintHtml(source: GridPrintSource, title: string): string {
   const rows: string[] = [];
+  for (let r = 0; r < source.rowCount; r++) rows.push(rowHtml(source, r));
+  return documentHtml(source, title, rows.join(''));
+}
+
+/**
+ * How long one slice of a table build may hold the renderer, in ms (Principle XII). Measured 2026-11-20: building
+ * 100,000 rows × 50 columns in one go took 2.6 – 3.0 s (10,000 × 50: 0.22 – 0.26 s), long enough to freeze the panel,
+ * so the rows are built in slices of this length, yielding to input between them.
+ */
+export const GRID_PRINT_SLICE_MS = 12;
+
+/** How the time-sliced build reads the clock and gives the renderer back; injectable for a test. */
+export interface GridPrintPacing {
+  now(): number;
+  yieldToInput(): Promise<void>;
+}
+
+const browserPacing: GridPrintPacing = {
+  now: () => performance.now(),
+  yieldToInput: () => new Promise((resolve) => setTimeout(resolve, 0)),
+};
+
+/** How many rows are built between clock reads: reading it per row would cost more than the rows. */
+const ROWS_PER_CHECK = 64;
+
+/** The table document for `source`, built in slices of {@link GRID_PRINT_SLICE_MS}, yielding to input between them. */
+export async function gridPrintHtmlSliced(source: GridPrintSource, title: string, pacing: GridPrintPacing = browserPacing): Promise<string> {
+  // Each slice's rows are joined as the slice ends, and the slices concatenated: one join of the whole table at the
+  // end held the renderer for over half a second at 100,000 rows (measured 2026-11-20).
+  let body = '';
+  let slice: string[] = [];
+  let sliceStart = pacing.now();
   for (let r = 0; r < source.rowCount; r++) {
-    let row = '<tr>';
-    for (let c = 0; c < source.colCount; c++) row += `<td>${escapeHtml(source.cell(r, c))}</td>`;
-    rows.push(`${row}</tr>`);
+    slice.push(rowHtml(source, r));
+    if ((r + 1) % ROWS_PER_CHECK === 0 && pacing.now() - sliceStart >= GRID_PRINT_SLICE_MS) {
+      body += slice.join('');
+      slice = [];
+      await pacing.yieldToInput();
+      sliceStart = pacing.now();
+    }
   }
-  return [
-    '<!doctype html><html><head><meta charset="utf-8">',
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">`,
-    `<title>${escapeHtml(title)}</title>`,
-    `<style>${STYLE}</style>`,
-    '</head><body class="throng-print throng-print--grid">',
-    `<table><colgroup>${cols}</colgroup>${head}<tbody>${rows.join('')}</tbody></table>`,
-    '</body></html>',
-  ].join('');
+  body += slice.join('');
+  return documentHtml(source, title, body);
 }
 
 /** A grid view's `printable`: the table of what the body's grid shows, or a refusal when it holds none yet. */
-export function gridPrintable(body: HTMLElement, title: string): Promise<PrintableOutput> {
+export async function gridPrintable(body: HTMLElement, title: string, pacing?: GridPrintPacing): Promise<PrintableOutput> {
   const read = gridPrintSourceIn(body);
-  if (read === undefined) return Promise.reject(new Error('The grid has not drawn yet.'));
-  return Promise.resolve({ kind: 'document', html: gridPrintHtml(read(), title), fit: 'width', remoteImages: [] });
+  if (read === undefined) throw new Error('The grid has not drawn yet.');
+  // Read once, now: the rows are what the grid showed when Print… ran, even if it changes while they are built.
+  const source = read();
+  return { kind: 'document', html: await gridPrintHtmlSliced(source, title, pacing), fit: 'width', remoteImages: [] };
 }
