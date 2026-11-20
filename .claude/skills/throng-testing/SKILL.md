@@ -515,6 +515,7 @@ overview.
 
 | Reference | Read it when |
 |---|---|
+| [constitution-test-discipline.md](references/constitution-test-discipline.md) | the binding text of the test layers, the E2E reserve, tags, budget, reported defects, suite runs and `@admin` (binding: constitution Principle V) |
 | [e2e-harness.md](references/e2e-harness.md) | writing or converting an E2E spec, the harness helpers, the tier and parallel plans, diagnosing a flake — the area knowledge behind this skill's process |
 | [e2e-reserve-and-tags.md](references/e2e-reserve-and-tags.md) | adding, demoting or deleting an E2E; paying for a new declaration under the budget; choosing its `@reserve:*` tag |
 | [build-guards.md](references/build-guards.md) | a renderer↔main channel changes, or the bridge-parity or renderer-typecheck guard goes red |
