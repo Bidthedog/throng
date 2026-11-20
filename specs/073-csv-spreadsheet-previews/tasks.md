@@ -109,6 +109,8 @@ its failing test at the layer R10 names.
 - [x] T070 [US2] FR-039b: the locked strip's outside edge is the accent colour at the ordinary 1px border width, replacing the 2px separator
 - [x] T071 [US2] FR-033d: scroll-sync highlights — a soft line highlight in the editor (CodeMirror decoration, no focus/selection change) and the matching grid row in a CSV preview, a gutter indicator in a Markdown preview (047 preview gutter); both on the synced pair, fading 1.5 s after the last scroll; theme tokens; component tests both directions for CSV and Markdown
 - [x] T072 [US2] FR-033e: the in-step highlight marks the line/record at the vertical centre of the scrolled view (and its counterpart), not its top; sync still keys on the top — CSV and Markdown, both directions; tests updated
+- [ ] T073 [US2] Defect against FR-033d/FR-033e: the editor's in-step highlight no longer shows (maintainer, after T072); the CSV grid's does — reproduce with a failing test first, then fix
+- [ ] T074 [US2] FR-033f: Scroll-sync highlight duration preference (editor.previews.syncHighlightSeconds, ships 1.5, 0–10 step 0.5, 0 = none), read live by the sync-mark store; docs/preferences.md; settings and fade tests
 - [x] T041 Review of the iteration diff; lint + typecheck; manual test plan Paths widened to the files that implement FR-011/FR-012/FR-043/SC-009
 
 ## Dependencies

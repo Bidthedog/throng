@@ -214,6 +214,10 @@ the feedback, the code and precedent rather than stated by the maintainer.
   drives Synchronise Scrolling; the highlight is only a visual guide to help the reader orient. *(derived)* The marked
   pair is the record or line at the vertical centre of the view being scrolled and its counterpart in the other view,
   wherever that sits. CSV and Markdown alike. (FR-033e, superseding FR-033d's "at the scrolled view's top")
+- Q40: Can the reader choose how long the in-step highlight shows? → A: Yes, a preference. *(derived)* **Scroll-sync
+  highlight duration** under Editor → Previews, in seconds, shipping **1.5**, from 0 to 10 in steps of 0.5; 0 shows no
+  highlight at all. It governs every provider's highlight and the editor's, takes effect without a restart, and
+  supersedes FR-033d's fixed 1.5 seconds. (FR-033f)
 
 ## Terminology
 
@@ -422,6 +426,8 @@ expected bytes: only the edited field differs.
 40. **Given** a CSV or Markdown file and its linked preview with Synchronise Scrolling on, **When** the user scrolls
     either, **Then** the highlight sits on the line or row in the middle of that view, and on the same line or record
     in the other; the tops of the two views stay in step as before (FR-033e).
+41. **Given** Scroll-sync highlight duration set to 4, **When** the user scrolls a synchronised view, **Then** both
+    highlights stay for about four seconds after scrolling stops; set to 0, no highlight shows (FR-033f).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -659,6 +665,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
   and its counterpart in the other view, wherever that sits in its viewport. Synchronise Scrolling itself still keeps
   the two views' tops in step (FR-033c, 044 FR-114); the highlight is a visual guide only. CSV and Markdown alike.
   *(Supersedes FR-033d's "the record or line at the scrolled view's top".)*
+- **FR-033f** *(Q40, 2026-11-20)*: A **Scroll-sync highlight duration** preference MUST exist under Editor → Previews
+  (`editor.previews.syncHighlightSeconds`), in seconds, shipping **1.5**, from 0 to 10 in steps of 0.5, rendered and
+  documented as every preference is. The in-step highlight (FR-033d) MUST fade that long after the last scroll, in the
+  editor and in every preview, and a change MUST take effect at the next scroll without a restart; 0 MUST show no
+  highlight. *(Supersedes FR-033d's fixed "1.5 seconds".)*
 - **FR-033b** *(Q29, 2026-11-19)*: Opening or dropping another CSV onto a CSV Preview Editor whose document has
   unsaved edits only it shows MUST raise the editor's unsaved-changes prompt (006 US9), naming the grid's file
   and the arriving one, with **Save & open**, **Discard & open**, **Open in new preview** and **Cancel**. Save and
