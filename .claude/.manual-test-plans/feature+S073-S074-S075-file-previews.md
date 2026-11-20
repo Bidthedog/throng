@@ -62,6 +62,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-102 | [General] One Go to dialog for lines, rows, pages and headings | untested | | | |
 | MT-103 | [General] Print… shown everywhere, enabled only where it prints | untested | | | |
 | MT-104 | [General] The middle mouse button never pastes | untested | | | |
+| MT-105 | [General] Open files in and Open previews in, both ways | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -947,3 +948,23 @@ Paths: `packages/ui/src/renderer/common/no-middle-paste.ts`, `packages/ui/src/re
 ### Negative cases
 - No middle-click anywhere in throng starts Chromium's autoscroll (the round scroll icon).
 - A Ctrl+V straight after a middle-click still pastes.
+
+## MT-105: [General] Open files in and Open previews in, both ways
+
+Covers: 075 FR-093b, 075 FR-093a, 023 FR-026, 047 FR-010, 044 FR-015c
+Paths: `packages/ui/src/renderer/preview/open-in-editor.ts`, `packages/ui/src/renderer/editor/editor-open.tsx`, `packages/ui/src/renderer/workspace/panel-body.tsx`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/preview/open-preview.ts`, `packages/ui/src/renderer/preview/preview-commands.tsx`
+
+### Steps
+1. In Preferences set **Open files in** to **Last Active Editor**. In one tab open `other.txt` in an editor and click into it. Open a Markdown file's preview from the Files & Folders tree (Open In → New Preview Panel), then press the preview's **Open in Editor** status-bar button. The Markdown file opens in the `other.txt` editor; no new panel appears, and the preview now shows **Go to Editor**.
+2. Repeat step 1 with a CSV file (its preview's header menu → Open in Editor) and with an HTML file (its preview's right-click menu → Open in Editor). Each opens in the last active editor, with no new panel.
+3. Repeat step 1 with unsaved changes in the `other.txt` editor. throng asks about the unsaved changes before replacing it; Cancel leaves everything as it was.
+4. Set **Open files in** to **New Editor** and repeat steps 1 and 2. Each time a new editor opens immediately to the left of the preview, and `other.txt` stays in its editor.
+5. With **Last Active Editor** again, open a Markdown preview in a tab holding no editor and press Open in Editor. A new editor opens to the left of the preview.
+6. Set the Markdown provider's **Open previews in** to **Last Active**. Open two Markdown files in two editors in one tab. Press the first editor's preview button, then the second's. The second press reuses the first preview, which now shows the second file.
+7. Set Markdown's **Open previews in** to **New** and repeat step 6. The second press opens a second preview beside the second editor.
+8. Repeat steps 6 and 7 with two CSV files (the CSV provider's Open previews in) and with two HTML files (the HTML provider's). Each follows its own provider's setting.
+
+### Negative cases
+- A file already open in an editor anywhere is focused there, whichever **Open files in** says; it is never opened twice.
+- A CSV Preview Editor is never chosen as the "last active editor" an Open in Editor reuses.
+- A preview's **Go to Editor** (when it already has an editor) only focuses that editor, under either setting.
