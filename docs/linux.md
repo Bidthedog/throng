@@ -23,6 +23,8 @@ The defaults are the same as on Windows. GNOME keeps `Ctrl+Shift+Alt` with the a
 
 Under XWayland, the keypad's `+` and `-` do nothing with `Ctrl+Alt`: the standard Linux keyboard layout makes those presses the X server's own video-mode switch, so XWayland keeps them and throng never sees them. Zoom a panel with `Ctrl+Alt+=` and `Ctrl+Alt+-` on the main row, or `Ctrl+wheel`. The keypad works for zoom under [native Wayland](preferences.md), or under XWayland once the layout's server keys are turned off: `gsettings set org.gnome.desktop.input-sources xkb-options "['srvrkeys:none']"` (on GNOME; add it to any options already set there).
 
+The middle mouse button pastes nothing anywhere in throng, terminals included, unlike most Linux programs. Paste with `Ctrl+V` or the right-click menu. `Ctrl+MiddleClick` still resets a panel's zoom, and dragging with the middle button still moves around a preview. A program in a terminal that reads the mouse, such as tmux, still receives the click and may paste its own buffer.
+
 ## Terminals
 
 - Every shell in `/etc/shells` or on `PATH` that throng knows is offered: bash, zsh, fish, sh, dash, ksh, tcsh, pwsh and nu.
