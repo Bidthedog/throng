@@ -1,5 +1,5 @@
 /**
- * 075 FR-068e (the maintainer, 2026-11-20 18:10: "Add an option to 'center' print previews. This should center the
+ * 075 FR-068f (the maintainer, 2026-11-20 18:10: "Add an option to 'center' print previews. This should center the
  * preview's canvas on the print canvas — especially important for images and SVGs.")
  */
 import { describe, expect, it } from 'vitest';

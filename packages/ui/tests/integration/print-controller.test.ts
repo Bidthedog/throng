@@ -119,7 +119,7 @@ describe('laying out and printing (FR-068, SC-012)', () => {
     const result = await controller.render('job-1', view!.settings);
     const [laidOut] = engine.of('pdf');
     expect(engine.of('pdf')).toHaveLength(1);
-    // 075 FR-068e — a document's job is laid out with the document's Centre choice (off by default).
+    // 075 FR-068f — a document's job is laid out with the document's Centre choice (off by default).
     expect(laidOut!.options.centre).toBe(false);
     expect(laidOut!.options).toMatchObject({ pageSize: 'A4', landscape: false });
     expect(laidOut!.options.pageRanges).toBeUndefined();

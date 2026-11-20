@@ -221,14 +221,17 @@ can keep browsing or press **F2** to rename the file.
 - **Maths**: `$…$` inline, `$$…$$` on its own lines, or a `math` code block typesets as an equation, by
   GitHub's rules — `$5 and $10` stays prose. A malformed expression shows its source, with the error in its
   hover. **Typeset math** in [Settings](preferences.md) turns it off.
-- **Print…** (**Ctrl+P** in a Markdown or Mermaid preview or an editor, or their menus) opens **Print Preview**: pick the printer,
-  paper, orientation, margins, scale, pages and copies, see each page as it will print, stepping through
-  them with **Back** and **Forward**, the mouse wheel or the arrow keys (**Home** and **End** for the first and
-  last), then **Print**. What prints is exactly the pages shown, on white paper in any theme, with the margins
-  outlined in dashes on screen. A number that is out of range is outlined red, and Print waits until it is put
-  right.
-  Folded sections and callouts print open, in fixed print colours whatever the theme. The other previews show
-  **Print…** greyed: they do not print yet.
+- **Print…** (**Ctrl+P** in an editor or a Markdown, Mermaid, Image, SVG, PDF, CSV or workbook preview, or their
+  menus) opens **Print Preview**: pick the printer, paper (each size shown in mm for the orientation),
+  orientation, margins, scale, **Centre on page**, pages and copies, see each page as it will print, stepping
+  through them with **Back** and **Forward**, the mouse wheel or the arrow keys (**Home** and **End** for the
+  first and last), then **Print**. What prints is exactly the pages shown, on white paper in any theme, with the
+  margins outlined in dashes on screen. A number that is out of range is outlined red, and Print waits until it
+  is put right.
+  Folded sections and callouts print open, in fixed print colours whatever the theme. A picture prints fitted to
+  the page and never larger than its own size; a PDF prints its own pages, one per sheet; a CSV or a workbook's
+  sheet prints as a table of every row, its header row repeated on each page. An HTML preview shows
+  **Print…** greyed: it does not print yet.
 - In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and
   Obsidian-style `[[wikilinks]]` follow like any other link, including vault-root ones such as
   `[[Docs/Guide]]`; hover one to see its target. Images embed with `![[diagram.png]]`, with

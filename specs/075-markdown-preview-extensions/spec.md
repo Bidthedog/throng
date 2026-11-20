@@ -573,7 +573,10 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   print, and, when it can, supply its **printable output** for the preview's current content. The output MAY
   be a flowing document that throng paginates, or ready-made pages that throng prints as they are (a future
   PDF provider's own pages).
-- **FR-061**: The Markdown and Mermaid providers MUST declare printing. A new provider MUST be able to add
+- **FR-061**: The Markdown and Mermaid providers MUST declare printing. *(Amended 2026-11-20 18:02, the maintainer:
+  "Add support for printing to PDFs, image previews, CSVs and editors.")* So MUST the Image, SVG, PDF, CSV and
+  Spreadsheet providers (FR-075a – FR-075c); every one prints a flowing document throng paginates, the PDF's own
+  pages drawn as such a document. The HTML provider does not print. A new provider MUST be able to add
   printing through its own registration alone, with no change to the print commands, menus, key binding or
   print preview (the 044 User Story 5 test, applied to printing). A contract test MUST prove it with a fake
   provider that supplies ready-made pages.
@@ -658,6 +661,13 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   - The **printer** list follows the OS's: a printer added or removed while the window is open appears or goes
     within a few seconds, the chosen one kept while it is there.
   - The title bar offers **Close** only.
+  - *(18:10, the maintainer: "For 'Paper size', show the size in mm next to each option, depending on the
+    orientation selected.")* Each **Paper size** option reads its name and its size in millimetres, width first,
+    turned for the chosen orientation — "A4 (297 × 210 mm)" in landscape — read from the paper table, never
+    written out by hand.
+  - *(18:10, the maintainer: "When 'landscape' is selected, the example page for margins should switch to
+    landscape.")* The custom-margins page is drawn in the chosen paper's proportions, turned for the orientation,
+    with the even gap and FR-069's no-scroll rule kept.
 - **FR-068c**: *(2026-11-20.)* The page MUST be shown white in every theme, with the margins outlined in dashes
   where the printed content stops; the outline is the window's and is never printed.
 - **FR-068d**: *(2026-11-20; the maintainer: the print differed from the preview and ignored the page range.)*
@@ -669,6 +679,13 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   error. When **every** page it names lies past the last, the range box MUST carry the same red outline a
   malformed range does, with a message giving the document's page count ("This document has 3 pages."); no page
   is shown and Print stays disabled.
+- **FR-068f**: *(2026-11-20 18:10, the maintainer: "Add an option to 'center' print previews. This should center the
+  preview's canvas on the print canvas — especially important for images and SVGs.")* Print Preview MUST offer
+  **Centre on page**, one checkbox for both directions (a picture has one middle; a pair would offer half-centred
+  layouts nobody asked for). It is kept for each kind of print and persists with the other settings (FR-070): on
+  by default for a picture, a diagram fitted to the page and a PDF's pages, which then sit in the middle of each
+  sheet both ways; off by default for a flowing document, where on centres only what is narrower than the text
+  column — an image, a diagram, a table — and never text.
 
 #### What prints (#484)
 
@@ -686,6 +703,21 @@ ready-made pages; the first shows the print actions disabled, the second prints 
 - **FR-074**: Collapsed sections (047 FR-032) and collapsed callouts (FR-006) MUST print expanded, whatever
   their state on screen: printing prints the full document. Printing MUST NOT change their on-screen state
   (FR-066).
+- **FR-075a**: *(2026-11-20 18:02.)* An Image or SVG preview MUST print its picture fitted to the page in both
+  dimensions, its shape kept, and never larger than its own size (an image's pixels, an SVG's width and height);
+  Print Preview's Scale still enlarges it. *(18:10, the maintainer: "SVG Print preview does not show anything.")* A
+  picture MUST print as itself in every route — an Image or SVG preview, an `svg` fence, an embedded `.svg`, a
+  picture in a Mermaid or Markdown preview — never as a blank page: a picture drawn from a `blob:` URL is inlined
+  from its own bytes, which the frame showing it carries as the picture it copies does.
+- **FR-075b**: *(2026-11-20 18:02.)* A CSV Preview Editor, and a workbook's sheet on screen, MUST print as a table
+  holding every row, not the rows in view: the header row, where the grid treats the first row as headers (a CSV's
+  **Lock first row**, a workbook's **First row is header**), repeated at the top of every page; the columns in the
+  grid's width proportions across the page width; a cell's text wrapping within its column; a page break only
+  between rows. A workbook prints the sheet on screen, not every sheet. The grids' own menus offer **Print…** as
+  every other preview's do (FR-063).
+- **FR-075c**: *(2026-11-20 18:02.)* A PDF preview MUST print the PDF's own pages, one per sheet of paper, each fitted
+  whole within the margins with its shape kept, read from the file (not from what the preview has drawn). The
+  paper is Print Preview's choice; a page of another size is fitted to it.
 - **FR-075**: Diagrams — standalone and embedded — MUST print as vector output at the page's resolution,
   regardless of the diagram's zoom, pan or Full Pane state (054 FR-046a – FR-046h). An embedded diagram MUST
   print in place, scaled down to the text width when wider; a standalone `.mmd`/`.mermaid` diagram MUST print

@@ -34,7 +34,7 @@ interface Host {
   readonly window: BrowserWindow;
   readonly file: string;
   readonly allowed: ReadonlySet<string>;
-  /** 075 FR-068e — the key of the Centre stylesheet while it is on the host. */
+  /** 075 FR-068f — the key of the Centre stylesheet while it is on the host. */
   centreCss?: string;
 }
 
@@ -106,7 +106,7 @@ export class ElectronPrintEngine implements IPrintEngine {
   async pdf(handle: PrintHostHandle, options: PdfOptions): Promise<Uint8Array> {
     const host = this.hosts.get(handle.id);
     if (host === undefined) throw new Error('The print host has closed.');
-    // 075 FR-068e — Centre is a stylesheet on the host while it is laid out, added or taken away to match.
+    // 075 FR-068f — Centre is a stylesheet on the host while it is laid out, added or taken away to match.
     if (options.centre && host.centreCss === undefined) host.centreCss = await host.window.webContents.insertCSS(PRINT_CENTRE_CSS);
     if (!options.centre && host.centreCss !== undefined) {
       await host.window.webContents.removeInsertedCSS(host.centreCss);

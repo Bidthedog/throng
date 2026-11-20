@@ -490,7 +490,7 @@ describe('the settings form (FR-066, FR-069; 2026-11-20)', () => {
     }
   });
 
-  it('offers Centre on page, on for a picture and off for a document by default, and lays out with the choice (FR-068e)', async () => {
+  it('offers Centre on page, on for a picture and off for a document by default, and lays out with the choice (FR-068f)', async () => {
     const picture = await mount(bridge({ ...JOB, fit: 'page', settings: { ...JOB.settings, centre: { page: true, width: false } } }));
     const box = (): HTMLInputElement => screen.getByTestId('print-centre') as HTMLInputElement;
     expect(box().checked).toBe(true);

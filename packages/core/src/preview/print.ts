@@ -136,7 +136,7 @@ export interface PrintSettings {
   readonly scale: { readonly fitWidth: boolean; readonly percent: number };
   readonly copies: number;
   /**
-   * 075 FR-068e (the maintainer, 2026-11-20: "Add an option to 'center' print previews") — centre the content on the
+   * 075 FR-068f (the maintainer, 2026-11-20: "Add an option to 'center' print previews") — centre the content on the
    * printable area, kept apart for the two kinds of printable: `page` (a picture or a PDF's pages, one per sheet:
    * centred both ways) and `width` (a flowing document: anything narrower than the text column centred across it).
    */
@@ -283,7 +283,7 @@ export interface PdfOptions {
   readonly pageRanges?: string;
   readonly printBackground: true;
   readonly preferCSSPageSize: false;
-  /** 075 FR-068e — lay the content out centred ({@link PRINT_CENTRE_CSS}). */
+  /** 075 FR-068f — lay the content out centred ({@link PRINT_CENTRE_CSS}). */
   readonly centre: boolean;
 }
 
@@ -328,7 +328,7 @@ const scaleOf = (s: PrintSettings): number => (s.scale.fitWidth ? 100 : s.scale.
 
 /**
  * `printToPDF`'s options for `s`; with `pageCount`, its page range is clipped to that many pages first. `fit` is the
- * job's kind, which picks the Centre setting that applies (FR-068e).
+ * job's kind, which picks the Centre setting that applies (FR-068f).
  */
 export function toPdfOptions(s: PrintSettings, pageCount?: number, fit: 'width' | 'page' = 'width'): PdfOptions {
   const m = marginsMm(s);
@@ -347,7 +347,7 @@ export function toPdfOptions(s: PrintSettings, pageCount?: number, fit: 'width' 
 }
 
 /**
- * 075 FR-068e — what Centre adds to a printable while it is laid out. A picture, a diagram and each of a PDF's pages
+ * 075 FR-068f — what Centre adds to a printable while it is laid out. A picture, a diagram and each of a PDF's pages
  * sit in the middle of their sheet, both ways; in a flowing document, anything narrower than the text column — an
  * image, a diagram, a table — sits in the middle of it. Text is never centred: it is not narrower than its column.
  */
