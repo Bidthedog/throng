@@ -199,8 +199,8 @@ Paths: `packages/ui/src/renderer/grid/**`, `packages/ui/src/renderer/preview/pro
 
 ## MT-10: A CSV and its editor in step; toggle looks
 
-Covers: FR-033c, FR-007a
-Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/editor/status-strip.tsx`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/preview/provider.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`
+Covers: FR-033c, FR-033d, FR-007a
+Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`, `packages/ui/src/renderer/editor/status-strip.tsx`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/grid/**`, `packages/core/src/preview/providers/csv.ts`, `packages/core/src/preview/provider.ts`, `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/editor/**`, `packages/ui/src/renderer/preview/markdown/**`
 
 ### Steps
 1. Open a 2,000-row CSV in the text editor and choose Open Preview. The preview opens linked to the editor (its title bar shows the link as a Markdown preview's does).
@@ -208,6 +208,9 @@ Paths: `packages/ui/src/renderer/preview/sync-scroll-button.tsx`, `packages/ui/s
 3. The Synchronise Scrolling button is on both status bars; turning it off on either stops both following.
 4. On the CSV status bar, with each toggle off — cell dialog, Wrap, Lock first row, Lock first column, Synchronise Scrolling — its icon is greyed with a diagonal line through it and its tooltip ends ": disabled". Turn each on: the line goes, the icon is bright on a highlighted background, and the tooltip ends ": enabled".
 5. The editor status bar's Synchronise Scrolling button looks and reads the same way.
+6. With the CSV editor and preview side by side and Synchronise Scrolling on, scroll the editor: a soft highlight marks its top line and the same record's row in the grid, and fades about a second and a half after you stop. Keyboard focus stays in the editor. Scroll the grid: the same, the other way.
+7. Scroll the editor to its last line while the grid still has rows below (turn Wrap on to make the grid taller): the highlight sits on a line part way down the editor, matching the grid's top row.
+8. Do the same with a long Markdown file and its preview, the preview gutter enabled: the editor highlights the matching line and the preview's gutter shows a marker beside the matching block. Turn the Markdown preview gutter off in Preferences: no marker, the editor highlight remains.
 
 ### Negative cases
 - A CSV preview has no Go to Heading; Ctrl+G still opens Go to Row.
