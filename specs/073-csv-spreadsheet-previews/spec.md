@@ -210,6 +210,10 @@ the feedback, the code and precedent rather than stated by the maintainer.
   appears when a scroll moves the other view, and fades out 1.5 seconds after scrolling stops; theme tokens only; no
   setting of its own (it follows Synchronise Scrolling); with the Markdown preview gutter disabled (047 FR-032b) the
   preview shows no indicator. (FR-033d, extending 044 FR-114 for CSV and Markdown)
+- Q39: Where does the in-step highlight sit? → A: In the middle of the scrolled view, not at its top. The top still
+  drives Synchronise Scrolling; the highlight is only a visual guide to help the reader orient. *(derived)* The marked
+  pair is the record or line at the vertical centre of the view being scrolled and its counterpart in the other view,
+  wherever that sits. CSV and Markdown alike. (FR-033e, superseding FR-033d's "at the scrolled view's top")
 
 ## Terminology
 
@@ -415,6 +419,9 @@ expected bytes: only the edited field differs.
 39. **Given** a Markdown file in an editor and its preview with Synchronise Scrolling on and the preview gutter
     enabled, **When** the user scrolls either, **Then** the editor highlights the matching line and the preview's
     gutter shows an indicator beside the block holding it (FR-033d).
+40. **Given** a CSV or Markdown file and its linked preview with Synchronise Scrolling on, **When** the user scrolls
+    either, **Then** the highlight sits on the line or row in the middle of that view, and on the same line or record
+    in the other; the tops of the two views stay in step as before (FR-033e).
 29. **Given** a block of cells selected, **When** the user right-clicks it, **Then** Edit in Dialog… is shown
     disabled; with one cell selected it is enabled (FR-036d).
 30. **Given** `a.csv` with an unsaved edit in a Last Preview Panel, **When** the user opens `b.csv`, **Then**
@@ -647,6 +654,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
   with the rendered block holding that line; no indicator while the gutter is disabled. The marks fade out 1.5
   seconds after the last scroll, use theme tokens only, and have no setting of their own. *(Extends 044 FR-114 for
   CSV and Markdown previews and their editors.)*
+- **FR-033e** *(Q39, 2026-11-20)*: The in-step highlight (FR-033d) MUST mark the record or line at the vertical
+  centre of the view being scrolled — the row or line under the middle of its visible area, past any locked row —
+  and its counterpart in the other view, wherever that sits in its viewport. Synchronise Scrolling itself still keeps
+  the two views' tops in step (FR-033c, 044 FR-114); the highlight is a visual guide only. CSV and Markdown alike.
+  *(Supersedes FR-033d's "the record or line at the scrolled view's top".)*
 - **FR-033b** *(Q29, 2026-11-19)*: Opening or dropping another CSV onto a CSV Preview Editor whose document has
   unsaved edits only it shows MUST raise the editor's unsaved-changes prompt (006 US9), naming the grid's file
   and the arriving one, with **Save & open**, **Discard & open**, **Open in new preview** and **Cancel**. Save and
