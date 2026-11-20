@@ -13,6 +13,7 @@ import { TREE_DROP_EVENT } from '../../src/renderer/explorer/tree-drag-store.js'
 import { getTreeDrag, setTreeDrag, clearTreeDrag } from '../../src/renderer/explorer/tree-drag-store.js';
 import { getActivePane, setActivePane } from '../../src/renderer/workspace/active-pane.js';
 import { COLD, ROOT, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
+import { __resetLastActivePreview } from '../../src/renderer/preview/last-active-preview.js';
 
 let m: MountedPreviewWindow | undefined;
 
@@ -179,5 +180,39 @@ describe('text/HTML drops still reach the body\'s own refusal, nothing written',
 
     expect(mounted.preview.navigate).not.toHaveBeenCalled();
     expect(mounted.preview.open).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * 073 FR-033b — dropping a file onto a preview whose run holds unsaved grid edits: main does not move the run and
+ * answers `reroute` (preview-service `navigate`). The open that follows must ask to reuse THE PANEL DROPPED ON, so
+ * main's unsaved-grid answer, and the prompt, name it — not whichever preview of that type was last active before.
+ * It does because the drop focuses the panel first, and a focused preview records itself as last active; the record
+ * is cleared before the drop so this holds only through that focus.
+ */
+describe('a drop of the same type that main reroutes reuses the panel dropped on (073 FR-033b)', () => {
+  it('opens with Last Active naming this panel', async () => {
+    const mounted = await mount();
+    __resetLastActivePreview();
+    mounted.preview.navigate.mockResolvedValue({ kind: 'reroute' });
+    mounted.preview.open.mockResolvedValue({ kind: 'placedElsewhere' });
+
+    await osDrop([`${ROOT}/other.md`]);
+
+    await waitFor(() => expect(mounted.preview.open).toHaveBeenCalledTimes(1));
+    const request = mounted.preview.open.mock.calls[0]![0] as { target?: { mode: string; reusePanelId: string | null } };
+    expect(request.target).toEqual({ mode: 'lastActive', reusePanelId: mounted.id });
+  });
+
+  it('a file of another type keeps the ordinary open (054 FR-008)', async () => {
+    const mounted = await mount();
+    mounted.preview.navigate.mockResolvedValue({ kind: 'reroute' });
+    mounted.preview.open.mockResolvedValue({ kind: 'placedElsewhere' });
+
+    await osDrop([`${ROOT}/flow.mmd`]);
+
+    await waitFor(() => expect(mounted.preview.open).toHaveBeenCalledTimes(1));
+    const request = mounted.preview.open.mock.calls[0]![0] as { target?: { reusePanelId: string | null } };
+    expect(request.target?.reusePanelId).not.toBe(mounted.id);
   });
 });
