@@ -109,9 +109,24 @@ describe('parseCsv at the editor size limit (SC-001)', () => {
     const row = '1234567,"Surname, Given",some text that pads the row out to a little over a hundred bytes,42.5\n';
     const text = row.repeat(100_000);
     expect(text.length).toBeGreaterThan(9_000_000);
-    const started = performance.now();
-    const m = parseCsv(text);
-    const elapsed = performance.now() - started;
+    /*
+     * The parse's cost, as the fastest of three: in a whole unit run beside two others (load ~6 on 20 cores) a single
+     * wall-clock parse broke the budget in 9 of 21 runs while the code was unchanged. Thread CPU time where Node has it
+     * leaves out the time the scheduler kept the thread waiting, and the fastest of three discards a parse a busy
+     * neighbour slowed, while a cost every parse pays is in every sample (as `occurrence-performance` and
+     * `text-fidelity-perf` measure).
+     */
+    const now = (): number => {
+      const u = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : null;
+      return u ? (u.user + u.system) / 1000 : performance.now();
+    };
+    let m = parseCsv('');
+    let elapsed = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < 3; i++) {
+      const started = now();
+      m = parseCsv(text);
+      elapsed = Math.min(elapsed, now() - started);
+    }
     expect(m.records).toBe(100_000);
     expect(m.width).toBe(4);
     // The whole SC-001 budget is 1.5 s to the first screen; the parse may take at most half of it.
