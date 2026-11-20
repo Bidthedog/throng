@@ -774,7 +774,15 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   a document with none loads no typesetter code or fonts. *(2026-11-20.)* Typesetting it lays the document out
   once, not once per batch, and redrawing it (a keystroke in its editor) typesets no expression again.
   Resizing its panel lays it out once the resize settles, not on every frame of the drag, and dragging a panel
-  edge beside it costs what it costs beside the same text untypeset.
+  edge beside it costs what it costs beside the same text untypeset. *(Amended 2026-11-20 17:24, the maintainer:
+  "The resize render debounce that has been added for previews — I don't like it. Can we make previews resize
+  dynamically / on the fly again, but just reduce the amount of redraws … Alternatively, apply the resize debounce
+  on previews over a certain size instead, and keep the dynamic resize for smaller previews?")* A preview's body
+  MUST follow its panel live while a drag lasts, taking the panel's latest width at most once per animation frame.
+  The settle above applies only where the layout is dear, by measured cost rather than by file size: a drag is held
+  once two width changes in a row each add more than **16 ms** (one 60 Hz frame) to the frame that draws them, and
+  the next drag starts held while the last release measured dear; a release that measures cheap makes the next drag
+  live again. The 500-expression document stays within the bound above: its drag costs what plain text's does.
 - **SC-007**: No hostile callout or math input in the sanitiser fixture executes code or makes a network
   request.
 - **SC-008**: A 20-page Markdown document's print preview updates within two seconds of any settings change.
