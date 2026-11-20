@@ -109,6 +109,20 @@ function allowed(url: string): boolean {
   return u.startsWith('throng-preview:') || u.startsWith(`${RENDERER_DIR_URL}/`) || u.startsWith('blob:') || u.startsWith('data:');
 }
 
+/**
+ * App zoom back to 1, and the Explorer it folded back too, before the next test in this app reaches for the tree. At app
+ * zoom 1.33 the 1280px window is under the Explorer's auto-collapse width, and the pane restores itself on widening.
+ * On macOS CI the next test twice found no tree rows (a-zoomed.svg, polyglot.png). If the pane does not come back,
+ * this fails here, naming that, not as a missing file in a later test.
+ */
+async function restoreAppZoom(app: ElectronApplication, win: Page): Promise<void> {
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.setZoomFactor(1));
+  await expect(
+    win.getByTestId('file-explorer-tree').getByText('picture.png', { exact: true }),
+    'the Explorer came back after app zoom returned to 1',
+  ).toBeVisible({ timeout: 10_000 });
+}
+
 /** Click a file in the tree (it ships Open … in: Throng Preview), and return the preview panel's id by its title. */
 async function previewFromTree(win: Page, file: string): Promise<string> {
   await win.getByTestId('file-explorer-tree').getByText(file, { exact: true }).click();
@@ -171,9 +185,24 @@ test('a long PDF zoomed in, scrolled to its end and fitted again has no pages wi
   });
   await expect(win.getByTestId(`pdf-text-${pdf}-40`)).toContainText('Page 40 of', { timeout: 10_000 });
   await win.getByTestId(`pdf-fit-${pdf}`).click();
-  await expect
-    .poll(() => scroller.evaluate((el) => el.scrollWidth - el.clientWidth), { timeout: 10_000 })
-    .toBeLessThanOrEqual(0);
+  // macOS CI twice held a 27px overflow here for the whole wait, and Linux has not reproduced it (10/10 locally). So a
+  // failure names what sticks out past the scroller, and by how much, for the next run to say where it comes from.
+  try {
+    await expect
+      .poll(() => scroller.evaluate((el) => el.scrollWidth - el.clientWidth), { timeout: 10_000 })
+      .toBeLessThanOrEqual(0);
+  } catch (error) {
+    const offenders = await scroller.evaluate((el) => {
+      const edge = el.getBoundingClientRect().left + el.clientWidth;
+      const out: string[] = [];
+      for (const d of el.querySelectorAll<HTMLElement>('*')) {
+        const over = d.getBoundingClientRect().right - edge;
+        if (over > 0.5) out.push(`${d.tagName.toLowerCase()}.${d.className} ${d.dataset.pdfPage ?? d.dataset.testid ?? ''} +${Math.round(over)}px w=${Math.round(d.getBoundingClientRect().width)}`);
+      }
+      return { clientWidth: el.clientWidth, scrollWidth: el.scrollWidth, offenders: out.slice(0, 10) };
+    });
+    throw new Error(`${(error as Error).message}\nafter Fit, past the scroller's edge: ${JSON.stringify(offenders)}`, { cause: error });
+  }
 
   // FR-062c — the layouts in a real layout: Two Pages puts pages 1 and 2 on one row and, fitted, still fits across;
   // Side by Side, zoomed out, holds more than one page to a row.
@@ -267,16 +296,20 @@ test('a fitted SVG holds still at an app zoom whose rounding overflows it, and r
       // The zoom's relayout has settled — the viewport's outer box, which a scrollbar does not move — so a scale that
       // still changes in the sampling window below is the picture refitting itself, never the relayout.
       await geom(frame.locator('.preview-diagram-frame__viewport'));
-      // The box can read still twice before the zoom's relayout even begins (setZoomFactor returns first), and CI then
-      // sampled one refit to the new size as two scales (0.1025 then 0.1925, never back). So first wait for the fit
-      // itself to hold for 300 ms. A picture that refits without end never holds, and fails here instead.
+      // The box can read still twice before the zoom's relayout even begins (setZoomFactor returns first). And at 1.33 the
+      // 1280px window is 962 CSS px, under the Explorer's auto-collapse width (~1,060), so the Explorer folds to its rail
+      // and the workspace widens: CI sampled that one refit as two scales about 2x apart (0.03125 then 0.066875, never
+      // back). So wait for the picture's scale and its viewport's width to hold together for 600 ms. A picture that
+      // refits without end never holds, and fails here instead.
       await expect
         .poll(
           () =>
             frame.evaluate(async (f) => {
-              const first = f.getAttribute('data-scale');
-              await new Promise((r) => setTimeout(r, 300));
-              return first !== null && f.getAttribute('data-scale') === first;
+              const vp = f.querySelector('.preview-diagram-frame__viewport') as HTMLElement;
+              const read = (): string => `${f.getAttribute('data-scale')} ${vp.getBoundingClientRect().width}`;
+              const first = read();
+              await new Promise((r) => setTimeout(r, 600));
+              return !first.startsWith('null') && read() === first;
             }),
           { timeout: 10_000 },
         )
@@ -294,7 +327,7 @@ test('a fitted SVG holds still at an app zoom whose rounding overflows it, and r
       expect(seen[0], `app zoom ${factor}: no scrollbar`).toMatch(/ 0x0$/);
     }
   } finally {
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.setZoomFactor(1));
+    await restoreAppZoom(app, win);
   }
 });
 
@@ -346,7 +379,7 @@ test('a zoomed SVG holds still at every step zoomed out from 100%, and the zoom 
     await expect(frame).toHaveAttribute('data-mode', 'open');
     await expect(frame).toHaveAttribute('data-scale', opening!);
   } finally {
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.setZoomFactor(1));
+    await restoreAppZoom(app, win);
   }
 });
 
