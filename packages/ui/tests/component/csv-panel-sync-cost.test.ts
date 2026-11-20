@@ -56,6 +56,13 @@ async function mountPair(rows: number, wrap: boolean) {
     settings: { editor: { previews: { providers: { csv: { wrapCells: wrap } } } } },
   });
   await screen.findByTestId(`csv-grid-${m.id}`, {}, COLD);
+  /*
+   * The mark settles from a timer, SYNC_MARK_QUIET_MS after the scroll goes quiet (FR-033g). On a slow runner one frame
+   * can outlast it, or the settle the setup's own publishes started lands among the counted frames, and the mark is set
+   * and cleared there although the reader never stopped (macOS CI: 2 emits). Timers are held from here: the setup's are
+   * run before counting (`reset`), and the one after the last frame is counted on its own (`settle`).
+   */
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   m.push(previewUpdate({ panelId: m.id, revision: 2, content: null, parent: PARENT, providerId: 'csv', filePath: FILE }));
   const scroller = document.querySelector<HTMLElement>('.data-grid__scroller')!;
   let top = 0;
@@ -81,7 +88,14 @@ async function mountPair(rows: number, wrap: boolean) {
       act(() => void scroller.dispatchEvent(new Event('scroll')));
     },
     counts: () => ({ follows, writes, emits, rects: rects.mock.calls.length }),
+    /** Marks the scroll's end makes once the counted frames are over: the timers held since mount, run now. */
+    settle: (): number => {
+      const before = emits;
+      act(() => void vi.runOnlyPendingTimers());
+      return emits - before;
+    },
     reset: (): void => {
+      act(() => void vi.runOnlyPendingTimers()); // the setup's settle, before anything is counted
       follows = 0;
       writes = 0;
       emits = 0;
@@ -109,6 +123,7 @@ describe.each([
     expect(c.follows).toBeLessThanOrEqual(FRAMES); // <= 1 per frame
     expect(c.writes).toBe(0); // the editor's echo does not move the grid again
     expect(c.emits).toBe(0); // FR-033g: nothing from the mark store while scrolling
+    expect(s.settle()).toBeLessThanOrEqual(1); // and one mark once it stops
     // Measured at 7 per frame before the status bar held still across a frame that changed nothing it draws.
     expect(c.rects / FRAMES).toBeLessThanOrEqual(1);
     s.done();
@@ -126,6 +141,7 @@ describe.each([
     expect(c.writes).toBeLessThanOrEqual(FRAMES);
     expect(c.follows).toBe(0); // the grid's own follow is claimed: it is not reported back as the reader's scroll
     expect(c.emits).toBe(0);
+    expect(s.settle()).toBeLessThanOrEqual(1);
     expect(c.rects / FRAMES).toBeLessThanOrEqual(1);
     s.done();
   }, 120_000);

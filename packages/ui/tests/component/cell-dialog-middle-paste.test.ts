@@ -26,7 +26,20 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/**
+ * jsdom's Range has no geometry, and CodeMirror measures the selection it draws: without these it logs
+ * "textRange(...).getClientRects is not a function" on every test (`panel-type-confirm-focus.test.ts`'s stub).
+ */
+function stubRangeGeometry(): void {
+  const range = globalThis.Range?.prototype as unknown as Record<string, unknown> | undefined;
+  if (range && typeof range.getClientRects !== 'function') {
+    range.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: function* () {} });
+    range.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 });
+  }
+}
+
 async function mount(): Promise<HTMLElement> {
+  stubRangeGeometry();
   render(createElement(CellDialog, { cellLabel: 'B3', initial: 'two lines', json: false, onSave: vi.fn(), onCancel: vi.fn() }));
   const content = await waitFor(() => {
     const el = screen.getByTestId('cell-dialog').querySelector<HTMLElement>('.cm-content');
