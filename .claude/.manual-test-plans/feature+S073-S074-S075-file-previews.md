@@ -783,12 +783,13 @@ Paths: `packages/ui/src/renderer/print-preview/**`, `packages/ui/src/renderer/pr
 ## MT-61: [Print] Printing an editor
 
 Covers: 075 FR-064a
-Paths: `packages/ui/src/renderer/print/text-printable.ts`, `packages/ui/src/renderer/editor/editor-print.ts`, `packages/ui/src/renderer/editor/editor-chrome.tsx`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/core/src/config/keybindings.ts`, `packages/core/src/config/keybindings-metadata.ts`
+Paths: `packages/ui/src/renderer/print/text-printable.ts`, `packages/ui/src/renderer/editor/editor-print.ts`, `packages/ui/src/renderer/editor/editor-chrome.tsx`, `packages/ui/src/renderer/editor/content-menu.ts`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/core/src/config/keybindings.ts`, `packages/core/src/config/keybindings-metadata.ts`
 
 ### Steps
 1. Open a `.ts` file in an editor and type a line without saving. Its header menu has **Print…** with the printer icon and **Ctrl+P**.
 2. Click it. Print Preview opens with the whole file, your unsaved line included, in the editor's font, coloured as code on white paper, long lines wrapped.
 3. Close it. Focus the editor and press **Ctrl+P**. Print Preview opens again.
+3a. Close it. Right-click in the editor's text: the menu offers **Print…** with the printer icon and **Ctrl+P**, below Go To Line…. Choose it: Print Preview opens.
 4. Open a `.txt` file and print it. It shows as plain text, whitespace kept.
 5. Print a page range and compare the paper with the preview, as MT-60 step 1o.
 
@@ -866,7 +867,7 @@ Paths: `packages/ui/src/renderer/grid/grid-print.ts`, `packages/ui/src/renderer/
 6. Open a workbook with two sheets, switch to the second, and print. The second sheet prints; with **First row is header** on, its first row repeats at the top of every page.
 
 ### Negative cases
-- A CSV of 100,000 rows prints every row; note how long Print Preview takes to open and whether the CSV Preview Editor stalls while it does (the table is built in one pass before Print Preview opens).
+- A CSV of 100,000 rows prints every row. Print Preview takes a couple of seconds to open; meanwhile the CSV Preview Editor still scrolls and takes clicks, with no freeze.
 
 ## MT-67: [Print] Printing an editor of any file type
 
