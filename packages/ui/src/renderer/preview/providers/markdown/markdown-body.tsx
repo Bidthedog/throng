@@ -116,6 +116,7 @@ import { placeOnStep, shouldDrive, shouldFollow } from '../../scroll-sync-policy
 import {
   blockLineFor,
   captureScrollAnchor,
+  centreBlockLine,
   remapAnchorLine,
   restoreScrollAnchor,
   topBlockLine,
@@ -641,7 +642,7 @@ export function MarkdownBody({
     if (report === undefined || editorLine === null) return;
     const top = topBlockLine(scroller);
     if (top === null || !shouldDrive({ previewTopBlock: top, editorLineBlock: blockOf(body, editorLine) })) return;
-    if (report(top) === false) {
+    if (report(top, centreBlockLine(scroller)) === false) {
       // Compared with a stale editor line: decide again against the next one the chrome hands down.
       reportDeferred.current = true;
       return;

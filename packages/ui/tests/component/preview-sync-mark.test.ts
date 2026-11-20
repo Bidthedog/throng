@@ -13,7 +13,7 @@
  */
 import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { __resetEditorScrollStore, publishEditorTopLine, registerEditorScroller } from '../../src/renderer/editor/editor-scroll-store.js';
+import { __resetEditorScrollStore, publishEditorCentreLine, publishEditorTopLine, registerEditorScroller } from '../../src/renderer/editor/editor-scroll-store.js';
 import { SYNC_MARK_FADE_MS, SYNC_MARK_REMOVE_MS, __resetSyncMarks, syncMarkOf } from '../../src/renderer/preview/sync-mark-store.js';
 import { COLD, README, mountMarkdownPreview, previewUpdate, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
@@ -34,7 +34,12 @@ function withGeometry(): void {
     return { top: 100 + line * 20 - (scroller?.scrollTop ?? 0), height: 40, left: 0, width: 400 } as DOMRect;
   });
 }
-const editorScrolledTo = (line: number, fromSync = false): void => act(() => publishEditorTopLine('ed-1', line, fromSync));
+/** The editor scrolled to `line` at its top, with `centre` under the middle of its viewport (ten lines lower unless told). */
+const editorScrolledTo = (line: number, fromSync = false, centre = line + 10): void =>
+  act(() => {
+    publishEditorCentreLine('ed-1', centre);
+    publishEditorTopLine('ed-1', line, fromSync);
+  });
 async function frames(n = 2): Promise<void> {
   for (let i = 0; i < n; i += 1) await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
@@ -67,15 +72,22 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('the editor leads (FR-033d)', () => {
-  it('marks the editor line and the block holding it in the preview gutter', async () => {
+describe('the editor leads (FR-033d, FR-033e)', () => {
+  it('marks the editor line at the vertical CENTRE and the block holding it in the preview gutter, not the top line', async () => {
     await mountParented();
     expect(marked()).toEqual([]);
-    editorScrolledTo(13);
-    await waitFor(() => expect(syncMarkOf('ed-1')).toEqual({ line: 13, on: true }));
-    // Line 13 is blank between P6 (line 12) and P7 (line 14): the block holding it is P6.
-    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P6']));
+    editorScrolledTo(13); // top 13; the line under the middle of the editor is 23
+    await waitFor(() => expect(syncMarkOf('ed-1')).toEqual({ line: 23, on: true }));
+    // Line 23 is blank between P11 (line 22) and P12 (line 24): the block holding it is P11 - not P6, which holds the top.
+    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P11']));
     expect(marked()[0]).toHaveClass('preview-sync-mark--on');
+  });
+
+  it('names the centre however far it is from the top (a tall viewport), and falls back to the top with no centre', async () => {
+    await mountParented();
+    editorScrolledTo(13, false, 40);
+    await waitFor(() => expect(syncMarkOf('ed-1')?.line).toBe(40));
+    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P20']));
   });
 
   it('leaves the preview\'s focus and selection alone', async () => {
@@ -90,15 +102,15 @@ describe('the editor leads (FR-033d)', () => {
   it('moves the indicator to the new block on the next sync scroll, never two at once', async () => {
     await mountParented();
     editorScrolledTo(13);
-    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P6']));
+    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P11']));
     editorScrolledTo(30);
-    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P15']));
+    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P20']));
   });
 
   it('marks the pair even when the preview is clamped short of the line (the follower part way down)', async () => {
     // The preview cannot scroll that far (no layout here), yet the block holding the editor's line is marked.
     await mountParented();
-    editorScrolledTo(58);
+    editorScrolledTo(58); // centre 68, past the end: the block at or before it is the last, P29
     await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P29']));
   });
 
@@ -119,13 +131,13 @@ describe('the editor leads (FR-033d)', () => {
   });
 });
 
-describe('the preview leads (FR-033d)', () => {
-  it('marks the block at the preview\'s top and the editor line it asked for', async () => {
+describe('the preview leads (FR-033d, FR-033e)', () => {
+  it('asks the editor to follow the TOP block, but marks the block at the vertical CENTRE and that line in the editor', async () => {
     await mountParented();
-    await readerScrolls(500); // P12 (line 24) straddles the top
+    await readerScrolls(500); // P12 (line 24) straddles the top; P17 (line 34, 180-220 px) straddles the middle, 200 px down
     expect(ed1).toHaveBeenCalledWith(24);
-    expect(syncMarkOf('ed-1')).toEqual({ line: 24, on: true });
-    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P12']));
+    expect(syncMarkOf('ed-1')).toEqual({ line: 34, on: true });
+    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P17']));
   });
 });
 
@@ -139,7 +151,7 @@ describe('the mark fades after the last sync scroll (FR-033d)', () => {
     act(() => void vi.advanceTimersByTime(SYNC_MARK_FADE_MS - 1));
     expect(syncMarkOf('ed-1')?.on).toBe(true);
     act(() => void vi.advanceTimersByTime(1));
-    expect(syncMarkOf('ed-1')).toEqual({ line: 13, on: false });
+    expect(syncMarkOf('ed-1')).toEqual({ line: 23, on: false });
     expect(marked()[0]).toHaveClass('preview-sync-mark');
     expect(marked()[0]).not.toHaveClass('preview-sync-mark--on');
 
@@ -155,7 +167,7 @@ describe('the mark fades after the last sync scroll (FR-033d)', () => {
     act(() => void vi.advanceTimersByTime(1000));
     editorScrolledTo(30);
     act(() => void vi.advanceTimersByTime(1000));
-    expect(syncMarkOf('ed-1')).toEqual({ line: 30, on: true });
+    expect(syncMarkOf('ed-1')).toEqual({ line: 40, on: true });
     act(() => void vi.advanceTimersByTime(500));
     expect(syncMarkOf('ed-1')?.on).toBe(false);
   });
@@ -165,7 +177,7 @@ describe('the preview gutter is Disabled (FR-033d, 047 FR-032b)', () => {
   it('draws no indicator in the preview, and the editor line is still marked', async () => {
     await mountParented(GUTTER(false));
     editorScrolledTo(13);
-    await waitFor(() => expect(syncMarkOf('ed-1')).toEqual({ line: 13, on: true }));
+    await waitFor(() => expect(syncMarkOf('ed-1')).toEqual({ line: 23, on: true }));
     await frames();
     expect(marked()).toEqual([]);
     expect(host().querySelector('.preview-markdown--gutter')).toBeNull();
@@ -176,6 +188,6 @@ describe('the preview gutter is Disabled (FR-033d, 047 FR-032b)', () => {
     editorScrolledTo(13);
     await waitFor(() => expect(syncMarkOf('ed-1')).not.toBeNull());
     m!.setSettings(GUTTER(true));
-    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P6']));
+    await waitFor(() => expect(marked().map((e) => e.textContent)).toEqual(['P11']));
   });
 });

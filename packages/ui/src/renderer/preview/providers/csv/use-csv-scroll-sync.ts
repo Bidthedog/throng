@@ -20,7 +20,7 @@ import type { DataGridHandle } from '../../../grid/data-grid.js';
 export interface CsvScrollSyncProps {
   syncLine?: number | null | undefined;
   syncEcho?: boolean | undefined;
-  onTopLineChange?: ((line: number) => boolean | void) | undefined;
+  onTopLineChange?: ((line: number, centreLine?: number | null) => boolean | void) | undefined;
   onTopLineRead?: ((read: () => number | null) => void) | undefined;
 }
 
@@ -76,7 +76,7 @@ export function useCsvScrollSync(
     if (row === recordAtLine(s, at)) return;
     const top = s[row];
     if (top === undefined) return;
-    if (send(top) === false) {
+    if (send(top, s[g.centreRow()] ?? top) === false) {
       deferred.current = true;
       return;
     }

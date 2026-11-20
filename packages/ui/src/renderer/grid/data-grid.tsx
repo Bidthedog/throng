@@ -115,6 +115,11 @@ export interface DataGridHandle {
    * locked, read from each row's own height (wrap). 0 at the very top of the grid.
    */
   topRow(): number;
+  /**
+   * 073 FR-033e — the row under the vertical centre of the visible rows (below the header and past a locked row, each
+   * row at its own height). For the sync mark only; sync keys on {@link DataGridHandle.topRow}.
+   */
+  centreRow(): number;
   /** 073 FR-033c — scrolls `row` to the top (below the locked row) WITHOUT touching the selection; scroll sync's. */
   scrollRowToTop(row: number): void;
 }
@@ -697,6 +702,13 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         const locked = lockFirstRow ? (rowV.measurementsCache[0]?.size ?? rowH) : 0;
         return Math.min(rows - 1, indexAtOffset(rowV.measurementsCache, el.scrollTop + locked));
       },
+      centreRow: () => {
+        const el = scrollRef.current;
+        if (!el) return 0;
+        const lockedH = lockFirstRow ? (rowV.measurementsCache[0]?.size ?? rowH) : 0;
+        const bodyH = viewport().h - headerH;
+        return Math.min(rows - 1, Math.max(0, indexAtOffset(rowV.measurementsCache, el.scrollTop + lockedH + Math.max(0, bodyH - lockedH) / 2)));
+      },
       scrollRowToTop: (row) => {
         const target = Math.min(rows - 1, Math.max(0, Math.floor(row)));
         const el = scrollRef.current;
@@ -704,7 +716,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         if (el) el.scrollTop = Math.max(0, (rowV.measurementsCache[target]?.start ?? target * rowH) - locked);
       },
     }),
-    [beginEdit, cols, commitSel, ensureVisible, lockFirstRow, rowH, rowV, rows],
+    [beginEdit, cols, commitSel, ensureVisible, headerH, lockFirstRow, rowH, rowV, rows, viewport],
   );
 
   // ── Pointer: cell / row / column selection, drag, resize ─────────────────────────────────────────────

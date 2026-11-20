@@ -51,6 +51,8 @@ function track(): void {
   scroller = document.querySelector<HTMLElement>('.data-grid__scroller')!;
   Object.defineProperty(scroller, 'scrollTop', { get: () => top, set: (v: number) => void (top = v), configurable: true });
   Object.defineProperty(scroller, 'scrollLeft', { get: () => 0, set: () => {}, configurable: true });
+  // A viewport of the 24 px header strip and twenty 22 px rows: the visible rows' vertical centre is 220 px below the scroll offset.
+  Object.defineProperty(scroller, 'clientHeight', { get: () => 24 + 20 * ROW, configurable: true });
 }
 /** The reader scrolls: a new offset, then the scroll event. */
 function scrollBy(to: number): void {
@@ -142,16 +144,16 @@ describe('the CSV scrolls, the editor follows (FR-033c, FR-121f)', () => {
   it('reports the first source line of the record now at the top, once the scroll settles', async () => {
     const m = mount(plain(300), { syncLine: 0 });
     scrollBy(40 * ROW);
-    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(40));
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(40, expect.any(Number)));
     expect(m.onTopLineChange).toHaveBeenCalledTimes(1);
   });
 
   it('a multi-line record reports its first line, and the record after it the line it really starts on', async () => {
     const m = mount(multi(60), { syncLine: 0 });
     scrollBy(3 * ROW);
-    await waitFor(() => expect(m.onTopLineChange).toHaveBeenLastCalledWith(3));
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenLastCalledWith(3, expect.any(Number)));
     scrollBy(4 * ROW);
-    await waitFor(() => expect(m.onTopLineChange).toHaveBeenLastCalledWith(6));
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenLastCalledWith(6, expect.any(Number)));
   });
 
   it('coalesces a burst of scrolls into one report', async () => {
@@ -160,7 +162,7 @@ describe('the CSV scrolls, the editor follows (FR-033c, FR-121f)', () => {
     await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalled());
     await settle();
     expect(m.onTopLineChange).toHaveBeenCalledTimes(1);
-    expect(m.onTopLineChange).toHaveBeenCalledWith(33);
+    expect(m.onTopLineChange).toHaveBeenCalledWith(33, expect.any(Number));
   });
 
   it('never reports the scroll it made to follow the editor (no feedback loop)', async () => {
@@ -177,7 +179,7 @@ describe('the CSV scrolls, the editor follows (FR-033c, FR-121f)', () => {
     const m = mount(plain(300), { syncLine: 0 });
     m.update({ syncLine: 120 });
     scrollBy(10 * ROW);
-    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(10));
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(10, expect.any(Number)));
   });
 
   it('does not report onto the record the editor is already at', async () => {
@@ -201,7 +203,7 @@ describe('the CSV scrolls, the editor follows (FR-033c, FR-121f)', () => {
     await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledTimes(1));
     m.update({ syncLine: 1, syncEcho: true });
     await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledTimes(2));
-    expect(m.onTopLineChange).toHaveBeenLastCalledWith(40);
+    expect(m.onTopLineChange).toHaveBeenLastCalledWith(40, expect.any(Number));
   });
 
   it('answers onTopLineRead with the line at the top now', () => {
@@ -214,12 +216,52 @@ describe('the CSV scrolls, the editor follows (FR-033c, FR-121f)', () => {
   });
 });
 
+describe('the centre row is what the mark names (FR-033e); sync still keys on the top', () => {
+  it('reports the first line of the record at the vertical centre of the visible rows, beside the top line', async () => {
+    const m = mount(plain(300), { syncLine: 0 });
+    scrollBy(40 * ROW); // top row 40; ten rows lower, row 50, is under the middle
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(40, 50));
+  });
+
+  it('a multi-line record at the centre reports its FIRST line, and a later record the line it starts on', async () => {
+    const m = mount(multi(80), { syncLine: 0 });
+    scrollBy(ROW); // top row 1; centre row 11, whose record starts on line 13 (records from 4 start two lines later)
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(1, 13));
+    scrollBy(3 * ROW); // top row 3, a three-line record; centre row 13
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenLastCalledWith(3, 15));
+  });
+
+  it('is read past a locked first row: the centre of the rows clear of it', async () => {
+    const m = mount(plain(300), { syncLine: 0, lockFirstRowChoice: true });
+    scrollBy(40 * ROW); // top row 41 (under the locked one); the visible rows are 440 - 22 px: centre at 880 + 22 + 209 = 1111 -> row 50
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(41, 50));
+  });
+
+  it('is read from each row\'s own height with wrap on', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8 }) }) as unknown as CanvasRenderingContext2D,
+    );
+    // Record 0 is 3 lines tall (66 px). At scrollTop 66 the top row is 1; the centre, 220 px lower at 286, is row 11 (record 0 is 66 px, then rows of 22 px), whose record starts on line 13.
+    const text = '"a\nb\nc"\n' + Array.from({ length: 80 }, (_, i) => `v${i}`).join('\n') + '\n';
+    const m = mount(text, { syncLine: 0, wrapChoice: true });
+    scrollBy(66);
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(3, 13));
+  });
+
+  it('with no sync line and no report, the mark and the sync stay quiet', async () => {
+    const m = mount(plain(300), { syncLine: null });
+    scrollBy(40 * ROW);
+    await settle();
+    expect(m.onTopLineChange).not.toHaveBeenCalled();
+  });
+});
+
 describe('locks and wrap are respected (FR-033c)', () => {
   it('with the first row locked, the top row is the first one under it, and an editor line puts its record just below it', async () => {
     const m = mount(plain(300), { syncLine: 0, lockFirstRowChoice: true });
     scrollBy(40 * ROW);
     // Row 40 starts at 880 px, under the locked row (22 px): the first row clear of it is 41.
-    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(41));
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(41, expect.any(Number)));
     m.update({ syncLine: 100 });
     expect(top).toBe(100 * ROW - ROW);
   });
@@ -232,7 +274,7 @@ describe('locks and wrap are respected (FR-033c)', () => {
     const text = '"a\nb\nc"\n' + Array.from({ length: 80 }, (_, i) => `v${i}`).join('\n') + '\n';
     const m = mount(text, { syncLine: 0, wrapChoice: true });
     scrollBy(66);
-    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(3));
+    await waitFor(() => expect(m.onTopLineChange).toHaveBeenCalledWith(3, expect.any(Number)));
   });
 });
 

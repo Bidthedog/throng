@@ -41,7 +41,7 @@ export interface AnchorElement {
 /** What the anchor reads and writes of the scroll container. */
 export interface AnchorContainer {
   scrollTop: number;
-  getBoundingClientRect(): { top: number };
+  getBoundingClientRect(): { top: number; height?: number };
   querySelectorAll(selector: string): Iterable<AnchorElement>;
 }
 
@@ -164,6 +164,23 @@ export function topBlockLine(container: AnchorContainer): number | null {
   const blocks = measure(container);
   if (blocks.length === 0) return null;
   return (blockAtTop(blocks) ?? blocks[0]!).line;
+}
+
+/**
+ * 073 FR-033e — the source line of the block at the VERTICAL CENTRE of the viewport: the deepest block straddling the
+ * middle, else the nearest one below it, else the last one above. For the sync mark only; sync keys on {@link topBlockLine}.
+ */
+export function centreBlockLine(container: AnchorContainer): number | null {
+  const blocks = measure(container);
+  if (blocks.length === 0) return null;
+  const middle = (container.getBoundingClientRect().height ?? 0) / 2;
+  let chosen: Measured | undefined;
+  for (const b of blocks) if (b.top <= middle && b.top + b.height > middle) chosen = b; // later = deeper
+  if (chosen === undefined) {
+    for (const b of blocks) if (b.top > middle && (chosen === undefined || b.top <= chosen.top)) chosen = b;
+  }
+  if (chosen === undefined) for (const b of blocks) if (b.top <= middle) chosen = b;
+  return (chosen ?? blocks[0]!).line;
 }
 
 /** What {@link blockLineFor} reads: the source-mapped blocks, and nothing about where they are drawn. */

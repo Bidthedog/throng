@@ -49,9 +49,11 @@
 import { EditorView } from '@codemirror/view';
 import type { StateEffect } from '@codemirror/state';
 import {
+  editorCentreLine,
   editorTopLine,
   forgetEditorTopLine,
   publishEditorDocLines,
+  publishEditorCentreLine,
   publishEditorTopLine,
   registerEditorScroller,
   type TopLineView,
@@ -117,6 +119,7 @@ export function attachEditorScrollRelay(view: RelayView, panelId: string, frames
     if (disposed) return;
     // U2 — the line count first, so a preview reading the new line also sees which document it numbers.
     publishEditorDocLines(panelId, view.state.doc.lines);
+    publishEditorCentreLine(panelId, editorCentreLine(view));
     publishEditorTopLine(panelId, editorTopLine(view), armed);
     if (armed && scrolledSinceDispatch) disarm();
   };
@@ -186,6 +189,7 @@ export function attachEditorScrollRelay(view: RelayView, panelId: string, frames
   const unregister = registerEditorScroller(panelId, scroller);
   // A preview that mounted first finds out this view exists, and where it is (FR-113).
   publishEditorDocLines(panelId, view.state.doc.lines);
+  publishEditorCentreLine(panelId, editorCentreLine(view));
   publishEditorTopLine(panelId, editorTopLine(view));
 
   return {

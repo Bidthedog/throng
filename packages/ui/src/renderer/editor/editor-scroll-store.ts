@@ -64,6 +64,22 @@ export function publishEditorTopLine(panelId: string, line: number, fromSync = f
   emit();
 }
 
+/**
+ * 073 FR-033e — the 0-based line at the VERTICAL CENTRE of an editor panel's viewport, published beside its top line.
+ * Only the sync MARK reads it (the soft highlight names the place under the middle of the scrolled view); sync itself
+ * still keys on the top line. Stored apart from {@link EditorTopLine} so a centre change never replaces that object.
+ */
+const centres = new Map<string, number>();
+
+export function publishEditorCentreLine(panelId: string, line: number): void {
+  centres.set(panelId, line);
+}
+
+/** The editor panel's centre line, or `null` when no mounted view of it has published one in this window. */
+export function editorCentreLineOf(panelId: string): number | null {
+  return centres.get(panelId) ?? null;
+}
+
 /** The editor panel's top line, or `null` when no mounted view of it has published one in this window. */
 export function editorTopLineOf(panelId: string): EditorTopLine | null {
   return lines.get(panelId) ?? null;
@@ -94,6 +110,7 @@ export function useEditorDocLines(panelId: string | null): number | null {
 /** Drop an editor panel's line, its line count and its scroller — its view unmounted. */
 export function forgetEditorTopLine(panelId: string): void {
   scrollers.delete(panelId);
+  centres.delete(panelId);
   const hadCount = docLines.delete(panelId);
   if (lines.delete(panelId) || hadCount) emit();
 }
@@ -164,9 +181,23 @@ export function editorTopLine(view: TopLineView): number {
   return pos === null ? 0 : view.state.doc.lineAt(pos).number - 1;
 }
 
+/**
+ * 073 FR-033e — the 0-based source line at the vertical centre of `view`'s viewport: the same lookup as
+ * {@link editorTopLine}, a half-viewport lower. A view that cannot say how tall it is answers its top line.
+ */
+export function editorCentreLine(view: TopLineView): number {
+  const rect = view.scrollDOM.getBoundingClientRect() as { top: number; height?: number };
+  const height = rect.height ?? 0;
+  if (!(height > 0)) return editorTopLine(view);
+  const left = view.contentDOM.getBoundingClientRect().left;
+  const pos = view.posAtCoords({ x: left + 1, y: rect.top + height / 2 }, false);
+  return pos === null ? editorTopLine(view) : view.state.doc.lineAt(pos).number - 1;
+}
+
 /** Test-only: clear all state. */
 export function __resetEditorScrollStore(): void {
   lines.clear();
+  centres.clear();
   scrollers.clear();
   docLines.clear();
   emit();

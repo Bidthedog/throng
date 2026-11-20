@@ -238,6 +238,7 @@ import { clearSyncMark, publishSyncMark, useSyncMark } from './sync-mark-store.j
 import {
   editorDocLinesOf,
   editorTopLineOf,
+  editorCentreLineOf,
   requestEditorTopLine,
   useEditorDocLines,
   useEditorTopLine,
@@ -1943,7 +1944,8 @@ export function PreviewPanel({
     lastEditorLine.current = parentTop;
     if (!syncing || parentId === null || parentTop === null || seen === null || seen === parentTop) return;
     if (parentTop.fromSync || seen.line === parentTop.line) return;
-    publishSyncMark(parentId, parentTop.line);
+    // 073 FR-033e — the editor's centre line, not its top (sync itself keys on the top).
+    publishSyncMark(parentId, editorCentreLineOf(parentId) ?? parentTop.line);
   }, [parentTop, parentId, syncing]);
   useEffect(() => {
     if (!syncing || parentId === null) return;
@@ -2042,7 +2044,7 @@ export function PreviewPanel({
    * that is not the editor's latest: while the drawn text is behind (U2), or when the editor has published a
    * line this chrome has not yet handed down (a draw's report can run before the render that releases it).
    */
-  const onTopLineChange = useCallback((line: number): boolean => {
+  const onTopLineChange = useCallback((line: number, centreLine?: number | null): boolean => {
     const current = stateRef.current;
     const editor = current?.parent?.panelId;
     if (!syncingRef.current || editor === undefined) return true;
@@ -2054,7 +2056,8 @@ export function PreviewPanel({
     if (passed === null || passed.parent !== editor || passed.value !== editorTopLineOf(editor)) return false;
     requestEditorTopLine(editor, line);
     // 073 FR-033d — this view led: the pair is in step at its top line.
-    publishSyncMark(editor, line);
+    // 073 FR-033e — the mark names the line at the CENTRE of this view; sync itself keyed on the top.
+    publishSyncMark(editor, centreLine ?? line);
     return true;
   }, []);
 

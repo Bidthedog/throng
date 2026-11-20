@@ -105,7 +105,7 @@ export interface PreviewBodyProps {
    * An answer of `false` means the chrome could not act on it yet — the body compared its block with an
    * editor line that is no longer the latest — and the body reports again once `syncLine` next changes.
    */
-  onTopLineChange?(line: number): boolean | void;
+  onTopLineChange?(line: number, centreLine?: number | null): boolean | void;
   /**
    * 044 FR-121h — the body hands the chrome a way to read the source line of the block at its top now, for
    * placing a newly adopted editor where the preview already is. The reader answers `null` before anything
