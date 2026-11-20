@@ -66,10 +66,17 @@ const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|
 const DIAGRAM_VENDOR =
   /\/node_modules\/(mermaid|@mermaid-js\/[^/]+|@braintree\/sanitize-url|@iconify\/[^/]+|@upsetjs\/venn\.js|chevrotain|@chevrotain\/[^/]+|langium|vscode-[a-z-]+|cose-base|cytoscape[a-z-]*|d3|d3-[a-z-]+|dagre-d3-es|dayjs|delaunator|elkjs|es-toolkit|hachure-fill|internmap|katex|khroma|layout-base|lodash-es|marked|path-data-parser|points-on-curve|points-on-path|robust-predicates|roughjs|rw|stylis|ts-dedent|uuid)\//;
 
-/** Both lazily-loaded vendor sets, as the eager guard below checks them. */
+/**
+ * 074 R5 (FR-065) — PDF.js, imported only by `preview/providers/pdf/pdf-renderer.ts`'s dynamic import, so no
+ * window and no other preview loads it. Its worker is a separate module file the renderer starts itself.
+ */
+const PDF_VENDOR = /\/node_modules\/pdfjs-dist\//;
+
+/** Every lazily-loaded vendor set, as the eager guard below checks them. */
 const LAZY_VENDOR = [
   { pattern: PREVIEW_VENDOR, what: 'the Markdown preview pipeline loads with the app (R21)' },
   { pattern: DIAGRAM_VENDOR, what: 'the Mermaid diagram renderer loads with the app (054 FR-047)' },
+  { pattern: PDF_VENDOR, what: 'the PDF renderer loads with the app (074 FR-065)' },
 ];
 
 /**
@@ -242,9 +249,11 @@ function chunkFor(rawId: string): string | null {
   // Its own chunk keeps the app chunk under 500 kB (047 took it to 525 kB).
   // The Markdown provider's body sits behind `view.ts`'s dynamic imports (R21), so it gets a chunk of
   // its own: in `app-preview`, which the app loads eagerly, those imports would load nothing new.
-  if (/\/src\/renderer\/preview\/providers\/markdown\/(?!view\.ts$)/.test(id)) return 'app-preview-markdown';
-  // 054 FR-042 — the Mermaid provider's body, behind its view's dynamic import for the same reason.
-  if (/\/src\/renderer\/preview\/providers\/mermaid\/(?!view\.ts$)/.test(id)) return 'app-preview-mermaid';
+  // 054 FR-042 and 074 FR-065 — every provider's body sits behind its view's dynamic import for the same
+  // reason, so each provider folder gets a chunk of its own. The HTML provider's sanitiser imports DOMPurify,
+  // which in `app-preview` would load the whole `preview` vendor chunk with the app.
+  const provider = /\/src\/renderer\/preview\/providers\/([a-z]+)\/(?!view\.ts$)/.exec(id);
+  if (provider) return `app-preview-${provider[1]}`;
   // 054 FR-047 — the two diagram modules that import a lazy vendor (mermaid; DOMPurify for the SVG profile)
   // are reached only by the block registry's `import()`, so they get a chunk of their own. The diagram's
   // React components and the rasteriser import neither and ride with whatever imports them.
@@ -308,6 +317,8 @@ function chunkFor(rawId: string): string | null {
   // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
   if (PREVIEW_VENDOR.test(id))
     return 'preview';
+  // 074 FR-065 — PDF.js, behind `pdf-renderer.ts`'s dynamic import, never `vendor`.
+  if (PDF_VENDOR.test(id)) return 'pdf';
   // The Mermaid renderer (054 FR-047): behind `mermaid-renderer.ts`'s dynamic import, never `vendor`. NOT one
   // named group: Mermaid loads each diagram type through its own `import()`, and grouping them all made one
   // 5 MB chunk. Ungrouped, Rolldown splits them along those imports, and `failOnEagerPreview` still refuses
