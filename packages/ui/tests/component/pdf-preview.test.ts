@@ -234,6 +234,24 @@ describe('the view controls (FR-062a)', () => {
     }
   });
 
+  it('fits a panel narrower than the smallest zoom step, and zooming out from there goes no wider (FR-062a, FR-062d)', async () => {
+    // macOS CI, 2026-11-20: five panels in a 1024px window left a PDF 58px wide, and Fit stopped at the zoom steps'
+    // 10% floor — a page of 61px plus its gutter, scrolling sideways in a panel it was meant to fit.
+    const restore = stubWidth(58);
+    try {
+      openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(1) });
+      mount(props());
+      await waitFor(() => expect(pages()).toHaveLength(1));
+      fireEvent.click(screen.getByTestId('pdf-fit-p1'));
+      // (58 − 24 gutter) / 600 → 0.0567: a 34px page.
+      await waitFor(() => expect(pages()[0]!.style.width).toBe('34px'));
+      fireEvent.click(screen.getByTestId('pdf-zoom-out-p1'));
+      await waitFor(() => expect(Number.parseFloat(pages()[0]!.style.width)).toBeLessThanOrEqual(34));
+    } finally {
+      restore();
+    }
+  });
+
   it('opens at 100% when the page fits, and Fit then FILLS the panel (FR-020a, FR-062a)', async () => {
     const wide = stubWidth(1224);
     try {

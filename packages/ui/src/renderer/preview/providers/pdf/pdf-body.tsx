@@ -103,6 +103,13 @@ type PdfView = { mode: 'fit' } | { mode: 'zoom'; scale: number } | { mode: 'open
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 /**
+ * FR-062a / FR-062d — the least Fit goes to. Not the zoom steps' floor (`DIAGRAM_MIN_SCALE`, 10%): a panel narrower
+ * than a tenth of a page plus its gutter is ordinary (five panels in a 1024px window left one 58px wide, macOS CI
+ * 2026-11-20), and Fit held there scrolled sideways in the panel it was meant to fit. This only keeps a page drawable.
+ */
+const FIT_MIN_SCALE = 0.01;
+
+/**
  * FR-065a — how long scrolling must be still before the pages it brought near are painted: under the gap between two
  * wheel notches or two key repeats (about 30 – 60 ms), a scroll in progress never paints; a reader who stops sees the
  * pages start drawing within a tenth of a second.
@@ -245,7 +252,7 @@ export function PdfBody({
   const columns = layout === 'two' ? 2 : 1;
   const fitScale =
     width > 0 && widest > 0
-      ? clamp((width - PAGE_GAP_PX * (columns + 1)) / (widest * columns), DIAGRAM_MIN_SCALE, DIAGRAM_MAX_SCALE)
+      ? clamp((width - PAGE_GAP_PX * (columns + 1)) / (widest * columns), FIT_MIN_SCALE, DIAGRAM_MAX_SCALE)
       : 1;
   const viewScale = view.mode === 'fit' ? fitScale : view.mode === 'open' ? Math.min(1, fitScale) : view.scale;
   const zoom = viewScale * panelZoom;
@@ -317,7 +324,8 @@ export function PdfBody({
     (factor: number, at?: { x: number; y: number }): void => {
       const scroller = scrollerRef.current;
       const from = viewScaleRef.current;
-      const next = clamp(from * factor, DIAGRAM_MIN_SCALE, DIAGRAM_MAX_SCALE);
+      // A Fit below the steps' floor stays where it is on a step out, rather than jumping up to the floor.
+      const next = clamp(from * factor, Math.min(DIAGRAM_MIN_SCALE, from), DIAGRAM_MAX_SCALE);
       if (scroller !== null) {
         pendingScroll.current = {
           ratio: next / from,

@@ -111,16 +111,52 @@ function allowed(url: string): boolean {
 
 /**
  * App zoom back to 1, and the Explorer it folded back too, before the next test in this app reaches for the tree. At app
- * zoom 1.33 the 1280px window is under the Explorer's auto-collapse width, and the pane restores itself on widening.
- * On macOS CI the next test twice found no tree rows (a-zoomed.svg, polyglot.png). If the pane does not come back,
- * this fails here, naming that, not as a missing file in a later test.
+ * zoom 1.33 the window is under the Explorer's auto-collapse width, and the pane restores itself on widening — but only
+ * to a width that holds it (`app.tsx`'s width coordinator). macOS runners have a 1024px display, so the window opens
+ * 1024px wide: the Explorer shows there only because opening the project revealed it, and a reveal holds until the next
+ * width change. The zoom is one, so at 1 the pane stays a rail (measured at 1024×740 locally; at 1280 it comes back).
+ * Show it again, as a reader would.
  */
 async function restoreAppZoom(app: ElectronApplication, win: Page): Promise<void> {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.setZoomFactor(1));
+  const contentWidth = await app.evaluate(({ BrowserWindow }) => {
+    const bw = BrowserWindow.getAllWindows()[0]!;
+    bw.webContents.setZoomFactor(1);
+    return bw.getContentSize()[0]!;
+  });
+  // setZoomFactor returns before the relayout: until the page is as wide as the window again, the pane still shows
+  // the last zoom's state (shown at 0.9), which the coordinator then collapses at 1.
+  await expect.poll(() => win.evaluate(() => window.innerWidth), { timeout: 10_000 }).toBe(contentWidth);
+  // The pane may still restore itself after the zoom's relayout (a wide window): only a rail that stays one is shown.
+  const hide = win.getByTestId('pane-hide-right');
+  await expect
+    .poll(
+      async () => {
+        if (await hide.isVisible()) return true;
+        await win.waitForTimeout(300);
+        if (await hide.isVisible()) return true;
+        await win.getByTestId('pane-show-right').click({ timeout: 2_000 }).catch(() => undefined);
+        return hide.isVisible();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true);
   await expect(
     win.getByTestId('file-explorer-tree').getByText('picture.png', { exact: true }),
     'the Explorer came back after app zoom returned to 1',
   ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * Close every preview the earlier tests in this app left open. On a macOS runner's 1024px window, the eight they leave
+ * squeeze a new preview to its placeholder, which draws no body (measured at 1024×740: the HTML page had no link to
+ * click). The button is clipped from a squeezed header, so it is pressed by its event.
+ */
+async function closePreviews(win: Page): Promise<void> {
+  const titles = win.locator('[data-testid^="panel-title-"]').filter({ hasText: / Preview$/ });
+  for (const testId of await titles.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid') ?? ''))) {
+    await win.getByTestId(testId.replace('panel-title-', 'panel-close-')).dispatchEvent('click');
+  }
+  await expect(titles).toHaveCount(0, { timeout: 10_000 });
 }
 
 /** Click a file in the tree (it ships Open … in: Throng Preview), and return the preview panel's id by its title. */
@@ -404,6 +440,7 @@ test('the hostile image, SVG, PDF and HTML fixtures run nothing, fetch nothing o
     void d.dismiss();
   });
 
+  await closePreviews(win);
   await previewFromTree(win, 'polyglot.png');
   await previewFromTree(win, 'hostile.svg');
   const pdf = await previewFromTree(win, 'hostile.pdf');

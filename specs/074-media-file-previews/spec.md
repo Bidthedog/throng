@@ -714,7 +714,7 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
   **Fit page width**, **Zoom In**, **Zoom 100%**, **Zoom Out** — as themeable icon controls with the fading
   zoom percentage, as a picture preview does (FR-030, FR-033). Fit sets the widest page across the panel,
   ~~never enlarged past 100%~~ *(second round, 2026-11-19: Fit FILLS the width, enlarging a page narrower
-  than the panel; in Two Pages, two pages fill it — FR-062c)*, and is the view a PDF opens in. The panel's zoom chords and Ctrl+wheel drive
+  than the panel; in Two Pages, two pages fill it — FR-062c; 2026-11-20: however narrow the panel, below the zoom steps' 10% floor too, and a step out from there never makes the page larger)*, and is the view a PDF opens in. The panel's zoom chords and Ctrl+wheel drive
   this view (the reset is Fit), as they drive a drawing that fills its panel; a step keeps the point under
   the pointer, or at the centre, where it is. Pages are re-rendered sharp at every scale (FR-062).
 - **FR-062b**: *(2026-11-19.)* In a PDF Preview, the preview's Go to command (`preview.goToHeading`,
