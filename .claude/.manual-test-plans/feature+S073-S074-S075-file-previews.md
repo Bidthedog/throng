@@ -708,7 +708,7 @@ Paths: `packages/ui/src/renderer/print-preview/**`, `packages/ui/src/renderer/pr
 1g. Click another application's window. Print Preview stays in front of it.
 1h. Set Margins to Custom, untick Fit to page width, set Scale to Custom and Pages to a range, then shrink the window as small as it goes. Every setting stays visible and the settings pane shows no scrollbar in either direction.
 1i. In a dark theme, open Print Preview. The page is white edge to edge, with a dashed outline where the margins are.
-1j. Set Margins to Custom. The four margin boxes sit round a small white page, one at each edge, each followed by "mm". Change one; the dashed outline moves to match.
+1j. Set Margins to Custom. The four margin boxes sit round a white page, one at each edge. The top and bottom boxes are followed by "mm"; the left and right boxes have "mm" underneath them. The gap between the page and each box is the same on all four sides. Change one; the dashed outline moves to match.
 1k. Untick Fit to page width. Scale offers 25 % to 200 % and Custom; choose 150 % and the page relays out; choose Custom and type 137 into the box that appears.
 1l. Type "abc" into Copies and wait a moment. The box is outlined red and Print is disabled; type 2 and both clear.
 1m. The title bar shows Close only — no maximise or restore.
