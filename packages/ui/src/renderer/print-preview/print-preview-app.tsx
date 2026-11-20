@@ -92,21 +92,33 @@ function takesKeys(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.matches('input, select, textarea') || target.isContentEditable);
 }
 
-/** The margins drawing's longer side, in em: the page drawn at the paper's shape within it. */
-const SHEET_LONG_EM = 7;
+/**
+ * The margins drawing's page, in em: its longer side, and the least height it may have. FR-069 (pipeline 44791444200):
+ * at 7em the drawing pushed the settings pane 33 px past the window's minimum size; at 5em, with the pane's rows
+ * tightened, it fits with 24 px to spare (measured at 640 × 680 in Chromium, every paper and orientation).
+ */
+const SHEET_LONG_EM = 5;
+/** A side margin's box and its "mm" below it stand about 3.3em: a page shorter than that leaves an uneven gap. */
+const SHEET_MIN_HEIGHT_EM = 3.5;
 
 /**
  * 075 FR-068b (the maintainer, 2026-11-20: "When 'landscape' is selected, the example page for margins should switch
  * to landscape") — the drawn page in the paper's proportions, turned for the orientation, its longer side
- * {@link SHEET_LONG_EM}. Its shorter side stays wider than a margin box and taller than a side box for every paper
- * offered, so the page still fills its cell and the gap round it stays even.
+ * {@link SHEET_LONG_EM}, and never shorter than a side box ({@link SHEET_MIN_HEIGHT_EM}: a landscape Legal page grows
+ * sideways, where there is room, rather than leaving a gap below it). Its width stays wider than a margin box for
+ * every paper offered, so the page fills its cell and the gap round it stays even.
  */
-function sheetSize(settings: PrintSettings): CSSProperties {
+export function sheetSizeEm(settings: Pick<PrintSettings, 'pageSize' | 'orientation'>): { width: number; height: number } {
   const { width, height } = paperSizeMm(settings.pageSize, settings.orientation);
-  const long = Math.max(width, height);
+  const scale = Math.max(SHEET_LONG_EM / Math.max(width, height), SHEET_MIN_HEIGHT_EM / height);
+  return { width: width * scale, height: height * scale };
+}
+
+function sheetSize(settings: PrintSettings): CSSProperties {
+  const { width, height } = sheetSizeEm(settings);
   return {
-    '--print-sheet-width': `${((width / long) * SHEET_LONG_EM).toFixed(3)}em`,
-    '--print-sheet-height': `${((height / long) * SHEET_LONG_EM).toFixed(3)}em`,
+    '--print-sheet-width': `${width.toFixed(3)}em`,
+    '--print-sheet-height': `${height.toFixed(3)}em`,
   } as CSSProperties;
 }
 

@@ -29,7 +29,10 @@ import { createHtmlExporter } from '../../src/renderer/preview/providers/markdow
 /** 054 T040 — jsdom has no canvas: the PNG rasteriser is injected as this fixed image. */
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const rasterise = vi.hoisted(() => vi.fn());
-vi.mock('../../src/renderer/preview/diagram/rasterise.js', () => ({ rasteriseSvg: rasterise }));
+vi.mock('../../src/renderer/preview/diagram/rasterise.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/renderer/preview/diagram/rasterise.js')>()),
+  rasteriseSvg: rasterise,
+}));
 rasterise.mockImplementation(() => Promise.resolve(PNG));
 import { createPreviewProviderRegistry } from '@throng/core';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';

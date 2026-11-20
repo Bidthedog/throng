@@ -3,9 +3,9 @@ import { createElement } from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { DEFAULT_PRINT_SETTINGS, formatGrouped, type PrintJobView, type PrintSettings } from '@throng/core';
+import { DEFAULT_PRINT_SETTINGS, PRINT_PAGE_SIZES, formatGrouped, type PrintJobView, type PrintSettings } from '@throng/core';
 import type { PrintPages } from '../../src/renderer/print-preview/print-pages.js';
-import { PRINTER_REFRESH_MS, PrintPreview, RENDER_DEBOUNCE_MS, VALIDATE_IDLE_MS } from '../../src/renderer/print-preview/print-preview-app.js';
+import { PRINTER_REFRESH_MS, PrintPreview, RENDER_DEBOUNCE_MS, VALIDATE_IDLE_MS, sheetSizeEm } from '../../src/renderer/print-preview/print-preview-app.js';
 
 /** PDF.js stands outside jsdom: the window's pages module is a fake whose draws the test can hold (074's pattern). */
 const pdf = vi.hoisted(() => ({
@@ -446,6 +446,24 @@ describe('the settings form (FR-066, FR-069; 2026-11-20)', () => {
     // 18:10 — its size is the paper's, turned for the orientation (set inline, below).
     expect(sheet).toMatch(/width:\s*var\(--print-sheet-width\)/);
     expect(sheet).toMatch(/height:\s*var\(--print-sheet-height\)/);
+  });
+
+  /*
+   * FR-069 (pipeline 44791444200) — the drawn page is what decides whether the settings pane fits at the window's
+   * minimum size: at a 7em long side it overflowed by 33 px. Measured in Chromium at 640 × 680, a 5em long side fits
+   * with 24 px to spare for every paper and orientation, and keeps the four gaps even only while the page is at least
+   * as tall as a side box (3.5em). jsdom lays nothing out, so the bounds are pinned here; print-preview.e2e measures.
+   */
+  it('keeps the drawn page within the height the pane has, and never shorter than a side box (FR-069, FR-068b)', () => {
+    for (const pageSize of PRINT_PAGE_SIZES) {
+      for (const orientation of ['portrait', 'landscape'] as const) {
+        const { width, height } = sheetSizeEm({ pageSize, orientation });
+        expect(height, `${pageSize} ${orientation}`).toBeLessThanOrEqual(5.001);
+        expect(height, `${pageSize} ${orientation}`).toBeGreaterThanOrEqual(3.499);
+        // Wider than a margin box, so the top and bottom boxes never stand wider than the page.
+        expect(width, `${pageSize} ${orientation}`).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 
   // The maintainer, 2026-11-20 18:10 — "When 'landscape' is selected, the example page for margins should switch to
