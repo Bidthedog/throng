@@ -587,7 +587,7 @@ whole machine; memory is a share of installed RAM.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Capture interval | `resourceMonitor.captureIntervalMs` | 2 s (2,000 ms) | 2 – 60 s, step 1 s | How often throng measures itself. A longer history needs a slower capture: up to 5 minutes allows 2 s, up to 10 minutes 5 s, up to 20 minutes 15 s, up to 30 minutes 30 s. A faster value than the history allows is raised, and Preferences says so beside the field. Also changeable from the monitor's toolbar. |
+| Capture interval | `resourceMonitor.captureIntervalMs` | 2 s (2,000 ms) | 2 – 60 s, step 1 s | How often throng measures itself. A longer history needs a slower capture, so the monitor never keeps more than about 150 points for a process: the longer the history window, the slower the fastest capture it allows. A faster value than the history allows is raised, and Preferences says beside the field what it was raised to and why. Also changeable from the monitor's toolbar, which offers only the intervals the history allows. |
 | History window | `resourceMonitor.historyMs` | 5 min (300,000 ms) | 1 – 30 min, step 1 min | How much history the monitor keeps per process while it is open. Nothing is kept once it closes. |
 | CPU warning | `resourceMonitor.cpuWarningPercent` | 50% | 1 – 100%, step 1% | The CPU share at which a figure shows the warning colour. Kept below the critical level. |
 | CPU critical | `resourceMonitor.cpuCriticalPercent` | 80% | 1 – 100%, step 1% | The CPU share at which a figure shows the critical colour. |

@@ -134,6 +134,6 @@ ends with its covering tests green (`td run --scope file`).
 - [x] T032 Make US1/AC3 and data-model.md agree with the off-stop size rounding the code and its test use (two decimals, `11.77 MB`), per US1/AC3 (contradicts)
 - [x] T033 Draw a count's, a column's and a character limit's unit in the singular at 1 ("1 entry", "1 column"), per FR-013 (partial)
 - [x] T034 Fix the docs that drifted from the descriptors: units still in labels, missing steps on count, day and percent rows, and the sentence that says a typed value applies after a pause, per FR-019 and FR-009 (partial)
-- [ ] T035 Replace the history-to-interval band table copied into docs/preferences.md with a description of the rule the code owns, per FR-014 (partial)
+- [x] T035 Replace the history-to-interval band table copied into docs/preferences.md with a description of the rule the code owns, per FR-014 (partial)
 - [ ] T036 Add traced tasks for FR-021 to FR-027 and bring plan.md up to date (the Preferences toast of FR-024, shipped-defaults version 38), per plan (missing)
 - [ ] T037 Correct the stale references: `resourceMonitor.captureIntervalSeconds` in the config-preferences skill's constitution reference, and the `formatGrouped` comment in form-controls.tsx, per FR-001 and FR-019 (partial)
