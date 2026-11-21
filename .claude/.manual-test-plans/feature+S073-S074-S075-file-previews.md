@@ -1079,6 +1079,7 @@ Paths: `packages/ui/src/renderer/common/no-middle-paste.ts`, `packages/ui/src/re
 9. Open an HTML preview of a page with a text box, click into the text box, and middle-click it. Nothing is pasted.
 10. Hold the middle button over a Mermaid diagram and drag: the diagram pans with the move cursor. Do the same in a PDF preview: the pages scroll with the pointer.
 11. Ctrl+middle-click a panel that is zoomed in: its zoom resets to 100%, and nothing is pasted.
+12. In a terminal, run `tmux` with `set -g mouse on` (or vim with `:set mouse=a`), put some text in its paste buffer, then middle-click in the pane. Nothing is pasted. Ctrl+middle-click over the same terminal still resets its zoom.
 
 ### Negative cases
 - No middle-click anywhere in throng starts Chromium's autoscroll (the round scroll icon).
