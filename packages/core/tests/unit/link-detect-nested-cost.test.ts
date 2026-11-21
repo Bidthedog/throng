@@ -11,6 +11,10 @@ import { detectPathCandidates } from '../../src/links/detect.js';
  *
  * Layer: unit — detection is a pure function of the line. The bound is a RATIO of two scans timed the same way, so a
  * busy machine slows both sides alike: each side is this thread's CPU time, the fastest of three passes.
+ *
+ * Each pass runs scans until the clock has moved SAMPLE_MS, never a fixed count: Windows reports thread CPU time in
+ * ~15.6 ms ticks, so a fixed 40 flat scans (about 1 ms of work) read as 0 ms there and the ratio as Infinity
+ * (pipeline 44889368543). Measured over at least 200 ms, a tick is under 8% of either side.
  */
 const record = (i: number): string =>
   `{ ""k"": ${i}, ""v"": ""quokka dolor aliqua labore ${i}"", ""n"": 0.${(i * 7919) % 10_000}, ""tags"": [ ""a"", ""b"" ] }`;
@@ -23,13 +27,19 @@ const cpuMs = (): number => {
   const u = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : null;
   return u ? (u.user + u.system) / 1000 : performance.now();
 };
+const SAMPLE_MS = 200;
 function msPerScan(line: string): number {
-  const RUNS = 40;
   let best = Number.POSITIVE_INFINITY;
   for (let sample = 0; sample < 3; sample += 1) {
     const started = cpuMs();
-    for (let r = 0; r < RUNS; r += 1) detectPathCandidates(line, []);
-    best = Math.min(best, (cpuMs() - started) / RUNS);
+    let runs = 0;
+    let elapsed = 0;
+    while (elapsed < SAMPLE_MS) {
+      for (let r = 0; r < 20; r += 1) detectPathCandidates(line, []);
+      runs += 20;
+      elapsed = cpuMs() - started;
+    }
+    best = Math.min(best, elapsed / runs);
   }
   return best;
 }
@@ -42,6 +52,8 @@ describe('path detection on a line of nested brackets (045 FR-188f, Principle XI
     msPerScan(FLAT);
     const nested = msPerScan(NESTED);
     const flat = msPerScan(FLAT);
+    // A zero would make the ratio Infinity (or NaN), whatever the scan cost: the clock, not the code.
+    expect(flat, 'the flat scan measured as no time at all').toBeGreaterThan(0);
     expect(nested / flat, `nested ${nested.toFixed(3)} ms, flat ${flat.toFixed(3)} ms per scan`).toBeLessThanOrEqual(2);
   });
 });
