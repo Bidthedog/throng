@@ -238,6 +238,14 @@ describe('closing (FR-070)', () => {
     expect(controller.openJobId).toBeNull();
   });
 
+  it('saves the settings the window last told it, when the window is closed from outside (FR-070)', async () => {
+    const settings = await openAndShow();
+    controller.remember('job-1', { ...settings, copies: 7 });
+    windows[0]!.close(); // the title bar's close, or the OS's
+    await vi.waitFor(() => expect(controller.openJobId).toBeNull());
+    await vi.waitFor(async () => expect((await store.read(engine.printerList)).copies).toBe(7));
+  });
+
   it('frees a host that finishes loading after the window closed', async () => {
     // Escape while the pages are still being laid out: the host arrives after the job is gone.
     const held: (() => void)[] = [];

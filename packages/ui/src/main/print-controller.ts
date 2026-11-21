@@ -224,6 +224,16 @@ export class PrintController {
   }
 
   /** Save `settings` and close (Close, Escape). */
+  /**
+   * FR-070 — the window's settings as they stand, sent on every change. The window can close without saying so (its
+   * title bar's close, the OS's), and `finish` then saves these: a change still inside the layout's debounce, or
+   * made while the page range names no pages, is kept rather than lost to the last settings laid out.
+   */
+  remember(jobId: string, settings: PrintSettings): void {
+    const job = this.live(jobId);
+    if (job !== null) job.settings = settings;
+  }
+
   close(jobId: string, settings: PrintSettings): void {
     const job = this.live(jobId);
     if (job === null) return;

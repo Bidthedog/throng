@@ -78,6 +78,11 @@ export function registerPrintIpc(controller: PrintController): void {
     const settings = await settingsOf(jobId, raw);
     return settings === null ? { ok: false, cause: 'This print job has closed.' } : controller.print(jobId, settings, sheet);
   });
+  ipcMain.handle('throng:print:remember', async (_event, jobId: unknown, raw: unknown) => {
+    if (typeof jobId !== 'string') return;
+    const settings = await settingsOf(jobId, raw);
+    if (settings !== null) controller.remember(jobId, settings);
+  });
   ipcMain.handle('throng:print:close', async (_event, jobId: unknown, raw: unknown) => {
     if (typeof jobId !== 'string') return;
     const settings = await settingsOf(jobId, raw);

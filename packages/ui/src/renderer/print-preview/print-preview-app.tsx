@@ -246,6 +246,12 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
     [],
   );
 
+  // FR-070 — main holds the settings as they stand, at once: the title bar's close (or the OS's) tells it nothing,
+  // and a change still inside the layout's debounce, or one that names no pages, has not been laid out.
+  useEffect(() => {
+    if (settings !== null) void bridge?.remember?.(jobId, settings);
+  }, [bridge, jobId, settings]);
+
   // Lay the pages out again once the controls have been still for a moment.
   useEffect(() => {
     if (settings === null || bridge === undefined) return;

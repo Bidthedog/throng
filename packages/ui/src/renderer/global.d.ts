@@ -751,6 +751,8 @@ declare global {
         ) => Promise<import('@throng/core').PrintSendResult>;
         /** Save `settings` and close. */
         close: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<void>;
+        /** 075 FR-070 — the settings as they stand, so a close main is not told about still saves them. */
+        remember: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<void>;
       };
       // 045 — file links (#394). Every call carries the link TEXT and the panel it was seen in, and
       // never a resolved path: main re-resolves, derives the owning project from `panelId`, and

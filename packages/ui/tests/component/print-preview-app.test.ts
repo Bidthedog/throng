@@ -57,6 +57,7 @@ function bridge(job: PrintJobView = JOB) {
     render: vi.fn(async (_id: string, _s: PrintSettings): Promise<RenderAnswer> => ({ pageCount: 2, pdf: pdfOf(2) })),
     print: vi.fn(async (_id: string, _s: PrintSettings, _sheet?: unknown) => ({ ok: true }) as { ok: true } | { ok: false; cause: string }),
     close: vi.fn(async () => undefined),
+    remember: vi.fn(async (_id: string, _s: PrintSettings) => undefined),
     printers: vi.fn(async (_id: string) => job.printers),
   };
 }
@@ -253,6 +254,14 @@ describe('Print Preview', () => {
     expect(screen.getByTestId('window-close')).toBeTruthy();
     expect(screen.queryByTestId('window-max')).toBeNull();
     expect(screen.queryByTestId('window-min')).toBeNull();
+  });
+
+  it('tells main every change at once, so a close from the title bar keeps it (FR-070)', async () => {
+    const b = await mount();
+    // Inside the layout's debounce: nothing has been laid out with it yet, so main has not seen it any other way.
+    fireEvent.change(screen.getByTestId('print-orientation'), { target: { value: 'landscape' } });
+    expect(b.render).not.toHaveBeenCalledWith('job-1', expect.objectContaining({ orientation: 'landscape' }));
+    expect(b.remember).toHaveBeenLastCalledWith('job-1', expect.objectContaining({ orientation: 'landscape' }));
   });
 
   it('closes on Escape with the current settings (FR-071)', async () => {
