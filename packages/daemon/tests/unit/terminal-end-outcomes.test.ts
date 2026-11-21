@@ -415,6 +415,34 @@ describe('051 FR-015 / FR-015a — shutdown', () => {
     expect(released).toEqual(['C:/proj']);
   });
 
+  /*
+   * An escalated end whose forced end reports nothing left running, but whose shell never reports an exit — the
+   * de-elevated agent gone silent, so its forced end times out answering "no survivors" (pipeline 44893096888). The
+   * terminal was answered as killed, yet the session lingered as running and its project folder stayed locked until
+   * the daemon restarted.
+   */
+  it('a Terminate all whose forced end leaves nothing running but reports no exit frees the folder and the session', async () => {
+    vi.useFakeTimers();
+    try {
+      const releases: string[] = [];
+      const lock = { acquire: async (path: string) => ({ path }), release: async (h: { path: string }) => void releases.push(h.path) };
+      const { host, call, attach, sessions, exits } = makeService(lock);
+      await attach('a');
+      const a = host.started[0]!.pid;
+      const done = call('terminal.killAll', { projectId: 'proj', escalate: true });
+      await vi.advanceTimersByTimeAsync(0);
+      host.fail(a, 'the terminal agent did not answer within 6 seconds');
+      await vi.advanceTimersByTimeAsync(END_SETTLE_GRACE_MS + 100);
+      await expect(done).resolves.toMatchObject({ killed: ['a'], failed: [] });
+      expect(host.forceEnds).toEqual([a]);
+      expect(releases, 'the folder lock is still held').toEqual(['C:/proj']);
+      expect(await sessions(), 'the session lingers').toEqual([]);
+      expect(exits).toEqual([{ panelId: 'a', unexpected: false }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('escalates an end that was already in flight when shutdown began, if it then fails', async () => {
     const { host, service, call, attach } = makeService();
     await attach('a');

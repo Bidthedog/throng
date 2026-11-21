@@ -276,6 +276,8 @@ interface Session {
   superseded: boolean;
   /** 051 FR-015a — a failure of the in-flight end is escalated rather than left running. */
   escalate: boolean;
+  /** #701 — told once when the exit is observed, so an escalated end can wait for it. */
+  onExited: (() => void) | null;
   /** Display labels for the app-close warning (refreshed on reattach). */
   meta?: TerminalMeta;
   readonly disposers: Array<() => void>;
@@ -846,7 +848,9 @@ export class TerminalService {
           for (const { pid, name } of survivors) {
             console.warn(`[terminal] ${session.panelId}: still running after a forced end: pid ${pid} (${name || 'unknown'})`);
           }
-          return survivors.length > 0 ? `${reason}; ${survivors.length} of its processes could not be ended` : null;
+          if (survivors.length > 0) return `${reason}; ${survivors.length} of its processes could not be ended`;
+          await this.settleUnreportedEnd(session);
+          return null;
         }
         // FR-005: an ordinary terminal again — once an exit from the end's own late kill has had
         // its chance to arrive (review finding 6).
@@ -862,6 +866,33 @@ export class TerminalService {
     });
     session.ending = settled;
     return this.track(settled);
+  }
+
+  /**
+   * #701 — a forced end that left nothing running, whose exit has not been observed: the host may simply not have
+   * reported it (a de-elevated agent gone silent answers its forced end with no survivors and never sends the exit).
+   * Wait the settle grace for the exit; if none comes, end the session here as its exit would, so its folder lock is
+   * released and it leaves the list. Otherwise the terminal is answered as ended yet keeps its project folder locked
+   * (on Windows, until the daemon restarts) and stays listed as running.
+   */
+  private async settleUnreportedEnd(session: Session): Promise<void> {
+    // A function, not a narrowed read: the exit may land while this awaits.
+    const exited = (): boolean => session.status === 'exited';
+    if (exited()) return;
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        session.onExited = null;
+        resolve();
+      }, END_SETTLE_GRACE_MS);
+      timer.unref?.();
+      session.onExited = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
+    if (exited()) return;
+    console.warn(`[terminal] ${session.panelId}: its host reported no exit after a forced end that left nothing running; ending it here`);
+    this.handleExit(session, { code: null });
   }
 
   private async attach(rawParams: unknown): Promise<TerminalAttachResult> {
@@ -1063,6 +1094,7 @@ export class TerminalService {
       ending: null,
       superseded: false,
       escalate: false,
+      onExited: null,
       meta: params.meta,
       disposers: [],
       input: createMouseReportCoalescer((data) => host.write(handle, data)),
@@ -1344,6 +1376,8 @@ export class TerminalService {
     if (session.status === 'exited') return; // already torn down
     session.status = 'exited';
     session.exit = exit;
+    session.onExited?.();
+    session.onExited = null;
     const current = this.sessions.get(session.panelId) === session;
     if (current) this.lastCwd.delete(session.panelId); // stop reporting a dead shell's cwd
     if (current) this.attention.stopActivity(session.panelId); // 057: a dead shell goes neither quiet nor noisy
