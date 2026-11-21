@@ -404,6 +404,28 @@ with the system's own tools, and any figure Linux cannot supply shows as unavail
 - **FR-050**: macOS implementations MUST NOT be built here. Selecting implementations on an unimplemented platform MUST
   report that the platform is unsupported rather than silently using another platform's implementation.
 
+**Watching ignored folders** *(added 2026-11-21, the maintainer's ruling on #274: "Ignored folders should not be indexed
+(unless they are unignored by the user)")*
+
+- **FR-051**: A project's file watch MUST NOT read or watch inside a folder that every reader of that watch ignores,
+  and MUST drop events from inside such a folder before they are coalesced, so they cost no report and cannot make a
+  report incomplete. A folder is ignored for the explorer tree and the file index by the explorer's exclusion globs
+  and the project's hidden set, and for Find in Files by its own lists (060 FR-025) as they stand with the global list
+  on. Unignoring a folder — editing either list, or Quick Open's "show hidden" (033 FR-069) — MUST widen the same
+  watch to it without opening a second one, and the watch MUST narrow again when the folder is ignored once more. A
+  reader of a folder inside an ignored one (an editor or preview open on a file in `node_modules`) MUST still be told
+  when that folder's files change. The folder's own creation, rename and removal are still reported. On Linux the watch
+  is built folder by folder (#585) and so does not descend into an ignored folder; Windows and macOS watch natively,
+  cannot leave a folder out, and drop its events instead.
+  - *Supersedes* the per-directory watch's contract as #585 shipped it, which no spec recorded: "every change anywhere
+    under the root" (`directory-tree-watch.ts`). That cost a `readdir` and an inotify watch for every folder of
+    `node_modules` and `.git` in every open project, though nothing showed or indexed them. #585's own requirement — a
+    bulk delete costs the size of what was deleted — is unchanged.
+  - *Not yet*: `.gitignore` is not an ignore source. Whether it should be is with the maintainer; the exclusion is a
+    predicate a reader supplies, so a gitignore source joins it as one more input.
+  - *Known gap*: a Find in Files run with its global exclusion list switched off scans folders the default lists ignore,
+    and is not told about changes inside them while it is open.
+
 ### Out of Scope
 
 - **Linux packaging, installers, auto-update, desktop entries and the release pipeline**:

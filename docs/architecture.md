@@ -638,7 +638,8 @@ copy, delete to the Recycle Bin, and undo.
   `core/src/fs/path-id.ts` and `core/src/fileop-undo/undo-stack.ts`.
 - Main: `files-service.ts`, `files-ipc.ts`, `node-file-system.ts` (the `IFileSystem` binding,
   with the Recycle Bin), `node-file-watcher.ts`, `shared-file-watcher.ts` (one watch per folder,
-  shared by the tree, the file index, editors and previews), `explorer-watcher.ts`, `recycle-bin-restore.ts`,
+  shared by the tree, the file index, editors and previews, leaving out only folders every reader ignores;
+  `project-watch-exclusion.ts` says which those are for the tree and Find in Files), `explorer-watcher.ts`, `recycle-bin-restore.ts`,
   `undo-service.ts` and `in-app-moves.ts`; `file-clipboard.ts`, `transfer-service.ts` and
   `transfer-ipc.ts` for the clipboard and pastes.
 - Renderer: `renderer/explorer/`, with the tree on react-arborist, its drags driven by mouse events through a react-dnd backend of throng's own (`tree-pointer-backend.ts`).

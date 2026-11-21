@@ -169,6 +169,7 @@ import { registerLinkIpc } from './link-ipc.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { SharedFileWatcher } from './shared-file-watcher.js';
+import { projectWatchLeavesOut } from './project-watch-exclusion.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
 import { reconnectWatcher } from './reconnect-watcher.js';
 import { createAppShellIntegration } from './electron-shell-integration.js';
@@ -1714,6 +1715,27 @@ if (isPrimaryInstance)
    * events and triggering its own re-read.
    */
   const projectWatcher = new SharedFileWatcher(new NodeFileWatcher(150));
+  /*
+   * 062 FR-051 — what the project watch may leave out: folders both the tree and Find in Files ignore. Compiled once
+   * per root and forgotten whenever an input changes (the settings, a project's hidden set or search list), at which
+   * point the watch is re-asked in place. `projectsByRoot` is read at call time, once a window has asked for a root.
+   */
+  const watchExclusions = new Map<string, (relPath: string) => boolean>();
+  const projectWatchExclusion = (absRoot: string): ((relPath: string) => boolean) => {
+    const key = normaliseForCompare(absRoot);
+    let compiled = watchExclusions.get(key);
+    if (!compiled) {
+      const project = projectsByRoot.get(key);
+      compiled = projectWatchLeavesOut({
+        treeGlobs: currentSettings.explorer.excludeGlobs,
+        hiddenPaths: project?.hiddenPaths ?? [],
+        searchGlobs: currentSettings.search.inFiles.excludeGlobs,
+        projectSearchGlobs: project?.searchExcludeGlobs ?? [],
+      });
+      watchExclusions.set(key, compiled);
+    }
+    return compiled;
+  };
   const explorerWatcher = new ExplorerWatcher(
     projectWatcher,
     (evt, absRoot, relPaths) => {
@@ -1742,6 +1764,7 @@ if (isPrimaryInstance)
     (root, reason) => {
       broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:watchFailed', { root, reason });
     },
+    projectWatchExclusion,
   );
   const filesService = new FilesService(fileSystem, shellIntegration);
   // FR-018 — a raw error that a classified message replaces still reaches the log, so it outlives
@@ -1875,6 +1898,9 @@ if (isPrimaryInstance)
       // its hidden set going away is a change like any other.
       if (gone.hiddenPaths.length > 0) changed.push(gone.rootFolder);
     }
+    // 062 FR-051 — a project's hidden set or search list may have changed: the project watch re-asks what it may leave out.
+    watchExclusions.clear();
+    explorerWatcher.rescope();
     // 050 FR-011 — a project removed or re-rooted empties a clipboard holding its items. Here, inside
     // the refresh, so EVERY caller's fresh list is checked — and only a list the daemon actually gave.
     fileClipboard.retainProjects(new Map(projects.map((p) => [p.id, p.rootFolder])));
@@ -1944,6 +1970,14 @@ if (isPrimaryInstance)
    * is precisely the divergence "the same glob list and the same hidden set the tree obeys" denies.
    */
   onSettingsChanged.push((previous, next) => {
+    // 062 FR-051 — the project watch leaves out what the tree AND Find in Files ignore, so it follows either list.
+    if (
+      !sameHidden(previous.explorer.excludeGlobs, next.explorer.excludeGlobs) ||
+      !sameHidden(previous.search.inFiles.excludeGlobs, next.search.inFiles.excludeGlobs)
+    ) {
+      watchExclusions.clear();
+      explorerWatcher.rescope();
+    }
     if (sameHidden(previous.explorer.excludeGlobs, next.explorer.excludeGlobs)) return;
     projectFileIndex.refresh();
   });

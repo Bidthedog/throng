@@ -42,8 +42,9 @@ The middle mouse button pastes nothing anywhere in throng, terminals included, u
 - Deleted files go to the Trash. Undo restores them from your home Trash or the Trash of the disk they were on.
 - An open folder is not protected from being renamed or deleted by another program, because Linux has no way to hold one.
   throng notices and reports it instead.
-- A project past the machine's limit on watched folders stops updating live, and the notice says so. To raise the limit:
-  `sudo sysctl fs.inotify.max_user_watches=524288`.
+- A project past the machine's limit on watched folders stops updating live, and the notice says so. Folders the
+  explorer and Find in Files both ignore, such as `node_modules` and `.git`, are not watched and do not count towards
+  it. To raise the limit: `sudo sysctl fs.inotify.max_user_watches=524288`.
 - **Open as throng project** is a folder menu item in Nemo and Dolphin. GNOME Files lists it under **Open With** instead.
 - The Properties dialog has no button for the operating system's own Properties, because Linux has no standard one. It shows the owner, group and permissions instead.
 - A file is treated as a program by its extension, as on Windows, so running a file with no extension is not warned about.

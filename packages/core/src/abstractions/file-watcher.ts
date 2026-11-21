@@ -20,6 +20,31 @@ export interface WatchOptions {
    * is not told when re-establishment gives up.
    */
   onFailed?: (reason: string) => void;
+  /**
+   * 062 FR-051 — the folders under the watched directory this reader does not need watched: what the project ignores
+   * (the explorer's exclusion globs, its own hidden set), unless the user has unignored them.
+   *
+   * Asked with a folder's path RELATIVE to the watched directory, POSIX-separated, and asked again whenever the watch
+   * decides whether to follow a folder — so it is LIVE: a reader whose answer changes calls {@link rescopeWatch} on
+   * its handle, and the watch follows the new answer without being reopened. A true answer covers the folder and
+   * everything under it. A watch built folder by folder (Linux) does not descend into such a folder, and every watch
+   * drops events from inside one; an event naming the folder itself is still reported.
+   *
+   * Absent: the reader states nothing. It is still told about its own folder and everything in it, but it may be
+   * served by a watch that leaves other folders out.
+   */
+  excluded?: (relPath: string) => boolean;
+}
+
+/** A watch whose {@link WatchOptions.excluded} answer can change while it is open (062 FR-051). */
+export interface RescopableWatch extends Disposable {
+  /** Re-ask the exclusion: follow folders it now includes, stop following folders it now excludes. */
+  rescope(): void;
+}
+
+/** Re-ask a watch's exclusion, when the handle supports it; a watch that cannot leave folders out ignores it. */
+export function rescopeWatch(handle: Disposable | null | undefined): void {
+  (handle as Partial<RescopableWatch> | null | undefined)?.rescope?.();
 }
 
 /**

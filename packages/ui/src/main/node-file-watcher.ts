@@ -7,8 +7,8 @@
  * IFileWatcher abstraction (Principle II).
  */
 import { existsSync, unwatchFile, watch, watchFile, type FSWatcher } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { logExpected, type Disposable, type IFileWatcher, type WatchBatch, type WatchOptions } from '@throng/core';
+import { dirname, join, relative, sep } from 'node:path';
+import { logExpected, type IFileWatcher, type RescopableWatch, type WatchBatch, type WatchOptions } from '@throng/core';
 import { watchDirectoryTree, type TreeWatch, type TreeWatchListener } from './directory-tree-watch.js';
 
 /**
@@ -31,8 +31,10 @@ function openRecursiveWatch(
   dir: string,
   listener: TreeWatchListener,
   onError: (error: NodeJS.ErrnoException) => void,
+  excluded?: (relPath: string) => boolean,
 ): TreeWatch {
-  if (strategy === 'per-directory') return watchDirectoryTree(dir, listener, onError);
+  // A native recursive watch cannot leave a folder out; its events from inside one are dropped instead (062 FR-051).
+  if (strategy === 'per-directory') return watchDirectoryTree(dir, listener, onError, excluded);
   const created = watch(dir, { recursive: true }, listener);
   created.on('error', onError);
   return created;
@@ -121,7 +123,10 @@ export class NodeFileWatcher implements IFileWatcher {
     dir: string,
     onChange: (path: string, batch?: WatchBatch) => void,
     options?: WatchOptions,
-  ): Disposable {
+  ): RescopableWatch {
+    const excluded = options?.excluded;
+    /** Events dropped because they came from inside an ignored folder; still counted towards the storm check. */
+    let ignoredEvents = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let lastPath = dir;
@@ -167,8 +172,42 @@ export class NodeFileWatcher implements IFileWatcher {
       onChange(lastPath, { paths, complete });
     };
 
+    /**
+     * Is `path` inside a folder the reader ignores (062 FR-051)? Only a folder ABOVE the path counts: the ignored
+     * folder's own appearance or removal is news to the folder it sits in. Dropped here, before coalescing, an
+     * install's thousands of events neither cost a report nor push a burst past `MAX_BATCH_PATHS` — so they cannot
+     * turn a burst that also touched a real file into an incomplete one, which would cost every reader a full re-read.
+     */
+    const insideExcluded = (path: string): boolean => {
+      if (excluded === undefined) return false;
+      const rel = relative(dir, path);
+      if (rel === '' || rel.startsWith('..')) return false;
+      const segments = rel.split(sep);
+      for (let i = 1; i < segments.length; i += 1) {
+        if (excluded(segments.slice(0, i).join('/'))) return true;
+      }
+      return false;
+    };
+
+    /** The directory has gone under a native watch, which says so only as an event storm (027 / #201; see below). */
+    const stormEnded = (): void => {
+      watcher?.close();
+      watcher = null;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      resetBurst();
+      waitForPath();
+      reportGone();
+    };
+
     const onEvent = (_event: string, filename: string | Buffer | null): void => {
       if (disposed) return;
+      if (filename && insideExcluded(join(dir, filename.toString()))) {
+        // The root's removal on Windows can show only as a storm of events from inside it, node_modules included.
+        ignoredEvents += 1;
+        if (ignoredEvents % STORM_CHECK_EVERY === 0 && !existsSync(dir)) stormEnded();
+        return;
+      }
       if (filename) {
         lastPath = join(dir, filename.toString());
         if (burstPaths.size < MAX_BATCH_PATHS) burstPaths.add(lastPath);
@@ -195,13 +234,7 @@ export class NodeFileWatcher implements IFileWatcher {
        */
       burstEvents += 1;
       if (burstEvents % STORM_CHECK_EVERY === 0 && !existsSync(dir)) {
-        watcher?.close();
-        watcher = null;
-        if (timer) clearTimeout(timer);
-        timer = null;
-        resetBurst();
-        waitForPath();
-        reportGone();
+        stormEnded();
         return;
       }
       // A delivered event proves this watch works, so the retry budget is spent, not consumed.
@@ -380,7 +413,11 @@ export class NodeFileWatcher implements IFileWatcher {
         // never installed as the live one.
         let created: TreeWatch | null = null;
         let failed = false;
-        created = openRecursiveWatch(this.recursiveStrategy, dir, onEvent, (error) => {
+        created = openRecursiveWatch(
+          this.recursiveStrategy,
+          dir,
+          onEvent,
+          (error) => {
           failed = true;
           if (disposed) return;
           created?.close();
@@ -394,7 +431,9 @@ export class NodeFileWatcher implements IFileWatcher {
             return;
           }
           scheduleRetry(error.code ?? error.message);
-        });
+          },
+          excluded,
+        );
         if (failed) return;
         watcher = created;
         if (this.guardRoot && this.recursiveStrategy === 'native') guardTheRoot();
@@ -423,6 +462,9 @@ export class NodeFileWatcher implements IFileWatcher {
     arm();
 
     return {
+      rescope: () => {
+        if (!disposed) watcher?.rescope?.();
+      },
       dispose: () => {
         // Latch FIRST: everything else checks it, so nothing armed below can fire afterwards.
         // Without this a re-establishment scheduled moments before disposal would quietly resume

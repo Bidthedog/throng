@@ -19,9 +19,15 @@
  *
  * Each event costs at most one `lstat`, and only for a `rename` of a name not already known to be a
  * watched directory (to learn whether a directory appeared).
+ *
+ * **It does not descend into a folder its caller ignores (062 FR-051).** A project's `node_modules` and `.git` hold
+ * most of its folders, and nothing in throng shows or indexes them unless the user unignores them; reading and
+ * watching every one of them cost a `readdir` and an inotify watch apiece, on every project opened. Such a folder's
+ * own appearance, rename and removal are still reported, by its parent's watch. `rescope()` follows a changed answer
+ * without reopening the watch: folders now ignored are let go, folders no longer ignored are walked and watched.
  */
 import { lstatSync, readdirSync, watch, type FSWatcher } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { logExpected } from '@throng/core';
 
 /** What a watch over a tree reports: the event and the changed path, relative to the root. */
@@ -30,6 +36,8 @@ export type TreeWatchListener = (event: string, filename: string | null) => void
 /** A live recursive watch. Closing it is idempotent. */
 export interface TreeWatch {
   close(): void;
+  /** Re-ask which folders are ignored (062 FR-051). Absent on a watch that cannot leave folders out. */
+  rescope?(): void;
 }
 
 interface WatchedDir {
@@ -52,11 +60,28 @@ export function watchDirectoryTree(
   rootPath: string,
   listener: TreeWatchListener,
   onError: (error: NodeJS.ErrnoException) => void,
+  /** A folder the caller ignores, root-relative and POSIX-separated: not descended into (062 FR-051). Asked live. */
+  excluded?: (relPath: string) => boolean,
 ): TreeWatch {
   /** Resolved once: children are keyed by `join`, which would not match a root spelled with a trailing separator. */
   const root = resolve(rootPath);
   const dirs = new Map<string, WatchedDir>();
+  /** Folders left unwatched because they are ignored, so `rescope` can find them again without listing anything. */
+  const skipped = new Set<string>();
   let closed = false;
+
+  const isExcluded = (dir: string): boolean =>
+    excluded !== undefined && dir !== root && excluded(relative(root, dir).split(sep).join('/'));
+
+  /** Watch `dir` and walk into it — unless it is ignored, in which case remember it and leave it be. */
+  const follow = (dir: string, announce: boolean): void => {
+    if (isExcluded(dir)) {
+      skipped.add(dir);
+      return;
+    }
+    skipped.delete(dir);
+    addDir(dir, announce);
+  };
 
   const fail = (error: NodeJS.ErrnoException): void => {
     if (closed) return;
@@ -114,7 +139,9 @@ export function watchDirectoryTree(
           // A watched directory was renamed or deleted (or replaced). Drop its branch if so.
           if (!isDirectory(child)) unwatch(child);
         } else if (isDirectory(child)) {
-          addDir(child, true); // a directory appeared
+          follow(child, true); // a directory appeared
+        } else {
+          skipped.delete(child); // an ignored folder that has gone
         }
       }
     }
@@ -212,7 +239,7 @@ export function watchDirectoryTree(
       if (closed) return;
       const child = join(dir, entry.name);
       if (announce) listener('rename', relative(root, child));
-      if (entry.isDirectory()) addDir(child, announce);
+      if (entry.isDirectory()) follow(child, announce);
     }
   }
 
@@ -221,8 +248,33 @@ export function watchDirectoryTree(
     closed = true;
     for (const node of dirs.values()) node.watcher.close();
     dirs.clear();
+    skipped.clear();
+  }
+
+  /**
+   * Follow a changed answer to "is this folder ignored?" (062 FR-051). Costs one question per folder watched or
+   * skipped, plus the walk of any folder now included; nothing already watched is listed again.
+   */
+  function rescope(): void {
+    if (closed || excluded === undefined) return;
+    for (const dir of [...dirs.keys()]) {
+      if (closed) return;
+      if (!dirs.has(dir) || !isExcluded(dir)) continue; // gone with an ancestor already let go, or still wanted
+      unwatch(dir);
+      skipped.add(dir);
+    }
+    for (const dir of [...skipped]) {
+      if (closed) return;
+      if (!dirs.has(dirname(dir))) {
+        skipped.delete(dir); // its parent is no longer followed; the parent's own walk will ask again
+        continue;
+      }
+      if (isExcluded(dir)) continue;
+      skipped.delete(dir);
+      if (isDirectory(dir)) addDir(dir, false);
+    }
   }
 
   addDir(root, false);
-  return { close };
+  return { close, rescope };
 }

@@ -37,6 +37,7 @@ import {
   hiddenPathGlobs,
   logExpected,
   normaliseForCompare,
+  rescopeWatch,
   toAbsPath,
   walkFiles,
   type Disposable,
@@ -104,8 +105,15 @@ interface Subscriber {
  * watch is the root's, held while any index of the root holds it; a signal or a failure goes to every index on it.
  */
 interface RootWatch {
+  /** The root as first spelled, for reading its hidden set. */
+  root: string;
   watch: Disposable | null;
   indices: Set<RootIndex>;
+  /**
+   * What the watch may leave out, compiled once per change of its inputs (062 FR-051): the same globs and hidden
+   * set the default index walks with. Null until first asked, and again after `refresh` says an input changed.
+   */
+  excluder: ((relPath: string) => boolean) | null;
 }
 
 interface RootIndex {
@@ -278,6 +286,12 @@ export class ProjectFileIndexService {
       if (index.status === 'ready') this.runReconcile(index);
       else if (index.watch) this.startWalk(index);
     }
+    // 062 FR-051 — the watch leaves out what the index ignores, so it follows the same change.
+    for (const [key, shared] of this.watches) {
+      if (target !== null && key !== target) continue;
+      shared.excluder = null;
+      rescopeWatch(shared.watch);
+    }
   }
 
   dispose(): void {
@@ -316,7 +330,7 @@ export class ProjectFileIndexService {
     const key = normaliseForCompare(index.root);
     let shared = this.watches.get(key);
     if (!shared) {
-      const created: RootWatch = { watch: null, indices: new Set() };
+      const created: RootWatch = { root: index.root, watch: null, indices: new Set(), excluder: null };
       shared = created;
       this.watches.set(key, created);
       created.watch = this.watcher.watch(
@@ -338,19 +352,36 @@ export class ProjectFileIndexService {
               this.onWatchFailed(each, reason);
             }
           },
+          excluded: (rel) => this.watchLeavesOut(created, rel),
         },
       );
     }
     const root = shared;
     root.indices.add(index);
+    // "Show hidden" unignores everything, so the root's one watch widens to cover it — in place (#274, FR-069c).
+    if (index.includeHidden) rescopeWatch(root.watch);
     index.watch = {
       dispose: () => {
-        if (!root.indices.delete(index) || root.indices.size > 0) return;
+        if (!root.indices.delete(index)) return;
+        if (root.indices.size > 0) {
+          if (index.includeHidden) rescopeWatch(root.watch); // and narrows again when it goes
+          return;
+        }
         if (this.watches.get(key) === root) this.watches.delete(key);
         root.watch?.dispose();
         root.watch = null;
       },
     };
+  }
+
+  /**
+   * May the root's watch leave the folder `rel` out (062 FR-051)? Not while any index of the root unignores
+   * everything; otherwise exactly what the default index ignores — the explorer's globs and the project's hidden set.
+   */
+  private watchLeavesOut(shared: RootWatch, rel: string): boolean {
+    for (const index of shared.indices) if (index.includeHidden) return false;
+    shared.excluder ??= compileExcluder([...this.excludeGlobs(), ...hiddenPathGlobs(this.hiddenPaths(shared.root))]);
+    return shared.excluder(rel);
   }
 
   /** Run `task` after everything already queued for this root, and never reject the chain. */

@@ -807,6 +807,51 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
     }
   }, 40_000);
 
+  /*
+   * 062 FR-051 — "Ignored folders should not be indexed (unless they are unignored by the user)" (the maintainer,
+   * 2026-11-21). The default index never watches into what it ignores; "show hidden" widens the one watch to it.
+   */
+  it('the default index does not watch into an ignored folder, and show hidden widens the one watch to it (062 FR-051)', async () => {
+    const heard: string[] = [];
+    let opened = 0;
+    const inner = new NodeFileWatcher(150);
+    const listening: IFileWatcher = {
+      watch: (dir, onChange, options) => {
+        opened += 1;
+        return inner.watch(dir, (p, batch) => {
+          heard.push(...(batch?.paths ?? [p]));
+          onChange(p, batch);
+        }, options);
+      },
+    };
+    const h = await Harness.create({ globs: ['**/node_modules'], watcher: listening });
+    try {
+      await seedProject(h.root);
+      h.service.subscribe(1, h.root, false);
+      await waitForReadyAt(h, 1, false);
+      await armWatch(h, 1);
+      const ignored = join(h.root, 'node_modules', 'ignored.js');
+      await writeFile(ignored, 'x');
+      const mark = h.sent.length;
+      await writeFile(join(h.root, 'src', 'after.ts'), 'x');
+      await waitFor('the change after it to reach the index', () =>
+        h.to(1, mark).find((p) => (p.added ?? []).includes('src/after.ts')),
+      );
+      expect(heard, 'the watch reported from inside node_modules').not.toContain(ignored);
+
+      h.service.subscribe(1, h.root, true); // show hidden
+      await waitForReadyAt(h, 1, true);
+      const flipMark = h.sent.length;
+      await writeFile(join(h.root, 'node_modules', 'shown.js'), 'x');
+      await waitFor('a new file inside node_modules to reach the show-hidden set', () =>
+        h.to(1, flipMark).find((p) => p.includeHidden && (p.added ?? []).includes('node_modules/shown.js')),
+      );
+      expect(opened, 'the flip opened a watch of its own').toBe(1);
+    } finally {
+      await h.destroy();
+    }
+  }, 40_000);
+
   it('the delta protocol is unchanged for each index (I2, S7, S8)', async () => {
     const h = await Harness.create({ globs: ['**/node_modules'] });
     try {
