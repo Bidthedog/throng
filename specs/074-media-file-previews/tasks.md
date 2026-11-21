@@ -175,3 +175,7 @@ last.
 
 - [x] T083 CRITICAL: Open the link menu (Open Link, Copy Link to Clipboard) over a PDF link to another of its pages, Open Link going to that page as Ctrl+click does, per Constitution VI (One gesture follows a link) and FR-066 (partial)
 - [x] T084 Amend US1's Independent Test, US2/AC1, US4/AC1, US5/AC1 and FR-062a to the opening view and titles FR-020a and FR-104 set, as T074 did for US1/AC1, per FR-020a and FR-104 (contradicts)
+
+## Phase 15: Convergence
+
+- [ ] T085 Note in plan.md's Constitution Check that FR-068a, FR-081a and FR-086b/d supersede its "no PDF text layer", "Find disabled on HTML" and "FR-081 once per preview", per FR-068a, FR-081a, FR-086b and FR-086d (contradicts)
