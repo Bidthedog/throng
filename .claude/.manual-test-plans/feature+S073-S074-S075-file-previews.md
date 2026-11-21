@@ -77,6 +77,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-110 | [Settings] An invalid entry in Preferences shows a toast, not text under the box | untested | | | |
 | MT-111 | [Settings] Lists and tables in Preferences open in their own window | untested | | | |
 | MT-112 | [Settings] Terminal flavours and shell arguments are editable in Preferences (#67) | untested | | | |
+| MT-113 | [General] The other-checkout daemon notice goes once the daemon is replaced (#685) | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1201,3 +1202,16 @@ Paths: `packages/core/src/config/settings-metadata.ts`, `packages/ui/src/rendere
 3. **Hidden built-in flavours** lists every built-in shell this machine has. Tick one: it leaves the Flavour dropdown. Untick it: it comes back.
 4. **Default shell arguments**: add `bash` → `--norc` and Save. A new Bash terminal starts without your .bashrc prompt.
 5. Remove what you added in steps 1 and 4 and Save; the rows read "No entries" again.
+
+## MT-113: [General] The other-checkout daemon notice goes once the daemon is replaced (#685)
+
+Covers: #685
+Paths: `packages/ui/src/renderer/statusbar/daemon-indicator.tsx`, `packages/ui/src/renderer/common/notification.tsx`
+
+### Steps
+1. Start throng from the main checkout (`npm start` there) so its daemon is running, then quit that window. Its daemon stays up.
+2. Start throng from this worktree. The "This build is running on another checkout's daemon" toast appears, and the same notice is listed in the Notifications panel.
+3. Click the daemon indicator in the status bar and replace the daemon with this build's. Once the indicator turns healthy, the toast and the Notifications-panel entry both disappear without being dismissed by hand.
+
+### Negative cases
+- Other notices already in the Notifications panel stay where they are.
