@@ -418,6 +418,13 @@ li + .encoding-picker__heading {
   vertical-align: 0.1em;
 }
 
+/* #683 — the zero-width image CodeMirror puts beside every inline widget (the markers above) is 1em tall and sits on
+   the baseline, so in an editor font whose ascent is shorter than 1em inside the line it raises the line box: every
+   line grew a pixel when View Whitespace went on. Hung from the line's top, it fits inside the line's own height. */
+.editor-panel .cm-editor .cm-widgetBuffer {
+  vertical-align: top;
+}
+
 /* 044 FR-001/FR-014 — the preview button: an icon control in the strip's own colours. It is drawn
    like the language indicator, and PRESSED (the file has a preview) holds the hover surface, so the
    state reads without a colour of its own. Disabled (the provider is off, FR-062) dims and stops
