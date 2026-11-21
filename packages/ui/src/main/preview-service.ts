@@ -1989,6 +1989,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       const url = `throng-preview://source/${encodeURIComponent(run.panelId)}?rev=${++this.sourceSeq}`;
       return { ok: true, content: { kind: 'resource', url } };
     }
+    // 077 FR-016, FR-018 (T056) — a provider with its own Maximum file size reads under that cap alone, never also
+    // under Max open file size; one without reads under the editor's limit.
+    const ownCap = hasOwnSizeCap(this.deps.registry, providerId);
+    const settings = this.deps.settings();
+    const limitKey = ownCap ? maxFileBytesKeyFor(this.deps.registry, providerId) : 'editor.maxOpenFileBytes';
     let result: LoadResult;
     try {
       result = await this.deps.reader.load({
@@ -1996,6 +2001,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         ownerRoot: run.projectRoot,
         ownerKind: 'project',
         allProjectRoots: [run.projectRoot],
+        ...(ownCap ? { maxBytes: maxFileBytesFor(this.deps.registry, settings.editor.previews, providerId, settings.editor.maxOpenFileBytes) } : {}),
       });
     } catch (error) {
       logCaught('preview-service: read document', error);
@@ -2010,10 +2016,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         return { ok: false, notice: { kind: 'not-decodable', encoding: result.encoding } };
       case 'utf32':
         return { ok: false, notice: { kind: 'utf32' } };
-      // 077 FR-014, FR-015 — the editor's limit refused it: the notice quotes the file's size and that limit, in the
-      // one wording every provider's too-large notice uses.
+      // 077 FR-014, FR-015 — the read's cap refused it: the notice quotes the file's size and that limit, in the one
+      // wording every provider's too-large notice uses.
       case 'too-large':
-        return { ok: false, notice: { kind: 'too-large', size: result.size, limit: result.limit, limitKey: 'editor.maxOpenFileBytes' } };
+        return { ok: false, notice: { kind: 'too-large', size: result.size, limit: result.limit, limitKey } };
       case 'not-found':
         return { ok: false, notice: { kind: 'deleted' } };
       case 'io': {

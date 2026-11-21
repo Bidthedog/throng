@@ -183,5 +183,5 @@ Each was implemented before it had a task; the commit named is the one that did 
 ## Phase 15: Convergence
 
 - [x] T055 Quote the file's size and **Max open file size** in a text preview's too-large notice (Markdown, CSV, Mermaid: `preview-service.ts`, the editor loader's refusal), and correct the known-gaps list, per FR-014, FR-015, SC-005 and Constitution X (partial)
-- [ ] T056 Read an HTML or SVG preview's source under its own **Maximum file size**, not also under the editor's limit, so the setting's value decides alone, per FR-016, FR-018 and US5/AC1 (contradicts)
+- [x] T056 Read an HTML or SVG preview's source under its own **Maximum file size**, not also under the editor's limit, so the setting's value decides alone, per FR-016, FR-018 and US5/AC1 (contradicts)
 - [ ] T057 Say a problem the user just made on a committed table row (a custom terminal flavour's cleared executable) in the Preferences toast, keeping the inline row message for a row broken in the file, per FR-024 and FR-025 (partial)

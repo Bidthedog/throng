@@ -147,6 +147,26 @@ describe('a preview that cannot show its file says so with one notice (FR-026)',
     expect((await attach('v1', a)).notice).toEqual({ kind: 'too-large', size: 4096, limit: 1024, limitKey: 'editor.maxOpenFileBytes' });
   });
 
+  // 077 FR-016, FR-018, US5/AC1 (T056) — an HTML or SVG preview's own Maximum file size decides alone: a file under it
+  // is shown though it is over Max open file size, and one over it is refused naming that setting.
+  it.each([
+    ['page.html', 'html'],
+    ['drawing.svg', 'svg'],
+  ])('%s is read under its own Maximum file size, not the editor limit', async (name, id) => {
+    const a = join(root, name);
+    const text = `<svg xmlns="http://www.w3.org/2000/svg"><!--${'x'.repeat(4096)}--></svg>`;
+    await writeFile(a, text);
+    settings.current.editor.maxOpenFileBytes = 1024;
+    const provider = settings.current.editor.previews.providers[id];
+    if (provider) provider.maxFileBytes = 8192;
+
+    expect(await attach('v1', a)).toMatchObject({ notice: null, content: { kind: 'text', text } });
+
+    if (provider) provider.maxFileBytes = 2048;
+    const { update } = await previews.refresh('v1');
+    expect(update?.notice).toEqual({ kind: 'too-large', size: Buffer.byteLength(text), limit: 2048, limitKey: `editor.previews.providers.${id}.maxFileBytes` });
+  });
+
   it('a binary file raises not-text', async () => {
     const a = join(root, 'bin.md');
     await writeFile(a, Buffer.from([0x00, 0x01, 0x02, 0x00, 0xff, 0x00, 0x00, 0x10]));

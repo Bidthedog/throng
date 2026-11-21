@@ -121,6 +121,12 @@ export interface LoadRequest {
   /** Read in this encoding instead of detecting one — Reopen with Encoding, or a chosen encoding being
    *  restored (059 FR-024, FR-028). A read that is not lossless in it is refused, never patched. */
   forcedEncoding?: EncodingId;
+  /**
+   * 077 FR-016, FR-018 — the byte cap in place of `editor.maxOpenFileBytes`, for a main-process reader with a limit of
+   * its own (a preview whose provider declares a Maximum file size). Never set from an IPC request: the editor's own
+   * open path is always capped by Max open file size.
+   */
+  maxBytes?: number;
 }
 
 export interface SaveRequest {
@@ -215,7 +221,7 @@ export class EditorService {
       { realPath, isDirectory: stat.kind === 'folder', size },
       { ownerKind: req.ownerKind },
       await realRoots(this.fs, { ownerRoot: req.ownerRoot, allProjectRoots: req.allProjectRoots }),
-      { maxOpenFileBytes: this.settings().editor.maxOpenFileBytes },
+      { maxOpenFileBytes: req.maxBytes ?? this.settings().editor.maxOpenFileBytes },
     );
   }
 
