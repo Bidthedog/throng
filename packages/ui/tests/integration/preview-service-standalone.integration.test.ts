@@ -137,12 +137,14 @@ describe('a preview that cannot show its file says so with one notice (FR-026)',
     expect(update?.notice).toEqual({ kind: 'deleted', repeat: true });
   });
 
-  it('a file over the size limit raises too-large', async () => {
-    const a = join(root, 'big.md');
+  // 077 FR-014, FR-015, SC-005 (T055) — a preview with no Maximum file size of its own is refused by the editor's
+  // limit, and its notice quotes the file's size and Max open file size like every other provider's.
+  it.each(['big.md', 'big.csv', 'big.mmd'])('%s over the size limit raises too-large naming its size and the limit', async (name) => {
+    const a = join(root, name);
     await writeFile(a, 'x'.repeat(4096));
     settings.current.editor.maxOpenFileBytes = 1024;
 
-    expect((await attach('v1', a)).notice).toEqual({ kind: 'too-large' });
+    expect((await attach('v1', a)).notice).toEqual({ kind: 'too-large', size: 4096, limit: 1024, limitKey: 'editor.maxOpenFileBytes' });
   });
 
   it('a binary file raises not-text', async () => {

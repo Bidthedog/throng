@@ -41,8 +41,11 @@ reads the setting.
 - This is an **end-state requirement** under the Incremental Delivery rule, binding on new work
   immediately. Known violations: **none open.** The five audited on 2026-11-20 (the preview and
   editor too-large notices, the drop refusal, the capture-interval and maximum-file-size
-  descriptions, the media previews' "5 MB steps") were fixed by spec 077; re-checked 2026-11-21.
-  A newly found one is listed here, with its file, until it is fixed.
+  descriptions, the media previews' "5 MB steps") were fixed by spec 077. The 2026-11-21 re-check
+  missed a sixth: a Markdown, CSV or Mermaid preview refused by **Max open file size** said only
+  that the file was too large (`packages/ui/src/main/preview-service.ts`, the editor loader's
+  refusal); 077 T055 fixed it the same day. A newly found one is listed here, with its file, until
+  it is fixed.
 
 ## Quality gate — configuration editors stay in sync with all configurable options
 

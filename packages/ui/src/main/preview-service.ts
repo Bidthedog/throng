@@ -2010,8 +2010,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         return { ok: false, notice: { kind: 'not-decodable', encoding: result.encoding } };
       case 'utf32':
         return { ok: false, notice: { kind: 'utf32' } };
+      // 077 FR-014, FR-015 — the editor's limit refused it: the notice quotes the file's size and that limit, in the
+      // one wording every provider's too-large notice uses.
       case 'too-large':
-        return { ok: false, notice: { kind: 'too-large' } };
+        return { ok: false, notice: { kind: 'too-large', size: result.size, limit: result.limit, limitKey: 'editor.maxOpenFileBytes' } };
       case 'not-found':
         return { ok: false, notice: { kind: 'deleted' } };
       case 'io': {
