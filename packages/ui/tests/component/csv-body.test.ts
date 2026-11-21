@@ -581,6 +581,22 @@ describe('CsvBody Esc after a Cut (FR-037i)', () => {
     expect(bridge.gridUndo).not.toHaveBeenCalled();
   });
 
+  // T103 — a cut of empty cells changes nothing, so it arms nothing: the next edit is not the cut's to undo.
+  it('does nothing after a cut of empty cells and a later edit', async () => {
+    const h = mount('a,b\n,2\n3,4\n');
+    fireEvent.mouseDown(cellAt(1, 0), { button: 0 });
+    fireEvent.mouseUp(window);
+    fireEvent.cut(grid());
+    const clip = window.throng?.clipboard as unknown as { write: ReturnType<typeof vi.fn>; writeRich: ReturnType<typeof vi.fn> };
+    await waitFor(() => expect(clip.write.mock.calls.length + clip.writeRich.mock.calls.length).toBeGreaterThan(0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(bridge.gridEdit).not.toHaveBeenCalled();
+    // An unrelated edit lands afterwards.
+    showText(h, 'a,b\n,2\nx,4\n');
+    fireEvent.keyDown(grid(), { key: 'Escape' });
+    expect(bridge.gridUndo).not.toHaveBeenCalled();
+  });
+
   it('does nothing with no cut before it', () => {
     mount('a,b\n1,2\n');
     fireEvent.keyDown(grid(), { key: 'Escape' });

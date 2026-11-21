@@ -160,7 +160,7 @@ preferences.
 
 ## Phase 10: Convergence
 
-- [ ] T103 Arm Esc-after-Cut only when the cut changed the document: a cut of empty cells sends nothing, and the next unrelated edit was then taken as the cut's result and undone by Esc, per FR-037i (partial)
-- [ ] T104 Give the workbook grid's Copy as Rich Text and Copy as Plain Text the copy icon, as the CSV grid's have, per FR-037g (partial)
-- [ ] T105 Amend the spec: SC-001 and SC-002 name "the CI runner class", but the timings are asserted on reference hardware and recorded on CI (performance-sla.md), per SC-001, SC-002 (contradicts)
-- [ ] T106 Amend the spec: a width changed in one window reaches a grid in another window when that grid next mounts, not live, per FR-040 (partial)
+- [x] T103 Arm Esc-after-Cut only when the cut changed the document: a cut of empty cells sends nothing, and the next unrelated edit was then taken as the cut's result and undone by Esc, per FR-037i (partial)
+- [x] T104 Give the workbook grid's Copy as Rich Text and Copy as Plain Text the copy icon, as the CSV grid's have, per FR-037g (partial)
+- [x] T105 Amend the spec: SC-001 and SC-002 name "the CI runner class", but the timings are asserted on reference hardware and recorded on CI (performance-sla.md), per SC-001, SC-002 (contradicts)
+- [x] T106 Amend the spec: a width changed in one window reaches a grid in another window when that grid next mounts, not live, per FR-040 (partial)

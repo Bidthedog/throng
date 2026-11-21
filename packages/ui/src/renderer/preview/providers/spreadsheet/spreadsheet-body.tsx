@@ -250,8 +250,8 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
       const copies: MenuAction[] = [
         readOnly('Cut', 'cut', 'content'),
         { label: 'Copy', icon: 'copy', section: 'content', onClick: () => copy(range) },
-        { label: 'Copy as Rich Text', section: 'content', onClick: () => copy(range, 'rich') },
-        { label: 'Copy as Plain Text', section: 'content', onClick: () => copy(range, 'plain') },
+        { label: 'Copy as Rich Text', icon: 'copy', section: 'content', onClick: () => copy(range, 'rich') },
+        { label: 'Copy as Plain Text', icon: 'copy', section: 'content', onClick: () => copy(range, 'plain') },
         readOnly('Paste', 'paste', 'content'),
         readOnly('Insert Row Above', 'insertRowAbove', 'create'),
         readOnly('Insert Row Below', 'insertRowBelow', 'create'),

@@ -823,6 +823,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-040**: Column widths MUST be stored per file, as document state alongside the document's other
   persisted state, and restored when the file is next shown in a grid, across restarts. A width MUST be
   shared by every panel showing the file.
+  *Refined (convergence T106, 2026-11-21): within one window a width reaches every grid on the file at once. A grid
+  in another window (a sub-workspace) reads the stored widths each time it mounts, so it shows a change made
+  elsewhere when it next mounts, not live; a width it has yet to store is kept over the read.*
 - **FR-041**: The CSV Preview Editor MUST honour `editor.maxOpenFileBytes` exactly as the text editor
   does (006 FR-062).
 - **FR-042**: The CSV Preview Editor MUST show the header strip as column letters and the first record as
@@ -967,6 +970,10 @@ Markdown and Mermaid pattern, each setting working as labelled.
   CSV Preview Editor within **1.5 seconds** of the open request on the CI runner class.
 - **SC-002**: A 1 MB workbook preview shows its first sheet within **1.5 seconds**, and one at the 25 MB
   limit within **8 seconds**, with the rest of the app answering input throughout.
+  *Refined (convergence T105, 2026-11-21): SC-001 and SC-002 are timed by `csv-preview-performance.e2e.ts` and, as
+  every timing is (performance-sla.md), asserted at one worker on reference hardware and recorded on CI, whose shared
+  runners are contended by construction. "The CI runner class" in SC-001 reads as that reference run. "Answering
+  input throughout" is measured as no main-thread stall over 100 ms while the 25 MB workbook is read.*
 - **SC-003**: Application startup loads none of the grid's, the CSV parser's or the workbook library's
   code; a test asserts it.
 - **SC-004**: Scrolling a 100,000-row by 50-column grid keeps the panel responsive: no input waits more

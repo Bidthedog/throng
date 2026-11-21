@@ -277,14 +277,16 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   );
 
   const clearRange = useCallback(
-    (range: GridRange) => {
+    /** Empties the range's cells; `false` when every one was empty already, so nothing was sent. */
+    (range: GridRange): boolean => {
       const cells: { row: number; col: number; value: string }[] = [];
-      if (model === null) return;
+      if (model === null) return false;
       for (let r = range.top; r <= Math.min(range.bottom, rowCount - 1); r++) {
         const reach = Math.min(range.right, recordFieldCount(model, r) - 1);
         for (let c = range.left; c <= reach; c++) if (getCell(r, c) !== '') cells.push({ row: r, col: c, value: '' });
       }
       setCells(cells);
+      return cells.length > 0;
     },
     [getCell, model, rowCount, setCells],
   );
@@ -368,11 +370,15 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         onCopyCapped?.(copied, selected, GRID_MAX_CELLS, 'cut');
       }).then((ok) => {
         if (!ok || capped) return;
-        cutMark.current = { before: textNow.current, after: null };
+        const before = textNow.current;
         // Recorded before the rows go: the record holds the values the cut took.
         recordCopy(sel, range, rowCount, getCell);
+        let changed = true;
         if (sel.rows === true) void send({ kind: 'deleteRows', from: range.top, count: Math.min(range.bottom, rowCount - 1) - range.top + 1 });
-        else clearRange(range);
+        else changed = clearRange(range);
+        // T103 — armed only when the cut changed the document: otherwise the next edit, whatever made it, would be
+        // taken for the cut's and undone by Esc.
+        cutMark.current = changed ? { before, after: null } : null;
       });
     },
     [clearRange, copyFormat, getCell, onCopyCapped, rowCount, send],

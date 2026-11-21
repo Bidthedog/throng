@@ -228,6 +228,16 @@ describe('SpreadsheetBody', () => {
       expect(onPrint).toHaveBeenCalledTimes(3);
     });
 
+    // FR-037g (convergence T104) — both grids: each Copy variant carries the copy icon, as the CSV grid's do.
+    it('draws the copy icon on Copy, Copy as Rich Text and Copy as Plain Text', async () => {
+      mount('throng-preview://source/s1?rev=1');
+      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+      fireEvent.contextMenu(document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
+      for (const label of ['Copy', 'Copy as Rich Text', 'Copy as Plain Text']) {
+        expect(drawnIcon(screen.getByTestId(`menu-item-${label}`)), label).toBe(iconMarkup('copy' as IconKey));
+      }
+    });
+
     it('the grid menu\'s Print… shows its key binding, as every other preview\'s does (075 FR-063, FR-075b)', async () => {
       mount('throng-preview://source/s1?rev=1', { onPrint: vi.fn() });
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
