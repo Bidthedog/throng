@@ -64,9 +64,12 @@ export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
   'terminals.commandRecipes',
 ];
 
-/** What this platform's Preferences draws: a control that means nothing here is hidden, not disabled (062). */
+/**
+ * What this platform's Preferences draws: a control that means nothing here is hidden, not disabled (062), and a
+ * setting another tab edits is drawn there, not here (077 FR-026).
+ */
 export function descriptorsForThisPlatform(all: readonly FieldDescriptor[]): readonly FieldDescriptor[] {
-  return all.filter((d) => d.onlyOn === undefined || d.onlyOn === hostTraits().os);
+  return all.filter((d) => (d.onlyOn === undefined || d.onlyOn === hostTraits().os) && d.editedIn === undefined);
 }
 
 /**
@@ -302,6 +305,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'General',
     subgroup: 'Appearance',
     control: 'select', // options are the themes on disk (populated at runtime)
+    // 077 FR-026 (maintainer, 2026-11-21) — the Themes tab chooses it; the Settings tab draws no row.
+    editedIn: 'themes',
   },
 
   // Confirmations

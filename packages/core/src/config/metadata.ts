@@ -252,6 +252,12 @@ export interface FieldDescriptor {
   /** The one platform this control means anything on (062). Absent, every platform. Hidden elsewhere, not disabled. */
   onlyOn?: 'windows' | 'linux' | 'macos';
   /**
+   * 077 FR-026 — another Preferences tab edits this setting, so the Settings tab draws no row for it. It is still a
+   * configurable, described setting: Revert All restores it, the JSON tab checks it, and the completeness gate counts
+   * it. Unlike an internal key, which nothing in the editor owns.
+   */
+  editedIn?: 'themes';
+  /**
    * Committing THIS VALUE costs the user something they must agree to first (030 FR-008; 043 FR-082b).
    *
    * The population is every control that can stop a FAILURE reporting itself: the `error` and

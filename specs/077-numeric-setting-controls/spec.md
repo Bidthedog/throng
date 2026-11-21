@@ -62,6 +62,8 @@ maintainer may still overrule any:
   `confirmations.` namespace; only the Preferences group changes.
 - Q (maintainer, 08:16): "The two 'Panes' options can go under 'General -> Window'." → FR-023. Keys unchanged; the
   Panes group goes.
+- Q (maintainer, 08:20): "You can remove the 'Appearance -> Theme' preference setting - that is handled in the 'Themes'
+  tab." → FR-026. Only the Settings tab's row goes; the key stays, written by the Themes tab.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -295,6 +297,10 @@ effective value after upgrading, now stored in ms or bytes.
   (`panes.projects.maxWidth`, `panes.fileExplorer.maxWidth`) MUST sit in Preferences under **General › Window**,
   and `docs/preferences.md` MUST document them in its Window section; there is no Panes group. Keys, bounds and
   controls are unchanged. *(Extends 069 FR-068, whose General › Window subgroup they join.)*
+- **FR-026**: *(2026-11-21.)* The Settings tab MUST draw no **Theme** row: the Themes tab chooses the active theme. The
+  key `appearance.theme` stays a configurable setting — `settings.json`, the shipped defaults, the JSON tab's check and
+  Revert All keep it — and a search of the Settings tab never finds a row for it. General has no Appearance subsection.
+  *(Supersedes 069 FR-068's Appearance subsection of General.)*
 
 **Documentation**
 

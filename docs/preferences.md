@@ -82,13 +82,6 @@ when it writes the file; a retired key it once used is dropped.
 
 The window, the app-wide behaviour and the attention marks, each under a heading of its own.
 
-### Appearance
-
-
-| Setting | Key | Default | Values | What it does |
-|---|---|---|---|---|
-| Theme | `appearance.theme` | `throng` | Any theme on disk | The active theme, applied across the whole app. See [Themes and icon sets](#themes-and-icon-sets). |
-
 ### Window
 
 Each project remembers for itself which side panes are expanded.
@@ -599,7 +592,9 @@ and the last folder chosen for a new project — which is not a preference.
 ## Themes and icon sets
 
 **Themes** — throng ships 14: **throng** (the default), Light, Snake, Gothic, Windows Terminal, Bash,
-VSCode, VI-VIM, English Garden, Matrix, Cyberpunk, Claude, Debian and Ubuntu. The **Themes** tab
+VSCode, VI-VIM, English Garden, Matrix, Cyberpunk, Claude, Debian and Ubuntu. The theme chosen in the
+**Themes** tab is the active one, applied across the whole app, and is stored as `appearance.theme`
+(default `throng`, any theme on disk); the Settings tab has no row for it. The **Themes** tab
 edits every token of a theme — colours, fonts and sizes, syntax colours, the icon colour and icon
 set — each with a plain-language label, using colour and size pickers drawn from the theme itself. Every one of
 those is stored in the theme's own file, so an edit belongs to the theme you made it in, and switching theme
