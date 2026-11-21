@@ -13,16 +13,19 @@
  *    against the project root) to `throng-preview://asset/<panelId>/<root-relative path>`, one path segment at a
  *    time, so a served stylesheet's own relative `url()` resolves to the same route. A path that climbs out of the
  *    project, and anything absolute (`http:`, `https:`, `//host`, `data:`, `file:`), is dropped.
- * 3. **Rewrite every link** but a `#fragment` to `throng-preview://follow/<panelId>?href=<link>`, titled with its
- *    target and the gesture. A plain click navigates the frame to that route, which answers 204 (nothing happens);
- *    a Ctrl+click reaches main's window-open guard, which hands it back to the panel to follow (FR-079).
+ * 3. **Rewrite every link** but a `#fragment` to `throng-preview://follow/<panelId>?href=<link>`, titled as every
+ *    preview titles a link. A plain click navigates the frame to that route, which answers 204 (nothing happens);
+ *    a Ctrl+click reaches main's window-open guard, which hands it back to the panel to follow (FR-079). A
+ *    `#fragment` link keeps its href and gets the same kind of title; the body follows it (`frame-fragments.ts`).
  * 4. **Inject the frame's own CSP** first in `<head>`, on top of the policy the `srcdoc` document inherits, and the
  *    themed default colours at zero specificity, so the page's own rules always win (FR-082).
  *
  * Pure apart from the DOM it is handed; no I/O.
  */
 import DOMPurify, { type WindowLike } from 'dompurify';
-import { logExpected, matchesSafeSource, relPathUnderRoot, sourceOf } from '@throng/core';
+import { classifyPreviewLink, logExpected, matchesSafeSource, relPathUnderRoot, sourceOf } from '@throng/core';
+import { previewLinkHoverText } from '../../link-dom.js';
+import { primaryModifierLabel } from '../../../config/host-modifiers.js';
 
 /** The frame document's own policy (FR-075): the preview protocol and the page's inline style, nothing else. */
 export const FRAME_CSP =
@@ -267,13 +270,20 @@ export function sanitiseHtmlPage(source: string, ctx: HtmlPageContext, win: Pars
   for (const style of doc.querySelectorAll('style')) style.textContent = rewriteCss(style.textContent ?? '', r);
   for (const anchor of doc.querySelectorAll('a[href], area[href]')) {
     const href = anchor.getAttribute('href') ?? '';
-    if (href.trim().startsWith('#')) continue;
+    if (href.trim().startsWith('#')) {
+      // A same-page link stays a fragment; the body follows it on the gesture only (`frame-fragments.ts`, FR-079).
+      const hover = previewLinkHoverText({ kind: 'heading', fragment: href.trim().slice(1) }, primaryModifierLabel());
+      if (hover !== '') anchor.setAttribute('title', hover);
+      continue;
+    }
     if (href.trim() === '') {
       anchor.removeAttribute('href');
       continue;
     }
     anchor.setAttribute('href', `throng-preview://follow/${encodeURIComponent(ctx.panelId)}?href=${encodeURIComponent(href)}`);
-    anchor.setAttribute('title', `${href} — Ctrl+click to follow`);
+    // 074 convergence T067 — the hover in every preview's words: what following it does, under the platform's modifier.
+    const hover = previewLinkHoverText(classifyPreviewLink(href, { docPath: ctx.docPath, projectRoot: ctx.projectRoot }), primaryModifierLabel());
+    if (hover !== '') anchor.setAttribute('title', hover);
   }
 
   // 4. The frame's own policy first, then the themed defaults, ahead of every page rule.

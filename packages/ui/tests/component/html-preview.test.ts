@@ -11,6 +11,8 @@ import { COLD, PROJECT, ROOT, mountMarkdownPreview, previewUpdate, type MountedP
 import { ProjectsClient } from '../../src/renderer/state/projects-client.js';
 import { isPanelUnsearchable } from '../../src/renderer/preview/unsearchable-panels.js';
 import { getFindSession, openFind, setTerm } from '../../src/renderer/search/search-store.js';
+import { previewLinkHoverText } from '../../src/renderer/preview/link-dom.js';
+import { primaryModifierLabel } from '../../src/renderer/config/host-modifiers.js';
 
 const FILE = `${ROOT}/site/page.html`;
 const SCRIPTED = '<html><body><h1>Hi</h1><script>alert(1)</script></body></html>';
@@ -218,6 +220,85 @@ describe('a Ctrl+clicked link comes back from main and is followed (FR-079)', ()
     await waitFor(() => expect(frame()).toBeTruthy(), COLD);
     m.pushFrameLink({ panelId: 'someone-else', href: 'https://example.test/docs' });
     expect(m.openExternal).not.toHaveBeenCalled();
+  });
+});
+
+// 074 convergence T061 / T067 — FR-079 and Constitution 5.5.0: a link inside the page, a `#fragment` one included,
+// follows on Ctrl+click and nothing else, and its hover names its target and the gesture as every preview does.
+describe('a link in the page follows on the gesture only, a fragment link included (FR-079)', () => {
+  const PAGE = '<p><a id="go" href="#part-two">to part two</a> <a id="web" href="https://example.test/x">web</a></p><h2 id="part-two">Part two</h2>';
+
+  async function drawn(): Promise<{ doc: Document; W: Window & typeof globalThis }> {
+    const m = await mount(PLAIN);
+    await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
+    update(m, 2, PAGE);
+    await waitFor(() => expect(frameDoc()!.querySelector('#part-two')).not.toBeNull());
+    const doc = frameDoc()!;
+    return { doc, W: doc.defaultView as Window & typeof globalThis };
+  }
+
+  /**
+   * Watch `scrollIntoView` in both realms: an update draws nodes parsed in this window into the frame's document, and
+   * an adopted node keeps the prototype it was made with. Restored after each test.
+   */
+  const restores: Array<() => void> = [];
+  afterEach(() => {
+    for (const restore of restores.splice(0)) restore();
+  });
+  function spyScroll(W: Window & typeof globalThis, scroll: () => void): void {
+    for (const proto of new Set([W.Element.prototype, Element.prototype])) {
+      const before = proto.scrollIntoView;
+      proto.scrollIntoView = scroll;
+      restores.push(() => {
+        proto.scrollIntoView = before;
+      });
+    }
+  }
+
+  function click(doc: Document, W: Window & typeof globalThis, sel: string, ctrlKey: boolean): MouseEvent {
+    const e = new W.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ctrlKey });
+    act(() => {
+      doc.querySelector(sel)!.dispatchEvent(e);
+    });
+    return e;
+  }
+
+  it('a plain click on a fragment link moves nothing', async () => {
+    const { doc, W } = await drawn();
+    const scroll = vi.fn();
+    spyScroll(W, scroll);
+    const e = click(doc, W, '#go', false);
+    expect(e.defaultPrevented, 'the frame’s own same-document jump is stopped').toBe(true);
+    expect(scroll).not.toHaveBeenCalled();
+  });
+
+  it('a Ctrl+click on a fragment link scrolls the page to its target', async () => {
+    const { doc, W } = await drawn();
+    const scroll = vi.fn();
+    spyScroll(W, scroll);
+    click(doc, W, '#go', true);
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect((scroll.mock.contexts[0] as Element).id).toBe('part-two');
+  });
+
+  it('Ctrl+Enter on a focused fragment link scrolls the page to its target', async () => {
+    const { doc, W } = await drawn();
+    const scroll = vi.fn();
+    spyScroll(W, scroll);
+    act(() => {
+      doc.querySelector('#go')!.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
+    });
+    expect((scroll.mock.contexts[0] as Element | undefined)?.id).toBe('part-two');
+  });
+
+  it('names each link’s target and the gesture on hover, in every preview’s words', async () => {
+    const { doc } = await drawn();
+    expect(doc.querySelector('#go')!.getAttribute('title')).toBe(
+      previewLinkHoverText({ kind: 'heading', fragment: 'part-two' }, primaryModifierLabel()),
+    );
+    expect(doc.querySelector('#web')!.getAttribute('title')).toBe(
+      previewLinkHoverText({ kind: 'external', url: 'https://example.test/x' }, primaryModifierLabel()),
+    );
   });
 });
 

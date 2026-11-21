@@ -35,6 +35,7 @@ import { IconButton } from '../../../common/icon-button.js';
 import { sanitiseHtmlPage, type BlockedResource } from './html-sanitise.js';
 import { readFrameScroll, updateFrameInPlace, writeFrameScroll, type FrameScroll } from './html-frame-update.js';
 import { listenToFrameInput } from './frame-input.js';
+import { listenToFrameFragments } from './frame-fragments.js';
 import { BlockedResourcesNotice, blockedFromViolation } from './blocked-notice.js';
 import './html.css';
 
@@ -202,6 +203,8 @@ export function HtmlBody({
     if (frame === null || doc === null) return;
     stopListening.current?.();
     const stopInput = listenToFrameInput(frame, doc);
+    // FR-079 — a `#fragment` link follows on the gesture only (`frame-fragments.ts`).
+    const stopFragments = listenToFrameFragments(doc);
     // FR-093a — a request the page's content policy refused at run time joins the notice's list.
     const onViolation = (e: SecurityPolicyViolationEvent): void => {
       const found = blockedFromViolation(e);
@@ -214,6 +217,7 @@ export function HtmlBody({
     doc.addEventListener('scroll', onScroll, { passive: true });
     stopListening.current = () => {
       stopInput();
+      stopFragments();
       doc.removeEventListener('securitypolicyviolation', onViolation);
       doc.removeEventListener('scroll', onScroll);
     };

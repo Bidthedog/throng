@@ -29,6 +29,8 @@ import {
 import type { SearchCount } from '@throng/core';
 import { pdfView } from '../../src/renderer/preview/providers/pdf/view.js';
 import { PREVIEW_LOADING_CLASS } from '../../src/renderer/preview/loading-placeholder.js';
+import { previewLinkHoverText } from '../../src/renderer/preview/link-dom.js';
+import { primaryModifierLabel } from '../../src/renderer/config/host-modifiers.js';
 
 const BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
 const renders: Array<{ page: number; scale: number }> = [];
@@ -425,11 +427,9 @@ describe('links (FR-066)', () => {
     return [...pages()[0]!.querySelectorAll('a')];
   }
 
-  it('follows an external link only on Ctrl+click, naming target and gesture on hover', async () => {
+  it('follows an external link only on Ctrl+click', async () => {
     const p = props();
     const [web] = await drawnWithLinks(p);
-    expect(web!.title).toContain('https://example.test/spec');
-    expect(web!.title).toContain('Ctrl+click');
     fireEvent.click(web!);
     expect(p.onFollow).not.toHaveBeenCalled();
     fireEvent.click(web!, { ctrlKey: true });
@@ -441,6 +441,24 @@ describe('links (FR-066)', () => {
     const [web] = await drawnWithLinks(p);
     fireEvent.keyDown(web!, { key: 'Enter', ctrlKey: true });
     expect(p.onFollow).toHaveBeenCalledTimes(1);
+  });
+
+  // 074 convergence T060 — Constitution 5.5.0: a panel's menu over a link offers Open Link / Copy Link to Clipboard.
+  it('reports a right-click on an external link to the panel, so its link menu opens over it', async () => {
+    const onLinkMenu = vi.fn();
+    const p = props({ onLinkMenu });
+    const [web] = await drawnWithLinks(p);
+    fireEvent.contextMenu(web!, { clientX: 30, clientY: 40 });
+    expect(onLinkMenu).toHaveBeenCalledWith({ kind: 'external', url: 'https://example.test/spec' }, { x: 30, y: 40 });
+  });
+
+  // 074 convergence T067 — FR-066 / 044 FR-094: the hover names the target and what following it does, in the words
+  // every preview uses, with the platform's own modifier.
+  it('names an external link’s target and gesture on hover as every preview does', async () => {
+    const [web] = await drawnWithLinks(props());
+    expect(web!.title).toBe(
+      previewLinkHoverText({ kind: 'external', url: 'https://example.test/spec' }, primaryModifierLabel()),
+    );
   });
 
   it('scrolls an internal link to its page, and asks the chrome nothing', async () => {

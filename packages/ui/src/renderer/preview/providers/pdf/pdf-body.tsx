@@ -91,6 +91,8 @@ import { getPanelSearch } from '../../../search/search-controller.js';
 import type { PreviewSearchController } from '../../preview-search.js';
 import { updateCount, useVisibleFindSession } from '../../../search/search-store.js';
 import { openPdf, type PdfDocument, type PdfLink, type PdfPage } from './pdf-renderer.js';
+import { previewLinkHoverText } from '../../link-dom.js';
+import { primaryModifierHeld, primaryModifierLabel } from '../../../config/host-modifiers.js';
 import { GoToDialog } from '../../../navigate/go-to-dialog.js';
 import './pdf.css';
 
@@ -201,6 +203,7 @@ export function PdfBody({
   initialViewState,
   onViewStateCapture,
   onFollow,
+  onLinkMenu,
   onDrawn,
   onBodyFailure,
   onStatusReadout,
@@ -267,8 +270,8 @@ export function PdfBody({
   /** Where to put the reader once the next document is laid out. */
   const restoreTo = useRef<PdfViewState | null>(isViewState(initialViewState) ? initialViewState : null);
 
-  const latest = useRef({ onDrawn, onBodyFailure, onStatusReadout, readSource, onFollow });
-  latest.current = { onDrawn, onBodyFailure, onStatusReadout, readSource, onFollow };
+  const latest = useRef({ onDrawn, onBodyFailure, onStatusReadout, readSource, onFollow, onLinkMenu });
+  latest.current = { onDrawn, onBodyFailure, onStatusReadout, readSource, onFollow, onLinkMenu };
 
   // FR-064 — the reader's place, as the chrome reads it when it leaves this entry.
   const capture = useCallback((): PdfViewState => {
@@ -705,21 +708,40 @@ export function PdfBody({
   const onGoToDismiss = useCallback((): void => setGoToOpen(false), []);
   const onGoToClosed = useCallback((): void => scrollerRef.current?.focus({ preventScroll: true }), []);
 
+  /** A link to an address, classified as every preview classifies one (044 FR-090). */
+  const previewLinkOf = (url: string) => classifyPreviewLink(url, { docPath: filePath, projectRoot });
   const follow = (link: PdfLink): void => {
     if (link.target.kind === 'page') {
       goToPage(link.target.page);
       return;
     }
-    latest.current.onFollow(classifyPreviewLink(link.target.url, { docPath: filePath, projectRoot }));
+    latest.current.onFollow(previewLinkOf(link.target.url));
   };
+  /**
+   * 074 convergence T060 — Constitution 5.5.0: the panel's menu over a link offers Open Link and Copy Link to Clipboard.
+   * A link to an address is reported to the panel, which opens that menu; a link to a page of this PDF has no address
+   * to copy, so its right-click is left to the body menu.
+   */
+  const onLinkContextMenu = (link: PdfLink) => (e: MouseEvent<HTMLAnchorElement>): void => {
+    const report = latest.current.onLinkMenu;
+    if (link.target.kind !== 'url' || !report) return;
+    e.preventDefault();
+    e.stopPropagation();
+    report(previewLinkOf(link.target.url), { x: e.clientX, y: e.clientY });
+  };
+  /** 074 convergence T067 — FR-066 / 044 FR-094: the hover in every preview's words, with the platform's modifier. */
+  const linkTitle = (link: PdfLink): string =>
+    link.target.kind === 'url'
+      ? previewLinkHoverText(previewLinkOf(link.target.url), primaryModifierLabel())
+      : `${primaryModifierLabel()}+Click to go to page ${formatGrouped(link.target.page)}`;
   const onLinkClick = (link: PdfLink) => (e: MouseEvent<HTMLAnchorElement>): void => {
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) follow(link);
+    if (primaryModifierHeld(e)) follow(link);
   };
   const onLinkKey = (link: PdfLink) => (e: KeyboardEvent<HTMLAnchorElement>): void => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) follow(link);
+    if (primaryModifierHeld(e)) follow(link);
   };
 
   const pageCount = loaded.kind === 'ready' ? loaded.doc.pageCount : 0;
@@ -801,16 +823,16 @@ export function PdfBody({
 
             {(links[n] ?? []).map((link, k) => {
               const [left, top, width, height] = link.rect;
-              const target = link.target.kind === 'page' ? `Page ${formatGrouped(link.target.page)}` : link.target.url;
               return (
                 <a
                   key={k}
                   className="preview-pdf__link"
                   href={link.target.kind === 'url' ? link.target.url : `#page-${link.target.page}`}
-                  title={`${target} — Ctrl+click to follow`}
+                  title={linkTitle(link)}
                   style={{ left: `${left * zoom}px`, top: `${top * zoom}px`, width: `${width * zoom}px`, height: `${height * zoom}px` }}
                   onClick={onLinkClick(link)}
                   onKeyDown={onLinkKey(link)}
+                  onContextMenu={onLinkContextMenu(link)}
                 />
               );
             })}
