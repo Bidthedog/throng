@@ -92,10 +92,10 @@ describe('resource monitor settings (055 FR-004, FR-033a, FR-046, FR-063)', () =
     expect(s.resourceMonitor.captureIntervalMs).toBe(2000);
   });
 
-  it('labels the confirmation "Kill processes" among the other confirmations (FR-063)', () => {
+  it('labels the confirmation "Kill processes" in the Resource Monitor group (FR-063b, 077 FR-022)', () => {
     expect(descriptor('confirmations.killProcesses')).toMatchObject({
       label: 'Kill processes',
-      group: 'Confirmations',
+      group: 'Resource Monitor',
       control: 'select',
     });
   });

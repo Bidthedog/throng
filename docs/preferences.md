@@ -137,7 +137,6 @@ on Windows and for a portable or archive copy.
 | Destroy a tab | `confirmations.destroyTab` | `double` | `none` · `single` · `double` | Confirmations before a tab and its panels are destroyed. |
 | Destroy a panel | `confirmations.destroyPanel` | `double` | `none` · `single` · `double` | Confirmations before a panel is destroyed. |
 | Destroy a sub-workspace | `confirmations.destroySubWorkspace` | `double` | `none` · `single` · `double` | Confirmations before a sub-workspace is destroyed. |
-| Kill processes | `confirmations.killProcesses` | `double` | `none` · `single` · `double` | Confirmations before the [Resource Monitor](quick-start.md#8-see-what-throng-is-using) force-ends a process (**Kill Process**) or everything running beneath a project, tab, panel or process (**Kill All Below**). The dialog names what will end. |
 
 ## Panes
 
@@ -591,6 +590,7 @@ whole machine; memory is a share of installed RAM.
 | Memory warning (%) | `resourceMonitor.memoryWarningPercent` | 50% | 1 – 100% | The share of installed memory at which a figure shows the warning colour. A process at or above it is never hidden as idle. |
 | Memory critical (%) | `resourceMonitor.memoryCriticalPercent` | 80% | 1 – 100% | The share of installed memory at which a figure shows the critical colour. |
 | Popup delay (ms) | `resourceMonitor.popoverDelayMs` | 500 ms | 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box | How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits. |
+| Kill processes | `confirmations.killProcesses` | `double` | `none` · `single` · `double` | Confirmations (none, one or two) before the Resource Monitor force-ends a process (**Kill Process**) or everything running beneath a project, tab, panel or process (**Kill All Below**). The dialog names what will end. |
 
 ## Settings with no control
 

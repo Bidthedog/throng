@@ -281,6 +281,16 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     max: 1500,
     step: 25,
   },
+  // 055 FR-063b — the one confirmation the Resource Monitor adds. 077 FR-022 (maintainer, 2026-11-21): in the Resource
+  // Monitor group, superseding FR-063b's Confirmations group. The key keeps its `confirmations.` namespace.
+  {
+    ...confirmDescriptor(
+      'confirmations.killProcesses',
+      'Kill processes',
+      'How many confirmations before the Resource Monitor force-ends a process (Kill Process) or everything running beneath a project, tab, panel or process (Kill All Below).',
+    ),
+    group: 'Resource Monitor',
+  },
 ];
 
 export const SETTINGS_METADATA: MetadataRegistry = [
@@ -352,12 +362,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     'Destroy a sub-workspace',
     'How many confirmations before a sub-workspace is destroyed.',
   ),
-  // 055 FR-063 — the one confirmation the Resource Monitor adds; its other actions reuse the rows above.
-  confirmDescriptor(
-    'confirmations.killProcesses',
-    'Kill processes',
-    'How many confirmations before the Resource Monitor force-ends a process (Kill Process) or everything running beneath a project, tab, panel or process (Kill All Below).',
-  ),
+  // 055 FR-063 — the Resource Monitor's own confirmation sits in its group (077 FR-022); its other actions reuse the
+  // rows above.
 
   // Panes
   {

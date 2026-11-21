@@ -58,6 +58,8 @@ maintainer may still overrule any:
 - Q (maintainer, 08:12): "Move the 'Attention -> Clear Delay' preferences setting under the 'Notifications'
   preferences header." → FR-021. The key is unchanged; the setting keeps its Attention subsection, now under
   Notifications beside the Attention row that announces a mark. The taskbar badge stays under General › Attention.
+- Q (maintainer, 08:14): "Move 'Kill Processes' to under 'Resource Monitor'." → FR-022. The key keeps its
+  `confirmations.` namespace; only the Preferences group changes.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -284,6 +286,9 @@ effective value after upgrading, now stored in ms or bytes.
   default, bounds and control are unchanged. *(Supersedes 057 FR-108's and round 4's "taskbar badge and clear delay
   stay under Attention" and 069 FR-068's General › Attention for the clear delay alone; the taskbar badge stays
   under General › Attention.)*
+- **FR-022**: *(2026-11-21.)* **Kill processes** (`confirmations.killProcesses`) MUST sit in Preferences in the
+  **Resource Monitor** group, and `docs/preferences.md` MUST document it in the Resource Monitor section. Its key,
+  values and default are unchanged. *(Supersedes 055 FR-063b's "in Preferences' Confirmations group".)*
 
 **Documentation**
 
