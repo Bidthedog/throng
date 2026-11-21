@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { canPrint, type PreviewProviderDescriptor } from '@throng/core';
 import { printPreviewPanel } from '../../src/renderer/preview/print/print-command.js';
-import { asPrintRequest } from '../../src/main/print-ipc.js';
+import { MAX_PRINTABLE_LENGTH, asPrintRequest, printRefusal } from '../../src/main/print-ipc.js';
 import type { PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
 
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
@@ -47,5 +47,23 @@ describe('the print seam (FR-060 – FR-062)', () => {
       title: 'x',
       output: { kind: 'document', html: '<p/>', fit: 'width', remoteImages: ['https://e.com/b.png'] },
     });
+  });
+
+  it('says why it refused, in words the requesting window shows (FR-080)', () => {
+    const huge = { title: 'x', output: { kind: 'document', html: 'a'.repeat(MAX_PRINTABLE_LENGTH + 1), fit: 'width', remoteImages: [] } };
+    expect(asPrintRequest(huge)).toBeNull();
+    expect(printRefusal(huge)).toBe('The document is too large to print.');
+    expect(printRefusal({ title: 'x', output: { kind: 'pages', pdf: 'not bytes' } })).toBe('It could not be made ready to print.');
+  });
+
+  it('a refusal reaches the command as a failure naming its cause; a focused Print Preview does not (FR-080, FR-071)', async () => {
+    const view = { printable: () => Promise.resolve({ kind: 'document' as const, html: '<p/>', fit: 'width' as const, remoteImages: [] }) };
+    const target = { view: view as never, body: {} as HTMLElement, filePath: 'D:/p/a.md' };
+    const failed = vi.fn();
+    expect(await printPreviewPanel(target, () => Promise.resolve({ opened: false, cause: 'The document is too large to print.' }), failed)).toBe(false);
+    expect(failed).toHaveBeenCalledWith('a.md', 'The document is too large to print.');
+    failed.mockClear();
+    expect(await printPreviewPanel(target, () => Promise.resolve({ opened: false }), failed)).toBe(true);
+    expect(failed).not.toHaveBeenCalled();
   });
 });

@@ -9,6 +9,7 @@ import type { EditorState } from '@codemirror/state';
 import { getEditorView } from './editor-views.js';
 import { getEditorState } from './editor-state.js';
 import { printTextDocument, type PrintOpen, type TextPrintableSource, type Tree } from '../print/text-printable.js';
+import type { PrintFailed } from '../print/print-failure.js';
 
 /** How long printing may spend finishing a parse the editor left lazy, in ms; past it, the parsed part highlights. */
 const PARSE_BUDGET_MS = 1_000;
@@ -28,10 +29,14 @@ export function editorPrintSource(state: EditorState, title: string, fontFamily?
  * Open Print Preview for the editor in `panelId`. Resolves `false` when that panel has no live editor or nothing
  * could be opened, `true` when main was asked.
  */
-export async function printEditorPanel(panelId: string, open: PrintOpen | undefined = window.throng?.print?.open): Promise<boolean> {
+export async function printEditorPanel(
+  panelId: string,
+  open: PrintOpen | undefined = window.throng?.print?.open,
+  onFailed?: PrintFailed,
+): Promise<boolean> {
   const view = getEditorView(panelId);
   if (view === undefined) return false;
   const title = getEditorState(panelId)?.displayName ?? 'Untitled';
   const fontFamily = view.contentDOM.ownerDocument.defaultView?.getComputedStyle(view.contentDOM).fontFamily;
-  return printTextDocument(editorPrintSource(view.state, title, fontFamily), open);
+  return printTextDocument(editorPrintSource(view.state, title, fontFamily), open, onFailed);
 }

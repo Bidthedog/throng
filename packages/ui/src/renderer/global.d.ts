@@ -735,7 +735,8 @@ declare global {
       // 075 (contracts/print.md §IPC) — Print Preview.
       print?: {
         /** From a preview: open Print Preview for `request`. `opened: false` when one was already open (it is focused). */
-        open: (request: import('@throng/core').PrintJobRequest) => Promise<{ opened: boolean }>;
+        /** `cause`: main refused the request and says why (075 FR-080); absent with `opened: false`, it focused the open one. */
+        open: (request: import('@throng/core').PrintJobRequest) => Promise<{ opened: boolean; cause?: string }>;
         /** From Print Preview: what it was opened for, or `null` for a job that has gone. */
         job: (jobId: string) => Promise<import('@throng/core').PrintJobView | null>;
         /** Lay the pages out with `settings`: their count, and the PDF Print Preview draws them from (FR-068a). */

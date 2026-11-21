@@ -26,6 +26,13 @@ export function asPrintRequest(raw: unknown): PrintJobRequest | null {
   return output === null ? null : { title: raw.title.slice(0, 260), output };
 }
 
+/** Why {@link asPrintRequest} refused `raw`, for the notice the requesting window raises (075 FR-080). */
+export function printRefusal(raw: unknown): string {
+  const o = isObject(raw) && isObject(raw.output) ? raw.output : null;
+  const size = o === null ? 0 : typeof o.html === 'string' ? o.html.length : o.pdf instanceof Uint8Array ? o.pdf.byteLength : 0;
+  return size > MAX_PRINTABLE_LENGTH ? 'The document is too large to print.' : 'It could not be made ready to print.';
+}
+
 /** The most pages, and the largest drawn page, a print sheet may carry. */
 export const MAX_SHEET_PAGES = 5000;
 export const MAX_SHEET_PAGE_LENGTH = 64 * 1024 * 1024;
@@ -53,7 +60,8 @@ export function registerPrintIpc(controller: PrintController): void {
 
   ipcMain.handle('throng:print:open', async (event, raw: unknown) => {
     const request = asPrintRequest(raw);
-    if (request === null) return { opened: false };
+    // 075 FR-080 — refused, and the window that asked is told why, in the user's words.
+    if (request === null) return { opened: false, cause: printRefusal(raw) };
     return controller.open(BrowserWindow.fromWebContents(event.sender), request);
   });
   ipcMain.handle('throng:print:job', (_event, jobId: unknown) => (typeof jobId === 'string' ? controller.describe(jobId) : null));

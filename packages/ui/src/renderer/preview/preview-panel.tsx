@@ -257,6 +257,7 @@ import { useMiddleDragScroll } from './middle-drag-scroll.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import type { PageLayout, PageLayoutControl, PreviewBody, PreviewBodyProps } from './provider-view.js';
 import { PRINT_UNAVAILABLE, printPreviewPanel } from './print/print-command.js';
+import { usePrintFailureNotice } from '../print/print-failure.js';
 import {
   TASK_NOTICE_ACTION,
   taskNoticeMessage,
@@ -843,6 +844,7 @@ export function PreviewPanel({
    * a different one clears the last first; a link followed or a step taken clears it.
    */
   const { notify, clear } = useNotify();
+  const printFailed = usePrintFailureNotice();
   const linkNoticeTestId = previewLinkNoticeTestId(panelId);
   const lastLinkNotice = useRef<LinkNotice | null>(null);
   const projectRootRef = useRef(projectRoot);
@@ -1183,15 +1185,19 @@ export function PreviewPanel({
   const printPanel = useCallback((): boolean => {
     const current = stateRef.current;
     if (!current || !canPrint(registry.get(current.providerId))) return false;
-    void printPreviewPanel({
-      view: viewRef.current,
-      body: bodyHostRef.current,
-      filePath: current.filePath,
-      // 075 FR-075c — a PDF prints its own pages, read from its file.
-      readSource: () => window.throng?.preview?.readSource?.(panelId) ?? Promise.resolve({ ok: false as const, status: 404 }),
-    });
+    void printPreviewPanel(
+      {
+        view: viewRef.current,
+        body: bodyHostRef.current,
+        filePath: current.filePath,
+        // 075 FR-075c — a PDF prints its own pages, read from its file.
+        readSource: () => window.throng?.preview?.readSource?.(panelId) ?? Promise.resolve({ ok: false as const, status: 404 }),
+      },
+      undefined,
+      printFailed, // FR-080
+    );
     return true;
-  }, [registry, panelId]);
+  }, [registry, panelId, printFailed]);
 
   const onHeadingOutlineClose = useCallback((): void => {
     setHeadingOutlineOpen(false);

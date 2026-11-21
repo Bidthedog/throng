@@ -108,6 +108,7 @@ import { clearDocumentOverride, loadDocumentOverride, toRelPath } from './langua
 import { isSameDocument, subscribeDocumentLanguageChange } from './document-language-events.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
 import { printEditorPanel } from './editor-print.js';
+import { usePrintFailureNotice } from '../print/print-failure.js';
 import {
   clampSelection,
   clearEditorViewState,
@@ -432,6 +433,8 @@ function commandsFor(deps: {
 const docScrollByPath = new Map<string, number>();
 
 export function useEditor(params: UseEditorParams): void {
+  // 075 FR-080 — a Print… that cannot reach Print Preview says so here.
+  const printFailedRef = useRef(usePrintFailureNotice());
   const { panel, tabId, projectRoot, rootless, ownerProjectId, container } = params;
   const onReadyRef = useRef(params.onReady);
   onReadyRef.current = params.onReady;
@@ -2137,7 +2140,7 @@ export function useEditor(params: UseEditorParams): void {
                   },
                   // 075 FR-064a — the editor's Print…, as the header row and Ctrl+P run it.
                   print: {
-                    run: () => void printEditorPanel(panelId),
+                    run: () => void printEditorPanel(panelId, undefined, printFailedRef.current),
                     chord: firstBinding(keybindingsRef.current, 'editor.print'),
                   },
                   /*

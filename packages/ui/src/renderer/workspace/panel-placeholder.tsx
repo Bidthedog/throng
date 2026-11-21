@@ -104,6 +104,7 @@ import { disposeEditor } from '../editor/use-editor.js';
 import { destroyPanelSearch } from '../search/search-store.js';
 import { openPreviewHeadingOutline, printPreviewFromPanel } from '../preview/preview-panel-handles.js';
 import { printEditorPanel } from '../editor/editor-print.js';
+import { usePrintFailureNotice } from '../print/print-failure.js';
 import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js';
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
@@ -134,6 +135,7 @@ function EdgeDropZone({ panelId, edge }: { panelId: string; edge: Edge }): React
  * (FR-014/018). Header buttons add a sibling Panel or close this one.
  */
 export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string }): ReactElement {
+  const printFailed = usePrintFailureNotice(); // 075 FR-080
   const ws = useWorkspace();
   const { activeProject, projects } = useProjects();
   const confirm = useConfirm();
@@ -958,7 +960,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 },
                 // 075 FR-061 — the same handles `preview.print`'s and `editor.print`'s chord dispatches use.
                 print: () => {
-                  if (panel.kind === 'editor') void printEditorPanel(panel.id);
+                  if (panel.kind === 'editor') void printEditorPanel(panel.id, undefined, printFailed);
                   else printPreviewFromPanel(panel.id);
                 },
                 /*

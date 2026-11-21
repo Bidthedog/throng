@@ -17,6 +17,7 @@
 import { highlightCode } from '@lezer/highlight';
 import { logCaught, printPaletteCss, type PrintJobRequest, type PrintableOutput } from '@throng/core';
 import { LONG_LINE_THRESHOLD, throngHighlightStyle } from '../editor/highlight-style.js';
+import { PRINT_NOT_READY, type PrintFailed } from './print-failure.js';
 
 /** Lezer's syntax tree, named through the highlighter that reads it (`@lezer/common` is not a direct dependency). */
 export type Tree = Parameters<typeof highlightCode>[1];
@@ -128,19 +129,29 @@ export function buildTextPrintable(source: TextPrintableSource): PrintableOutput
 }
 
 /** The bridge call that opens Print Preview; `window.throng.print.open` in the app. */
-export type PrintOpen = (request: PrintJobRequest) => Promise<{ opened: boolean }>;
+/** `cause` is set only when main refused the request (075 FR-080); `opened: false` alone means it focused the open one. */
+export type PrintOpen = (request: PrintJobRequest) => Promise<{ opened: boolean; cause?: string }>;
 
 /**
  * Open Print Preview for a text document. It never prints: only Print Preview's own Print button sends a job.
  * Resolves `false` when there is no bridge or the request failed, `true` when main was asked.
  */
-export async function printTextDocument(source: TextPrintableSource, open: PrintOpen | undefined = window.throng?.print?.open): Promise<boolean> {
+export async function printTextDocument(
+  source: TextPrintableSource,
+  open: PrintOpen | undefined = window.throng?.print?.open,
+  onFailed?: PrintFailed,
+): Promise<boolean> {
   if (open === undefined) return false;
   try {
-    await open({ title: source.title, output: buildTextPrintable(source) });
+    const result = await open({ title: source.title, output: buildTextPrintable(source) });
+    if (result.cause !== undefined) {
+      onFailed?.(source.title, result.cause); // FR-080 — main refused it, and said why
+      return false;
+    }
     return true;
   } catch (error) {
     logCaught('print: open Print Preview for a text document', error);
+    onFailed?.(source.title, PRINT_NOT_READY);
     return false;
   }
 }

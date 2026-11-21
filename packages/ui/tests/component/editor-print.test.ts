@@ -158,6 +158,40 @@ describe('Print… for an editor', () => {
     expect([...doc.querySelectorAll('pre span')].some((s) => s.textContent === 'const')).toBe(true);
   });
 
+  it('says so in one notice, naming the file and the cause, when Print Preview refuses the document (075 FR-080)', async () => {
+    const open = vi.fn((_r: PrintJobRequest) => Promise.resolve({ opened: false, cause: 'The document is too large to print.' }));
+    await mount('editor', open);
+    editorView('x', 'y');
+
+    fireEvent.keyDown(window, { key: 'p', code: 'KeyP', ctrlKey: true });
+
+    const notice = await screen.findByTestId('print-failed');
+    expect(notice.textContent).toContain('a.ts');
+    expect(notice.textContent).toContain('The document is too large to print.');
+  });
+
+  it('says so in one notice when the request cannot reach Print Preview at all (075 FR-080)', async () => {
+    const open = vi.fn((_r: PrintJobRequest) => Promise.reject(new Error('bridge gone')));
+    await mount('editor', open);
+    editorView('x', 'y');
+
+    fireEvent.keyDown(window, { key: 'p', code: 'KeyP', ctrlKey: true });
+
+    expect((await screen.findByTestId('print-failed')).textContent).toContain('a.ts');
+  });
+
+  it('raises nothing when Print Preview is already open and was brought forward instead', async () => {
+    const open = vi.fn((_r: PrintJobRequest) => Promise.resolve({ opened: false }));
+    await mount('editor', open);
+    editorView('x', 'y');
+
+    fireEvent.keyDown(window, { key: 'p', code: 'KeyP', ctrlKey: true });
+
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('print-failed')).toBeNull();
+  });
+
   it('the command body prints nothing for a panel with no live editor', async () => {
     const open = vi.fn();
     expect(await printEditorPanel('nope', open)).toBe(false);

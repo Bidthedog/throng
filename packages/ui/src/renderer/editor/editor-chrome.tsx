@@ -15,6 +15,7 @@ import { getActivePane } from '../workspace/active-pane.js';
 import { getEditorActions } from './editor-actions.js';
 import { saveAllEditors } from './editor-save-all.js';
 import { printEditorPanel } from './editor-print.js';
+import { usePrintFailureNotice } from '../print/print-failure.js';
 import { EditorOpenListener } from './editor-open.js';
 import { UnsavedOpenDialog } from './unsaved-open-dialog.js';
 import { DirtyCloseDialog } from './dirty-close-dialog.js';
@@ -76,6 +77,7 @@ export function EditorChrome({ isSubWorkspace = false }: { isSubWorkspace?: bool
  * over an active preview must reach nothing) without the rest of the window chrome.
  */
 export function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean }): null {
+  const printFailed = usePrintFailureNotice(); // 075 FR-080
   const keybindings = useKeybindings();
   const ws = useWorkspace();
   const { activeProject } = useProjects();
@@ -107,7 +109,7 @@ export function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean 
         e.preventDefault();
         const printTab = w.layout?.tabs.find((t) => t.id === w.layout?.activeTabId);
         const printPanelId = printTab ? effectiveActivePanelId(printTab) : null;
-        if (printPanelId) void printEditorPanel(printPanelId);
+        if (printPanelId) void printEditorPanel(printPanelId, undefined, printFailed);
         return;
       }
       if (action !== 'editor.saveAll') {
@@ -139,6 +141,6 @@ export function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean 
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [keybindings]);
+  }, [keybindings, printFailed]);
   return null;
 }
