@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   SETTINGS_METADATA,
   SETTINGS_INTERNAL_KEYS,
-  HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS,
   settingsLeaves,
 } from '../../src/config/settings-metadata.js';
 import {
@@ -125,9 +124,7 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
     expect(byKey.get('editor.maxOpenFileBytes')?.control).toBe('slider');
     // string arrays → array
     expect(byKey.get('explorer.excludeGlobs')?.control).toBe('array');
-    // The three terminal-flavour controls are HIDDEN for v1.0.0 (see the dedicated block below):
-    // they are no longer in the rendered registry, so `byKey` does not carry them. Their control
-    // shapes are asserted against HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS instead.
+    // #67 — the terminal-flavour settings each declare the control their shape needs (see the block below).
   });
 
   it('groups every descriptor into a labelled section', () => {
@@ -309,35 +306,26 @@ describe('editor.previews.* and editor.navigation.historySize are required leave
   });
 });
 
-describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 re-exposes them)', () => {
+describe('the terminal-flavour settings are in the Settings tab (#67)', () => {
   const rendered = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
-  const hidden = new Map(HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS.map((d) => [d.key, d]));
-  const HIDDEN_KEYS = [
-    'terminals.flavours',
-    'terminals.disabledBuiltins',
-    'terminals.defaultShellArguments',
-  ] as const;
+  const KEYS = ['terminals.flavours', 'terminals.disabledBuiltins', 'terminals.defaultShellArguments'] as const;
 
-  it('classifies all three as internal, so they are not in the configurable set', () => {
-    for (const key of HIDDEN_KEYS) {
-      expect(SETTINGS_INTERNAL_KEYS, key).toContain(key);
-      expect(settingsLeaves(), key).not.toContain(key);
+  it('are configurable settings with a descriptor each, under the one Terminal heading', () => {
+    for (const key of KEYS) {
+      expect(SETTINGS_INTERNAL_KEYS, key).not.toContain(key);
+      expect(settingsLeaves(), key).toContain(key);
+      expect(rendered.get(key)?.group, key).toBe('Terminal');
     }
   });
 
-  it('does not render them: no descriptor in the rendered SETTINGS_METADATA', () => {
-    for (const key of HIDDEN_KEYS) {
-      expect(rendered.has(key), key).toBe(false);
-    }
+  it('declare the control their shape needs: ordered records, a picker over detected built-ins, a keyed table', () => {
+    expect(rendered.get('terminals.flavours')).toMatchObject({ control: 'records', idKey: 'id' });
+    expect(rendered.get('terminals.disabledBuiltins')?.control).toBe('multiselect');
+    expect(rendered.get('terminals.defaultShellArguments')?.control).toBe('map');
   });
 
-  it('keeps their descriptors intact for #67 to re-expose (a hide, not a revert)', () => {
-    // The controls are withheld, not deleted — #67 re-exposes them by spreading this array back
-    // into SETTINGS_METADATA. Assert the shapes survive so a stray deletion is caught here.
-    expect(hidden.get('terminals.flavours')?.control).toBe('records');
-    expect(hidden.get('terminals.flavours')?.idKey).toBe('id');
-    expect(hidden.get('terminals.disabledBuiltins')?.control).toBe('multiselect');
-    expect(hidden.get('terminals.defaultShellArguments')?.control).toBe('map');
+  it('keep the per-flavour command recipes internal, outside #67', () => {
+    expect(SETTINGS_INTERNAL_KEYS).toContain('terminals.commandRecipes');
   });
 });
 

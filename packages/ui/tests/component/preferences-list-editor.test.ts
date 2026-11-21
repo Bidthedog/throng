@@ -10,13 +10,12 @@ import userEvent from '@testing-library/user-event';
 import { createElement, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SETTINGS_METADATA, type FieldDescriptor } from '@throng/core';
-import { HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS } from '../../../core/src/config/settings-metadata.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { SettingControl } from '../../src/renderer/preferences/form-controls.js';
 import { listSummary } from '../../src/renderer/preferences/list-editor.js';
 
 const byKey = (key: string): FieldDescriptor => {
-  const d = [...SETTINGS_METADATA, ...HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS].find((x) => x.key === key);
+  const d = SETTINGS_METADATA.find((x) => x.key === key);
   if (!d) throw new Error(`no descriptor ${key}`);
   return d;
 };

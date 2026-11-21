@@ -422,6 +422,9 @@ next indent inserts.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Use Option as Meta (macOS only) | `terminals.macOptionIsMeta` | off | on · off | Make Option act as the Meta key in terminals, so shortcuts such as Option+B and Option+F reach programs that use Meta. Off, Option types the characters your keyboard layout puts on it, such as # or @. |
+| Custom terminal flavours | `terminals.flavours` | none | A table of flavours, in order: an id (required, unique), a label, the executable (required), its arguments and default shell arguments | Shells of your own, offered in the Flavour dropdown after the built-ins, in this order. Edited in a [list window](#lists-and-tables); a row needs an id and an executable before it is saved. |
+| Default shell arguments | `terminals.defaultShellArguments` | none | A table of flavour id → arguments | Shell arguments passed to a flavour every time it starts, for example `pwsh` → `-NoLogo`. Edited in a [list window](#lists-and-tables). |
+| Hidden built-in flavours | `terminals.disabledBuiltins` | none | Any of the built-in flavours this machine has | Built-in flavours to leave out of the Flavour dropdown. Every built-in this machine has is listed, hidden ones ticked, so unticking one shows it again. |
 | Remember terminal form values | `terminals.formHistory.enabled` | on | on · off | Offer Startup Command and Shell Arguments values used before, per terminal type. Off stops recording and offering them, and keeps what is stored until cleared. |
 | Terminal form values remembered | `terminals.formHistory.maxEntries` | 10 entries | 1 – 50 entries | How many values each field keeps per terminal type. Lowering this trims every list to its newest entries. |
 | Show terminal status bar | `terminals.showStatusBar` | on | on · off | The status bar along the bottom of each terminal panel. |
@@ -593,12 +596,10 @@ whole machine; memory is a share of installed RAM.
 
 ## Settings with no control
 
-Three terminal-flavour settings take effect from a hand-edited `settings.json` but have no control in
-the Settings editor yet: `terminals.flavours` (custom shells for the Flavour dropdown — id, label,
-executable, arguments), `terminals.disabledBuiltins` (built-in flavour ids to hide) and
-`terminals.defaultShellArguments` (arguments passed to a flavour every time it starts, keyed by
-flavour id). `settings.json` also carries bookkeeping throng writes for itself — a `version` marker
-and the last folder chosen for a new project — which is not a preference.
+`terminals.commandRecipes` — how a flavour is handed a startup command, keyed by flavour id — takes effect
+from a hand-edited `settings.json` but has no control in the Settings editor. `settings.json` also carries
+bookkeeping throng writes for itself — a `version` marker and the last folder chosen for a new project —
+which is not a preference.
 
 ## Themes and icon sets
 
