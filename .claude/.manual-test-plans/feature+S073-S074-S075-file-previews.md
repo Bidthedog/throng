@@ -26,6 +26,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-13 | [CSV] Loading placeholders for workbooks and large CSVs | untested | | | |
 | MT-14 | [CSV] The cell dialog is themed like an editor | untested | | | |
 | MT-15 | [CSV] A workbook preview says it is read-only | untested | | | |
+| MT-16 | [CSV] Converge fixes: ellipsis, menus, copy limit, unsaved prompt, Esc after Cut | untested | | | |
 | MT-20 | [Media] Open … in, for every preview type | untested | | | carried from 074 MT-01; no sign-off survives the merge |
 | MT-21 | [Media] Image Preview | untested | | | carried from 074 MT-02; no sign-off survives the merge |
 | MT-22 | [Media] SVG Preview beside its editor | untested | | | carried from 074 MT-03; no sign-off survives the merge |
@@ -1281,3 +1282,16 @@ Paths: `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/re
 3. Right-click a cell in an .xlsx preview. Print… shows Ctrl+P beside it.
 4. In Print Preview, change Orientation to Landscape and close it at once with the title-bar ×. Choose Print… again: Landscape is kept.
 5. In a Markdown preview, select across a callout, copy, and paste into a rich editor (LibreOffice Writer, or a mail draft). It pastes as a quote with the title in bold, and no marker or fold icon.
+
+## MT-16: [CSV] Converge fixes: ellipsis, menus, copy limit, unsaved prompt, Esc after Cut
+
+Covers: 073 FR-004, 073 FR-033, 073 FR-037g, 073 FR-037i, 044 FR-015
+Paths: `packages/ui/src/renderer/grid/data-grid.tsx`, `packages/ui/src/renderer/grid/grid-copy.ts`, `packages/ui/src/renderer/grid/grid.css`, `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/ui/src/renderer/preview/preview-panel.tsx`
+
+### Steps
+1. Narrow a CSV column until its text does not fit. The text ends in "…".
+2. Right-click a CSV cell. Copy as Rich Text and Copy as Plain Text show the copy icon. The editor item reads "Go to Editor" while the preview is linked to an editor, and "Open in Editor" otherwise.
+3. Right-click a workbook (.xlsx) cell. Copy as Rich Text and Copy as Plain Text show the copy icon.
+4. Set "Open previews in" to a new panel. Edit a CSV grid without saving, then drop another CSV onto that panel. The unsaved-changes prompt appears and names "<name> - CSV Preview".
+5. In a CSV of more than 1,000,000 cells, select all and Copy. A warning names the 1,000,000 limit and both counts. Cut shows the same warning and removes nothing.
+6. Cut a block of empty cells, then type in another cell and press Enter, then press Esc. Your typed edit stays.
