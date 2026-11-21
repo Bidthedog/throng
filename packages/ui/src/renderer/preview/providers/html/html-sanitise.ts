@@ -258,6 +258,8 @@ export function sanitiseHtmlPage(source: string, ctx: HtmlPageContext, win: Pars
   for (const el of doc.querySelectorAll('*')) {
     if (el.hasAttribute('src')) setOrRemove(el, 'src', r.resolve(el.getAttribute('src') ?? '', srcKind(el)));
     if (el.hasAttribute('poster')) setOrRemove(el, 'poster', r.resolve(el.getAttribute('poster') ?? '', 'image'));
+    // The legacy `background` of `<body>`, `<table>` and `<td>` is an image like any other (FR-072, FR-093a).
+    if (el.hasAttribute('background')) setOrRemove(el, 'background', r.resolve(el.getAttribute('background') ?? '', 'image'));
     if (el.hasAttribute('srcset')) setOrRemove(el, 'srcset', rewriteSrcset(el.getAttribute('srcset') ?? '', r));
     if (el.hasAttribute('style')) el.setAttribute('style', rewriteCss(el.getAttribute('style') ?? '', r));
     if (el.namespaceURI === SVG_NS) {

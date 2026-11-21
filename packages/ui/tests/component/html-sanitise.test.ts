@@ -144,6 +144,27 @@ describe('links follow only by the gesture (FR-079)', () => {
   });
 });
 
+// 074 convergence T072 — FR-072 / FR-093a: the legacy `background` attribute is an image resource like any other: a
+// relative one loads from the project, a remote one is left out and listed.
+describe('a background attribute is resolved as an image (FR-072, FR-093a)', () => {
+  const legacy = sanitiseHtmlPage(
+    '<body background="img/bg.png"><table background="https://remote.example/t.png"><tr><td>x</td></tr></table></body>',
+    { panelId: 'panel-1', docPath: DOC, projectRoot: ROOT },
+  );
+  const legacyDoc = new DOMParser().parseFromString(legacy.html, 'text/html');
+
+  it('points a relative background at the project’s asset route', () => {
+    const value = legacyDoc.body.getAttribute('background') ?? '';
+    expect(value.startsWith(ASSET)).toBe(true);
+    expect(value).toContain('bg.png');
+  });
+
+  it('leaves a remote background out, and lists it as a blocked image', () => {
+    expect(legacyDoc.querySelector('table')!.hasAttribute('background')).toBe(false);
+    expect(legacy.blocked).toContainEqual(expect.objectContaining({ url: 'https://remote.example/t.png', kind: 'image' }));
+  });
+});
+
 describe('the themed defaults (FR-082)', () => {
   it('sets a background and text colour at zero specificity, so any page rule wins', () => {
     expect(styles()).toContain(':where(html) { background: rgb(1, 2, 3); color: rgb(4, 5, 6); }');
