@@ -200,7 +200,8 @@ Files & Folders; each shows in an Image Preview, fitted; overwrite one on disk a
 1. **Given** a `.png` in Files & Folders, **When** the user opens it by the open gesture, Enter, Quick
    Open or Open In → Preview, **Then** an Image Preview panel titled `screenshot.png - Preview` shows
    the image, fitted to the panel, and hovering the title shows its full path. *(FR-001, FR-020,
-   FR-022)*
+   FR-022)* *(2026-11-21, convergence: the title is `screenshot.png - Image Preview` (FR-104), and the image opens
+   at 100%, fitted only when larger than the panel (FR-020a).)*
 2. **Given** an open Image Preview, **When** the user uses Fit, Zoom In, Zoom 100%, Zoom Out,
    middle-button drag, Ctrl+wheel or Ctrl+middle-click, **Then** each behaves as it does on a Mermaid
    preview, and none of it changes the file or is saved with the layout. *(FR-030 – FR-034)*
@@ -421,7 +422,8 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
 - **Transparency.** A transparent image is drawn over a themed backdrop that keeps it visible in every
   shipped theme (FR-027).
 - **SVG with no size.** An SVG with a `viewBox` but no `width`/`height` fits the panel; one with neither
-  draws at a default size of 300 × 150.
+  draws at a default size of 300 × 150. *(2026-11-21, convergence: superseded by FR-020a — an SVG sized only by
+  its `viewBox` opens at 100% of that size (FR-043), and is fitted only when larger than the panel.)*
 - **SVG referencing a local file.** `<image href="photo.png">` inside an SVG Preview: see FR-044 —
   nothing outside the SVG itself is loaded, local or remote.
 - **A huge or deeply nested SVG** that takes too long to draw shows the inline notice rather than
@@ -643,7 +645,9 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
   enlarged past 100%, so pixel art and icons can be inspected.
 - **FR-035**: An image or SVG drawn inside a Markdown preview (FR-054, FR-055) MUST carry the controls
   and right-click menu an inline Mermaid diagram carries there (054 FR-046a – FR-046n), including its
-  inline Maximise and the box height a document may give it (`|300`, `height=300`).
+  inline Maximise and the box height a document may give it (`|300`, `height=300`). *(2026-11-21, convergence:
+  for an image embed, `|300` is the image's width and `|300x200` its width and height, as 068 FR-056 rules; the
+  box height of an `svg` fence is given with `height=300`.)*
 
 #### SVG provider (#631)
 
@@ -874,7 +878,11 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
 - **FR-085a**: *(2026-11-20, superseding FR-085's out-of-scope clause for the menu and rich copy.)* A
   right-click inside an HTML page MUST open the panel's body menu with **Split**, **Select All**, **Copy**,
   **Copy as Rich Text** and **Find…**, as a Markdown preview's body menu offers them. Copy as Rich Text puts
-  the selection on the clipboard as HTML with a plain-text alternative; Copy stays plain text.
+  the selection on the clipboard as HTML with a plain-text alternative; Copy stays plain text. *(2026-11-21,
+  convergence, superseding "Copy stays plain text": the plain **Copy** row and chord run
+  `editor.previews.copyFormat`, as on every preview, because the constitution (5.5.0, "a preference picks the
+  default; the menu offers every variant") makes the plain item run the preference's choice. **Copy as Rich Text**
+  and **Copy as Plain Text** are both offered beside it (FR-085b).)*
 - **FR-085b**: *(2026-11-20, derived.)* The shared body menu's other rows that apply to a selection — **Copy as
   Plain Text** — are offered too, as on every preview.
 - **FR-086**: *(Superseded by FR-086b for HTML, 2026-11-20.)* The preview find bar (#420) SHOULD search the rendered page when the seam allows it
