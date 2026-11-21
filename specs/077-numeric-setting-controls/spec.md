@@ -97,8 +97,9 @@ read `settings.json`.
 2. **Given** a size slider, **When** the user drags it, **Then** it moves in that setting's step (e.g. 1 MB below 32 MB,
    5 MB to 250 MB), the box shows the step's byte count, the slider is not greyed, and `settings.json` holds bytes.
 3. **Given** a size setting, **When** the user types `12,345,678` in its box and confirms (Enter or leaving the box),
-   **Then** `settings.json` holds `12345678`, the value beside the slider reads `11.8 MB`, and the slider is greyed
-   but still enabled.
+   **Then** `settings.json` holds `12345678`, the value beside the slider reads `11.77 MB`, and the slider is greyed
+   but still enabled. *(Amended 2026-11-21, convergence T032: an off-stop size reads to at most two decimals, as
+   `numeric-units.ts` rounds it and `numeric-units.test.ts` asserts; first written as one decimal, `11.8 MB`.)*
 4. **Given** a greyed slider, **When** the user drags it, **Then** the box takes the step's byte count and the slider is
    no longer greyed.
 5. **Given** any notice, description or label that names a size limit, **When** it is shown, **Then** it quotes the

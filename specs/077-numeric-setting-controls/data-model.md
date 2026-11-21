@@ -15,7 +15,7 @@
 
 | Unit | Factor from stored | Shown as |
 |---|---|---|
-| `MB` | 1,048,576 bytes | `25 MB`; off-stop to one decimal (`11.8 MB`) |
+| `MB` | 1,048,576 bytes | `25 MB`; off-stop to at most two decimals (`11.77 MB`) — *amended 2026-11-21 (T032), was one decimal (`11.8 MB`)* |
 | `ms` | 1 | `125 ms` |
 | `s` | 1,000 ms | `1.5 s` |
 | `min` | 60,000 ms | `5 min` |

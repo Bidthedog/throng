@@ -131,7 +131,7 @@ ends with its covering tests green (`td run --scope file`).
 - [x] T029 Say once in Preferences, beside the size settings, that MB means 1,048,576 bytes, per FR-003 (partial)
 - [x] T030 Give the per-language indent table's number cells a declared step and the typed-value check every number box has — the reason in the Preferences toast, clamped on confirm, no fractions — per FR-008, FR-009 and FR-012 (partial)
 - [x] T031 Bring the five durations shown in seconds whose steps are 0.1 s or 0.25 s (`editor.autoSaveDebounceMs`, `editor.previews.maxWaitMs`, `attention.clearDelayMs`, `editor.links.existenceCheckTimeoutMs`, `terminals.commandPollMs`) and the two size settings stepped off FR-005's table (`diagnostics.maxFileBytes`, `spreadsheet.maxPreviewBytes`) into agreement with FR-005, re-stepping or recording the exception in the spec, and make the descriptor test enforce the table, per FR-005 and FR-012 (contradicts)
-- [ ] T032 Make US1/AC3 and data-model.md agree with the off-stop size rounding the code and its test use (two decimals, `11.77 MB`), per US1/AC3 (contradicts)
+- [x] T032 Make US1/AC3 and data-model.md agree with the off-stop size rounding the code and its test use (two decimals, `11.77 MB`), per US1/AC3 (contradicts)
 - [ ] T033 Draw a count's, a column's and a character limit's unit in the singular at 1 ("1 entry", "1 column"), per FR-013 (partial)
 - [ ] T034 Fix the docs that drifted from the descriptors: units still in labels, missing steps on count, day and percent rows, and the sentence that says a typed value applies after a pause, per FR-019 and FR-009 (partial)
 - [ ] T035 Replace the history-to-interval band table copied into docs/preferences.md with a description of the rule the code owns, per FR-014 (partial)
