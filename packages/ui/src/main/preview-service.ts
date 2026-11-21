@@ -1896,6 +1896,13 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // before anything else about the run changes: the preview keeps what it showed.
     this.deps.foldRekey?.reparent(run.panelId, fileKey(run.filePath), false);
     this.watchDisk(run);
+    /*
+     * #698 — the run is standalone NOW: say so at once, as a dirty or title change is said (FR-022), and let the
+     * disk's text follow when it is read. Waiting for the read left every viewer believing the preview still followed
+     * the document — its parent, its dirty mark — for as long as the disk took; on the nightly's macOS runner that
+     * outlasted the integration test's settle and the preview's update was missing (pipeline 44848109329).
+     */
+    this.emit(run, null);
     void this.readAndApply(run, { force: true, repeat: false });
   }
 
