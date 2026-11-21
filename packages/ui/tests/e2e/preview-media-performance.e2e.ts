@@ -1,7 +1,7 @@
 /**
  * 074 SC-003, SC-004 — how fast the media previews appear, and that a long PDF never freezes the window.
  *
- * - SC-003: a 10 MB image and a 5 MB SVG appear within 1 second of opening; a parented HTML preview shows an edit
+ * - SC-003: a 10 MB image and a 5 MB SVG appear within 1 second of opening; a parented HTML or SVG preview shows an edit
  *   within the configured update delay plus 250 ms.
  * - SC-004: a 500-page PDF shows its first page within 2 seconds of opening, and scrolling through it never freezes
  *   the window for more than 100 ms at a time.
@@ -146,6 +146,50 @@ test('a parented HTML preview shows an edit within the update delay plus 250 ms 
     );
   } finally {
     cleanupTemp(htmlRoot);
+    cleanupTemp(cfgRoot);
+  }
+});
+
+/*
+ * 074 convergence T068 — the same reading for a parented SVG preview. The edit is a space after the root element (still
+ * well-formed), and "showing it" is the picture's href moving to the new drawing.
+ */
+test('a parented SVG preview shows an edit within the update delay plus 250 ms (SC-003)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
+  const svgRoot = mkdtempSync(join(tmpdir(), 'throng-preview-perf-svg-'));
+  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-preview-perf-cfg-'));
+  writeSettingsAtomic(cfgRoot, { editor: { previews: { providers: { svg: { defaultOpenAction: 'editor' } } } } });
+  writeFileSync(join(svgRoot, 'shape.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="teal"/></svg>');
+  try {
+    await runApp(
+      async (_app, win) => {
+        await createProject(win, 'PreviewPerfSvg', svgRoot);
+        const editorId = await firstPanelId(win);
+        await win.getByTestId(`panel-type-select-${editorId}`).selectOption('editor');
+        await win.getByTestId(`panel-type-confirm-${editorId}`).click();
+        await win.getByTestId('file-explorer-tree').getByText('shape.svg', { exact: true }).click();
+        await expect(win.getByTestId(`editor-${editorId}`).locator('.cm-content')).toContainText('teal', { timeout: 8000 });
+        await win.getByTestId(`editor-preview-${editorId}`).click();
+        const image = win.locator('[data-testid^="diagram-frame-"] svg[data-throng-picture] image').last();
+        await expect(image).toHaveAttribute('href', /.+/, { timeout: 10_000 });
+        const before = (await image.getAttribute('href')) ?? '';
+
+        await focusEditor(win, editorId);
+        await win.keyboard.press('ControlOrMeta+End');
+        await win.keyboard.type(' ', { delay: 0 });
+        const lastKey = Date.now();
+        await expect(image).not.toHaveAttribute('href', before, { timeout: 10_000 });
+        const delay = 300; // the shipped Preview update delay (044 FR-060)
+        expectWithinSla(test.info(), {
+          what: 'last keystroke to the parented SVG preview showing it',
+          requirement: '074 SC-003',
+          elapsedMs: Date.now() - lastKey,
+          budgetMs: delay + 250,
+        });
+      },
+      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+    );
+  } finally {
+    cleanupTemp(svgRoot);
     cleanupTemp(cfgRoot);
   }
 });
