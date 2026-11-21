@@ -78,6 +78,17 @@ const GUARDED_TABLES: readonly GuardedTable[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_attention_flag_project ON attention_flag(project_id);`,
   },
+  // v15 — the daemon's attention ledger (#692, 057 FR-091a). Read at every daemon start, so a drifted store must
+  // regain the table rather than lose every mark.
+  {
+    table: 'attention_ledger',
+    ddl: `
+      CREATE TABLE IF NOT EXISTS attention_ledger (
+        panel_id TEXT PRIMARY KEY,
+        seq      INTEGER NOT NULL,
+        entry    TEXT NOT NULL
+      );`,
+  },
 ];
 
 interface AdditiveColumn {

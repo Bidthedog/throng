@@ -86,18 +86,20 @@ describe('terminal attention ledger (057)', () => {
     expect(entries[0]).toMatchObject({ kind: 'failed', reason: { signal: 'bell' } });
   });
 
-  it('terminal.kill drops the panel\'s entry (FR-066)', async () => {
+  // #692, FR-091a (superseding FR-066's "a terminal throng ends leaves no mark"): ending a terminal does not take its
+  // mark. The panel restarts its terminal and still shows it; a mark goes when cleared, or with its panel or project.
+  it('terminal.kill keeps the panel\'s entry (FR-091a)', async () => {
     const h = await harness(['p1', 'p2']);
     await h.rpc('terminal.attentionSync', { entries: [entry('p1'), entry('p2')] });
     await h.rpc('terminal.kill', { panelId: 'p1' });
-    expect((await ledger(h)).map((e) => e.panelId)).toEqual(['p2']);
+    expect((await ledger(h)).map((e) => e.panelId)).toEqual(['p1', 'p2']);
   });
 
-  it('killAll drops every entry whose terminal it ended', async () => {
+  it('killAll — Terminate all on close — keeps every entry (FR-091a)', async () => {
     const h = await harness(['p1', 'p2']);
     await h.rpc('terminal.attentionSync', { entries: [entry('p1'), entry('p2'), entry('gone')] });
     await h.rpc('terminal.killAll', {});
-    expect((await ledger(h)).map((e) => e.panelId)).toEqual(['gone']);
+    expect((await ledger(h)).map((e) => e.panelId)).toEqual(['p1', 'p2', 'gone']);
   });
 
   it('project delete drops the project\'s entries, with or without a running terminal', async () => {

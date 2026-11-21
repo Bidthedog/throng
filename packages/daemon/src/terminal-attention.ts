@@ -25,6 +25,11 @@ export interface AttentionSubject {
 }
 
 export interface TerminalAttentionOptions {
+  /**
+   * #692, 057 FR-091a — where the ledger is kept so it outlives the daemon: read once when the daemon starts, written
+   * whole after every change. Absent keeps it in memory only (a test that is about something else).
+   */
+  ledgerStore?: { load(): AttentionLedgerEntry[]; save(entries: readonly AttentionLedgerEntry[]): void };
   /** The names a notification and tooltip carry (FR-015, FR-033); absent leaves "Terminal" and no project name. */
   /**
    * `liveTitle` is the terminal's current window title (FR-116), so the panel is named as its header names
@@ -151,6 +156,43 @@ export class TerminalAttention {
     private readonly options: TerminalAttentionOptions = {},
     private readonly now: () => number = Date.now,
   ) {}
+
+  /** #692 — the stored ledger has been read into memory (lazily: the daemon migrates its store after composing this). */
+  private loaded = false;
+
+  /** #692 — the marks main held when the last daemon ended, read back before the ledger is first used. */
+  private ensureLoaded(): void {
+    if (this.loaded) return;
+    this.loaded = true;
+    try {
+      const stored = this.options.ledgerStore?.load() ?? [];
+      // Anything recorded since this daemon started is newer than what the last one stored.
+      const fresh = [...this.ledger];
+      this.ledger.clear();
+      for (const raw of stored) {
+        const entry = readEntry(raw);
+        if (entry) this.ledger.set(entry.panelId, { ...entry, whileDetached: raw.whileDetached === true });
+      }
+      for (const [id, e] of fresh) {
+        this.ledger.delete(id);
+        this.ledger.set(id, e);
+      }
+      this.trim();
+    } catch (error) {
+      logCaught('terminal-attention: read the stored ledger', error); // start from memory, as before #692
+    }
+  }
+
+  /** #692 — write the ledger through to its store after a change. Never throws: a failed write keeps the memory copy. */
+  private persist(): void {
+    const store = this.options.ledgerStore;
+    if (store === undefined) return;
+    try {
+      store.save([...this.ledger.values()]);
+    } catch (error) {
+      logCaught('terminal-attention: store the ledger', error);
+    }
+  }
 
   getConfig(): AttentionProducerConfig {
     return this.config;
@@ -382,6 +424,7 @@ export class TerminalAttention {
 
   /** A signal that arrived while no window was open: held for main to read on reconnect. */
   private recordDetached(sig: AttentionSignal): void {
+    this.ensureLoaded();
     const existing = this.ledger.get(sig.panelId);
     this.ledger.delete(sig.panelId); // re-insert so insertion order stays oldest-first
     this.ledger.set(sig.panelId, {
@@ -397,6 +440,7 @@ export class TerminalAttention {
       whileDetached: true,
     });
     this.trim();
+    this.persist();
   }
 
   private trim(): void {
@@ -409,6 +453,7 @@ export class TerminalAttention {
 
   /** `terminal.attentionLedger`: every entry, clearing `whileDetached` on the ones returned. */
   readLedger(): AttentionLedgerEntry[] {
+    this.ensureLoaded();
     let live: ReadonlySet<string> | null = null;
     try {
       live = this.options.livePanels?.() ?? null;
@@ -420,11 +465,13 @@ export class TerminalAttention {
     for (const [id, e] of [...this.ledger]) if (this.isIgnored(e)) this.ledger.delete(id);
     const out = [...this.ledger.values()].map((e) => ({ ...e }));
     for (const [id, e] of this.ledger) if (e.whileDetached) this.ledger.set(id, { ...e, whileDetached: false });
+    this.persist();
     return out;
   }
 
   /** `terminal.attentionSync`: main's full set replaces the ledger, except detached entries main has not read. */
   syncLedger(raw: unknown): void {
+    this.ensureLoaded();
     const incoming = (raw as { entries?: unknown } | null)?.entries;
     const next = new Map<string, AttentionLedgerEntry>();
     if (Array.isArray(incoming)) {
@@ -437,14 +484,19 @@ export class TerminalAttention {
     this.ledger.clear();
     for (const [id, e] of next) this.ledger.set(id, e);
     this.trim();
+    this.persist();
   }
 
-  /** A terminal throng ended, or a panel that no longer exists: its mark is not coming back. */
+  /** A panel that no longer exists: its mark is not coming back. */
   forgetPanel(panelId: string): void {
-    this.ledger.delete(panelId);
+    this.ensureLoaded();
+    if (this.ledger.delete(panelId)) this.persist();
   }
 
   forgetProject(projectId: string): void {
-    for (const [id, e] of this.ledger) if (e.projectId === projectId) this.ledger.delete(id);
+    this.ensureLoaded();
+    let changed = false;
+    for (const [id, e] of this.ledger) if (e.projectId === projectId) changed = this.ledger.delete(id) || changed;
+    if (changed) this.persist();
   }
 }

@@ -834,7 +834,9 @@ export class TerminalService {
     }
     session.userKilled = true;
     session.escalate = escalate;
-    this.attention.forgetPanel(session.panelId); // 057 FR-066: a terminal throng ends leaves no mark to restore
+    // #692, 057 FR-091a (superseding FR-066's "a terminal throng ends leaves no mark"): ending a terminal — shutdown,
+    // Terminate all, an unload — does not take its mark. The mark goes when it is cleared, its panel is destroyed or its
+    // project deleted; the panel restarts its terminal and shows the mark again.
     const ending = session.host.end(session.handle, this.endTimeoutMs).then(
       () => null,
       async (error: unknown) => {

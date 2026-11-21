@@ -1139,7 +1139,16 @@ lands on a marked panel and clears it.
   (Principle X). Each has a shipped default, appears in the Preferences editor with a description, and
   is documented with the rest of the preferences.
 - **FR-091**: Marks MUST survive switching projects, unloading a project with Keep Terminals Running, and
-  reopening throng while terminals keep running (FR-066). A mark MUST NOT outlive its panel.
+  reopening throng while terminals keep running (FR-066). A mark MUST NOT outlive its panel. *(Widened by FR-091a,
+  2026-11-21: a mark also survives a reopen whose terminals did not keep running.)*
+- **FR-091a** *(maintainer, 2026-11-21, #692; supersedes FR-091's "while terminals keep running")*: A mark MUST also
+  survive throng closing and reopening when its terminal does not keep running — Terminate all on close, the machine
+  powered off, a new version installed and started. Every panel that showed a mark before shows it again afterwards,
+  matching the notifications still listed (068 FR-031), and restoring it MUST NOT announce it (FR-038). Ending a terminal
+  MUST NOT clear its mark: a mark goes when its panel is attended (FR-095), its panel is destroyed, its project is
+  deleted or its producer withdraws it (FR-007). *(The daemon kept the marks in memory and forgot each one as it ended a terminal, so any restart lost them
+  while their Notifications entries came back from disk, and the next mark's reconcile (FR-025) then dismissed those
+  entries unread.)*
 
 ### Key Entities
 

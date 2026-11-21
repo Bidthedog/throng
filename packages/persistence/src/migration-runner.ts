@@ -13,6 +13,7 @@ import { applyMigrationV11, MIGRATION_V11_VERSION } from './migrations/v11-atten
 import { applyMigrationV12, MIGRATION_V12_VERSION } from './migrations/v12-project-search-excludes.js';
 import { applyMigrationV13, MIGRATION_V13_VERSION } from './migrations/v13-grid-column-widths.js';
 import { applyMigrationV14, MIGRATION_V14_VERSION } from './migrations/v14-project-html-safe-sources.js';
+import { applyMigrationV15, MIGRATION_V15_VERSION } from './migrations/v15-attention-ledger.js';
 
 /** The baseline schema version (no domain tables — only a `_meta` marker). */
 export const BASELINE_VERSION = 1;
@@ -85,6 +86,10 @@ const MIGRATIONS: readonly Migration[] = [
   {
     version: MIGRATION_V14_VERSION,
     up: applyMigrationV14,
+  },
+  {
+    version: MIGRATION_V15_VERSION,
+    up: applyMigrationV15,
   },
 ];
 
