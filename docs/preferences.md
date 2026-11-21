@@ -57,6 +57,14 @@ back the same layout.
   you opened stays open, and a subsection you folded stays folded. They are not a setting, so they do
   not appear in `settings.json`.
 
+### Lists and tables
+
+A setting that holds a list or a table — excluded globs, link protocols, the extensions that end a spaced
+path, safe preview sources, language by extension, indentation by language — shows one line in its row:
+how many entries it holds and the first few. Its edit button opens the list in a window of its own over
+Preferences, where you add, change and remove entries as before. **Save** (or **Ctrl+Enter**) stores the
+list; **Cancel** (or **Esc**) leaves it as it was.
+
 ### Resetting
 
 Four scopes, all reading the same shipped-defaults record:

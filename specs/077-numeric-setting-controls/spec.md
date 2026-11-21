@@ -67,6 +67,12 @@ maintainer may still overrule any:
   outline; the toast names the setting and its range.
 - Q (maintainer, 08:20): "You can remove the 'Appearance -> Theme' preference setting - that is handled in the 'Themes'
   tab." → FR-026. Only the Settings tab's row goes; the key stays, written by the Themes tab.
+- Q (maintainer, 08:18): "The 'Excluded Globs', 'languages', 'indentation by language', 'Allowed link protocols',
+  'file extensions that end a spaces path' - and all other preferences that have unbounded lists in the UI - should
+  have their own modal editor that sits on top of the preferences window, rather than being inline. Functionality
+  remains the same, but the lists are cumbersome as inline editors." → FR-025. Scope (orchestrator, confirmed): the
+  seven list and table settings the Settings tab draws; the hidden terminal-flavour tables inherit it when #67 shows
+  them; Key Bindings' chord lists and the Project Settings dialog's lists stay as they are.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -311,6 +317,17 @@ effective value after upgrading, now stored in ms or bytes.
   key and record tables' add boxes. A table row that arrived broken from the file keeps its own row (C17): it reports
   the file, not an entry. *(Supersedes FR-008's "say inline, beside the box" — its wording and bound-naming survive
   in the toast — 053 FR-008's message beside the text box, and 074 FR-072c's "says why beside it".)*
+- **FR-025**: *(2026-11-21.)* A setting whose Preferences control edits an unbounded list or table (`array`, `map`
+  and `records` controls: `explorer.excludeGlobs`, `search.inFiles.excludeGlobs`, `editor.links.protocolAllowlist`,
+  `editor.links.knownFileExtensions`, `editor.previews.providers.html.safeSources`, `editor.languageByExtension`,
+  `editor.indentByLanguage`) MUST show in its row a one-line summary — the number of entries, digit-grouped, and
+  the first three by name (a language by its name), "No entries" when empty — and a themeable icon button, titled
+  "Edit <setting>…", that opens a modal over the Preferences window. The modal MUST hold the same editor the row
+  drew inline, with the same add, remove, edit and per-entry checks, on a draft: **Save** or Ctrl+Enter writes the
+  draft once (nothing when unchanged), **Cancel** or Escape discards it, focus stays inside it and returns to the
+  button when it closes. What is wrong with an entry is said in the Preferences toast (FR-024). The row's label,
+  description and search are unchanged. *(Supersedes the inline list and table editors of 016 FR-022, 021's list
+  rows' commit-as-typed — the modal's draft takes it — and 074 FR-072c's inline list.)*
 - **FR-026**: *(2026-11-21.)* The Settings tab MUST draw no **Theme** row: the Themes tab chooses the active theme. The
   key `appearance.theme` stays a configurable setting — `settings.json`, the shipped defaults, the JSON tab's check and
   Revert All keep it — and a search of the Settings tab never finds a row for it. General has no Appearance subsection.

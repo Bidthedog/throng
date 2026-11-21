@@ -80,6 +80,8 @@ describe('JsonArrayControl', () => {
     render(
       createElement(SettingControl, { descriptor: arrayField, value: [{ a: 1 }], onCommit: vi.fn() }),
     );
+    // 077 FR-025 — a list is edited in its modal.
+    fireEvent.click(screen.getByTestId('list-edit-x.list'));
     const area = screen.getByTestId('control-x.list');
     expect(invalidOf(area)).toBe(false);
     fireEvent.change(area, { target: { value: '{nope' } });

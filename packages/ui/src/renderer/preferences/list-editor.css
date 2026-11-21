@@ -1,0 +1,40 @@
+/* 077 FR-025 — a list or table setting: one summary line and its Edit button in the row; the editor in a modal. */
+.list-setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.list-setting__summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--throng-colour-textMuted);
+}
+
+/* Wider than a confirmation: it holds a table. The body scrolls; the title and buttons stay. */
+.modal.list-editor {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 92vw);
+  max-height: 86vh;
+}
+
+.list-editor__description,
+.list-editor__hint {
+  margin: 0 0 10px;
+  color: var(--throng-colour-textMuted);
+}
+
+.list-editor__hint {
+  margin: 10px 0 0;
+}
+
+.list-editor__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}

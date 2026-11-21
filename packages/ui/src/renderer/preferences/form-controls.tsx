@@ -12,6 +12,7 @@ import {
 import { FolderPicker } from '../common/folder-picker.js';
 import { IconButton } from '../common/icon-button.js';
 import { MapControl } from './map-control.js';
+import { ListSettingControl } from './list-editor.js';
 import { useFieldNotice } from './field-notice.js';
 import { logExpected, typedProblem } from '@throng/core';
 
@@ -75,8 +76,17 @@ export function SettingControl(props: SettingControlProps): ReactElement {
     case 'number':
     case 'font-size':
       return <NumberControl {...props} />;
+    // 077 FR-025 — a list is summarised in its row and edited in a modal, by the same editor it had inline.
     case 'array':
-      return <ArrayControl {...props} />;
+      return (
+        <ListSettingControl
+          descriptor={props.descriptor}
+          value={props.value}
+          disabled={props.disabled}
+          onCommit={props.onCommit}
+          editor={(draft, setDraft) => <ArrayControl {...props} value={draft} onCommit={setDraft} />}
+        />
+      );
     case 'folder':
       return <FolderControl {...props} />;
     // A keyed map (016). WITHOUT this case it falls through to `default:` and renders as a TEXT
@@ -88,7 +98,17 @@ export function SettingControl(props: SettingControlProps): ReactElement {
     // `terminals.flavours` does not crash, it renders as a TEXT FIELD full of "[object Object]".
     case 'map':
     case 'records':
-      return <MapControl {...props} />;
+      return (
+        <ListSettingControl
+          descriptor={props.descriptor}
+          value={props.value}
+          disabled={props.disabled}
+          onCommit={props.onCommit}
+          editor={(draft, setDraft) => (
+            <MapControl descriptor={props.descriptor} value={draft} options={props.options} onCommit={setDraft} />
+          )}
+        />
+      );
     default:
       // text / colour / font-family / icon / chord fall back to a text field here;
       // richer pickers live in the Themes/Key Bindings tabs (US3/US4).

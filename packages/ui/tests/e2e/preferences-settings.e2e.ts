@@ -145,11 +145,13 @@ test('edits toggle / select / number / array controls and applies + persists eac
         .poll(() => readSettings(cfgRoot)?.behaviour?.submenuHoverMs)
         .toBe(250);
 
-      // Array (string): add an explorer.excludeGlobs entry.
+      // Array (string): add an explorer.excludeGlobs entry, in its modal (077 FR-025), written on Save.
       const before = readSettings(cfgRoot)?.explorer?.excludeGlobs?.length ?? 0;
+      await prefs.getByTestId('list-edit-explorer.excludeGlobs').click();
       await prefs.getByTestId('control-explorer.excludeGlobs-add').click();
       const newIdx = before;
       await prefs.getByTestId(`control-explorer.excludeGlobs-item-${newIdx}`).fill('**/dist');
+      await prefs.getByTestId('list-editor-save-explorer.excludeGlobs').click();
       await expect
         .poll(() => readSettings(cfgRoot)?.explorer?.excludeGlobs)
         .toContain('**/dist');

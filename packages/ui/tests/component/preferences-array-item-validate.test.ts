@@ -20,8 +20,14 @@ function renderControl(value: string[] = SHIPPED) {
   const onCommit = vi.fn();
   // 077 FR-024 — under the provider, as in the Preferences window: the refusal is a toast carrying the entry's `…-invalid` id.
   render(createElement(NotificationProvider, null, createElement(SettingControl, { descriptor, value, onCommit })));
+  // 077 FR-025 — the list is edited in its modal; the setting is written when the modal is saved.
+  fireEvent.click(screen.getByTestId(`list-edit-${KEY}`));
   return { onCommit };
 }
+
+const save = (): void => {
+  fireEvent.click(screen.getByTestId(`list-editor-save-${KEY}`));
+};
 
 function addEntry(text: string): HTMLInputElement {
   fireEvent.click(screen.getByTestId(`control-${KEY}-add`));
@@ -64,6 +70,8 @@ describe('the list editor validates each entry before it commits (074 FR-072c)',
     const input = addEntry('https://cdn.example.com');
     expect(onCommit).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.queryByTestId(`control-${KEY}-item-${SHIPPED.length}-invalid`)).toBeNull();
+    save();
 
     expect(onCommit).toHaveBeenCalledWith([...SHIPPED, 'https://cdn.example.com']);
     expect(screen.queryByTestId(`control-${KEY}-item-${SHIPPED.length}-invalid`)).toBeNull();
@@ -87,6 +95,7 @@ describe('the list editor validates each entry before it commits (074 FR-072c)',
     fireEvent.click(screen.getByTestId(`control-${KEY}-add`));
     const input = screen.getByTestId(`control-${KEY}-item-${SHIPPED.length}`);
     fireEvent.blur(input);
+    save();
 
     expect(onCommit).not.toHaveBeenCalled();
     expect(screen.queryByTestId(`control-${KEY}-item-${SHIPPED.length}`)).toBeNull();
