@@ -1024,6 +1024,10 @@ export function PreviewPanel({
         // The reveal is keyed by the heading's SLUG, read off the element. The fragment is not one: Go
         // to Heading passes the heading's name ("Three"), which names no section, so the reveal
         // changed nothing and the deferred scroll never ran.
+        // 075 FR-010 — a heading inside a collapsed callout: the callout, and every collapsed one around it, opens
+        // first. The body folds a callout itself (CSS on its body), so the heading is never `hidden` and the section
+        // reveal below would not notice; synchronous, so the measurement after it sees the opened callout.
+        revealNodeAt(heading);
         const slug = heading.getAttribute('data-heading-slug');
         const needsReveal = heading.hidden || (expandTarget && slug !== null && isCollapsed(foldStateRef.current, slug));
         if (needsReveal && slug !== null && revealRef.current) {

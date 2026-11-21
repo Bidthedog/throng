@@ -132,7 +132,7 @@ MVP = US1 + US2 (callouts usable). Then US3, US4, US6, US5 in that order, each a
 
 ## Phase 10: Convergence
 
-- [ ] T068 Open a collapsed callout, and every collapsed callout around it, when a heading inside it is the target of a `#fragment` link, a wikilink, Go to Heading or an outline jump: `scrollToHeading` in `packages/ui/src/renderer/preview/preview-panel.tsx` reveals only a hidden heading or a collapsed section; component test first, per FR-010 (partial)
+- [x] T068 Open a collapsed callout, and every collapsed callout around it, when a heading inside it is the target of a `#fragment` link, a wikilink, Go to Heading or an outline jump: `scrollToHeading` in `packages/ui/src/renderer/preview/preview-panel.tsx` reveals only a hidden heading or a collapsed section; component test first, per FR-010 (partial)
 - [x] T069 Leave the find match frames (`.preview-match-frames`) out of the printable copy in `packages/ui/src/renderer/preview/print/printable.ts`, with a case in `print-printable.test.ts`, per FR-076, US5 (partial)
 - [ ] T070 Raise one notice in the requesting panel or editor, and log it, when Print… cannot build its printable or main refuses the request (over the size cap, malformed): today `print-command.ts` and `text-printable.ts` only log and `print-ipc.ts` answers `{opened:false}` silently, per FR-080 (partial)
 - [ ] T071 Prove or fix the ready-made-pages print route: a `pages` printable is loaded as a PDF into a plugin-less window in `packages/ui/src/main/electron-print-engine.ts`, and the contract test stops at the IPC boundary; an integration test that a `pages` output reaches Print Preview with its pages, then whatever fix it needs, per FR-060, FR-061, US6/AS2, SC-011 (partial)
