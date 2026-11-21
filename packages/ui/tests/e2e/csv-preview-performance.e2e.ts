@@ -29,11 +29,23 @@ import { expectWithinSla } from './helpers/sla.js';
 test.describe.configure({ mode: 'serial' });
 
 const MB = 1024 * 1024;
+/** `editor.maxOpenFileBytes`'s shipped value: a CSV over it is refused, not shown. */
+const LIMIT_BYTES = 10 * MB;
 
-/** A CSV of `rows` records, a header first, each record about 100 bytes. */
+/** Every record's length on disk, its CRLF included: 100,000 of them make 10.2 MB, under the 10 MiB limit. */
+const RECORD_BYTES = 102;
+
+/**
+ * A CSV of `rows` records after a header, each exactly {@link RECORD_BYTES} long (ASCII, CRLF endings): the note is
+ * padded to make up the length, so the file's size is the same on every platform (pipeline 44897252549 measured an
+ * unpadded file at 7.5 MB).
+ */
 function bigCsv(rows: number): string {
   const out = ['id,name,city,amount,note'];
-  for (let i = 0; i < rows; i++) out.push(`${i},name-${i},city-${i % 997},${(i * 7) % 100_000},a note about record ${i} padded to length`);
+  for (let i = 0; i < rows; i++) {
+    const head = `${i},name-${i},city-${i % 997},${(i * 7) % 100_000},a note about record ${i} `;
+    out.push(head.padEnd(RECORD_BYTES - 2, 'x'));
+  }
   return out.join('\r\n') + '\r\n';
 }
 
@@ -52,7 +64,7 @@ let root = '';
 
 test.beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'throng-csv-perf-'));
-  // Under the CSV preview's shipped 10 MB limit, with SC-001's 100,000 rows.
+  // SC-001's file: 100,000 rows and over 10 MB (10,000,000 bytes), yet under the shipped 10 MiB limit, which refuses it.
   writeFileSync(join(root, 'rows-100k.csv'), bigCsv(100_000));
   writeFileSync(join(root, 'book-1mb.xlsx'), bookOf(1 * MB));
   // Just under the 25 MB limit: a file over it is refused, not read.
@@ -83,7 +95,9 @@ async function previewFromTree(win: Page, file: string): Promise<string> {
 
 test('a 10 MB, 100,000-row CSV shows its first screen within 1.5 seconds (SC-001)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const win = shared!.win;
-  expect(statSync(join(root, 'rows-100k.csv')).size).toBeGreaterThan(9 * MB);
+  const size = statSync(join(root, 'rows-100k.csv')).size;
+  expect(size).toBeGreaterThanOrEqual(10_000_000);
+  expect(size).toBeLessThanOrEqual(LIMIT_BYTES);
   const started = Date.now();
   const id = await previewFromTree(win, 'rows-100k.csv');
   const grid = win.getByTestId(`csv-grid-${id}`);
