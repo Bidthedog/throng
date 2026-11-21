@@ -44,6 +44,10 @@ export interface ProjectsSettings {
   unloadTerminalAction: UnloadTerminalAction;
   /** Whether a folder opened from outside throng switches to its project or only loads it (067 FR-035). */
   openFromOutside: OpenFromOutside;
+  /** #695, 077 FR-027 — how long the pointer rests on a project row before its popover opens, in ms. */
+  popoverDelayMs: number;
+  /** #695, 077 FR-027 — whether a project row shows its popover at all. */
+  popoverEnabled: boolean;
 }
 
 /** What a folder arriving from outside throng does to the active project (067 FR-035). */
@@ -849,7 +853,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     destroySubWorkspace: 'double',
     killProcesses: 'double',
   },
-  projects: { unloadTerminalAction: 'keepRunning', openFromOutside: 'switch' },
+  projects: { unloadTerminalAction: 'keepRunning', openFromOutside: 'switch', popoverDelayMs: 300, popoverEnabled: true },
   panes: {
     projects: { maxWidth: DEFAULT_PROJECTS_MAX_WIDTH },
     fileExplorer: { maxWidth: DEFAULT_EXPLORER_MAX_WIDTH },
@@ -1193,6 +1197,9 @@ function projectsSettings(raw: unknown, d: ProjectsSettings): ProjectsSettings {
       ? (p.unloadTerminalAction as UnloadTerminalAction)
       : d.unloadTerminalAction,
     openFromOutside: p.openFromOutside === 'switch' || p.openFromOutside === 'load' ? p.openFromOutside : d.openFromOutside,
+    // 077 FR-016 — no clamp here: the bounds guard holds it to the descriptor's range, the one bound.
+    popoverDelayMs: wholeNumber(p.popoverDelayMs, d.popoverDelayMs),
+    popoverEnabled: typeof p.popoverEnabled === 'boolean' ? p.popoverEnabled : d.popoverEnabled,
   };
 }
 

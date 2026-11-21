@@ -355,6 +355,32 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     optionLabels: { switch: 'Switch to the project', load: 'Load it without switching' },
   },
   {
+    // #695, 077 FR-027 — the project row's popover, beside the tab and File Explorer popovers' own switches.
+    key: 'projects.popoverEnabled',
+    label: 'Project popover',
+    description:
+      'Show a popover when the pointer rests on a project in the Projects pane: its full name, its ID, its full path, its tab and panel counts, and how to rename it.',
+    group: 'General',
+    subgroup: 'Projects',
+    control: 'toggle',
+  },
+  {
+    // #695, 077 FR-027 — the same stops as `tabs.popoverDelayMs` and `explorer.popoverDelayMs`.
+    key: 'projects.popoverDelayMs',
+    label: 'Project popover delay',
+    description:
+      'How long the pointer must rest on a project before its popover appears, in milliseconds. Zero shows it as soon as the pointer arrives.',
+    group: 'General',
+    subgroup: 'Projects',
+    control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    min: 0,
+    max: 1500,
+    step: 25,
+  },
+  {
     key: 'projects.unloadTerminalAction',
     label: 'Unload project: default terminal action',
     description:

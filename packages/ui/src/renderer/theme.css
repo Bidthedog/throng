@@ -615,6 +615,7 @@ textarea,
 }
 
 .project-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -729,7 +730,6 @@ textarea,
 
 .project-item--active .project-item__switch,
 .project-item--active .project-item__name,
-.project-item--active .project-item__counts,
 .project-item--active .project-item__path,
 .project-item--active .project-item__grip,
 .project-item--active .project-item__controls button {
@@ -786,21 +786,76 @@ textarea,
   flex: 0 1 auto;
 }
 
-/* Tab/panel count indicator after the project name (stays put; name ellipsizes). */
-.project-item__counts {
-  flex: 0 0 auto;
-  color: var(--text-dim);
-  font-size: 11px;
-}
-
+/*
+ * #695, 077 FR-027 — the action buttons take no room until the pointer is over the row: out of the flow
+ * (and unseen) at rest, so the name and the path use the row's whole width; back in the flow on hover,
+ * where the labels give way to them. Out of the flow rather than `display: none`, so they stay
+ * targetable at the same place.
+ */
 .project-item__controls {
   display: flex;
   gap: 2px;
   opacity: 0;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .project-item:hover .project-item__controls {
   opacity: 1;
+  position: static;
+  transform: none;
+}
+
+/* The name and the path: an ellipsis at rest, the rest scrolled into view on hover (FR-032, #695). */
+.project-item__marquee {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.project-item__marquee-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  will-change: transform;
+}
+
+.project-item__marquee-text--scrolling {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* #695, 077 FR-027 — the row's popover, on the tab popover's surface (`throng-popup`). */
+.project-popover {
+  position: fixed;
+  z-index: 1000;
+  min-width: 240px;
+  max-width: 440px;
+  pointer-events: none;
+}
+
+.project-popover__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.project-popover__path {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.project-popover__detail,
+.project-popover__hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .project-item__controls button {

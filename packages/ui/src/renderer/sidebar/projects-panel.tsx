@@ -57,6 +57,7 @@ import { useContextMenu } from '../context-menu-provider.js';
 import { projectMenu } from './project-menu.js';
 import { categoryMenu } from './category-menu.js';
 import { useUnloadProject } from './use-unload-project.js';
+import { ProjectRowPopover, useProjectRowPopover } from './project-row-popover.js';
 import {
   registerProjectsPanelCommands,
   unregisterProjectsPanelCommands,
@@ -170,19 +171,31 @@ function DraggableCategoryHeader({
 }
 
 /**
- * The project's root path in a de-emphasised line. When it overflows, hovering
- * starts a horizontal marquee scroll after ~200 ms and resets on leave (FR-032).
+ * A one-line label that ends in an ellipsis when it does not fit, and scrolls to show the rest once the
+ * pointer has rested on it for ~200 ms, resetting on leave (FR-032). The project's path has always
+ * scrolled; #695 (077 FR-027) gives the name the same behaviour. Neither carries a native tooltip: the
+ * row's popover shows both in full.
  */
-function PathLabel({ path, id }: { path: string; id: string }): ReactElement {
+function MarqueeLabel({
+  text,
+  className,
+  testId,
+}: {
+  text: string;
+  className: string;
+  testId?: string;
+}): ReactElement {
   const outerRef = useRef<HTMLSpanElement>(null);
+  const innerRef = useRef<HTMLSpanElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [offset, setOffset] = useState(0);
 
   const onEnter = (): void => {
     timer.current = setTimeout(() => {
-      const el = outerRef.current;
-      if (!el) return;
-      const overflow = el.scrollWidth - el.clientWidth;
+      const outer = outerRef.current;
+      const inner = innerRef.current;
+      if (!outer || !inner) return;
+      const overflow = inner.scrollWidth - outer.clientWidth;
       if (overflow > 0) setOffset(overflow);
     }, MARQUEE_DELAY_MS);
   };
@@ -190,26 +203,27 @@ function PathLabel({ path, id }: { path: string; id: string }): ReactElement {
     if (timer.current) clearTimeout(timer.current);
     setOffset(0);
   };
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
 
   return (
     <span
       ref={outerRef}
-      className="project-item__path"
-      data-testid="project-path"
-      // 068 FR-064 (over FR-034d): the path, then `(id: <id>)` on a second line, so a user can match a
-      // log record (`project=<project:ID>`) to this project.
-      title={`${path}\n(id: ${id})`}
+      className={`project-item__marquee ${className}`}
+      data-testid={testId}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
       <span
-        className="project-item__path-text"
+        ref={innerRef}
+        className={`project-item__marquee-text ${className}-text${offset > 0 ? ' project-item__marquee-text--scrolling' : ''}`}
         style={{
           transform: `translateX(${-offset}px)`,
           transition: offset > 0 ? `transform ${Math.max(2, offset / 30)}s linear` : 'transform 0.2s',
         }}
       >
-        {path}
+        {text}
       </span>
     </span>
   );
@@ -258,6 +272,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
 
   const confirm = useConfirm();
   const settings = useAppSettings();
+  const rowPopover = useProjectRowPopover(settings.projects.popoverDelayMs, settings.projects.popoverEnabled);
   const ws = useWorkspace();
   const contextMenu = useContextMenu();
   // Projects with any unsaved editor light the shared unsaved dot (006, US8) —
@@ -1287,15 +1302,6 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
               const key = rowKey(row);
               const isActive = activeProject?.id === project.id;
               const loaded = loadedIds.has(project.id);
-              // Live counts for the open project (its layout is loaded); persisted
-              // counts (from projects.list) for the rest.
-              const counts =
-                ws.layout && ws.layout.projectId === project.id
-                  ? {
-                      tabs: ws.layout.tabs.length,
-                      panels: ws.layout.tabs.reduce((n, t) => n + countPanels(t.root), 0),
-                    }
-                  : { tabs: project.tabCount ?? 0, panels: project.panelCount ?? 0 };
               // #489 — the selected row is filled with the project's own colour, and everything on
               // it is drawn in black or white, whichever reads on that fill. A colour that does not
               // parse sets neither, and the stylesheet falls back to the theme's accent pair.
@@ -1329,7 +1335,16 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                   // Category headers carry no selection state at all — there is nothing to select.
                   aria-selected={isActive}
                   tabIndex={effectiveFocusedKey === key ? 0 : -1}
-                  onContextMenu={(e) => openProjectMenu(e, project)}
+                  // #695, 077 FR-027 — the row's popover. Pointer-down is taken in the CAPTURE phase so the
+                  // drag sensor's own onPointerDown on this element is left in place.
+                  onPointerMove={rowPopover.handlersFor(project.id).onPointerMove}
+                  onPointerLeave={rowPopover.handlersFor(project.id).onPointerLeave}
+                  onPointerDownCapture={rowPopover.handlersFor(project.id).onPointerDown}
+                  onWheel={rowPopover.handlersFor(project.id).onWheel}
+                  onContextMenu={(e) => {
+                    rowPopover.handlersFor(project.id).onContextMenu();
+                    openProjectMenu(e, project);
+                  }}
                 >
                   <ProjectGrip id={project.id} />
                   {renamingId === project.id ? (
@@ -1363,13 +1378,12 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                       switchProject(project.id);
                     }}
                     onDoubleClick={() => setRenamingId(project.id)}
-                    title="Double-click to rename"
                   >
                     {/* 057 FR-092 — the mark takes the colour dot's place while the project is marked. */}
                     <ProjectRowLead projectId={project.id} colour={project.colour} />
                     <span className="project-item__labels">
                       <span className="project-item__name-row">
-                        <span className="project-item__name">{project.name}</span>
+                        <MarqueeLabel text={project.name} className="project-item__name" />
                         {dirtyProjects.has(project.id) ? (
                           <span
                             className="throng-unsaved-dot project-item__unsaved"
@@ -1378,15 +1392,8 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                             aria-label="Unsaved changes"
                           />
                         ) : null}
-                        <span
-                          className="project-item__counts"
-                          data-testid={`project-counts-${project.id}`}
-                          title={`${counts.tabs} tab${counts.tabs === 1 ? '' : 's'}, ${counts.panels} panel${counts.panels === 1 ? '' : 's'}`}
-                        >
-                          ({counts.tabs}T·{counts.panels}P)
-                        </span>
                       </span>
-                      <PathLabel path={project.rootFolder} id={project.id} />
+                      <MarqueeLabel text={project.rootFolder} className="project-item__path" testId="project-path" />
                     </span>
                   </button>
                 )}
@@ -1448,6 +1455,24 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
           ) : null}
         </ul>
       </DndContext>
+      {(() => {
+        // #695, 077 FR-027 — the one row popover. Live counts for the open project (its layout is loaded);
+        // persisted counts (from projects.list) for the rest.
+        const shown = rowPopover.shown;
+        const project = shown ? projects.find((p) => p.id === shown.projectId) : undefined;
+        if (!shown || !project || renamingId === project.id) return null;
+        const live = ws.layout && ws.layout.projectId === project.id ? ws.layout : null;
+        return (
+          <ProjectRowPopover
+            projectId={project.id}
+            name={project.name}
+            path={project.rootFolder}
+            tabs={live ? live.tabs.length : (project.tabCount ?? 0)}
+            panels={live ? live.tabs.reduce((n, t) => n + countPanels(t.root), 0) : (project.panelCount ?? 0)}
+            anchor={shown.anchor.isConnected ? shown.anchor : null}
+          />
+        );
+      })()}
       </div>
     </div>
   );

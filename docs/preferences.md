@@ -109,6 +109,8 @@ Each project remembers for itself which side panes are expanded.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Folder opened from outside throng | `projects.openFromOutside` | `switch` | `switch` · `load` | What happens when a folder arrives from the file manager or the command line: switch to its project, or only load it. |
+| Project popover | `projects.popoverEnabled` | on | on · off | Show a popover when the pointer rests on a project in the Projects pane: its full name, its ID, its full path, its tab and panel counts, and how to rename it. |
+| Project popover delay | `projects.popoverDelayMs` | 300 ms | 0 – 1,500 ms, step 25 ms | How long the pointer must rest on a project before its popover appears. Zero shows it as soon as the pointer arrives. |
 
 ### Behaviour
 

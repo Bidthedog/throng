@@ -332,6 +332,19 @@ effective value after upgrading, now stored in ms or bytes.
   key `appearance.theme` stays a configurable setting — `settings.json`, the shipped defaults, the JSON tab's check and
   Revert All keep it — and a search of the Settings tab never finds a row for it. General has no Appearance subsection.
   *(Supersedes 069 FR-068's Appearance subsection of General.)*
+- **FR-027**: *(maintainer, 2026-11-21, #695.)* A project row in the Projects pane MUST give its name and path the row's
+  full width while the pointer is not over it; its action buttons appear, in their usual place, only while the pointer
+  is over the row, and the name and path give way to them. A name or path that does not fit MUST end in an ellipsis
+  and scroll to show the rest when the pointer rests on it, the name as the path does (002 FR-032). The row MUST NOT
+  show its tab and panel count. Resting the pointer on the row for **Project popover delay**
+  (`projects.popoverDelayMs`: a slider, 0–1,500 ms in steps of 25, default 300 ms, stored and shown in ms) MUST
+  show ONE popover — the full name, the project ID, the full path, the tab and panel counts (digit-grouped) and
+  "Double-click to rename" — drawn like the tab and File Explorer popovers; zero shows it at once. **Project popover**
+  (`projects.popoverEnabled`, a switch, default on) off shows no popover. Both sit in General › Projects. The move
+  handle, the action buttons and the attention mark keep their own tooltips and show no row popover; a press, a
+  wheel or a menu on the row puts it away until the pointer leaves. Double-clicking the row (not the handle or a
+  button) still renames the project. *(Supersedes 068 FR-064's path tooltip: the path and the ID are read from the
+  popover, and the row carries no native tooltip of its own.)*
 
 **Documentation**
 
