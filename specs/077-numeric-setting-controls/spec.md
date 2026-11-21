@@ -278,6 +278,11 @@ effective value after upgrading, now stored in ms or bytes.
   debounces 0–2,000 ms in 25 ms; the Markdown heading jump 0–1,500 ms in 50 ms; the CSV long-cell threshold 0–1,000
   characters in 10s; per-language indent columns in steps of 1; every file-size cap with a hard minimum of 1 KB and a
   hard maximum of 2 GB (2,147,483,648 bytes).
+  - *(Amended 2026-11-21, convergence T047 — corrects the CSV wording.)* The CSV long-cell threshold's slider runs
+    **10–1,000 characters** in 10s, with any whole number from 1 to 100,000 typed in the box (research R6). This
+    replaces "0–1,000 characters" above: R6's table, which this requirement adopts, says 10–1,000, and that is what
+    shipped (`CSV_LONG_CELL_THRESHOLD`, `packages/core/src/csv/cell-text.ts`). The 0 was a slip, not a decision: at a
+    threshold of 0 every non-empty cell counts as long (`isLongCell` tests `length > threshold`).
 - **FR-013**: A setting's unit MUST be drawn by the control, not carried in its label ("Popup delay", not "Popup delay
   (ms)").
 
