@@ -11,6 +11,7 @@
 import { THRONG_THEME, TOKEN_PARENT, type Theme } from '../theme.js';
 import { deriveFileIconColours } from '../file-icon-colours.js';
 import { deriveCalloutColours } from '../callout-colours.js';
+import { BY_DESIGN_LOW_CONTRAST_THEMES, SYNTAX_SELECTION_MIN } from '../theme-quality.js';
 import {
   CURRENT_MATCH_SEPARATION,
   INACTIVE_SELECTION_FROM_PAGE,
@@ -367,7 +368,7 @@ function inactiveOccurrence(
  * active selection, the page, and every match surface. The same maximise-the-smaller-gap shape as the
  * ordinary match above, and for the same reason — a first-fit walk can land on a collision.
  */
-function inactiveSelection(
+export function inactiveSelection(
   selection: string,
   editorBg: string,
   editorFg: string,
@@ -611,6 +612,26 @@ interface Palette {
   syntax: SyntaxSeeds;
 }
 
+/**
+ * #105 — the editor selection, the other background code is painted on: the theme's own selection, walked toward
+ * the editor body only as far as every syntax colour and the editor text clear WCAG AA body text on it
+ * (`SYNTAX_SELECTION_MIN` in theme-quality.ts). A selection that already clears it is returned unchanged.
+ *
+ * Toward the body because the hues are lifted to 6:1 there (`syntaxAndSearch`), so the walk always ends readable;
+ * the first readable step keeps as much of the selection's own colour as legibility allows.
+ */
+export function readableSelection(selection: string, editorBg: string, editorFg: string, code: readonly string[]): string {
+  const text = [editorFg, ...code];
+  for (let step = 0; step <= SELECTION_WALK_GRID; step += 1) {
+    const candidate = step === 0 ? selection : blend(selection, editorBg, step / SELECTION_WALK_GRID);
+    if (text.every((c) => contrastRatio(c, candidate) >= SYNTAX_SELECTION_MIN)) return candidate;
+  }
+  return editorBg;
+}
+
+/** The selection walk's grid toward the body (#105): steps of 1/50, the inactive selection's grid. */
+const SELECTION_WALK_GRID = 50;
+
 function makeTheme(name: string, p: Palette): Theme {
   const mono = p.monoFamily ?? MONO;
   const editorBg = p.editorBg ?? p.bg;
@@ -619,6 +640,11 @@ function makeTheme(name: string, p: Palette): Theme {
   // The syntax hues and the search-match surfaces are derived TOGETHER: code is what gets drawn on
   // a match, so the surfaces are tinted only as far as the code stays readable on them (FR-007a).
   const code = syntaxAndSearch(p.syntax, editorBg, editorFg, p.accent);
+  // #105 — Matrix, VI-VIM and Gothic keep the selection they were drawn with: their low contrast is the point (#61).
+  const authoredSelection = p.selection ?? p.surfaceActive ?? p.surface;
+  const selection = BY_DESIGN_LOW_CONTRAST_THEMES.includes(name)
+    ? authoredSelection
+    : readableSelection(authoredSelection, editorBg, editorFg, Object.values(code.syntax));
   return {
     name,
     colours: {
@@ -660,7 +686,7 @@ function makeTheme(name: string, p: Palette): Theme {
       editorBg: p.editorBg ?? p.bg,
       editorFg: p.editorFg ?? p.text,
       editorCursor: p.accent,
-      editorSelection: p.selection ?? p.surfaceActive ?? p.surface,
+      editorSelection: selection,
       // Editor gutter (009): a subtle offset from the editor body; line numbers
       // reuse the theme's muted foreground (≥3:1 on the gutter background).
       editorGutterBg: p.editorGutterBg ?? gutterBgFor(p.editorBg ?? p.bg),
@@ -679,7 +705,7 @@ function makeTheme(name: string, p: Palette): Theme {
       searchMatchOccurrenceInactive: code.occurrenceInactive,
       // 049 FR-025: a selection kept in an unfocused panel, derived from the theme's own selection.
       editorSelectionInactive: inactiveSelection(
-        p.selection ?? p.surfaceActive ?? p.surface,
+        selection,
         editorBg,
         editorFg,
         p.accent,

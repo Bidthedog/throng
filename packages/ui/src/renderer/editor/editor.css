@@ -60,11 +60,11 @@
 
 .editor-panel .cm-selectionBackground,
 .editor-panel .cm-content ::selection {
-  background: var(--throng-colour-editorSelection, #2a3a57) !important;
+  background: var(--throng-colour-editorSelection, #25334d) !important;
 }
 
 .editor-panel .cm-focused .cm-selectionBackground {
-  background: var(--throng-colour-editorSelection, #2a3a57) !important;
+  background: var(--throng-colour-editorSelection, #25334d) !important;
 }
 
 /* 049 (#457) — a selection kept in an editor that does not have focus. CodeMirror keeps drawing it

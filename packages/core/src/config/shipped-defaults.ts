@@ -385,7 +385,27 @@ import { setAtPath } from './metadata.js';
 // Bumped by 077 (36 → 37): a SETTINGS payload, and the first that renames keys. Every size is stored in bytes and every
 // duration in ms (FR-001), so the six keys v1.0.0-beta1 shipped in another unit move to their new names, converted
 // exactly ({@link V37_SETTINGS_RENAMES}); the old keys are removed and a second pass finds nothing.
-export const SHIPPED_DEFAULTS_VERSION = 37;
+//
+// Bumped by #105 (37 → 38): existing VALUES move — the editor selection of throng, Snake, Windows Terminal, Bash, VSCode,
+// Claude and Ubuntu, walked toward the editor body until every syntax colour reads on it, and with it the inactive
+// selection derived from it. Version 37 wrote both into every theme file, so this is 049 round 2's guarded value
+// rewrite: {@link V37_MOVED_COLOURS} records what 37 wrote and {@link planThemeValueUpgrade} moves a token only where
+// the file still holds exactly that. 37 is not edited to carry it: the maintainer's hand-testing install holds a 37 marker.
+export const SHIPPED_DEFAULTS_VERSION = 38;
+
+/**
+ * The selection colours shipped-defaults version 37 wrote for the themes #105 recoloured, and only those tokens. A
+ * frozen literal copy for {@link V19_MOVED_COLOURS}' reason: the live values are the new ones.
+ */
+export const V37_MOVED_COLOURS: Readonly<Record<string, Readonly<Record<string, string>>>> = deepFreeze({
+  throng: { editorSelection: '#2a3a57' },
+  Snake: { editorSelection: '#3a4426', editorSelectionInactive: '#313512' },
+  'Windows Terminal': { editorSelection: '#264f78', editorSelectionInactive: '#202730' },
+  Bash: { editorSelection: '#264f4a', editorSelectionInactive: '#1a2523' },
+  VSCode: { editorSelection: '#264f78', editorSelectionInactive: '#27333d' },
+  Claude: { editorSelection: '#3d3020', editorSelectionInactive: '#36271d' },
+  Ubuntu: { editorSelection: '#5c1a44', editorSelectionInactive: '#52122b' },
+});
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved
@@ -1370,6 +1390,13 @@ export function planThemeValueUpgrade(args: {
     // 049 round 2 (19 → 20): the same guard against version 19's record.
     if (v19) {
       for (const [token, was] of Object.entries(v19)) {
+        moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
+      }
+    }
+    // #105 (37 → 38): the same guard against version 37's record.
+    const v37 = V37_MOVED_COLOURS[name];
+    if (v37) {
+      for (const [token, was] of Object.entries(v37)) {
         moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
       }
     }

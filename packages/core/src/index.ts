@@ -611,6 +611,8 @@ export {
   contrastFailures,
   assertInScopeContrast,
   assertSyntaxBodyContrast,
+  assertSyntaxSelectionContrast,
+  SYNTAX_SELECTION_MIN,
   knownContrastIssues,
   // Search-match mutual distinctness (043, FR-067).
   MATCH_SURFACE_PAIRS,
@@ -661,6 +663,7 @@ export {
   // compares an installed file against. Copies, never references: see their doc comments.
   V6_SEARCH_MATCH_COLOURS,
   V19_MOVED_COLOURS,
+  V37_MOVED_COLOURS,
   V6_SEARCH_IN_FILES_SETTINGS,
   SEARCH_MATCH_TOKENS,
   planThemeValueUpgrade,

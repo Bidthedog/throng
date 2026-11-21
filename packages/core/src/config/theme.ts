@@ -244,7 +244,10 @@ export const THRONG_THEME: Theme = {
     editorBg: '#0c0f16',
     editorFg: '#d6deea',
     editorCursor: '#6aa3ff',
-    editorSelection: '#2a3a57',
+    // #105 — hand-set from `readableSelection` (default-themes), the walk the bundled themes run: `#2a3a57` walked toward
+    // the editor body until every syntax colour and the editor text clear WCAG AA on it. Re-measure with the walk
+    // whenever `editorBg`, `editorFg` or a syntax colour below moves.
+    editorSelection: '#25334d',
     // 049 FR-025 — a selection kept in an unfocused editor or preview. Hand-set from the SAME walk the
     // fourteen bundled themes run (`inactiveSelection` in default-themes), measured on these values;
     // re-measure it whenever `editorSelection`, `editorBg` or a match surface below moves. 049 FR-025a moved it from
