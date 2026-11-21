@@ -596,6 +596,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
   to the width of its widest value across every row, header label included, clamped to 40–2000 px at zoom
   1 and stored as FR-040 stores a width. Double-clicking a column that the previous double-click fitted
   MUST restore the width it had before the fit. Both grids.
+  *Refined (convergence T100, 2026-11-21): "stored as FR-040 stores a width" applies to the CSV Preview Editor. A
+  workbook preview is read-only and holds no document state, so its fitted and dragged widths last for the panel's
+  life, per sheet, and a move to another workbook starts afresh (FR-051).*
 - **FR-008c** *(Q27, 2026-11-19)*: Over a row number the pointer MUST be a right-pointing select arrow, over a
   column letter a down-pointing select arrow, and over the corner cell a diagonal select arrow; a column's
   resize edge keeps the resize pointer. Both grids. *(Refines FR-008b's pointer cursor.)*
@@ -634,6 +637,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
   state, be reachable by keyboard, and have a matching checked item on the panel menu. Whether Wrap is on is
   decided per panel: the panel's own choice, saved with the panel so it survives a restart, else **Wrap
   cells** (FR-060b). Scrolling with Wrap on still meets SC-009. *(Refines FR-004.)*
+  *Refined (convergence T099, 2026-11-21): a wrapped cell draws at most its first 50,000 characters, so one huge
+  value cannot stall the grid's layout (Principle XII); the cell's tooltip and its editors still hold the whole value.
+  "No line cap" stands: the limit is on characters drawn in one cell, never on lines.*
 
 #### CSV parsing
 
@@ -657,6 +663,10 @@ Markdown and Mermaid pattern, each setting working as labelled.
   view of the file's one document. Opening it MUST join the document an editor already holds for the
   file, or open the document if none does; it MUST NOT hold a buffer, dirty state or undo history of its
   own. *(Supersedes 044 FR-020, FR-025 for the CSV provider.)*
+  *Refined (convergence T097, 2026-11-21; plan R1): a CSV Preview Editor that is only read joins the document an
+  editor holds, or opens none, and a standalone one opens the file's document on its first grid edit. Until then it
+  counts as no open document (044 FR-025 holds for a preview that is only read). The supersession table's "opens the
+  file as a document" means from that first edit.*
 - **FR-031**: The CSV provider's Open-in preference (074) MUST be labelled **Open CSVs in**, offer
   **Throng Editor**, **Throng Preview Editor** and **Default OS Program**, and ship **Throng Preview
   Editor**.
@@ -697,6 +707,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
   documented as every preference is. The in-step highlight (FR-033d) MUST fade that long after the last scroll, in the
   editor and in every preview, and a change MUST take effect at the next scroll without a restart; 0 MUST show no
   highlight. *(Supersedes FR-033d's fixed "1.5 seconds" and its "no setting of their own".)*
+  *Superseded in part by 077 FR-001 (convergence T098, 2026-11-21): the setting is stored in milliseconds as
+  `editor.previews.syncHighlightMs` — ships 1,500, 0–10,000 in steps of 500 — and is still shown in seconds.*
 - **FR-033g** *(Q41, 2026-11-20)*: The in-step highlight (FR-033d, FR-033e) MUST NOT be drawn or moved while scrolling
   continues. It MUST appear once scrolling has stopped for **300 ms**, on the pair in step at that moment, and then fade
   after the Scroll-sync highlight duration (FR-033f); a highlight still showing MUST clear when scrolling starts again.
@@ -955,6 +967,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
   code; a test asserts it.
 - **SC-004**: Scrolling a 100,000-row by 50-column grid keeps the panel responsive: no input waits more
   than 100 ms.
+  *Evidence (convergence T102, 2026-11-21): no latency is measured. The render-count tests stand for it —
+  `data-grid-scroll-cost.test.ts` and `csv-panel-horizontal-scroll-cost.test.ts` bound the work each scroll step
+  does — with SC-009's long-task bound. An input-latency measurement needs a real window and is left to the manual plan.*
 - **SC-009** *(Q9, 2026-11-19)*: Scrolling horizontally or vertically across a 100,000-row by 50-column
   grid runs no main-thread task longer than 50 ms, and at ordinary wheel or trackpad speed no blank cell
   area is drawn.
@@ -968,6 +983,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **SC-008**: Adding both providers changes no file in the preview panel's shared chrome, its menus, the
   editor status bar or the Previews preferences page other than registration (044 FR-070), except the
   CSV provider's document-view seam that FR-030 and FR-033 require, which the plan names.
+  *Refined (convergence T101, 2026-11-21): the later-approved requirements also reach the shared chrome, and are
+  exceptions here: the Read-only marker on the status bar (FR-050a – FR-050c), the per-panel Wrap and Lock toggles
+  carried through the body (FR-013, FR-039a, FR-060b, FR-060d) and Go to Row (FR-043a, FR-043b).*
 
 ## Assumptions
 
