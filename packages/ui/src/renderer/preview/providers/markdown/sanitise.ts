@@ -440,6 +440,33 @@ export type PreviewHtmlExporter = (selection: DocumentFragment) => string;
  * Before sanitising, every image in the selection is replaced by a text node of its alt text — or removed,
  * when it has none. The selection is the caller's own clone, so rewriting it touches nothing on screen.
  */
+/**
+ * 075 (edge case "Copy") — a callout in a rich copy keeps its markup as the form every editor pastes: a quotation
+ * headed by its title in bold, then its body. Not the `[!type]` marker, which no other application reads, and not
+ * the icon or fold control (both `aria-hidden`), which are throng's furniture. Innermost first, so a nested callout
+ * becomes a nested quotation. The export profile would otherwise reduce it to bare `div`s, losing the title's role.
+ */
+function calloutsAsQuotations(selection: ParentNode): void {
+  for (const callout of [...selection.querySelectorAll('[data-callout]')].reverse()) {
+    const doc = callout.ownerDocument;
+    const quote = doc.createElement('blockquote');
+    const title = [...callout.children].find((el) => el.hasAttribute('data-callout-title'));
+    if (title !== undefined) {
+      for (const hidden of [...title.querySelectorAll('[aria-hidden="true"]')]) hidden.remove();
+      if ((title.textContent ?? '').trim().length > 0) {
+        const heading = doc.createElement('p');
+        const strong = doc.createElement('strong');
+        strong.append(...title.childNodes);
+        heading.append(strong);
+        quote.append(heading);
+      }
+    }
+    const body = [...callout.children].find((el) => el.hasAttribute('data-callout-body'));
+    if (body !== undefined) quote.append(...body.childNodes);
+    callout.replaceWith(quote);
+  }
+}
+
 export function createHtmlExporter(root: WindowLike = window): PreviewHtmlExporter {
   const purify = DOMPurify(root);
   purify.addHook('beforeSanitizeAttributes', (node) => {
@@ -469,6 +496,7 @@ export function createHtmlExporter(root: WindowLike = window): PreviewHtmlExport
     if (link?.kind === 'external') node.setAttribute('href', link.url);
   });
   return (selection) => {
+    calloutsAsQuotations(selection);
     for (const img of [...selection.querySelectorAll(`img:not([${DIAGRAM_IMAGE_ATTRIBUTE}])`)]) {
       const alt = img.getAttribute('alt') ?? '';
       if (alt.length > 0) img.replaceWith(img.ownerDocument.createTextNode(alt));

@@ -370,7 +370,9 @@ ready-made pages; the first shows the print actions disabled, the second prints 
 - **Live re-render**: typing elsewhere in the document does not re-collapse a callout the user opened.
 - **Collapse All / Expand All** (047 FR-038): leaves callouts as they are.
 - **Copy**: copying a selection that holds a callout copies its title and body text, not the `[!type]`
-  marker, in plain text; in rich text it keeps the callout's markup.
+  marker, in plain text; in rich text it keeps the callout's markup. *(Made precise 2026-11-21, converge T076: the
+  rich copy is a quotation headed by the callout's title in bold, then its body, nested as the callouts nest — the
+  form other applications paste. The `[!type]` marker, icon and fold control are not copied.)*
 - **User theme created before this feature**: lacks the seven role tokens and takes them by the same rule that
   fills any other token a saved theme lacks; nothing is lost and the theme still loads.
 - **User icon set**: a set with no override for a callout key shows the default art (069 FR-015).
