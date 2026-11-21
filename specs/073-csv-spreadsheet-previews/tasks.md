@@ -157,3 +157,10 @@ preferences.
 - [x] T100 Amend the spec: FR-011's "stored as FR-040" — a workbook's fitted and dragged widths last for the panel's life, as a read-only preview has no document state, per FR-011 (partial)
 - [x] T101 Amend SC-008 to name the later-approved shared-chrome changes (the Read-only marker, the Wrap and Lock toggles, Go to) as exceptions, per SC-008 (contradicts)
 - [x] T102 Name SC-004's evidence (the scroll-cost render-count tests) in the spec, or add a timed input-latency check, per SC-004 (missing)
+
+## Phase 10: Convergence
+
+- [ ] T103 Arm Esc-after-Cut only when the cut changed the document: a cut of empty cells sends nothing, and the next unrelated edit was then taken as the cut's result and undone by Esc, per FR-037i (partial)
+- [ ] T104 Give the workbook grid's Copy as Rich Text and Copy as Plain Text the copy icon, as the CSV grid's have, per FR-037g (partial)
+- [ ] T105 Amend the spec: SC-001 and SC-002 name "the CI runner class", but the timings are asserted on reference hardware and recorded on CI (performance-sla.md), per SC-001, SC-002 (contradicts)
+- [ ] T106 Amend the spec: a width changed in one window reaches a grid in another window when that grid next mounts, not live, per FR-040 (partial)
