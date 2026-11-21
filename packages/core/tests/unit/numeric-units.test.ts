@@ -54,6 +54,25 @@ describe('toDisplay — the value in the unit the slider is shown in', () => {
     expect(toDisplay(80, pct)).toBe(`${g(80)}%`);
     expect(toDisplay(10, rows)).toBe(`${g(10)} entries`);
   });
+
+  it('draws a count’s, a column’s, a day count’s and a character limit’s unit in the singular at 1 (FR-013)', () => {
+    const columns = d({ storedUnit: 'count', display: 'own', unitLabel: 'columns', min: 1, max: 16, step: 1 });
+    const keptDays = d({ storedUnit: 'count', display: 'own', unitLabel: 'days', min: 1, max: 30, step: 1 });
+    const notices = d({ storedUnit: 'count', display: 'own', unitLabel: 'notifications', min: 1, max: 500, step: 1 });
+    expect(toDisplay(1, rows)).toBe(`${g(1)} entry`);
+    expect(toDisplay(1, columns)).toBe(`${g(1)} column`);
+    expect(toDisplay(1, keptDays)).toBe(`${g(1)} day`);
+    expect(toDisplay(1, chars)).toBe(`${g(1)} character`);
+    expect(toDisplay(1, notices)).toBe(`${g(1)} notification`);
+    // Every other number keeps the plural.
+    expect(toDisplay(2, columns)).toBe(`${g(2)} columns`);
+    expect(toDisplay(0, chars)).toBe(`${g(0)} characters`);
+  });
+
+  it('names a bound of 1 in the singular too', () => {
+    const threshold = d({ storedUnit: 'characters', display: 'own', min: 10, max: 1000, step: 10, hardMin: 1 });
+    expect(checkTyped('0', threshold)).toEqual({ ok: false, message: `At least ${g(1)} character`, clampTo: 1 });
+  });
 });
 
 describe('formatSetting — what a notice or description quotes', () => {

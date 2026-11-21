@@ -46,12 +46,26 @@ function storedWord(d: FieldDescriptor): string {
   }
 }
 
+/**
+ * FR-013 — a unit WORD read after the number 1 is singular: `1 entry`, `1 column`, `1 day`. Symbols (`ms`, `s`, `MB`,
+ * `px`, `min`) are not words and never change.
+ */
+const SINGULAR: Readonly<Record<string, string>> = {
+  bytes: 'byte',
+  characters: 'character',
+  columns: 'column',
+  days: 'day',
+  entries: 'entry',
+  items: 'item',
+  notifications: 'notification',
+};
+
 /** Join a number and its unit: `%` sits against the number, every other unit after a space. */
-function withUnit(n: number, unit: string, singular?: string): string {
+function withUnit(n: number, unit: string): string {
   const text = formatGrouped(n);
   if (unit === '') return text;
   if (unit === '%') return `${text}%`;
-  return `${text} ${n === 1 && singular !== undefined ? singular : unit}`;
+  return `${text} ${n === 1 ? (SINGULAR[unit] ?? unit) : unit}`;
 }
 
 /**
@@ -66,7 +80,7 @@ export function unitNote(d: FieldDescriptor): string | null {
 export function toDisplay(value: number, d: FieldDescriptor): string {
   const unit = displayOf(d);
   if (unit === 'own') return withUnit(value, storedWord(d));
-  return withUnit(round2(value / FACTOR[unit]), unit, unit === 'days' ? 'day' : undefined);
+  return withUnit(round2(value / FACTOR[unit]), unit);
 }
 
 /** What a notice or description quotes: the display value, plus the stored value where they differ (FR-014). */
