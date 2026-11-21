@@ -41,6 +41,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-31 | [Media] Safe HTML preview sources | untested | | | carried from 074 MT-12; no sign-off survives the merge |
 | MT-32 | [Media] Preview type icons and titles | untested | | | carried from 074 MT-13; no sign-off survives the merge |
 | MT-33 | [Media] PDF scrolls and resizes smoothly | untested | | | new 2026-11-20 |
+| MT-34 | [Media] Converge fixes: links in HTML pages and PDFs, Copy Path, reloads | untested | | | |
 | MT-40 | [Markdown] Callouts draw with their type, icon and title | needs retest | | | signed off on 075 at 0c5219b71c9e; later 075 work (loading placeholder, resize hold) and the merge touched its paths |
 | MT-41 | [Markdown] Folding callouts | needs retest | | | signed off on 075 at 0c5219b71c9e; later 075 work and the merge touched preview-panel.tsx, markdown-body.tsx and copy.ts |
 | MT-42 | [Markdown] Callout colours in the Themes editor | needs retest | 03657a275a3b | 2026-11-20 | 1bb44e9d touched packages/core/src/config/theme-copy.ts |
@@ -1295,3 +1296,15 @@ Paths: `packages/ui/src/renderer/grid/data-grid.tsx`, `packages/ui/src/renderer/
 4. Set "Open previews in" to a new panel. Edit a CSV grid without saving, then drop another CSV onto that panel. The unsaved-changes prompt appears and names "<name> - CSV Preview".
 5. In a CSV of more than 1,000,000 cells, select all and Copy. A warning names the 1,000,000 limit and both counts. Cut shows the same warning and removes nothing.
 6. Cut a block of empty cells, then type in another cell and press Enter, then press Esc. Your typed edit stays.
+
+## MT-34: [Media] Converge fixes: links in HTML pages and PDFs, Copy Path, reloads
+
+Covers: 074 FR-068a, 074 FR-085a
+Paths: `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/preview/providers/html/`, `packages/ui/src/renderer/preview/providers/pdf/`
+
+### Steps
+1. In an HTML preview of a page with `<a href="#sec">Jump</a>` above `<h2 id="sec">`, right-click the link and choose Open Link. The page scrolls to the heading, with no "heading not found" notice. Ctrl+click on the link does the same.
+2. Right-click a link inside a PDF preview. A link menu appears with Open Link and Copy Link.
+3. Right-click any preview's body. Copy Path is offered and copies the file's path.
+4. In a PDF preview, scroll to the middle of a page, change the PDF on disk (or re-save it), and let it reload. The view returns to the same point on the page.
+5. Select All (Ctrl+A) in a PDF preview selects the PDF's text and nothing outside it.
