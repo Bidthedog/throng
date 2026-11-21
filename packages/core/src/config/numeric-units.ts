@@ -122,9 +122,10 @@ export function nearestStop(value: number, d: FieldDescriptor): number {
 export type TypedCheck = { ok: true; value: number } | { ok: false; message: string; clampTo?: number };
 
 /**
- * What the text in a numeric box means (FR-008, FR-009): a whole number within the hard bounds, or the message to show
- * while it is typed and the bound a confirm stores instead. Text that is no number has nothing to clamp to — confirming
- * it restores the stored value.
+ * What the text in a numeric box means (FR-008, FR-009): a whole number within the hard bounds, or why it is not and the
+ * bound a confirm stores instead. Text that is no number has nothing to clamp to — confirming it stores nothing and the
+ * entry stays in the box until it is corrected or Escape restores the stored value; the reason is said in the
+ * Preferences toast, through {@link typedProblem}, never inline (FR-024).
  */
 export function checkTyped(text: string, d: FieldDescriptor): TypedCheck {
   return checkAgainst(parseGrouped(text), d);

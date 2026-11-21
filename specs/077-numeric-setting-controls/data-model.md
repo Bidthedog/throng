@@ -23,16 +23,25 @@
 
 ## Control state (derived — research R3)
 
-| State | Condition | Slider | Box | Message |
+| State | Condition | Slider | Box | Preferences toast |
 |---|---|---|---|---|
 | On a stop | value is a stop | live | stored value | none |
 | Overridden | within hard bounds, not a stop | greyed, operable, at nearest stop | stored value | none |
-| Typing, invalid | text out of hard bounds | unchanged | typed text | bound message |
-| Typing, not a number | text not a whole number | unchanged | typed text | "Not a whole number" |
+| Typing, invalid | text out of hard bounds | unchanged | typed text, invalid outline | "<Setting> must be between <lo> and <hi>" |
+| Typing, not a number | text not a whole number | unchanged | typed text, invalid outline | "<Setting> must be a whole number" |
+
+Nothing is shown inline beside or beneath the box: the box keeps only its invalid outline and `aria-invalid`, and what
+is wrong is said in the Preferences window's toast, naming the setting and what it takes (FR-024). An emptied box is
+named only when it is confirmed (FR-009).
 
 Transitions: drag → stores the stop (→ On a stop); confirm valid → stores (→ On a stop or Overridden); confirm out of
-bounds → stores the nearer hard bound; confirm non-number or Escape → restores the stored value; Reset → shipped
-default.
+bounds → stores the nearer hard bound; confirm non-number → stores nothing and KEEPS the entry, its toast flashing, until
+it is corrected (an entry is never discarded — FR-009, 040 FR-007, 018 FR-017); Escape → restores the stored value and
+the toast goes; Reset → shipped default.
+
+*Amended 2026-11-21 (T048) — this section said a confirmed non-number restored the stored value, and showed the reason
+in an inline Message column. FR-009 (2026-11-20) keeps the entry, and FR-024 (2026-11-21) moved the reason to the toast;
+the controls (`form-controls.tsx` NumberControl, `map-control.tsx`) do both, and this section now says so.*
 
 ## Renamed keys (FR-001, FR-002)
 

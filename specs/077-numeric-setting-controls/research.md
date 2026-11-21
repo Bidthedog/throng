@@ -33,7 +33,9 @@ spec runs on its default; a change to one touches the decision named beside it.
 
 - **Decision**: `numeric-units.ts` exports `checkTyped(text, descriptor) → {ok, value} | {error, message, clampTo}`.
   The control shows `message` while typing and stores `clampTo` on confirm; non-numbers return no `clampTo` and the
-  control restores the stored value.
+  control stores nothing, keeping the entry until it is corrected or Escape restores the stored value (FR-009; amended
+  2026-11-21, T048 — this said the control restored the stored value). What is wrong is said in the Preferences toast,
+  not inline (FR-024).
 - **Rationale**: Unit-testable without a DOM; the same function backs the print fields (FR-020).
 - **Alternatives**: Per-control logic — rejected (the current `parse` returns `null` for out-of-range and drops input).
 

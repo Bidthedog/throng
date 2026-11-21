@@ -26,10 +26,10 @@ Messages (stored unit, digit-grouped, locale grouping per 4.5.0):
 | `control-<key>-slider` | range input in stored units; `aria-valuetext` = `toDisplay` |
 | `control-<key>-value` | the display value with unit |
 | `control-<key>` | exact-value box (every numeric setting; the id it already had) |
-| `control-<key>-invalid` | inline message, `role="alert"`, present only while invalid |
+| `control-<key>-invalid` | the Preferences toast saying what is wrong, present only while invalid; nothing inline — the box keeps its invalid outline and `aria-invalid` (FR-024; amended 2026-11-21, T048) |
 
 - Greyed state: `data-overridden="true"` on the slider, styled by a theme token; the slider stays enabled.
-- Confirm: Enter or blur. Escape restores. Reset clears message and override.
+- Confirm: Enter or blur. A confirmed non-number stores nothing and stays in the box, its toast flashing (FR-009). Escape restores the stored value. Reset clears the toast and the override.
 
 ## Main → renderer — too-large notice
 
