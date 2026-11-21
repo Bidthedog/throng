@@ -302,6 +302,23 @@ describe('a link in the page follows on the gesture only, a fragment link includ
   });
 });
 
+// 074 convergence T075 — Constitution VI ("one gesture follows a link"), FR-079, FR-085a: a panel's menu over a link
+// offers Open Link and Copy Link to Clipboard, in an HTML page as in every other preview.
+describe('the menu over a link in the page is the link menu (FR-079, FR-085a)', () => {
+  it('offers Open Link and Copy Link to Clipboard on a right-click of a link', async () => {
+    const m = await mount(PLAIN);
+    await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
+    update(m, 2, '<p><a href="https://example.test/page">External</a></p>');
+    await waitFor(() => expect(frameDoc()!.querySelector('a')).not.toBeNull());
+    fireEvent.contextMenu(frameDoc()!.querySelector('a')!, { clientX: 4, clientY: 4 });
+    await waitFor(() => {
+      const rows = screen.getAllByRole('menuitem').map((el) => el.textContent?.trim() ?? '');
+      expect(rows.some((r) => r.startsWith('Open Link'))).toBe(true);
+      expect(rows.some((r) => r.startsWith('Copy Link to Clipboard'))).toBe(true);
+    });
+  });
+});
+
 // 074 convergence T064 — FR-072: a change on disk to a stylesheet or font the page names is shown at the next update or
 // Refresh. The frame fetches a resource again only when its URL changes, so each update names its assets afresh.
 describe('an update or Refresh fetches the page’s own resources again (FR-072)', () => {

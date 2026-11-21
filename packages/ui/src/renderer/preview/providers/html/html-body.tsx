@@ -35,7 +35,7 @@ import { IconButton } from '../../../common/icon-button.js';
 import { sanitiseHtmlPage, type BlockedResource } from './html-sanitise.js';
 import { readFrameScroll, updateFrameInPlace, writeFrameScroll, type FrameScroll } from './html-frame-update.js';
 import { listenToFrameInput } from './frame-input.js';
-import { listenToFrameFragments } from './frame-fragments.js';
+import { listenToFrameFragments, listenToFrameLinkMenu } from './frame-fragments.js';
 import { BlockedResourcesNotice, blockedFromViolation } from './blocked-notice.js';
 import './html.css';
 
@@ -76,6 +76,7 @@ export function HtmlBody({
   initialViewState,
   navigationSeq,
   onDrawn,
+  onLinkMenu,
   onViewStateCapture,
   registerSelectionHost,
 }: PreviewBodyProps): ReactElement {
@@ -208,6 +209,10 @@ export function HtmlBody({
   onDrawnRef.current = onDrawn;
   const filePathRef = useRef(filePath);
   filePathRef.current = filePath;
+  const projectRootRef = useRef(projectRoot);
+  projectRootRef.current = projectRoot;
+  const linkMenuRef = useRef(onLinkMenu);
+  linkMenuRef.current = onLinkMenu;
 
   // Removes the listeners in the frame's current document (another realm: no AbortSignal, see `frame-input.ts`).
   const stopListening = useRef<(() => void) | null>(null);
@@ -221,6 +226,10 @@ export function HtmlBody({
     const stopInput = listenToFrameInput(frame, doc);
     // FR-079 — a `#fragment` link follows on the gesture only (`frame-fragments.ts`).
     const stopFragments = listenToFrameFragments(doc);
+    // FR-085a — the menu over a link is the panel's link menu (Open Link, Copy Link to Clipboard).
+    const stopLinkMenu = listenToFrameLinkMenu(frame, doc, { docPath: filePathRef.current, projectRoot: projectRootRef.current }, (link, point) =>
+      linkMenuRef.current?.(link, point),
+    );
     // FR-093a — a request the page's content policy refused at run time joins the notice's list.
     const onViolation = (e: SecurityPolicyViolationEvent): void => {
       const found = blockedFromViolation(e);
@@ -234,6 +243,7 @@ export function HtmlBody({
     stopListening.current = () => {
       stopInput();
       stopFragments();
+      stopLinkMenu();
       doc.removeEventListener('securitypolicyviolation', onViolation);
       doc.removeEventListener('scroll', onScroll);
     };
