@@ -131,6 +131,20 @@ describe('custom flavours: an ordered table of records (#67)', () => {
     await user.click(screen.getByTestId(`list-editor-save-${FLAVOURS}`));
     expect(onCommit).not.toHaveBeenCalled();
   });
+
+  // 077 FR-024 — one condition, one notice: a draft row's problem is an entry's, said in the toast alone. Only a row
+  // that arrived broken from the file keeps its own inline message (C17), because it reports the file.
+  it('says a draft row’s problem in the toast alone, and a row broken in the file in its own row', async () => {
+    const { user } = mountControl(FLAVOURS, [nu, { id: 'broken' }]);
+    await user.click(screen.getByTestId(`list-edit-${FLAVOURS}`));
+    await user.type(screen.getByTestId(`flavour-new-id`), 'elvish');
+    await user.click(screen.getByTestId(`flavour-add`));
+
+    expect(screen.getByTestId('flavour-row-elvish')).toBeInTheDocument();
+    expect(screen.getByTestId('flavour-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('flavour-row-error-elvish'), 'the draft’s problem is drawn twice').toBeNull();
+    expect(screen.getByTestId('flavour-row-error-broken')).toBeInTheDocument();
+  });
 });
 
 describe('default shell arguments: a keyed table of text (#67)', () => {

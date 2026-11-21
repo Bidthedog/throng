@@ -311,7 +311,8 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
    * Was the id typed into the new-id box REFUSED? `error` alone cannot say: after a successful add it
    * still holds guidance about the DRAFT row ("needs an executable"), which is not a fault in the box,
    * and marking the box `aria-invalid` for it would flag a field the user has just emptied and been
-   * right to. Only a refused id marks the box (056 FR-007); a draft's problem marks its own row.
+   * right to. Only a refused id marks the box (056 FR-007); a draft's problem is said in the toast alone
+   * (077 FR-024).
    */
   const [idRefused, setIdRefused] = useState(false);
 
@@ -411,9 +412,13 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     //   • a write that FAILS takes the row with it. The row never reaches `records`, and the draft
     //     is already gone: the user's typing is destroyed by the one event that most needs them to
     //     be able to retry. The failure itself is reported by the tab's write path (FR-006a).
-    if (checkFlavourRecord(next, committedIds) === null) {
+    // A draft that is still not a flavour keeps the toast current: it is the draft's only voice (FR-024).
+    const draftProblem = checkFlavourRecord(next, committedIds);
+    if (draftProblem === null) {
       commitRows([...records, next]);
       setError(null);
+    } else {
+      setError(draftProblem.message);
     }
   };
 
@@ -432,7 +437,9 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
         <tbody>
           {rows.map((row, index) => {
             const rowKey = rowKeys[index];
-            const problem = problemOf(index);
+            // 077 FR-024 — only a COMMITTED row draws its problem inline (C17). A draft's problem is an
+            // entry's, and the toast already says it: one condition, one notice.
+            const problem = index < records.length ? problemOf(index) : null;
             return (
               <Fragment key={rowKey}>
                 <tr data-testid={`${noun}-row-${rowKey}`}>

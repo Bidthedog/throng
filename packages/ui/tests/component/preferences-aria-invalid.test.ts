@@ -189,6 +189,7 @@ describe('MapControl', () => {
     await user.click(screen.getByTestId('flavour-add'));
     expect(screen.getByTestId('flavour-error')).toBeInTheDocument();
     expect(invalidOf(screen.getByTestId('flavour-new-id'))).toBe(false);
-    expect(container.querySelector('[data-pref-invalid]')).not.toBeNull();
+    // 077 FR-024 — the toast is the draft's one notice; only a row broken in the file is marked inline (C17).
+    expect(container.querySelector('[data-pref-invalid]')).toBeNull();
   });
 });
