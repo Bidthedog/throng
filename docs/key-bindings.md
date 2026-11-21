@@ -289,6 +289,13 @@ for enhanced key reporting: see [macOS](macos.md#terminals).
 
 The last three are the toggles at the right of a terminal's status bar, which are also in its right-click menu.
 
+**Shift+Enter and Ctrl+Enter at a PowerShell prompt need Windows 11 or later (build 22000 and up).** They
+insert a line break and move to the `>> ` continuation line only where the Windows console host asks for
+Windows key events (win32-input-mode), which those builds' consoles do. The console of Windows 10 and Windows
+Server 2022 never asks, and a terminal has no other way to tell PowerShell that Enter was modified. There, the line break
+is inserted, but the next characters you type can land on the wrong line. Finish a multi-line command with
+a backtick (`` ` ``) at the end of each line instead.
+
 ## On macOS
 
 Every application chord in the tables above uses **Cmd** where they show **Ctrl**, and **Option** is Alt:
