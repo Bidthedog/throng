@@ -550,15 +550,12 @@
   min-width: 120px;
 }
 
+/*
+ * 077 FR-024 — an invalid entry is marked by its outline alone, which takes no room; what is wrong is said in the
+ * Preferences toast, so nothing beneath the box moves.
+ */
 .ctl__input--invalid {
   border-color: var(--danger, #e14b4b);
-}
-
-.ctl__error {
-  display: block;
-  margin-top: 3px;
-  color: var(--danger, #e14b4b);
-  font-size: 11px;
 }
 
 .ctl--array {
@@ -1341,11 +1338,6 @@
 .map-control-add select {
   flex: 0 1 180px;
   min-width: 0;
-}
-
-.map-control-error {
-  color: var(--throng-colour-danger, #f85149);
-  font-size: 12px;
 }
 
 /**

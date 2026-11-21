@@ -29,6 +29,7 @@ import { createElement, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { formatGrouped, type FieldDescriptor } from '@throng/core';
 import { SettingControl } from '../../src/renderer/preferences/form-controls.js';
+import { NotificationProvider } from '../../src/renderer/common/notification.js';
 
 /**
  * The descriptor the settings tab feeds this control. `behaviour.tabHoverActivateMs` is the real
@@ -58,7 +59,8 @@ const large: FieldDescriptor = {
 
 function renderControl(descriptor: FieldDescriptor, value: unknown) {
   const onCommit = vi.fn();
-  render(createElement(SettingControl, { descriptor, value, onCommit }));
+  // 077 FR-024 — under the provider, as in the Preferences window: a box's problem is a toast carrying its `…-invalid` id.
+  render(createElement(NotificationProvider, null, createElement(SettingControl, { descriptor, value, onCommit })));
   return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
@@ -87,7 +89,7 @@ function renderBound(descriptor: FieldDescriptor, initial: unknown) {
       },
     });
   }
-  render(createElement(Host));
+  render(createElement(NotificationProvider, null, createElement(Host)));
   return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
@@ -220,12 +222,12 @@ describe('committing and refusing (FR-036, FR-017)', () => {
     const { user, onCommit } = renderControl(bounded, 900);
     await user.clear(field(bounded.key));
     await user.type(field(bounded.key), 'not-a-number');
-    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent('Not a whole number');
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent('Tab hover activate must be a whole number');
     await user.keyboard('{Enter}');
     expect(onCommit).not.toHaveBeenCalled();
     // Never discarded (040 FR-007): the entry and its message stay until corrected, or Escape restores.
     expect(field(bounded.key).value).toBe('not-a-number');
-    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent('Not a whole number');
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent('Tab hover activate must be a whole number');
     await user.keyboard('{Escape}');
     expect(field(bounded.key).value).toBe('900');
     expect(screen.queryByTestId(`control-${bounded.key}-invalid`)).toBeNull();
@@ -235,7 +237,7 @@ describe('committing and refusing (FR-036, FR-017)', () => {
     const { user, onCommit } = renderControl(bounded, 900);
     await user.clear(field(bounded.key));
     await user.type(field(bounded.key), '999999');
-    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent(`Up to ${formatGrouped(3000)}`);
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent(`Tab hover activate must be between ${formatGrouped(100)} and ${formatGrouped(3000)}`);
     await user.keyboard('{Enter}');
     expect(onCommit).toHaveBeenCalledWith(3000);
   });
@@ -244,7 +246,7 @@ describe('committing and refusing (FR-036, FR-017)', () => {
     const { user, onCommit } = renderControl(bounded, 900);
     await user.clear(field(bounded.key));
     await user.type(field(bounded.key), '40');
-    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent(`At least ${formatGrouped(100)}`);
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toHaveTextContent(`Tab hover activate must be between ${formatGrouped(100)} and ${formatGrouped(3000)}`);
     await user.keyboard('{Enter}');
     expect(onCommit).toHaveBeenCalledWith(100);
   });
@@ -336,7 +338,7 @@ describe('077 — a size in MB, or exactly in bytes (US1)', () => {
     const { user, onCommit } = renderControl(sizeCap, 10 * MiB);
     await user.clear(field(sizeCap.key));
     await user.type(field(sizeCap.key), '999999999999');
-    expect(screen.getByTestId(`control-${sizeCap.key}-invalid`)).toHaveTextContent(`Up to ${formatGrouped(2048 * MiB)} bytes`);
+    expect(screen.getByTestId(`control-${sizeCap.key}-invalid`)).toHaveTextContent(`Max open file size must be between ${formatGrouped(1024)} and ${formatGrouped(2048 * MiB)} bytes`);
     await user.keyboard('{Enter}');
     expect(onCommit).toHaveBeenCalledWith(2048 * MiB);
   });

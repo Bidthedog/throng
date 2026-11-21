@@ -100,11 +100,11 @@ describe('the capture interval’s minimum and note (055 FR-004, T098, R11)', ()
     // Absent when the interval already meets the minimum.
     expect(screen.queryByTestId(`setting-note-${KEY}`)).toBeNull();
 
-    // 077 FR-008 / FR-009 — less than the minimum is named as it is typed, and confirming it stores the
+    // 077 FR-008, FR-009, FR-024 — less than the minimum is named (in the toast) as it is typed, and confirming it stores the
     // minimum rather than the typed value: here the minimum is already stored, so nothing is written.
     const field = screen.getByTestId(`control-${KEY}`);
     fireEvent.change(field, { target: { value: '5000' } });
-    expect(await screen.findByTestId(`control-${KEY}-invalid`)).toHaveTextContent(`At least ${formatGrouped(30_000)} ms`);
+    expect(await screen.findByTestId(`control-${KEY}-invalid`)).toHaveTextContent(`must be between ${formatGrouped(30_000)} and `);
     fireEvent.blur(field);
     await waitFor(() => expect(field).toHaveValue(formatGrouped(30_000)));
     expect(writes).not.toHaveBeenCalled();

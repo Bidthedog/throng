@@ -29,10 +29,13 @@ block the app**, so you can keep working while you edit a theme and watch each c
   seconds or minutes. The box beside it holds the exact value as it is stored — bytes for a size,
   milliseconds for a duration — and takes any whole number within the setting's limits, which can go
   beyond the slider's ends. A value that is not one of the slider's steps greys the slider; it still
-  moves, and moving it sets that step. The box names a limit as you type past it, and **Enter** or
-  leaving the box stores that limit; text that is no number stays, saying so, until you correct it or
-  press **Esc**, which puts the stored value back. In the tables below, *Range* gives the slider's ends and
-  step in the shown unit, then the box's limits in the stored unit where they reach further.
+  moves, and moving it sets that step. Type past a limit and the box turns red while a notification names
+  the setting and its limits; **Enter** or leaving the box stores that limit. Text that is no number stays,
+  red, until you correct it or press **Esc**, which puts the stored value back. In the tables below, *Range*
+  gives the slider's ends and step in the shown unit, then the box's limits in the stored unit where they
+  reach further.
+- **A box that refuses an entry** says why in a notification, never under the box, so nothing on the page
+  moves. Confirming the same entry again flashes that notification rather than adding another.
 
 ### Folding sections
 

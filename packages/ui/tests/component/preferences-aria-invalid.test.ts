@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { type FieldDescriptor } from '@throng/core';
 import { SettingControl } from '../../src/renderer/preferences/form-controls.js';
 import { MapControl } from '../../src/renderer/preferences/map-control.js';
+import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ColourField } from '../../src/renderer/common/colour-picker.js';
 
 const invalidOf = (el: HTMLElement): boolean => el.getAttribute('aria-invalid') === 'true';
@@ -112,15 +113,17 @@ describe('MapControl', () => {
 
   it('marks the new-key input aria-invalid while a refused key shows its error', async () => {
     const user = userEvent.setup({ delay: null });
-    render(createElement(MapControl, { descriptor: byExtension, value: {}, onCommit: vi.fn() }));
+    // 077 FR-024 — the error is the Preferences toast, so the control is mounted under the provider, as in the window.
+    render(createElement(NotificationProvider, null, createElement(MapControl, { descriptor: byExtension, value: {}, onCommit: vi.fn() })));
     const input = screen.getByTestId(`map-new-key-${byExtension.key}`);
     expect(invalidOf(input)).toBe(false);
     await user.type(input, 'foo');
     await user.click(screen.getByTestId(`map-add-${byExtension.key}`));
-    expect(screen.getByTestId(`map-error-${byExtension.key}`)).toBeInTheDocument();
+    expect(screen.getByTestId(`map-error-${byExtension.key}`)).toHaveTextContent(/^.*Language by extension: /);
     expect(invalidOf(input)).toBe(true);
     await user.type(input, 'x');
     expect(invalidOf(input)).toBe(false);
+    expect(screen.queryByTestId(`map-error-${byExtension.key}`)).toBeNull();
   });
 
   it('marks a records row that arrived broken from the file', () => {
@@ -170,8 +173,9 @@ describe('MapControl', () => {
         { key: 'file', label: 'Executable', control: 'text' },
       ],
     } as FieldDescriptor;
+    // 077 FR-024 — under the provider, as in the window: the draft row's message is the Preferences toast.
     const { container } = render(
-      createElement(MapControl, { descriptor: records, value: [], onCommit: vi.fn() }),
+      createElement(NotificationProvider, null, createElement(MapControl, { descriptor: records, value: [], onCommit: vi.fn() })),
     );
     const newId = screen.getByTestId('flavour-new-id');
     // A duplicate/empty id is refused outright: that error IS about the new-id value.

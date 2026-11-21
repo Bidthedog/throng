@@ -105,7 +105,25 @@ export type TypedCheck = { ok: true; value: number } | { ok: false; message: str
  * it restores the stored value.
  */
 export function checkTyped(text: string, d: FieldDescriptor): TypedCheck {
+  return checkAgainst(parseGrouped(text), d);
+}
+
+/**
+ * 077 FR-024 — what the Preferences toast says about the text in a numeric box, or `null` when it is a value the box
+ * accepts. The toast stands apart from the box, so the sentence names the setting and its whole range rather than the
+ * one bound that was passed: "Font size must be between 6 and 72".
+ */
+export function typedProblem(text: string, d: FieldDescriptor): string | null {
   const n = parseGrouped(text);
+  if (n === null || !Number.isInteger(n)) return `${d.label} must be a whole number`;
+  if (checkAgainst(n, d).ok) return null;
+  const { lo, hi } = hardBounds(d);
+  const word = storedWord(d);
+  if (lo !== undefined && hi !== undefined) return `${d.label} must be between ${formatGrouped(lo)} and ${withUnit(hi, word)}`;
+  return lo !== undefined ? `${d.label} must be at least ${withUnit(lo, word)}` : `${d.label} must be at most ${withUnit(hi!, word)}`;
+}
+
+function checkAgainst(n: number | null, d: FieldDescriptor): TypedCheck {
   if (n === null || !Number.isInteger(n)) return { ok: false, message: 'Not a whole number' };
   const { lo, hi } = hardBounds(d);
   const word = storedWord(d);

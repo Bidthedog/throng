@@ -348,8 +348,11 @@ test('an invalid number is not applied and is surfaced; last valid value stays',
       const num = prefs.getByTestId('control-behaviour.tabHoverActivateMs');
       await num.fill('not-a-number');
       await num.press('Enter');
-      // Invalidity surfaced; the file keeps the default (600), not applied.
+      // Invalidity surfaced — in the Preferences toast, naming the setting (077 FR-024); the file keeps the default
+      // (600), not applied.
       await expect(prefs.getByTestId('control-behaviour.tabHoverActivateMs-invalid')).toBeVisible();
+      await expect(prefs.getByTestId('control-behaviour.tabHoverActivateMs-invalid')).toContainText('must be a whole number');
+      await expect(num).toHaveAttribute('aria-invalid', 'true');
       expect(readSettings(cfgRoot)?.behaviour?.tabHoverActivateMs).toBe(600);
     },
   );

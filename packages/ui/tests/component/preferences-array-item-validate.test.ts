@@ -10,6 +10,7 @@ import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { SETTINGS_METADATA, type FieldDescriptor } from '@throng/core';
 import { SettingControl } from '../../src/renderer/preferences/form-controls.js';
+import { NotificationProvider } from '../../src/renderer/common/notification.js';
 
 const KEY = 'editor.previews.providers.html.safeSources';
 const descriptor = SETTINGS_METADATA.find((d: FieldDescriptor) => d.key === KEY) as FieldDescriptor;
@@ -17,7 +18,8 @@ const SHIPPED = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
 
 function renderControl(value: string[] = SHIPPED) {
   const onCommit = vi.fn();
-  render(createElement(SettingControl, { descriptor, value, onCommit }));
+  // 077 FR-024 — under the provider, as in the Preferences window: the refusal is a toast carrying the entry's `…-invalid` id.
+  render(createElement(NotificationProvider, null, createElement(SettingControl, { descriptor, value, onCommit })));
   return { onCommit };
 }
 
@@ -37,8 +39,8 @@ describe('the list editor validates each entry before it commits (074 FR-072c)',
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onCommit).not.toHaveBeenCalled();
-    expect(screen.getByTestId(`control-${KEY}-item-${SHIPPED.length}-invalid`).textContent).toBe(
-      'Only https addresses can be sources',
+    expect(screen.getByTestId(`control-${KEY}-item-${SHIPPED.length}-invalid`).textContent).toContain(
+      `${descriptor.label}: Only https addresses can be sources`,
     );
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(input.value).toBe('http://cdn.example.com');

@@ -7,6 +7,7 @@ import {
   type MapColumn,
 } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
+import { useFieldNotice } from './field-notice.js';
 
 /**
  * The keyed-table control (016, F5/FR-022) — a settings value that is a MAP.
@@ -108,6 +109,11 @@ function KeyedMapControl({
 
   const [newKey, setNewKey] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // 077 FR-024 — a refused key is named in the Preferences toast; the box keeps its outline, and nothing moves.
+  const fieldNotice = useFieldNotice(`map-error-${descriptor.key}`);
+  useEffect(() => {
+    fieldNotice(error === null ? null : `${descriptor.label}: ${error}`);
+  }, [fieldNotice, error, descriptor.label]);
 
   const commit = (next: MapValue): void => onCommit(next);
 
@@ -115,6 +121,8 @@ function KeyedMapControl({
     const problem = validateKey(newKey, keys, descriptor);
     if (problem) {
       setError(problem);
+      // The same refused key added again flashes its toast (one condition, one notice).
+      fieldNotice(`${descriptor.label}: ${problem}`, true);
       return;
     }
     const key = newKey.trim();
@@ -219,7 +227,7 @@ function KeyedMapControl({
         ) : (
           <input
             type="text"
-            className="ctl__input map-control-text"
+            className={error !== null ? 'ctl__input ctl__input--invalid map-control-text' : 'ctl__input map-control-text'}
             value={newKey}
             placeholder=".foo"
             onChange={(e) => {
@@ -242,11 +250,6 @@ function KeyedMapControl({
           testId={`map-add-${descriptor.key}`}
         />
       </div>
-      {error ? (
-        <div className="map-control-error" role="alert" data-testid={`map-error-${descriptor.key}`}>
-          {error}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -295,6 +298,11 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
 
   const [newId, setNewId] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // 077 FR-024 — what the add or a commit found is said in the Preferences toast, not in a strip under the table.
+  const fieldNotice = useFieldNotice(`${noun}-error`);
+  useEffect(() => {
+    fieldNotice(error === null ? null : `${descriptor.label}: ${error}`);
+  }, [fieldNotice, error, descriptor.label]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   /**
    * Was the id typed into the new-id box REFUSED? `error` alone cannot say: after a successful add it
@@ -352,6 +360,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     if (problem?.field === 'id') {
       setError(problem.message);
       setIdRefused(true);
+      fieldNotice(`${descriptor.label}: ${problem.message}`, true);
       return;
     }
     setIdRefused(false);
@@ -476,7 +485,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
       <div className="map-control-add">
         <input
           type="text"
-          className="ctl__input map-control-text"
+          className={idRefused ? 'ctl__input ctl__input--invalid map-control-text' : 'ctl__input map-control-text'}
           value={newId}
           placeholder={`New ${noun} id`}
           onChange={(e) => {
@@ -493,11 +502,6 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
         />
         <IconButton token="add" title={`Add ${noun}`} onClick={addRow} testId={`${noun}-add`} />
       </div>
-      {error ? (
-        <div className="map-control-error" role="alert" data-testid={`${noun}-error`}>
-          {error}
-        </div>
-      ) : null}
     </div>
   );
 }

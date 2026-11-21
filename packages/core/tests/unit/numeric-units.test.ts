@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkTyped,
   clampToHard,
+  typedProblem,
   formatGrouped,
   formatSetting,
   isStop,
@@ -107,6 +108,34 @@ describe('checkTyped — the box, as the user types', () => {
     expect(checkTyped('abc', size)).toEqual({ ok: false, message: 'Not a whole number' });
     expect(checkTyped('1.5', fast)).toEqual({ ok: false, message: 'Not a whole number' });
     expect(checkTyped('', fast)).toEqual({ ok: false, message: 'Not a whole number' });
+  });
+});
+
+/*
+ * 077 FR-024 (the maintainer, 2026-11-21 08:16: "the error should be shown in preferences toast, rather than inline") —
+ * the toast stands apart from the box, so its sentence names the setting and both of its bounds: "Font size must be
+ * between 6 and 72".
+ */
+describe('typedProblem — what the toast says about a typed value', () => {
+  it('says nothing about a value within the hard bounds', () => {
+    expect(typedProblem(g(12_345_678), d({ ...size, label: 'Scrollback size' }))).toBeNull();
+  });
+
+  it('names the setting and both hard bounds, in the stored unit, whichever bound was passed', () => {
+    const scrollback = d({ ...size, label: 'Scrollback size' });
+    const expected = `Scrollback size must be between ${g(1024)} and ${g(2048 * MiB)} bytes`;
+    expect(typedProblem('999999999999', scrollback)).toBe(expected);
+    expect(typedProblem('10', scrollback)).toBe(expected);
+  });
+
+  it('names the one bound a setting has', () => {
+    expect(typedProblem('-1', d({ label: 'Retries', control: 'number', min: 0 }))).toBe(`Retries must be at least ${g(0)}`);
+    expect(typedProblem('11', d({ label: 'Retries', control: 'number', max: 10 }))).toBe(`Retries must be at most ${g(10)}`);
+  });
+
+  it('says a setting takes a whole number when the text is none', () => {
+    expect(typedProblem('abc', d({ ...fast, label: 'Hover delay' }))).toBe('Hover delay must be a whole number');
+    expect(typedProblem('1.5', d({ ...fast, label: 'Hover delay' }))).toBe('Hover delay must be a whole number');
   });
 });
 

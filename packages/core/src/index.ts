@@ -1220,6 +1220,7 @@ export {
   isStop,
   nearestStop,
   toDisplay,
+  typedProblem,
   type TypedCheck,
 } from './config/numeric-units.js';
 

@@ -62,6 +62,9 @@ maintainer may still overrule any:
   `confirmations.` namespace; only the Preferences group changes.
 - Q (maintainer, 08:16): "The two 'Panes' options can go under 'General -> Window'." → FR-023. Keys unchanged; the
   Panes group goes.
+- Q (maintainer, 08:16): "When entering an invalid value in a preferences box, the error should be shown in preferences
+  toast, rather than inline. The inline setting shifts the layout and its ugly." → FR-024. The box keeps its red
+  outline; the toast names the setting and its range.
 - Q (maintainer, 08:20): "You can remove the 'Appearance -> Theme' preference setting - that is handled in the 'Themes'
   tab." → FR-026. Only the Settings tab's row goes; the key stays, written by the Themes tab.
 
@@ -297,6 +300,17 @@ effective value after upgrading, now stored in ms or bytes.
   (`panes.projects.maxWidth`, `panes.fileExplorer.maxWidth`) MUST sit in Preferences under **General › Window**,
   and `docs/preferences.md` MUST document them in its Window section; there is no Panes group. Keys, bounds and
   controls are unchanged. *(Extends 069 FR-068, whose General › Window subgroup they join.)*
+- **FR-024**: *(2026-11-21.)* What is wrong with an entry in a Preferences box MUST be said in the Preferences window's
+  toast — the notification surface its other messages use — and never inline beside or beneath the box, so nothing in
+  the window moves. The toast MUST name the setting and what it takes ("Font size must be between 6 and 72", "Font
+  size must be a whole number"; a rule-checked text or list entry: "<setting>: <the rule's message>"). The box MUST
+  keep only its invalid outline and `aria-invalid`. One condition, one notice: a box owns at most one toast; a
+  different problem with the same entry rewrites it, the same refused entry confirmed again flashes it, and it goes
+  when the entry is put right, restored with Escape, or the box leaves the window. What a confirm stores, clamps or
+  keeps is unchanged (FR-009). Covers the numeric box, rule-checked text boxes, list entries, the JSON list box and the
+  key and record tables' add boxes. A table row that arrived broken from the file keeps its own row (C17): it reports
+  the file, not an entry. *(Supersedes FR-008's "say inline, beside the box" — its wording and bound-naming survive
+  in the toast — 053 FR-008's message beside the text box, and 074 FR-072c's "says why beside it".)*
 - **FR-026**: *(2026-11-21.)* The Settings tab MUST draw no **Theme** row: the Themes tab chooses the active theme. The
   key `appearance.theme` stays a configurable setting — `settings.json`, the shipped defaults, the JSON tab's check and
   Revert All keep it — and a search of the Settings tab never finds a row for it. General has no Appearance subsection.

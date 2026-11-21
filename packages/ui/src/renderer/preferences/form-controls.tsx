@@ -12,7 +12,8 @@ import {
 import { FolderPicker } from '../common/folder-picker.js';
 import { IconButton } from '../common/icon-button.js';
 import { MapControl } from './map-control.js';
-import { logExpected } from '@throng/core';
+import { useFieldNotice } from './field-notice.js';
+import { logExpected, typedProblem } from '@throng/core';
 
 /**
  * Generic descriptor-driven form controls (feature 007, FR-028/029). One control
@@ -322,6 +323,12 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
   /** 077 FR-008 — what is wrong with the text in the box, said while it is typed; `null` while it is fine. */
   const [message, setMessage] = useState<string | null>(null);
   const invalid = message !== null;
+  // 077 FR-024 — what is wrong is said in the Preferences toast, naming the setting and its range; the box keeps only
+  // its outline. An inert control cannot be typed into, so it has nothing to complain about.
+  const fieldNotice = useFieldNotice(`${testId(descriptor.key)}-invalid`);
+  useEffect(() => {
+    fieldNotice(invalid && !disabled ? (typedProblem(text, descriptor) ?? message) : null);
+  }, [fieldNotice, invalid, disabled, text, message, descriptor]);
   const focused = useRef(false);
 
   /**
@@ -415,6 +422,8 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
     const n = check.ok ? check.value : check.clampTo;
     if (n === undefined) {
       setMessage(check.ok ? null : check.message);
+      // The same refused entry confirmed again flashes its toast (one condition, one notice).
+      if (!check.ok && !disabled) fieldNotice(typedProblem(raw, descriptor) ?? check.message, true);
       return;
     }
     setMessage(null);
@@ -518,13 +527,6 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
           if (e.key === 'Escape') restore();
         }}
       />
-      {/* An inert control cannot be typed into, so a complaint about what was typed into it is
-          stale by construction — hide it rather than leave it accusing a box nobody can reach. */}
-      {invalid && !disabled ? (
-        <span className="ctl__error" role="alert" data-testid={`${testId(descriptor.key)}-invalid`}>
-          {message}
-        </span>
-      ) : null}
     </span>
   );
 }
@@ -535,6 +537,11 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
   // edited again, and the commit is refused, so the last valid value stays what is saved.
   const [error, setError] = useState<string | null>(null);
   const focused = useRef(false);
+  // 077 FR-024 — the refusal is the Preferences toast's, naming the setting; the box keeps its outline.
+  const fieldNotice = useFieldNotice(`${testId(descriptor.key)}-invalid`);
+  useEffect(() => {
+    fieldNotice(error === null ? null : `${descriptor.label}: ${error}`);
+  }, [fieldNotice, error, descriptor.label]);
   useEffect(() => {
     if (!focused.current) {
       setText(value === undefined ? '' : String(value));
@@ -545,7 +552,10 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
   const commit = (raw: string): boolean => {
     const message = descriptor.validate?.(raw) ?? null;
     setError(message);
-    if (message !== null) return false;
+    if (message !== null) {
+      fieldNotice(`${descriptor.label}: ${message}`, true);
+      return false;
+    }
     if (raw !== value) onCommit(raw);
     return true;
   };
@@ -579,11 +589,6 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
           commit(e.currentTarget.value);
         }}
       />
-      {error !== null ? (
-        <span className="ctl__error" data-testid={`${testId(descriptor.key)}-invalid`}>
-          {error}
-        </span>
-      ) : null}
     </>
   );
 }
@@ -640,12 +645,15 @@ function ArrayControl(props: SettingControlProps): ReactElement {
  */
 function ValidatedArrayItem({
   id,
+  label,
   value,
   validate,
   onCommit,
   onEmpty,
 }: {
   id: string;
+  /** The setting's label, which names the list in its toast (077 FR-024). */
+  label: string;
   value: string;
   validate: (item: string) => string | null;
   onCommit: (item: string) => void;
@@ -654,6 +662,11 @@ function ValidatedArrayItem({
   const [text, setText] = useState(value);
   const [error, setError] = useState<string | null>(null);
   const focused = useRef(false);
+  // 077 FR-024 — a refused entry is named in the Preferences toast; the box keeps its outline.
+  const fieldNotice = useFieldNotice(`${id}-invalid`);
+  useEffect(() => {
+    fieldNotice(error === null ? null : `${label}: ${error}`);
+  }, [fieldNotice, error, label]);
   useEffect(() => {
     if (!focused.current) {
       setText(value);
@@ -667,7 +680,10 @@ function ValidatedArrayItem({
     }
     const message = validate(raw);
     setError(message);
-    if (message !== null) return false;
+    if (message !== null) {
+      fieldNotice(`${label}: ${message}`, true);
+      return false;
+    }
     if (raw !== value) onCommit(raw);
     return true;
   };
@@ -677,7 +693,6 @@ function ValidatedArrayItem({
         className={error !== null ? 'ctl__input ctl__input--invalid' : 'ctl__input'}
         data-testid={id}
         aria-invalid={error !== null}
-        aria-describedby={error !== null ? `${id}-invalid` : undefined}
         // An added row takes focus, so typing follows the click on Add.
         autoFocus={onEmpty !== undefined}
         value={text}
@@ -688,7 +703,7 @@ function ValidatedArrayItem({
           setText(e.target.value);
           setError(null);
         }}
-        // A refused entry keeps focus, so the message is read where it was typed.
+        // A refused entry keeps focus, so the user corrects it where it was typed.
         onKeyDown={(e) => {
           if (e.key === 'Enter' && commit(e.currentTarget.value)) e.currentTarget.blur();
         }}
@@ -697,11 +712,6 @@ function ValidatedArrayItem({
           commit(e.currentTarget.value);
         }}
       />
-      {error !== null ? (
-        <span className="ctl__error" id={`${id}-invalid`} data-testid={`${id}-invalid`}>
-          {error}
-        </span>
-      ) : null}
     </span>
   );
 }
@@ -719,6 +729,7 @@ function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps
           {validate !== undefined ? (
             <ValidatedArrayItem
               id={`${testId(descriptor.key)}-item-${i}`}
+              label={descriptor.label}
               value={item}
               validate={validate}
               onCommit={(entry) => set(items.map((x, j) => (j === i ? entry : x)))}
@@ -775,6 +786,7 @@ function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps
         <div className="ctl__array-row">
           <ValidatedArrayItem
             id={`${testId(descriptor.key)}-item-${items.length}`}
+            label={descriptor.label}
             value=""
             validate={validate}
             onCommit={(entry) => {
@@ -800,6 +812,12 @@ function JsonArrayControl({ descriptor, value, onCommit }: SettingControlProps):
   const [text, setText] = useState<string>(() => JSON.stringify(value ?? [], null, 2));
   const [invalid, setInvalid] = useState(false);
   const focused = useRef(false);
+  // 077 FR-024 — said in the Preferences toast; the box keeps its outline.
+  const problem = `${descriptor.label} must be a valid JSON array`;
+  const fieldNotice = useFieldNotice(`${testId(descriptor.key)}-invalid`);
+  useEffect(() => {
+    fieldNotice(invalid ? problem : null);
+  }, [fieldNotice, invalid, problem]);
   useEffect(() => {
     if (!focused.current) {
       setText(JSON.stringify(value ?? [], null, 2));
@@ -815,6 +833,7 @@ function JsonArrayControl({ descriptor, value, onCommit }: SettingControlProps):
     } catch (error) {
       logExpected('form-controls: parse a JSON array field', 'the user typed something that is not a JSON array; the field is marked invalid', error);
       setInvalid(true);
+      fieldNotice(problem, true);
     }
   };
   return (
@@ -837,11 +856,6 @@ function JsonArrayControl({ descriptor, value, onCommit }: SettingControlProps):
           commit();
         }}
       />
-      {invalid ? (
-        <span className="ctl__error" data-testid={`${testId(descriptor.key)}-invalid`}>
-          Must be a valid JSON array.
-        </span>
-      ) : null}
     </span>
   );
 }

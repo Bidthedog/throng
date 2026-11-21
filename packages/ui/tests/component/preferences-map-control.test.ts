@@ -21,6 +21,7 @@ import { createElement, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { SETTINGS_METADATA, type FieldDescriptor } from '@throng/core';
 import { MapControl, validateKey } from '../../src/renderer/preferences/map-control.js';
+import { NotificationProvider } from '../../src/renderer/common/notification.js';
 
 /** The extension map: keys must LOOK like extensions, which is the interesting validation. */
 const byExtension: FieldDescriptor = {
@@ -47,7 +48,8 @@ function renderMap(descriptor: FieldDescriptor, initial: Record<string, unknown>
       },
     });
   }
-  render(createElement(Host));
+  // 077 FR-024 — under the provider, as in the Preferences window: a refused key is named in its toast.
+  render(createElement(NotificationProvider, null, createElement(Host)));
   return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
