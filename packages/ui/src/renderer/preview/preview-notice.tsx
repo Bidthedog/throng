@@ -99,6 +99,15 @@ function sizeDescriptor(key: string | undefined): FieldDescriptor {
   return found ?? { key: '', label: '', description: '', group: '', control: 'slider', storedUnit: 'bytes', display: 'MB' };
 }
 
+/**
+ * 077 FR-014 — a too-large refusal's size and limit, as every too-large surface words them: "<size>, over the <limit>
+ * limit set in Preferences", each in the limit setting's own display (MB with its bytes).
+ */
+export function tooLargeDetail(size: number, limit: number, limitKey: string | undefined): string {
+  const d = sizeDescriptor(limitKey);
+  return `${formatSetting(size, d)}, over the ${formatSetting(limit, d)} limit set in Preferences`;
+}
+
 /** The one sentence a file notice says (030 FR-040, FR-026). */
 export function previewNoticeMessage(notice: FileNotice): string {
   switch (notice.kind) {
@@ -111,8 +120,7 @@ export function previewNoticeMessage(notice: FileNotice): string {
       // (MB with its bytes), digit-grouped, when main measured them. The setting's value, never a default (7.3.0).
       if (notice.size === undefined || notice.limit === undefined) return 'This file is too large to preview.';
       {
-        const d = sizeDescriptor(notice.limitKey);
-        return `This file is too large to preview: ${formatSetting(notice.size, d)}, over the ${formatSetting(notice.limit, d)} limit set in Preferences.`;
+        return `This file is too large to preview: ${tooLargeDetail(notice.size, notice.limit, notice.limitKey)}.`;
       }
     // 059 FR-053 — core's one wording, which the editor says too.
     case 'not-text':

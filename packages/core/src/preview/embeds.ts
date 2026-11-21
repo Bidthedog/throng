@@ -144,10 +144,23 @@ export function splitEmbedRef(wire: string): { ref: string; wiki: boolean } {
 export type EmbedRefusal = 'missing' | 'outside' | 'unsupported' | 'unreadable' | 'too-large';
 
 /** One embed's answer, in the order the references were asked for. */
-export type PreviewEmbedRead = { ref: string; ok: true; text: string } | { ref: string; ok: false; reason: EmbedRefusal };
+export type PreviewEmbedRead =
+  | { ref: string; ok: true; text: string }
+  | {
+      ref: string;
+      ok: false;
+      reason: EmbedRefusal;
+      /** 077 FR-014 — a `too-large` refusal's file size and the limit, in bytes, and the setting that set it. */
+      size?: number;
+      limit?: number;
+      limitKey?: string;
+    };
 
-/** The notice an embed refusal draws, naming the reference as written. */
-export function embedRefusalText(ref: string, reason: EmbedRefusal): string {
+/**
+ * The notice an embed refusal draws, naming the reference as written. `detail` (077 FR-014): a too-large refusal's
+ * size and limit as the chrome words them ("11.44 MB (… bytes), over the 10 MB (… bytes) limit set in Preferences").
+ */
+export function embedRefusalText(ref: string, reason: EmbedRefusal, detail?: string): string {
   switch (reason) {
     case 'missing':
       return `Embedded diagram not found: ${ref}`;
@@ -156,7 +169,7 @@ export function embedRefusalText(ref: string, reason: EmbedRefusal): string {
     case 'unsupported':
       return `Not a Mermaid file: ${ref}`;
     case 'too-large':
-      return `Embedded diagram is too large to show: ${ref}`;
+      return detail === undefined ? `Embedded diagram is too large to show: ${ref}` : `Embedded diagram is too large to show: ${ref} — ${detail}.`;
     default:
       return `Embedded diagram could not be read: ${ref}`;
   }

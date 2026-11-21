@@ -134,6 +134,7 @@ import { hasMath, showMathPending } from './math-dom.js';
 import { showImagesPending } from '../../loading-placeholder.js';
 import { applyImageEmbedResolution, EMBED_ATTRIBUTE, embedReadRefOf, embedRefOf } from './embeds.js';
 import { embedRefusalText, type PreviewEmbedRead } from '@throng/core';
+import { tooLargeDetail } from '../../preview-notice.js';
 import {
   applyTableLayout,
   chToPx,
@@ -244,7 +245,11 @@ function applyEmbeds(fragment: DocumentFragment, reads: ReadonlyMap<string, Prev
       replacement = doc.createElement(alone ? 'div' : 'span');
       replacement.className = EMBED_NOTICE_CLASS;
       replacement.setAttribute('role', 'status');
-      replacement.textContent = embedRefusalText(ref, read.reason);
+      replacement.textContent = embedRefusalText(
+        ref,
+        read.reason,
+        read.size !== undefined && read.limit !== undefined ? tooLargeDetail(read.size, read.limit, read.limitKey) : undefined,
+      );
     }
     if (line !== null) replacement.setAttribute('data-source-line', line);
     target.replaceWith(replacement);

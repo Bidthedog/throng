@@ -188,5 +188,5 @@ Each was implemented before it had a task; the commit named is the one that did 
 
 ## Phase 16: Convergence
 
-- [ ] T058 CRITICAL: Quote the file's size and **Max open file size** in an embedded diagram's too-large refusal (`![[big.mmd]]`), as every other too-large surface does, per Constitution X, FR-014 and SC-005 (partial)
+- [x] T058 CRITICAL: Quote the file's size and **Max open file size** in an embedded diagram's too-large refusal (`![[big.mmd]]`), as every other too-large surface does, per Constitution X, FR-014 and SC-005 (partial)
 - [ ] T059 Keep a broken table row's problem in the Preferences toast until it is put right, whatever happens to another row: say the first row still with a problem, edited or draft, per FR-024 and FR-025 (partial)

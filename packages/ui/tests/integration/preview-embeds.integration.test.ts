@@ -26,6 +26,7 @@ let root: string;
 let outside: string;
 let recoveryDir: string;
 let previews: PreviewService;
+let settings: ReturnType<typeof liveSettings>;
 
 async function file(relPath: string, text: string, under = root): Promise<string> {
   const path = join(under, relPath);
@@ -39,7 +40,8 @@ beforeEach(async () => {
   outside = await mkdtemp(join(tmpdir(), 'throng-embeds-out-'));
   recoveryDir = await mkdtemp(join(tmpdir(), 'throng-embeds-rec-'));
   const relay = lateListener();
-  const service = new EditorService(fs, () => liveSettings().current);
+  settings = liveSettings();
+  const service = new EditorService(fs, () => settings.current);
   const coord = new EditorCoordinator(service, new EditorRecovery(recoveryDir), {
     recoveryDebounceMs: 10_000,
     relaySync: () => {},
@@ -51,7 +53,7 @@ beforeEach(async () => {
     reader: service,
     fs,
     fileWatcher: manualWatcher(),
-    settings: liveSettings().get,
+    settings: settings.get,
     registry: SHIPPED_PREVIEW_PROVIDERS,
     projectRoot: async (id) => (id === 'P' ? root : undefined),
     push: recordingPush(),
@@ -107,6 +109,16 @@ describe('readEmbeds', () => {
     await file('docs/notes.md', '# n\n');
     const { results } = await previews.readEmbeds('v1', ['gone.mmd', 'notes.md', '../../escape.mmd']);
     expect(results.map((r) => (r.ok ? 'ok' : r.reason))).toEqual(['missing', 'unsupported', 'outside']);
+  });
+
+  // 077 convergence T058 — Constitution X, FR-014, SC-005: an embed over Max open file size is refused with the file's
+  // size and the limit, as every other too-large surface quotes them.
+  it('refuses an embed over Max open file size with its size and the limit', async () => {
+    settings.current = { ...settings.current, editor: { ...settings.current.editor, maxOpenFileBytes: 1024 } };
+    await file('docs/big.mmd', `graph TD\n${'  A --> B\n'.repeat(400)}`);
+    const { results } = await previews.readEmbeds('v1', ['big.mmd']);
+    expect(results[0]).toMatchObject({ ok: false, reason: 'too-large', limit: 1024, limitKey: 'editor.maxOpenFileBytes' });
+    expect((results[0] as { size?: number }).size).toBeGreaterThan(1024);
   });
 
   it('refuses a file reached through a junction that leads out of the project', async () => {

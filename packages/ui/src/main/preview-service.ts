@@ -477,7 +477,15 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       case 'deleted':
         return { ref, ok: false, reason: 'missing' };
       case 'too-large':
-        return { ref, ok: false, reason: 'too-large' };
+        // 077 FR-014 — the size and the limit travel with the refusal, so the embed's notice can quote them.
+        return {
+          ref,
+          ok: false,
+          reason: 'too-large',
+          ...(read.notice.size !== undefined ? { size: read.notice.size } : {}),
+          ...(read.notice.limit !== undefined ? { limit: read.notice.limit } : {}),
+          ...(read.notice.limitKey !== undefined ? { limitKey: read.notice.limitKey } : {}),
+        };
       default:
         return { ref, ok: false, reason: 'unreadable' };
     }
