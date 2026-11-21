@@ -620,6 +620,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
   cell dialog, which remain as the surfaces where it was first reported; the terminal's inclusion awaits the
   maintainer's confirmation.)* *(Supersedes the Linux middle-click paste of the primary selection that 062 FR-030
   carried — recorded in 062's Supersessions.)*
+  *Widened (maintainer, 2026-11-21: "middle click should not paste at all in throng, in any panel"): this includes a
+  program running in a terminal. The middle button's press, release, auxclick and any motion with it held MUST NOT
+  reach a terminal's program as a mouse report, with a modifier or not, so a program that reads the mouse (tmux, vim
+  with the mouse on) cannot paste its own buffer on a middle click. Ctrl+middle-click's zoom reset (Cmd on macOS) still
+  works over a terminal. This settles the terminal's inclusion that the note above left awaiting confirmation.*
 - **FR-008d** *(Q30, 2026-11-19)*: A grid's selection MUST belong to the file it shows. When a panel shows
   another file (Last Preview Panel reuse, Back, Forward), the file it leaves keeps its selection in that
   history entry, and the file it shows gets back its own last selection, or A1 when it has none. Selections

@@ -742,13 +742,23 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // fires before xterm's descendant handlers; stopping button-2 press/release there makes the
     // context menu the sole owner of a right-click. `stopImmediatePropagation` (not `preventDefault`)
     // leaves the browser free to still fire `contextmenu` for the themed menu, and the panel's
-    // pointerdown still marks it active. Left/middle buttons (selection, mouse reporting) are untouched.
+    // pointerdown still marks it active. The left button (selection, mouse reporting) is untouched.
+    //
+    // 073 FR-008g (maintainer, 2026-11-21: "middle click should not paste at all in throng, in any panel") — the
+    // MIDDLE button is swallowed the same way: a program reading the mouse (tmux, vim with the mouse on) takes a middle
+    // press as its own paste. Its press, release, auxclick and any motion with it held never reach xterm, so no report
+    // is sent, Ctrl held or not. Ctrl+MiddleClick's zoom reset still runs: it listens on the window in the capture
+    // phase (mouse-zoom.ts), before this.
     const swallowRightButton = (ev: MouseEvent): void => {
-      if (ev.button === 2) ev.stopImmediatePropagation();
+      if (ev.button === 2 || ev.button === 1) ev.stopImmediatePropagation();
+    };
+    const swallowMiddleDrag = (ev: MouseEvent): void => {
+      if ((ev.buttons & 4) !== 0) ev.stopImmediatePropagation();
     };
     container.addEventListener('mousedown', swallowRightButton, true);
     container.addEventListener('mouseup', swallowRightButton, true);
     container.addEventListener('auxclick', swallowRightButton, true);
+    container.addEventListener('mousemove', swallowMiddleDrag, true);
     // Terminal keyboard negotiation state (#90): the kitty flags AND win32-input-mode the
     // running program has enabled. A modified Enter is reported in CSI-u form while kitty is
     // active, as a win32-input key event while win32-input-mode is (PowerShell/cmd), else as a
@@ -1910,6 +1920,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       container.removeEventListener('mousedown', swallowRightButton, true);
       container.removeEventListener('mouseup', swallowRightButton, true);
       container.removeEventListener('auxclick', swallowRightButton, true);
+      container.removeEventListener('mousemove', swallowMiddleDrag, true);
       screenEl?.removeEventListener('mousedown', keepLinkClickFromProgram); // issue 198
       screenEl?.removeEventListener('mousedown', onHintMouseDown);
       screenEl?.removeEventListener('mouseup', onHintMouseUp);
