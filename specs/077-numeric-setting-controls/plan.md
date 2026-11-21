@@ -110,3 +110,17 @@ What shipped after this plan was written, and where it differs from the text abo
 - **Shipped-defaults version.** 077's upgrade (renames and unit conversion, `contracts/settings-upgrade-v37.md`) is
   version 37, as the Summary and source tree say. `SHIPPED_DEFAULTS_VERSION` is **38** now: a later theme change
   (#105, `1b255c98`, selected code readable in every bundled theme) bumped it again. The 077 migration still runs at 37.
+
+## Amendments (2026-11-21, convergence T051 — additive)
+
+Two sentences of the Summary say less, or more, than what shipped:
+
+- **The exact-value box is on every numeric setting (FR-006)**, not only "for sizes and durations": counts, lengths,
+  pixels and percentages keep it too (clarification 2, revised; research R12). It greys the slider, validates as typed
+  and clamps on confirm the same way on all of them.
+- **No key stored in days moves (FR-001).** `diagnostics.keepDays` stays a count of days (clarification 1, research
+  R6), so the upgrade migrates only keys stored in seconds, minutes, KB or MB — the five in `V37_SETTINGS_RENAMES`
+  (`packages/core/src/config/shipped-defaults.ts`; `contracts/settings-upgrade-v37.md`). The Summary's "days" was a
+  slip.
+- Two of the plan's companions are amended in the same change: `contracts/numeric-control.md` (the greyed slider is
+  plain CSS, no theme token — T008) and research R10 (the print fields use `checkPrintField`, not `checkTyped` — T021).

@@ -29,6 +29,9 @@ Messages (stored unit, digit-grouped, locale grouping per 4.5.0):
 | `control-<key>-invalid` | the Preferences toast saying what is wrong, present only while invalid; nothing inline — the box keeps its invalid outline and `aria-invalid` (FR-024; amended 2026-11-21, T048) |
 
 - Greyed state: `data-overridden="true"` on the slider, styled by a theme token; the slider stays enabled.
+  *(Amended 2026-11-21, convergence T051 — additive.)* No theme token styles it: T008 draws the greyed slider in plain
+  CSS, dimmed and greyscale with no colour (`.ctl__slider--overridden` in
+  `packages/ui/src/renderer/preferences/preferences.css`), so there is no token and no shipped-defaults bump for it.
 - Confirm: Enter or blur. A confirmed non-number stores nothing and stays in the box, its toast flashing (FR-009). Escape restores the stored value. Reset clears the toast and the override.
 
 ## Main → renderer — too-large notice

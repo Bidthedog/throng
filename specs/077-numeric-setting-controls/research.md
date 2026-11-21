@@ -104,3 +104,7 @@ Find debounce default moves 120 → 125 ms to sit on a stop; submenu dwell max 2
 
 - **Decision**: Print fields get descriptors (steps, hard bounds) in the print-preview model and use `checkTyped`; their
   inputs stay compact number fields. Covered by component tests only.
+- *(Amended 2026-11-21, convergence T051 — additive.)* The print fields do not use `checkTyped`: margins take
+  decimals and `checkTyped` takes whole numbers, so they use their own `checkPrintField`
+  (`packages/core/src/preview/print.ts`), as T021 records. The decision otherwise stands — descriptors with steps and
+  hard bounds in the print-preview model, compact number fields, component tests.

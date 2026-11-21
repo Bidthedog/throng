@@ -172,5 +172,5 @@ Each was implemented before it had a task; the commit named is the one that did 
 ## Phase 13: Convergence
 
 - [x] T050 Show a draft table row's problem in the Preferences toast alone, keeping the inline row message for a row that arrived broken from the file (C17), per FR-024 and FR-025 (partial)
-- [ ] T051 Bring plan.md's summary, contracts/numeric-control.md and research R10 to what shipped: the box on every numeric setting, no days migration, the greyed slider in plain CSS, the print fields' own check, per FR-001, FR-006, T008 and T021 (contradicts)
+- [x] T051 Bring plan.md's summary, contracts/numeric-control.md and research R10 to what shipped: the box on every numeric setting, no days migration, the greyed slider in plain CSS, the print fields' own check, per FR-001, FR-006, T008 and T021 (contradicts)
 - [ ] T052 Scope FR-012's 1 KB – 2 GB hard bounds to the editor and preview caps and name research R6's log-limit bounds, per FR-012 (contradicts)
