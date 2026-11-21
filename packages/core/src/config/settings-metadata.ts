@@ -795,7 +795,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     storedUnit: 'ms',
     display: 's',
     min: 0,
-    max: 10000,
+    // 077 FR-005 — the maintainer's ruling (2026-11-21): at most 3 s. A stored value above it clamps to 3 s on load.
+    max: 3000,
     // 018: WIDENED from 50. A step must be at least 1% of the range (FR-035), and 50 across
     // 0–10000 is 0.5% — a slider with two hundred indistinguishable positions, which is no more
     // usable than no slider at all. Every other numeric already satisfied the rule; this was the

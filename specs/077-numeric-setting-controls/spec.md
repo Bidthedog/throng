@@ -248,7 +248,10 @@ effective value after upgrading, now stored in ms or bytes.
     shipped default off the slider (FR-011). Each keeps its range and its hard bounds; any value within them can be
     typed. `editor.previews.maxWaitMs` and `attention.clearDelayMs` were re-stepped to 0.5 s instead (their 0–10 s
     range and 1 s default allow it). `slider-descriptors.test.ts` enforces the table and names these five.
-    - `editor.autoSaveDebounceMs` — 0–10 s in **0.1 s**: its shipped 300 ms is no 0.5 s stop.
+    - `editor.autoSaveDebounceMs` — 0–10 s in **0.1 s**: its shipped 300 ms is no 0.5 s stop. *(2026-11-21, the
+      maintainer's ruling: "default 300 ms, step 100 ms, maximum 3 s, minimum unchanged". It now runs **0–3 s in
+      0.1 s** from 300 ms; a value stored above 3 s clamps to 3 s on load, as any value past a setting's bounds does
+      (FR-016). The other four exceptions stand as recorded: "the rest are fine".)*
     - `editor.links.existenceCheckTimeoutMs` (0.25–25 s) and `terminals.commandPollMs` (0.25–5 s) — in **0.25 s**: a
       0.25 s floor sits on no 0.5 s grid that still ends at the maximum.
     - `diagnostics.maxFileBytes` — 0.25–4 MB in **0.25 MB** (research R6, FR-012): 1 MB steps would raise the floor to

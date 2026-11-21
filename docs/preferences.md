@@ -184,7 +184,7 @@ on Windows and for a portable or archive copy.
 |---|---|---|---|---|
 | Auto-save | `editor.autoSave` | off | on · off | Write edits automatically once typing settles, without `Ctrl+S`. |
 | Save Document Scroll Position | `editor.saveDocumentScroll` | off | on · off | Reopening a file in the same editor restores where you were, instead of starting at the top. |
-| Auto-save delay | `editor.autoSaveDebounceMs` | 0.3 s (300 ms) | 0 – 10 s, step 0.1 s | How long after typing stops an auto-save writes. |
+| Auto-save delay | `editor.autoSaveDebounceMs` | 0.3 s (300 ms) | 0 – 3 s, step 0.1 s | How long after typing stops an auto-save writes. |
 | Save-All scope | `editor.saveAllScope` | `project` | `tab` · `project` · `all` | What a `Ctrl+Shift+S` Save All covers. |
 | New-file line ending | `editor.defaultLineEnding` | `lf` | `lf` · `crlf` · `cr` | The line ending for brand-new documents. An existing file keeps its own. |
 | Fallback encoding | `editor.fallbackEncoding` | `windows1252` | `windows1250` … `windows1258` | The code page a file is read in when it has no BOM and is not valid UTF-8 or UTF-16 (what other editors call ANSI). Set it to your own code page and legacy files in it open without a notice. |

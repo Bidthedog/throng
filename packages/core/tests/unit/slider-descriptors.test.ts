@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_APP_SETTINGS, SETTINGS_METADATA, THEME_METADATA, type FieldDescriptor } from '../../src/index.js';
+import { DEFAULT_APP_SETTINGS, SETTINGS_METADATA, THEME_METADATA, applyDeclaredBounds, type FieldDescriptor } from '../../src/index.js';
 
 /**
  * 018 / FR-034, FR-035 — the slider's bounds and step are DECLARED, and the declaration is honest.
@@ -228,5 +228,22 @@ describe('the hover dwells (077 FR-012, R6)', () => {
       expect(d, `no descriptor for ${key}`).toBeDefined();
       expect([d!.min, d!.max, d!.step, d!.hardMax], key).toEqual([0, 1500, 25, 10_000]);
     }
+  });
+});
+
+// 077 FR-005 — the maintainer's ruling of 2026-11-21 on the auto-save delay: 300 ms by default, in 100 ms steps, at
+// most 3 s. A stored value above 3 s clamps to 3 s on load, as any value past a setting's bounds does.
+describe('the auto-save delay (FR-005, ruling 2026-11-21)', () => {
+  const d = SETTINGS_METADATA.find((x) => x.key === 'editor.autoSaveDebounceMs')!;
+
+  it('runs 0 – 3 s in 100 ms steps, from 300 ms', () => {
+    expect([d.min, d.max, d.step, d.hardMax]).toEqual([0, 3000, 100, undefined]);
+    expect(DEFAULT_APP_SETTINGS.editor.autoSaveDebounceMs).toBe(300);
+  });
+
+  it('clamps a stored value above 3 s to 3 s', () => {
+    const raw = { editor: { autoSaveDebounceMs: 5000 } };
+    const { value } = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
+    expect((value as { editor: { autoSaveDebounceMs: number } }).editor.autoSaveDebounceMs).toBe(3000);
   });
 });
