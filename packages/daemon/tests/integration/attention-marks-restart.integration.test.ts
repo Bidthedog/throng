@@ -45,7 +45,7 @@ afterEach(async () => {
 function boot(): { container: Container; db: ThrongDatabase; call: (method: string, params?: unknown) => Promise<any> } {
   const env = { ...process.env, THRONG_DATABASE_PATH: join(dir, 'throng.db'), THRONG_PIPE_NAME: `throng-692-${process.pid}-${live.length}` };
   // A quiet log: run from source, the PTY agent the container spawns at boot has no built entry to start, and
-  // says so. The terminal below runs on the local PTY, which is what a non-elevated daemon uses.
+  // says so. The terminal below is pinned to the local PTY (see its attach).
   const container = createDaemonContainer(env, () => {});
   const db = container.get<ThrongDatabase>(DAEMON_TYPES.Database);
   runMigrations(db);
@@ -77,7 +77,21 @@ describe('attention marks across a daemon restart (#692)', () => {
     const layout = createDefaultLayout(project.id, { tab: 't1', panel: 'p1' });
     await first.call(WORKSPACE_SAVE_METHOD, { projectId: project.id, layout });
     // A real terminal behind the marked panel, so the shutdown ends it as a power-off or an upgrade does.
-    await first.call(TERMINAL_ATTACH_METHOD, { panelId: 'p1', projectId: project.id, launch: { file: CMD, args: [], cwd: root }, cols: 80, rows: 24 });
+    /*
+     * `runAsAdmin` pins it to the local PTY whatever the daemon's elevation (shouldDeElevate). Unpinned, an elevated
+     * daemon — every hosted Windows runner — routes it to the de-elevated agent, which has no built entry when run from
+     * source: it never connects, the shutdown's end and forced end each wait out their timeout (about 12 s), no exit
+     * is ever observed, and the folder lock taken at attach is still held by this process when the test removes the
+     * folder (EPERM, pipelines 44889368543 and 44893096888).
+     */
+    await first.call(TERMINAL_ATTACH_METHOD, {
+      panelId: 'p1',
+      projectId: project.id,
+      launch: { file: CMD, args: [], cwd: root },
+      cols: 80,
+      rows: 24,
+      runAsAdmin: true,
+    });
     const mark: AttentionLedgerEntry = {
       panelId: 'p1',
       projectId: project.id,
