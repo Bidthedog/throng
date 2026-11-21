@@ -283,6 +283,14 @@ effective value after upgrading, now stored in ms or bytes.
     replaces "0–1,000 characters" above: R6's table, which this requirement adopts, says 10–1,000, and that is what
     shipped (`CSV_LONG_CELL_THRESHOLD`, `packages/core/src/csv/cell-text.ts`). The 0 was a slip, not a decision: at a
     threshold of 0 every non-empty cell counts as long (`isLongCell` tests `length > threshold`).
+  - *(Amended 2026-11-21, convergence T052 — scopes the file-size bounds.)* "Every file-size cap with a hard minimum
+    of 1 KB and a hard maximum of 2 GB" means the **editor and preview caps**: `editor.maxOpenFileBytes`, the
+    `editor.previews.providers.{image,svg,pdf,html}.maxFileBytes` caps and the spreadsheet's `maxPreviewBytes`
+    (`MAX_FILE_HARD_BOUNDS`, `packages/core/src/preview/providers/media-settings.ts`). The diagnostics log limits are
+    not file-size caps of that kind and keep research R6's own bounds, as shipped (`settings-metadata.ts`,
+    `docs/preferences.md`): `diagnostics.maxFileBytes` from 1,024 to **67,108,864** bytes (1 KB – 64 MB);
+    `diagnostics.maxTotalBytes` from **1,048,576** to **68,719,476,736** bytes (1 MB – 64 GB). This replaces the
+    sentence's reach over those two keys; R6's table, which this requirement adopts, already gave them these bounds.
 - **FR-013**: A setting's unit MUST be drawn by the control, not carried in its label ("Popup delay", not "Popup delay
   (ms)").
 
