@@ -73,6 +73,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-106 | [General] The Preferences JSON editors are themed like an editor | untested | | | |
 | MT-107 | [General] × on the last panel returns it to the blank form | untested | | | |
 | MT-108 | [General] A quit from the system closes throng without asking (#699) | untested | | | |
+| MT-109 | [Settings] Clear delay, Kill processes and the pane widths in their new groups | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1136,3 +1137,15 @@ Paths: `packages/ui/src/main/main.ts`
 
 ### Negative cases
 - Closing the window yourself with a terminal running always asks first.
+
+## MT-109: [Settings] Clear delay, Kill processes and the pane widths in their new groups
+
+Covers: 077 FR-021, 077 FR-022, 077 FR-023
+Paths: `packages/core/src/config/settings-metadata.ts`, `docs/preferences.md`
+
+### Steps
+1. Open Preferences → Notifications. Under the notification type rows, an **Attention** subsection holds **Clear delay**. General › Attention still holds the taskbar badge, and no longer Clear delay.
+2. Open the Resource Monitor group. Its last row is **Kill processes**. The Confirmations group no longer lists it.
+3. Open General › Window. **Projects pane max width** and **File Explorer pane max width** follow Use native Wayland. There is no **Panes** heading anywhere.
+4. Change each of the four settings and close Preferences; reopen it. Each keeps its new value, and throng behaves as before (a mark clears after the delay, ending a process asks or not as set, the panes stop at their widths).
+5. Search Preferences for "clear delay", "kill" and "pane". Each finds its row in the new place.
