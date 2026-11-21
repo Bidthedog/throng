@@ -71,6 +71,16 @@ const DIAGRAM_VENDOR =
 const GRID_VENDOR = /\/node_modules\/(@tanstack\/react-virtual|@tanstack\/virtual-core|xlsx)\//;
 
 /**
+ * 073 FR-009 (T081) — core's CSV parser, its minimal-change writer and the grid operations built on them. Only the grid
+ * bodies (behind their views' dynamic imports) and the parse worker use them in the renderer, so they ride with the
+ * grid rather than in `core`, which every window loads at startup. The cell-text helpers and the clipboard formats stay
+ * in `core`: the preview chrome and the resource monitor read them eagerly. The renderer imports them from
+ * `@throng/core/csv`: through the `@throng/core` barrel the bundler routes them via the eager `core` chunk whatever
+ * chunk they are assigned.
+ */
+const CORE_CSV = /\/packages\/core\/(?:src|dist)\/csv\/(?:index|csv-model|csv-edit|grid-operation|record-lines)\.[jt]s$/;
+
+/**
  * 074 R5 (FR-065), 075 FR-068a — PDF.js, imported only by `preview/pdf-library.ts`'s dynamic import, which the PDF
  * Preview and Print Preview share, so no window and no other preview loads it with the app. Its worker is a separate module file the renderer starts itself.
  */
@@ -82,6 +92,7 @@ const LAZY_VENDOR = [
   { pattern: DIAGRAM_VENDOR, what: 'the Mermaid diagram renderer loads with the app (054 FR-047)' },
   // 073 FR-009 — the grid's virtualiser arrives with the first grid preview; SheetJS only inside its worker.
   { pattern: GRID_VENDOR, what: 'the data grid or the workbook reader loads with the app (073 FR-009)' },
+  { pattern: CORE_CSV, what: 'the CSV parser and writer load with the app (073 FR-009)' },
   { pattern: PDF_VENDOR, what: 'the PDF renderer loads with the app (074 FR-065)' },
 ];
 
@@ -250,6 +261,7 @@ function chunkFor(rawId: string): string | null {
   // `@throng/core` — the domain layer every window kind shares, most of it the settings and theme
   // metadata. Its own chunk, like a vendor, so no window's app chunk carries it (044: the workspace
   // chunk passed 500 kB).
+  if (CORE_CSV.test(id)) return 'app-preview-grid';
   if (/\/packages\/core\//.test(id)) return 'core';
   // The preview panel and its providers — the app's own code, but its largest self-contained area.
   // Its own chunk keeps the app chunk under 500 kB (047 took it to 525 kB).

@@ -30,24 +30,26 @@ import {
   lockFirstRowOn,
   lockFirstColumnOn,
   cellDialogText,
-  cellValue,
   columnLabel,
   flattenCellText,
   isJsonContainer,
   longCellThresholdOf,
   firstBinding,
-  GRID_MAX_CELLS,
-  GRID_MAX_ROW_COUNT,
   logCaught,
   logExpected,
-  parseCsv,
   parseTsv,
+  type PreviewCopyFormat,
+} from '@throng/core';
+import {
+  cellValue,
+  GRID_MAX_CELLS,
+  GRID_MAX_ROW_COUNT,
+  parseCsv,
   recordAtLine,
   recordFieldCount,
   type CsvGridOperation,
   type CsvModel,
-  type PreviewCopyFormat,
-} from '@throng/core';
+} from '@throng/core/csv';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';

@@ -5,7 +5,8 @@
  * it). The format is the caller's: Copy follows `editor.previews.copyFormat`, and the two named variants
  * name their own (the constitution's *a preference picks the default; the menu offers every variant*).
  */
-import { GRID_MAX_CELLS, gridToHtmlTable, gridToTsv, logCaught, type PreviewCopyFormat } from '@throng/core';
+import { gridToHtmlTable, gridToTsv, logCaught, type PreviewCopyFormat } from '@throng/core';
+import { GRID_MAX_CELLS } from '@throng/core/csv';
 import type { GridRange } from './grid-selection.js';
 
 /** The cells of `range`, row by row — capped at the paste limit, so a Select All of a vast sheet stays bounded. */

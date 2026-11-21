@@ -14,7 +14,7 @@
  * Nothing here writes into the selection or the document.
  */
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
-import { recordAtLine, recordStartLines, type CsvModel } from '@throng/core';
+import { recordAtLine, recordStartLines, type CsvModel } from '@throng/core/csv';
 import type { DataGridHandle } from '../../../grid/data-grid.js';
 
 export interface CsvScrollSyncProps {

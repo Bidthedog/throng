@@ -9,15 +9,16 @@
 import { act, fireEvent, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { recordStartLines } from '@throng/core';
+import { recordStartLines } from '@throng/core/csv';
 import { CsvBody } from '../../src/renderer/preview/providers/csv/csv-body.js';
 import { __resetColumnWidthCache } from '../../src/renderer/preview/providers/csv/column-widths.js';
 import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
 
-vi.mock('@throng/core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@throng/core')>();
+// The CSV body imports the record mapping from the CSV subpath (073 FR-009, T081).
+vi.mock('@throng/core/csv', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@throng/core/csv')>();
   return { ...actual, recordStartLines: vi.fn(actual.recordStartLines) };
 });
 

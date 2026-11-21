@@ -2,7 +2,8 @@
  * 073 research R4 — the message protocol of the CSV parsing worker, as a plain function so a test can run
  * it in-thread through `setGridWorkerFactory`.
  */
-import { logCaught, type CsvModel } from '@throng/core';
+import { logCaught } from '@throng/core';
+import { type CsvModel } from '@throng/core/csv';
 
 export interface CsvParseRequest {
   id: number;
