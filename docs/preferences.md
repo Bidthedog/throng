@@ -14,7 +14,7 @@ are tabs of one window that floats above throng and minimises with it; it stays 
 block the app**, so you can keep working while you edit a theme and watch each change land.
 
 - **The visual editors apply immediately** — there is no Save button and no restart. Toggles and
-  dropdowns apply at once; typed values apply a moment after you stop typing.
+  dropdowns apply at once; a typed value applies when you press **Enter** or leave the box.
 - **Settings** has typeahead search that matches any word against a setting's name, description or
   current value, and each section's name.
 - **The JSON view** (the **UI ⇄ JSON** toggle in the toolbar) edits the same files in throng's own
@@ -250,7 +250,7 @@ The settings in this table apply to every preview type.
 | Markdown: Load remote images | `editor.previews.providers.markdown.loadRemoteImages` | on | on · off | Show images a document links from the web over HTTPS, such as build badges. Off, each shows its alternative text and nothing is requested. |
 | Markdown: Show front matter | `editor.previews.providers.markdown.showFrontMatter` | on | on · off | Show the metadata block at the top of a document as a table. Off, the block is not shown at all. |
 | Markdown: Preview gutter | `editor.previews.providers.markdown.gutter` | on | on · off | A narrow strip down a Markdown preview's left edge holding a fold arrow beside each heading; the document moves right to make room. Off, the strip and its arrows are gone and folding stays available from the menus and bindings. |
-| Markdown: Heading jump scroll duration (ms) | `editor.previews.providers.markdown.headingJumpMs` | 200 ms | 0 – 1,500 ms, step 50 ms; 0 – 5,000 ms in the box | How long a jump from [Go to Heading](key-bindings.md#navigate) takes to scroll there. Zero jumps instantly. |
+| Markdown: Heading jump scroll duration | `editor.previews.providers.markdown.headingJumpMs` | 200 ms | 0 – 1,500 ms, step 50 ms; 0 – 5,000 ms in the box | How long a jump from [Go to Heading](key-bindings.md#navigate) takes to scroll there. Zero jumps instantly. |
 | Markdown sections open | `editor.markdownSectionsOpen` | `expanded` | `expanded` · `collapsed` | Whether a Markdown document opens with its heading sections expanded or collapsed, in the editor and its preview alike. Sections are then folded from the gutter, the right-click menu or the [Markdown bindings](key-bindings.md#markdown). |
 
 #### Mermaid
@@ -396,7 +396,7 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 | Quick Open hides excluded files | `editor.navigation.quickOpenExcludeHidden` | on | on · off | Leave out of Quick Open what the project hides — the excluded globs and anything hidden in this project. The modal has its own control to show them for one search. |
 | Remember the last Quick Open query | `editor.navigation.rememberQuickOpenQuery` | off | on · off | Reopen Quick Open with the last query that actually opened a file, selected so typing replaces it. For this session only; never written to disk. |
 | Remember the last Go To Line number | `editor.navigation.rememberGotoLineNumber` | off | on · off | Reopen Go To Line with the last line you went to. For this session only. |
-| Navigation history size | `editor.navigation.historySize` | 10 entries | 1 – 100 entries | How many files Back and Forward remember in each editor and preview panel. Lowering it trims every open panel at once — never the file it is showing. History persists across restarts. |
+| Navigation history size | `editor.navigation.historySize` | 10 entries | 1 – 100 entries, step 1 | How many files Back and Forward remember in each editor and preview panel. Lowering it trims every open panel at once — never the file it is showing. History persists across restarts. |
 
 ### Indentation
 
@@ -408,9 +408,9 @@ next indent inserts.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Indent with | `editor.indent.style` | `spaces` | `spaces` · `tabs` | What a new indent inserts. |
-| Indent width | `editor.indent.indentWidth` | 2 columns | 1 – 16 columns | Spaces per indent level. |
-| Tab width | `editor.indent.tabWidth` | 4 columns | 1 – 16 columns | Columns a literal tab occupies on screen. Display only. |
-| Indentation by language | `editor.indentByLanguage` | Each language's convention | A table: language → style, width (1 – 16), tab width (1 – 16) | Per-language indentation. It cannot be emptied, because that would re-indent every language with the global default. |
+| Indent width | `editor.indent.indentWidth` | 2 columns | 1 – 16 columns, step 1 | Spaces per indent level. |
+| Tab width | `editor.indent.tabWidth` | 4 columns | 1 – 16 columns, step 1 | Columns a literal tab occupies on screen. Display only. |
+| Indentation by language | `editor.indentByLanguage` | Each language's convention | A table: language → style, width (1 – 16 columns, step 1), tab width (1 – 16 columns, step 1); a value past a limit is stored as that limit, and a fraction is refused | Per-language indentation. It cannot be emptied, because that would re-indent every language with the global default. |
 
 ### Languages
 
@@ -428,7 +428,7 @@ next indent inserts.
 | Default shell arguments | `terminals.defaultShellArguments` | none | A table of flavour id → arguments | Shell arguments passed to a flavour every time it starts, for example `pwsh` → `-NoLogo`. Edited in a [list window](#lists-and-tables). |
 | Hidden built-in flavours | `terminals.disabledBuiltins` | none | Any of the built-in flavours this machine has | Built-in flavours to leave out of the Flavour dropdown. Every built-in this machine has is listed, hidden ones ticked, so unticking one shows it again. |
 | Remember terminal form values | `terminals.formHistory.enabled` | on | on · off | Offer Startup Command and Shell Arguments values used before, per terminal type. Off stops recording and offering them, and keeps what is stored until cleared. |
-| Terminal form values remembered | `terminals.formHistory.maxEntries` | 10 entries | 1 – 50 entries | How many values each field keeps per terminal type. Lowering this trims every list to its newest entries. |
+| Terminal form values remembered | `terminals.formHistory.maxEntries` | 10 entries | 1 – 50 entries, step 1 | How many values each field keeps per terminal type. Lowering this trims every list to its newest entries. |
 | Show terminal status bar | `terminals.showStatusBar` | on | on · off | The status bar along the bottom of each terminal panel. |
 | Shell integration | `terminals.shellIntegration` | on | on · off | Ask shells that cannot be observed from outside (PowerShell) to report their working directory, so terminals reopen where you left them. Installs a prompt function that defers to any prompt you already have — switch it off if it disagrees with a custom prompt. |
 | Reload terminals when a project opens | `terminals.reloadMode` | `automatic` | `automatic` · `manual` | Automatic starts every terminal in every tab as a project opens. Manual starts none: each panel waits with a **Reload** action. |
@@ -576,7 +576,7 @@ logged, with the number of entries pending in the Notifications panel at the tim
 |---|---|---|---|---|
 | Log detail | `diagnostics.logLevel` | `info` | `fatal` · `error` · `warn` · `info` · `debug` | How much throng records. A crash of a process, window or panel is recorded at `fatal` whatever this is set to. Raise it to `debug` before reproducing a problem, then send the logs with your report. At `debug`, terminals also write `[renderer-terminal]` lines to `main.log` — what each view was handed when it attached, screen and mouse mode changes, wheel routing, selections, menu copies and redraws. |
 | Log file size | `diagnostics.maxFileBytes` | 1 MB (1,048,576 bytes) | 0.25 – 4 MB, step 0.25 MB; 1,024 – 67,108,864 bytes in the box | How large one log file grows before throng starts a new one. |
-| Days of logs kept | `diagnostics.keepDays` | 3 days | 1 – 30 days | How many days of logs to keep, counting only days throng was running. Older logs are deleted. |
+| Days of logs kept | `diagnostics.keepDays` | 3 days | 1 – 30 days, step 1 | How many days of logs to keep, counting only days throng was running. Older logs are deleted. |
 | Log folder limit | `diagnostics.maxTotalBytes` | 100 MB (104,857,600 bytes) | 50 – 2,000 MB, step 50 MB; 1,048,576 – 68,719,476,736 bytes in the box | The most space all of throng's logs and crash reports may take. Past it, the oldest files are deleted first, and the log records that it did. A log still being written is never deleted. |
 
 ## Resource Monitor
@@ -589,11 +589,11 @@ whole machine; memory is a share of installed RAM.
 |---|---|---|---|---|
 | Capture interval | `resourceMonitor.captureIntervalMs` | 2 s (2,000 ms) | 2 – 60 s, step 1 s | How often throng measures itself. A longer history needs a slower capture: up to 5 minutes allows 2 s, up to 10 minutes 5 s, up to 20 minutes 15 s, up to 30 minutes 30 s. A faster value than the history allows is raised, and Preferences says so beside the field. Also changeable from the monitor's toolbar. |
 | History window | `resourceMonitor.historyMs` | 5 min (300,000 ms) | 1 – 30 min, step 1 min | How much history the monitor keeps per process while it is open. Nothing is kept once it closes. |
-| CPU warning (%) | `resourceMonitor.cpuWarningPercent` | 50% | 1 – 100% | The CPU share at which a figure shows the warning colour. Kept below the critical level. |
-| CPU critical (%) | `resourceMonitor.cpuCriticalPercent` | 80% | 1 – 100% | The CPU share at which a figure shows the critical colour. |
-| Memory warning (%) | `resourceMonitor.memoryWarningPercent` | 50% | 1 – 100% | The share of installed memory at which a figure shows the warning colour. A process at or above it is never hidden as idle. |
-| Memory critical (%) | `resourceMonitor.memoryCriticalPercent` | 80% | 1 – 100% | The share of installed memory at which a figure shows the critical colour. |
-| Popup delay (ms) | `resourceMonitor.popoverDelayMs` | 500 ms | 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box | How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits. |
+| CPU warning | `resourceMonitor.cpuWarningPercent` | 50% | 1 – 100%, step 1% | The CPU share at which a figure shows the warning colour. Kept below the critical level. |
+| CPU critical | `resourceMonitor.cpuCriticalPercent` | 80% | 1 – 100%, step 1% | The CPU share at which a figure shows the critical colour. |
+| Memory warning | `resourceMonitor.memoryWarningPercent` | 50% | 1 – 100%, step 1% | The share of installed memory at which a figure shows the warning colour. A process at or above it is never hidden as idle. |
+| Memory critical | `resourceMonitor.memoryCriticalPercent` | 80% | 1 – 100%, step 1% | The share of installed memory at which a figure shows the critical colour. |
+| Popup delay | `resourceMonitor.popoverDelayMs` | 500 ms | 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box | How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits. |
 | Kill processes | `confirmations.killProcesses` | `double` | `none` · `single` · `double` | Confirmations (none, one or two) before the Resource Monitor force-ends a process (**Kill Process**) or everything running beneath a project, tab, panel or process (**Kill All Below**). The dialog names what will end. |
 
 ## Settings with no control
