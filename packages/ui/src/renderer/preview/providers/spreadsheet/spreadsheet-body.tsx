@@ -107,20 +107,6 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
     scrolls.current.clear();
   }, [filePath]);
 
-  /*
-   * FR-051 (T079) — the chosen sheet, each sheet's scroll and its column widths belong to the workbook. A reused panel
-   * moving to another file starts that file on its first visible sheet, even where it has a sheet of the same name. A
-   * reload of the same file keeps them (FR-058): only a change of file resets them.
-   */
-  const shownFile = useRef(filePath);
-  useEffect(() => {
-    if (shownFile.current === filePath) return;
-    shownFile.current = filePath;
-    setSheetName(null);
-    setWidths({});
-    scrolls.current.clear();
-  }, [filePath]);
-
   // Read and parse on every new source revision (FR-058).
   useEffect(() => {
     if (source === '') return;
