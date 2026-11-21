@@ -59,6 +59,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-65 | [Print] Printing a PDF preview | untested | | | |
 | MT-66 | [Print] Printing a CSV or a workbook's sheet | untested | | | |
 | MT-67 | [Print] Printing an editor of any file type | untested | | | |
+| MT-68 | [Print] A PDF picks its own paper; Save as PDF | untested | | | |
 | MT-80 | [Settings] A size in MB on the slider, exactly in bytes in the box | untested | | | |
 | MT-81 | [Settings] Durations shown in their unit | untested | | | |
 | MT-82 | [Settings] Typing a value past a limit, or no number | untested | | | |
@@ -1335,3 +1336,17 @@ Paths: `packages/ui/src/renderer/workspace/panel-header-fit.ts`
 1. Drag a split divider until a terminal panel is about 150 px wide, then as far as it goes. Its title stays readable and ends in "…".
 2. Do the same with an editor panel. Header buttons drop out one at a time as it narrows (Save As, Save, Back/Forward, Split, Focus Mode, then ✕), and come back as it widens.
 3. Right-click the narrow panel's header. Every hidden button's action is on the menu and works from there.
+
+## MT-68: [Print] A PDF picks its own paper; Save as PDF
+
+Covers: 075 FR-068g, 075 FR-082
+Paths: `packages/ui/src/renderer/print-preview/print-preview-app.tsx`, `packages/ui/src/main/print-controller.ts`, `packages/ui/src/main/print-ipc.ts`, `packages/ui/src/renderer/print/print-saved-notice.tsx`, `packages/core/src/print/`
+
+### Steps
+1. Open an A4-landscape PDF in a preview and choose Print…. Paper size shows A4 and Orientation shows Landscape.
+2. Open a PDF with a non-standard page (e.g. 100 × 150 mm) and choose Print…. Paper size shows "Custom (100 × 150 mm)".
+3. Close Print Preview, then choose Print… on a Markdown file. The paper is what it was before the PDFs.
+4. Choose Print… on a Markdown file inside the project, then Save as PDF…. The dialog starts at <name>.pdf beside the file. Save: Print Preview closes, and a toast says it was saved, with a folder icon. Click it: the PDF is revealed in the File Explorer.
+5. Save as PDF… again to a folder outside the project. The toast shows a PDF icon; click it, and the PDF opens in a PDF preview.
+6. Save as PDF… to a read-only folder. Print Preview stays open, with the inline notice "Saving as PDF failed: …" naming the file.
+7. Open the saved PDF: its pages match what Print Preview showed (paper, margins, centring).
