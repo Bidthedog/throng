@@ -143,7 +143,7 @@ last.
 
 - [x] T060 CRITICAL: Report a PDF link's right-click to the panel through `onLinkMenu`, classified, so the shared link menu (Open Link, Copy Link to Clipboard) opens over a link in a PDF, per Constitution 5.5.0 (one gesture follows a link) and FR-066 (missing)
 - [x] T061 CRITICAL: Make an HTML page's `#fragment` links follow only on Ctrl+click / Ctrl+Enter, scrolling the frame to their target, never on a plain click, with the target-and-gesture hover text, per FR-079 and Constitution 5.5.0 (contradicts)
-- [ ] T062 Add **Copy Path** to the Image Preview's and the PDF Preview's body menus, per FR-028 and FR-068a (missing)
+- [x] T062 Add **Copy Path** to the Image Preview's and the PDF Preview's body menus, per FR-028 and FR-068a (missing)
 - [ ] T063 Offer **Select All** in a PDF Preview's body menu and keep Ctrl+A to the PDF's text layers rather than the whole window, per FR-068a (partial)
 - [ ] T064 Make Refresh and an update re-read an HTML page's relative stylesheets and fonts, so a change to one on disk is shown, per FR-072 (partial)
 - [x] T065 Amend FR-085a additively: an HTML Preview's plain **Copy** runs `editor.previews.copyFormat` like every preview, per Constitution 5.5.0 (a preference picks the default; the menu offers every variant), which the code already follows, per FR-085a (contradicts)

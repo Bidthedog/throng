@@ -267,7 +267,7 @@ import {
 import { revealNodeAt } from './node-reveal.js';
 import './preview.css';
 import './match-frames.css';
-import { logCaught, logExpected } from '@throng/core';
+import { logCaught, logExpected, pathForms, relPathUnderRoot } from '@throng/core';
 
 /** The refusals that mean the preview must not be restored here (FR-067). Everything else is kept. */
 const CLEARING_REFUSALS: ReadonlySet<string> = new Set(['no-provider', 'disabled', 'outside-project']);
@@ -2334,6 +2334,13 @@ export function PreviewPanel({
         selectionEmpty,
         content,
         editorRoute,
+        // 074 FR-028, FR-068a — Copy Path, in the File Explorer's four forms, for a file inside the project.
+        copyPath: (() => {
+          const root = projectRootRef.current;
+          const file = stateRef.current?.filePath;
+          const rel = root !== null && file !== undefined ? relPathUnderRoot(root, file) : null;
+          return root !== null && rel !== null ? pathForms(root, rel) : null;
+        })(),
         // FR-122a/b — every text-provider preview, whatever is under the pointer; never a binary one.
         syncScroll:
           flowingRef.current

@@ -4,11 +4,12 @@
  *
  * Layer: component — the real chrome and seam; jsdom decodes no image, so the browser picture loader is spied.
  */
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browserPictureLoader } from '../../src/renderer/preview/blocks/picture.js';
 import { diagramActionsAt } from '../../src/renderer/preview/diagram/diagram-actions.js';
 import { isPanelFindAbsent } from '../../src/renderer/preview/unsearchable-panels.js';
+import { pathForms } from '@throng/core';
 import { COLD, ROOT, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
 let pv: MountedPreviewWindow | undefined;
@@ -98,6 +99,20 @@ describe('an Image Preview (FR-020, FR-022, FR-030)', () => {
     expect(frame()).toHaveClass('preview-diagram-frame--fills');
     expect(frame()).toHaveClass('preview-diagram-frame--scrolls');
     expect(screen.getByTestId(`diagram-hatch-${pv.id}-diagram-0`)).toBeInTheDocument();
+  });
+
+  // 074 convergence T062 — FR-028 (and FR-068a for a PDF): the body menu offers Copy Path, in the four forms the File
+  // Explorer offers, alongside Copy Image.
+  it('offers Copy Path in the body menu, and copies the form picked', async () => {
+    pv = await mountMarkdownPreview('', `${ROOT}/shot.png`, { providerId: 'image', attach: { content: resource } });
+    await waitFor(() => expect(frame()?.querySelector('image')).toBeTruthy(), COLD);
+    fireEvent.contextMenu(screen.getByTestId(`preview-image-${pv.id}`), { clientX: 5, clientY: 5 });
+    await waitFor(() => expect(screen.getAllByRole('menuitem').map((el) => el.textContent?.trim())).toContain('Copy Path'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Copy Path/ }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^Absolute \(POSIX\)/ }));
+    await waitFor(() =>
+      expect(pv!.clipboardWrite).toHaveBeenCalledWith({ text: pathForms(ROOT, 'shot.png').absPosix, mode: 'verbatim' }),
+    );
   });
 
   it('draws no hatch when Image: Hatch transparent areas is off (FR-027b)', async () => {

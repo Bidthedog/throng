@@ -35,6 +35,7 @@ import type { PageLayout } from './provider-view.js';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 import { outliningSubmenu, type OutliningArgs } from '../common/outlining-menu.js';
+import { copyPathSubmenu, type PathForms } from '../common/copy-path-menu.js';
 
 /** The Content section: present when the provider draws selectable text (`PreviewProviderView.textSelection`). */
 export interface PreviewContentSection {
@@ -63,6 +64,11 @@ export interface PreviewEditorRouteItem {
 export interface PreviewContentMenuArgs {
   /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
   split?: SplitMenuArgs;
+  /**
+   * 074 FR-028, FR-068a — the previewed file's path in the File Explorer's four forms: Copy Path is offered. Omitted or
+   * `null` (a file outside the project): no Copy Path.
+   */
+  copyPath?: PathForms | null;
   /** Whether the body's selection was collapsed when the menu was asked for. */
   selectionEmpty: boolean;
   /** Omitted or `null`: no Content section (a provider without selectable text). */
@@ -236,6 +242,8 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
       onClick: () => content.selectAll(),
     });
   }
+
+  if (args.copyPath) items.push(copyPathSubmenu(args.copyPath, 'navigate'));
 
   if (editorRoute) {
     items.push({
