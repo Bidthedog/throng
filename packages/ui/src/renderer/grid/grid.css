@@ -187,6 +187,22 @@
   border-bottom: 1px solid var(--throng-colour-border);
 }
 
+/* FR-004 (T080) — the cell's text, truncated with an ellipsis. It sits in an element of its own because the cell is a
+   flex container (it centres the text vertically), and Chromium draws no ellipsis on a flex container's text. */
+.data-grid__cell-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.data-grid__cell--wrap .data-grid__cell-text {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
 /* FR-013 — a wrapped cell shows its value in full: line breaks kept, wrapped to the column's width. The row is as
    tall as its tallest cell (data-grid.tsx sizes it), so nothing scrolls inside the cell. The line height is set
    inline, from the row height. */

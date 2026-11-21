@@ -91,7 +91,10 @@ describe('DataGrid rendering', () => {
     const g = setup({ getCell: () => payload });
     expect(g.cellAt(0, 0).textContent).toBe(payload);
     expect(g.root.querySelector('img')).toBeNull();
-    expect(g.cellAt(0, 0).children).toHaveLength(0);
+    // One element only: the text's own span, which carries FR-004's ellipsis (T080). Nothing inside it.
+    expect(g.cellAt(0, 0).children).toHaveLength(1);
+    expect(g.cellAt(0, 0).firstElementChild).toHaveClass('data-grid__cell-text');
+    expect(g.cellAt(0, 0).firstElementChild!.children).toHaveLength(0);
   });
 
   it('shows one empty cell for an empty table', () => {

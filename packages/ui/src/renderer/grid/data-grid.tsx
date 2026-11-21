@@ -359,7 +359,10 @@ const GridCell = memo(function GridCell(p: CellProps): ReactElement {
       }}
       title={value === '' ? undefined : value}
     >
-      {p.wrap ? (value.length > MAX_WRAP_CHARS ? value.slice(0, MAX_WRAP_CHARS) : value) : displayText(value)}
+      {/* FR-004 (T080) — the text in an element of its own: the cell is a flex container, on which no ellipsis is drawn. */}
+      <span className="data-grid__cell-text">
+        {p.wrap ? (value.length > MAX_WRAP_CHARS ? value.slice(0, MAX_WRAP_CHARS) : value) : displayText(value)}
+      </span>
     </div>
   );
 });
