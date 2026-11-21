@@ -1,4 +1,4 @@
-import type { AttentionLedgerEntry } from '@throng/core';
+import { logCaught, type AttentionLedgerEntry } from '@throng/core';
 import type { ThrongDatabase } from './database.js';
 
 interface AttentionLedgerRow {
@@ -25,8 +25,10 @@ export class AttentionLedgerRepository {
     for (const row of rows) {
       try {
         out.push(JSON.parse(row.entry) as AttentionLedgerEntry);
-      } catch {
-        // A row written by a build whose shape this one cannot read: the daemon validates what it keeps.
+      } catch (error) {
+        // A row written by a build whose shape this one cannot read: skip it, as the daemon skips any entry it cannot
+        // validate, and say so in the log.
+        logCaught(`attention-ledger-repository: parse stored entry for panel ${row.panel_id}`, error);
       }
     }
     return out;
