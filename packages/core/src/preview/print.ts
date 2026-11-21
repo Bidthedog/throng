@@ -17,6 +17,8 @@ export type PrintableOutput =
       readonly fit: 'width' | 'page';
       /** The `https:` images the preview had already loaded — the only remote requests printing may make (FR-079). */
       readonly remoteImages: readonly string[];
+      /** FR-068g — the document's own page size, as laid out (a PDF's first page): Print Preview starts on that paper. */
+      readonly paper?: { readonly widthMm: number; readonly heightMm: number };
     }
   | { readonly kind: 'pages'; readonly pdf: Uint8Array };
 
@@ -58,16 +60,55 @@ export const PAGE_SIZE_MM: Readonly<Record<PrintPageSize, { readonly width: numb
 
 export type PrintOrientation = 'portrait' | 'landscape';
 
-/** 075 FR-068b — `size` in millimetres, turned for `orientation` (width × height). */
-export function paperSizeMm(size: PrintPageSize, orientation: PrintOrientation): { width: number; height: number } {
-  const { width, height } = PAGE_SIZE_MM[size];
-  return orientation === 'landscape' ? { width: height, height: width } : { width, height };
+/** FR-068g — a listed size, or `Custom`: a document's own page size that none of them is. */
+export type PrintPaperSize = PrintPageSize | 'Custom';
+
+/** A paper's size in millimetres, portrait (width ≤ height). */
+export interface PaperMm {
+  readonly width: number;
+  readonly height: number;
 }
 
+const turned = ({ width, height }: PaperMm, orientation: PrintOrientation): { width: number; height: number } =>
+  orientation === 'landscape' ? { width: height, height: width } : { width, height };
+
+/** 075 FR-068b — `size` in millimetres, turned for `orientation` (width × height). */
+export function paperSizeMm(size: PrintPageSize, orientation: PrintOrientation): { width: number; height: number } {
+  return turned(PAGE_SIZE_MM[size], orientation);
+}
+
+/** The paper `s` prints on, in millimetres, turned for its orientation (FR-068b, FR-068g). */
+export function paperOf(s: Pick<PrintSettings, 'pageSize' | 'orientation' | 'customPaper'>): { width: number; height: number } {
+  if (s.pageSize === 'Custom') return turned(s.customPaper ?? PAGE_SIZE_MM.A4, s.orientation);
+  return paperSizeMm(s.pageSize, s.orientation);
+}
+
+const roundMm = (n: number): number => Math.round(n * 10) / 10;
+
 /** 075 FR-068b (2026-11-20) — a paper size's option label: its name, and its size in mm for `orientation`. */
-export function paperSizeLabel(size: PrintPageSize, orientation: PrintOrientation): string {
-  const { width, height } = paperSizeMm(size, orientation);
-  return `${size} (${width} × ${height} mm)`;
+export function paperSizeLabel(size: PrintPaperSize, orientation: PrintOrientation, custom?: PaperMm): string {
+  const { width, height } = size === 'Custom' ? turned(custom ?? PAGE_SIZE_MM.A4, orientation) : paperSizeMm(size, orientation);
+  return `${size} (${roundMm(width)} × ${roundMm(height)} mm)`;
+}
+
+/** How near a page must be to a listed size to be it: a PDF's points round a millimetre or so. */
+const PAPER_MATCH_MM = 1;
+
+/**
+ * 075 FR-068g (the maintainer, 2026-11-21: "A PDF's own page size should choose the print paper size.") — the paper a
+ * page `widthMm` × `heightMm` is: the listed size it is within a millimetre of, turned the way the page is, or a
+ * custom paper of exactly its size.
+ */
+export function paperForPage(
+  widthMm: number,
+  heightMm: number,
+): { pageSize: PrintPaperSize; orientation: PrintOrientation; customPaper?: PaperMm } {
+  const orientation: PrintOrientation = widthMm > heightMm ? 'landscape' : 'portrait';
+  const portrait = { width: Math.min(widthMm, heightMm), height: Math.max(widthMm, heightMm) };
+  const near = (a: number, b: number): boolean => Math.abs(a - b) <= PAPER_MATCH_MM;
+  const listed = PRINT_PAGE_SIZES.find((size) => near(PAGE_SIZE_MM[size].width, portrait.width) && near(PAGE_SIZE_MM[size].height, portrait.height));
+  if (listed !== undefined) return { pageSize: listed, orientation };
+  return { pageSize: 'Custom', orientation, customPaper: { width: roundMm(portrait.width), height: roundMm(portrait.height) } };
 }
 export type PrintMarginPreset = 'default' | 'none' | 'minimum' | 'custom';
 
@@ -130,7 +171,9 @@ export function checkPrintField(text: string, f: PrintFieldBounds): PrintFieldCh
 export interface PrintSettings {
   /** The printer's name; `null` when no printer is available. */
   readonly printer: string | null;
-  readonly pageSize: PrintPageSize;
+  readonly pageSize: PrintPaperSize;
+  /** FR-068g — the size `Custom` stands for, portrait; only a document's own page size sets it, and it never persists. */
+  readonly customPaper?: PaperMm;
   readonly orientation: PrintOrientation;
   readonly margins: { readonly preset: PrintMarginPreset; readonly custom: PrintMargins };
   readonly scale: { readonly fitWidth: boolean; readonly percent: number };
@@ -276,7 +319,8 @@ const MM_PER_INCH = 25.4;
 
 /** What `webContents.printToPDF` takes (inches, a 0.1 – 2 scale, a 1-based range string). */
 export interface PdfOptions {
-  readonly pageSize: PrintPageSize;
+  /** A listed size by name, or a custom paper in inches, portrait (FR-068g). */
+  readonly pageSize: PrintPageSize | { readonly width: number; readonly height: number };
   readonly landscape: boolean;
   readonly margins: { readonly top: number; readonly right: number; readonly bottom: number; readonly left: number };
   readonly scale: number;
@@ -294,7 +338,8 @@ export interface PdfOptions {
 export interface PrintOptions {
   readonly silent: true;
   readonly deviceName: string;
-  readonly pageSize: PrintPageSize;
+  /** A listed size by name, or a custom paper in microns, portrait (FR-068g). */
+  readonly pageSize: PrintPageSize | { readonly width: number; readonly height: number };
   readonly landscape: boolean;
   readonly margins: { readonly marginType: 'none' };
   readonly scaleFactor: 100;
@@ -324,6 +369,12 @@ export function printSheetHtml(sheet: PrintSheet): string {
   return `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:${w} ${h};margin:0}html,body{margin:0;padding:0;background:#fff}img{display:block;width:${w};height:${h};break-after:page}img:last-child{break-after:auto}</style></head><body>${pages}</body></html>`;
 }
 
+/** A custom paper, portrait, in the unit `perMm` converts millimetres to. */
+const customSize = (s: PrintSettings, perMm: number): { width: number; height: number } => {
+  const paper = s.customPaper ?? PAGE_SIZE_MM.A4;
+  return { width: paper.width * perMm, height: paper.height * perMm };
+};
+
 const scaleOf = (s: PrintSettings): number => (s.scale.fitWidth ? 100 : s.scale.percent);
 
 /**
@@ -335,7 +386,7 @@ export function toPdfOptions(s: PrintSettings, pageCount?: number, fit: 'width' 
   const parsed = s.pages.all ? null : parsePageRanges(s.pages.ranges);
   const ranges = parsed !== null && pageCount !== undefined ? clipPageRanges(parsed, pageCount) : parsed;
   return {
-    pageSize: s.pageSize,
+    pageSize: s.pageSize === 'Custom' ? customSize(s, 1 / MM_PER_INCH) : s.pageSize,
     landscape: s.orientation === 'landscape',
     margins: { top: m.top / MM_PER_INCH, right: m.right / MM_PER_INCH, bottom: m.bottom / MM_PER_INCH, left: m.left / MM_PER_INCH },
     scale: scaleOf(s) / 100,
@@ -363,7 +414,7 @@ export function toPrintOptions(s: PrintSettings): PrintOptions | null {
   return {
     silent: true,
     deviceName: s.printer,
-    pageSize: s.pageSize,
+    pageSize: s.pageSize === 'Custom' ? customSize(s, 1000) : s.pageSize,
     landscape: s.orientation === 'landscape',
     margins: { marginType: 'none' },
     scaleFactor: 100,

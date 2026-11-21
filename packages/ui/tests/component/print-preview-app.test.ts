@@ -264,6 +264,19 @@ describe('Print Preview', () => {
     expect(b.remember).toHaveBeenLastCalledWith('job-1', expect.objectContaining({ orientation: 'landscape' }));
   });
 
+  it("offers and selects a document's own paper when no listed size is it (FR-068g)", async () => {
+    await mount(bridge({ ...JOB, settings: { ...JOB.settings, pageSize: 'Custom', customPaper: { width: 100, height: 150 } } }));
+    const select = screen.getByTestId('print-page-size') as HTMLSelectElement;
+    expect(select.value).toBe('Custom');
+    expect(select.selectedOptions[0]?.textContent).toBe('Custom (100 × 150 mm)');
+    expect([...select.options].map((o) => o.value)).toEqual(['A3', 'A4', 'A5', 'Letter', 'Legal', 'Tabloid', 'Custom']);
+  });
+
+  it('offers no custom paper when the document has none of its own (FR-068g)', async () => {
+    await mount();
+    expect([...(screen.getByTestId('print-page-size') as HTMLSelectElement).options].map((o) => o.value)).not.toContain('Custom');
+  });
+
   it('closes on Escape with the current settings (FR-071)', async () => {
     const b = await mount();
     fireEvent.keyDown(window, { key: 'Escape' });

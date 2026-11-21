@@ -19,7 +19,10 @@ export function asPrintRequest(raw: unknown): PrintJobRequest | null {
   let output: PrintableOutput | null = null;
   if (o.kind === 'document' && typeof o.html === 'string' && o.html.length <= MAX_PRINTABLE_LENGTH && (o.fit === 'width' || o.fit === 'page')) {
     const remote = Array.isArray(o.remoteImages) ? o.remoteImages.filter((u): u is string => typeof u === 'string' && u.startsWith('https:')) : [];
-    output = { kind: 'document', html: o.html, fit: o.fit, remoteImages: remote };
+    // FR-068g — the document's own page size, when it is one a sheet of paper can be (the sheet's own bounds).
+    const mm = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 10 && v <= 2000;
+    const paper = isObject(o.paper) && mm(o.paper.widthMm) && mm(o.paper.heightMm) ? { widthMm: o.paper.widthMm, heightMm: o.paper.heightMm } : undefined;
+    output = { kind: 'document', html: o.html, fit: o.fit, remoteImages: remote, ...(paper !== undefined ? { paper } : {}) };
   } else if (o.kind === 'pages' && o.pdf instanceof Uint8Array && o.pdf.byteLength <= MAX_PRINTABLE_LENGTH) {
     output = { kind: 'pages', pdf: o.pdf };
   }

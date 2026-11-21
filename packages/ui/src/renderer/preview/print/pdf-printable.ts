@@ -90,6 +90,14 @@ export async function drawPdfPages(bytes: Uint8Array): Promise<DrawnPdfPage[]> {
   }
 }
 
+/** FR-068g — the paper a PDF's first page is, in millimetres: Print Preview starts on it. */
+export function paperOfPages(pages: readonly DrawnPdfPage[]): { widthMm: number; heightMm: number } | undefined {
+  const first = pages[0];
+  if (first === undefined) return undefined;
+  const mm = (pt: number): number => (pt / POINTS_PER_INCH) * 25.4;
+  return { widthMm: mm(first.widthPt), heightMm: mm(first.heightPt) };
+}
+
 /** The PDF view's `printable`: the file's own pages, read through the source route. */
 export async function buildPdfPrintable(
   readSource: (() => Promise<{ ok: true; bytes: Uint8Array } | { ok: false; status: number }>) | undefined,
@@ -98,5 +106,7 @@ export async function buildPdfPrintable(
   if (readSource === undefined) throw new Error('The PDF cannot be read for printing.');
   const answer = await readSource();
   if (!answer.ok) throw new Error(`The PDF could not be read for printing (${answer.status}).`);
-  return { kind: 'document', html: pdfPrintHtml(await drawPdfPages(answer.bytes), title), fit: 'page', remoteImages: [] };
+  const pages = await drawPdfPages(answer.bytes);
+  const paper = paperOfPages(pages);
+  return { kind: 'document', html: pdfPrintHtml(pages, title), fit: 'page', remoteImages: [], ...(paper !== undefined ? { paper } : {}) };
 }

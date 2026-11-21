@@ -27,6 +27,7 @@ import {
   type PrintSendResult,
   type PrintSettings,
   type PrintSheet,
+  paperForPage,
 } from '@throng/core';
 
 /** What the controller needs of the Print Preview window (`print-preview-window.ts`). */
@@ -59,6 +60,8 @@ interface Job {
   hostLoad: Promise<PrintHostHandle> | null;
   printers: readonly PrinterInfoLike[];
   settings: PrintSettings | null;
+  /** FR-068g — the stored settings, kept when the job started on the document's own paper instead of the stored one. */
+  stored: PrintSettings | null;
   /** The settings the window's pages were laid out with; `null` until a layout reached it. */
   shown: PrintSettings | null;
   /** How many pages that layout made: the sheet a print sends must be exactly those. */
@@ -71,6 +74,21 @@ interface Job {
 export function countPdfPages(pdf: Uint8Array): number {
   const text = Buffer.from(pdf).toString('latin1');
   return (text.match(/\/Type\s*\/Page(?![a-zA-Z])/g) ?? []).length;
+}
+
+/**
+ * FR-068g — what a closed job saves: its settings, except that a paper the document chose (its own size, a custom
+ * paper above all, never persists) gives way to the stored one. A paper the user picked from the list is theirs.
+ */
+function settingsToKeep(job: Job): PrintSettings {
+  const settings = job.settings as PrintSettings;
+  const paper = job.request.output.kind === 'document' ? job.request.output.paper : undefined;
+  if (job.stored === null || paper === undefined) return settings;
+  const chosen = paperForPage(paper.widthMm, paper.heightMm);
+  const untouched = settings.pageSize === chosen.pageSize && settings.orientation === chosen.orientation;
+  if (!untouched && settings.pageSize !== 'Custom') return settings;
+  const { customPaper: _custom, ...rest } = settings;
+  return { ...rest, pageSize: job.stored.pageSize, orientation: job.stored.orientation };
 }
 
 const sameSettings = (a: PrintSettings | null, b: PrintSettings): boolean => a !== null && JSON.stringify(a) === JSON.stringify(b);
@@ -97,7 +115,7 @@ export class PrintController {
     // Claimed before anything else: a second request arriving while this one opens must find it (FR-071).
     const id = this.newId();
     const window = this.deps.openWindow(parent, id);
-    const job: Job = { id, request, window, host: null, hostLoad: null, printers: [], settings: null, shown: null, shownPages: 0, renders: 0, state: 'open' };
+    const job: Job = { id, request, window, host: null, hostLoad: null, printers: [], settings: null, stored: null, shown: null, shownPages: 0, renders: 0, state: 'open' };
     this.job = job;
     window.onClosed(() => void this.finish(job));
     return Promise.resolve({ opened: true });
@@ -108,7 +126,13 @@ export class PrintController {
     const job = this.live(jobId);
     if (job === null) return null;
     job.printers = await this.deps.engine.printers();
-    job.settings ??= await this.deps.store.read(job.printers);
+    if (job.settings === null) {
+      const stored = await this.deps.store.read(job.printers);
+      const paper = job.request.output.kind === 'document' ? job.request.output.paper : undefined;
+      // FR-068g — a document with its own page size starts on that paper; the stored paper is kept for the next one.
+      job.stored = paper === undefined ? null : stored;
+      job.settings = paper === undefined ? stored : { ...stored, ...paperForPage(paper.widthMm, paper.heightMm) };
+    }
     const fit = job.request.output.kind === 'document' ? job.request.output.fit : 'page';
     return { title: job.request.title, settings: job.settings, printers: printerChoices(job.printers), fit };
   }
@@ -275,7 +299,7 @@ export class PrintController {
     if (this.job === job) this.job = null;
     if (job.host !== null) this.deps.engine.dispose(job.host);
     try {
-      if (job.settings !== null) await this.deps.store.write(job.settings);
+      if (job.settings !== null) await this.deps.store.write(settingsToKeep(job));
     } catch (error) {
       logCaught('print: save the settings', error);
     }

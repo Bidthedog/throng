@@ -23,8 +23,10 @@ const drawWithPdfJs: DrawPages = async (pdf) => (await import('./pdf-printable.j
  */
 async function asDocument(output: PrintableOutput, title: string, drawPages: DrawPages): Promise<PrintableOutput> {
   if (output.kind !== 'pages') return output;
-  const { pdfPrintHtml } = await import('./pdf-printable.js');
-  return { kind: 'document', html: pdfPrintHtml(await drawPages(output.pdf), title), fit: 'page', remoteImages: [] };
+  const { pdfPrintHtml, paperOfPages } = await import('./pdf-printable.js');
+  const pages = await drawPages(output.pdf);
+  const paper = paperOfPages(pages); // FR-068g
+  return { kind: 'document', html: pdfPrintHtml(pages, title), fit: 'page', remoteImages: [], ...(paper !== undefined ? { paper } : {}) };
 }
 
 /** The hover on a disabled Print… row (FR-062): what is wrong, not what the user may not do. */

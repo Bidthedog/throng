@@ -143,3 +143,7 @@ MVP = US1 + US2 (callouts usable). Then US3, US4, US6, US5 in that order, each a
 - [x] T076 Decide what a rich copy of a callout keeps (today `EXPORT_PROFILE` strips its type and role, leaving bare nested `div`s) and either emit it or amend the Copy edge case to the structure and text that survive, per edge case "Copy" (partial)
 - [x] T077 Add the component test T011 claims: Collapse All and Expand All leave callouts' own fold state alone, per FR-009, T011 (partial)
 - [x] T078 Add a pipeline test of a Mermaid block and a display equation inside a callout, per US2/AS4 (partial)
+
+## Phase 11: Maintainer rulings, 2026-11-21
+
+- [x] T079 Start Print Preview's paper at a PDF's own page size (first page, its orientation; a listed size within 1 mm, else Custom), without persisting it, per FR-068g

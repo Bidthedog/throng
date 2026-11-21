@@ -693,6 +693,13 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   by default for a picture, a diagram fitted to the page and a PDF's pages, which then sit in the middle of each
   sheet both ways; off by default for a flowing document, where on centres only what is narrower than the text
   column — an image, a diagram, a table — and never text.
+- **FR-068g**: *(2026-11-21 11:24, the maintainer: "A PDF's own page size should choose the print paper size.")*
+  When Print… starts from a document with its own page size (a PDF, and any provider's ready-made pages), Print
+  Preview's paper MUST start at that size: the first page's, in millimetres, turned the way that page is. A listed size
+  within a millimetre of it is that size (a PDF's points round A4 to 209.9 × 297 mm); a size none of them is, is offered
+  as **Custom (W × H mm)**, after the listed sizes and only for that job. The user can still choose any other paper.
+  The page's own paper does not persist (FR-070): closing on it leaves the stored paper size and orientation as they
+  were, so the next Markdown print starts where it did; a listed size the user chose instead persists as before.
 
 #### What prints (#484)
 

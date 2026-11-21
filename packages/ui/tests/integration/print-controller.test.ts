@@ -246,6 +246,29 @@ describe('closing (FR-070)', () => {
     await vi.waitFor(async () => expect((await store.read(engine.printerList)).copies).toBe(7));
   });
 
+  it("starts a document with its own page size on that paper, and saves the paper the user had (FR-068g)", async () => {
+    await store.write({ ...DEFAULT_PRINT_SETTINGS, printer: engine.printerList[0]?.name ?? null, pageSize: 'Letter' });
+    const pdf: PrintJobRequest = { title: 'a.pdf', output: { kind: 'document', html: '<p>x</p>', fit: 'page', remoteImages: [], paper: { widthMm: 150, heightMm: 100 } } };
+    await controller.open(null, pdf);
+    const view = await controller.describe('job-1');
+    expect(view!.settings).toMatchObject({ pageSize: 'Custom', orientation: 'landscape', customPaper: { width: 100, height: 150 } });
+    // Closed on the PDF's own paper: the next Markdown print still starts on Letter.
+    controller.close('job-1', { ...view!.settings, copies: 2 });
+    await vi.waitFor(() => expect(controller.openJobId).toBeNull());
+    const saved = await store.read(engine.printerList);
+    expect(saved).toMatchObject({ pageSize: 'Letter', orientation: 'portrait', copies: 2 });
+  });
+
+  it('saves a paper the user chose over the document\'s own (FR-068g)', async () => {
+    const pdf: PrintJobRequest = { title: 'a.pdf', output: { kind: 'document', html: '<p>x</p>', fit: 'page', remoteImages: [], paper: { widthMm: 210, heightMm: 297 } } };
+    await controller.open(null, pdf);
+    const view = await controller.describe('job-1');
+    expect(view!.settings).toMatchObject({ pageSize: 'A4', orientation: 'portrait' });
+    controller.close('job-1', { ...view!.settings, pageSize: 'A3' });
+    await vi.waitFor(() => expect(controller.openJobId).toBeNull());
+    expect((await store.read(engine.printerList)).pageSize).toBe('A3');
+  });
+
   it('frees a host that finishes loading after the window closed', async () => {
     // Escape while the pages are still being laid out: the host arrives after the job is gone.
     const held: (() => void)[] = [];

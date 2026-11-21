@@ -16,7 +16,7 @@ import {
   PRINT_FIELDS,
   PRINT_PAGE_SIZES,
   paperSizeLabel,
-  paperSizeMm,
+  paperOf,
   PRINT_PALETTE,
   formatGrouped,
   logCaught,
@@ -109,8 +109,8 @@ const SHEET_MIN_HEIGHT_EM = 3.5;
  * sideways, where there is room, rather than leaving a gap below it). Its width stays wider than a margin box for
  * every paper offered, so the page fills its cell and the gap round it stays even.
  */
-export function sheetSizeEm(settings: Pick<PrintSettings, 'pageSize' | 'orientation'>): { width: number; height: number } {
-  const { width, height } = paperSizeMm(settings.pageSize, settings.orientation);
+export function sheetSizeEm(settings: Pick<PrintSettings, 'pageSize' | 'orientation' | 'customPaper'>): { width: number; height: number } {
+  const { width, height } = paperOf(settings);
   const scale = Math.max(SHEET_LONG_EM / Math.max(width, height), SHEET_MIN_HEIGHT_EM / height);
   return { width: width * scale, height: height * scale };
 }
@@ -475,6 +475,10 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                       {paperSizeLabel(size, settings.orientation)}
                     </option>
                   ))}
+                  {/* FR-068g — the document's own page size, when none of the listed sizes is it. */}
+                  {settings.customPaper !== undefined && (
+                    <option value="Custom">{paperSizeLabel('Custom', settings.orientation, settings.customPaper)}</option>
+                  )}
                 </select>
               </label>
               <label className="print-preview__field">

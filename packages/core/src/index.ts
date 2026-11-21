@@ -1525,6 +1525,8 @@ export {
   PAGE_SIZE_MM,
   paperSizeLabel,
   paperSizeMm,
+  paperOf,
+  paperForPage,
   PRINT_CENTRE_CSS,
   PRINT_FIELDS,
   PRINT_PAGE_SIZES,
@@ -1559,6 +1561,8 @@ export type {
   PrintSheet,
   PrintOrientation,
   PrintPageSize,
+  PrintPaperSize,
+  PaperMm,
   PrintSettings,
 } from './preview/print.js';
 export { PRINT_PALETTE, printPaletteCss } from './preview/print-palette.js';

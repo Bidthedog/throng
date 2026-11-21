@@ -43,6 +43,10 @@ describe('the print seam (FR-060 – FR-062)', () => {
     expect(request.title).toBe('doc.fp');
     expect(request.output).toMatchObject({ kind: 'document', fit: 'page' });
     expect(request.output.html).toContain('data:image/png;base64,AAAA');
+    // FR-068g — the pages' own paper (612 × 792 pt is Letter) goes with them.
+    const paper = (request.output as { paper?: { widthMm: number; heightMm: number } }).paper;
+    expect(paper?.widthMm).toBeCloseTo(215.9, 1);
+    expect(paper?.heightMm).toBeCloseTo(279.4, 1);
     expect(asPrintRequest(request)).toEqual(request);
   });
 
