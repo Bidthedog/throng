@@ -29,7 +29,7 @@ export function usePrintFailureNotice(): PrintFailed {
     latest.current?.notify({
       severity: 'error',
       subject: { kind: 'file', name: title },
-      action: 'print this file',
+      action: 'print',
       message: cause,
       testId: PRINT_FAILED_TEST_ID,
     });
