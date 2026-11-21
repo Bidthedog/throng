@@ -136,7 +136,7 @@ ends with its covering tests green (`td run --scope file`).
 - [x] T034 Fix the docs that drifted from the descriptors: units still in labels, missing steps on count, day and percent rows, and the sentence that says a typed value applies after a pause, per FR-019 and FR-009 (partial)
 - [x] T035 Replace the history-to-interval band table copied into docs/preferences.md with a description of the rule the code owns, per FR-014 (partial)
 - [x] T036 Add traced tasks for FR-021 to FR-027 and bring plan.md up to date (the Preferences toast of FR-024, shipped-defaults version 38), per plan (missing)
-- [ ] T037 Correct the stale references: `resourceMonitor.captureIntervalSeconds` in the config-preferences skill's constitution reference, and the `formatGrouped` comment in form-controls.tsx, per FR-001 and FR-019 (partial)
+- [x] T037 Correct the stale references: `resourceMonitor.captureIntervalSeconds` in the config-preferences skill's constitution reference, and the `formatGrouped` comment in form-controls.tsx, per FR-001 and FR-019 (partial)
 
 ## Phase 11: The 2026-11-21 clarifications (traced, added by T036)
 

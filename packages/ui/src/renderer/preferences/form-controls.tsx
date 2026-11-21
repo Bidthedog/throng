@@ -334,8 +334,8 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
   // 018 / FR-037 — the DISPLAYED value is grouped; the STORED value never is.
   //
   // `editor.maxOpenFileBytes` showed as `10485760`: eight digits with no grouping, which nobody
-  // reads as ten megabytes. `formatGrouped` leaves anything under five digits alone, because a
-  // 5000 ms delay rendered as `5,000` reads as a typo rather than a kindness.
+  // reads as ten megabytes. `formatGrouped` groups every number at every magnitude (constitution
+  // 4.5.0 removed 018's five-digit floor), so `5,000` sits beside `10,000` in the same shape.
   const display = (v: unknown): string =>
     typeof v === 'number' ? formatGrouped(v) : v === undefined ? '' : String(v);
 

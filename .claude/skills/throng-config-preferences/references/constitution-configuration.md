@@ -47,8 +47,8 @@ reads the setting.
     names `editor.maxOpenFileBytes`'s limit without stating it.
   - `packages/core/src/editor/drop.ts` — the drop refusal states the size and the limit
     ungrouped.
-  - `packages/core/src/config/settings-metadata.ts` — `resourceMonitor.captureIntervalSeconds`'s
-    description copies the minimum-interval bands from
+  - `packages/core/src/config/settings-metadata.ts` — `resourceMonitor.captureIntervalMs`'s (077
+    FR-001's name for `captureIntervalSeconds`) description copies the minimum-interval bands from
     `packages/core/src/resources/settings-resolution.ts`, and `editor.maxOpenFileBytes`'s
     hard-codes "the slider moves in 5 MB steps".
   - `packages/core/src/preview/providers/media-settings.ts` — every media preview's *Maximum file
