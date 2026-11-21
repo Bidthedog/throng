@@ -5,7 +5,7 @@
  *
  * Fixtures are written with the same library, so each format round-trips through a real file image.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as XLSX from 'xlsx';
 import { cellDisplay, readWorkbook, WORKBOOK_READ_OPTIONS } from '../../src/renderer/preview/providers/spreadsheet/workbook-read.js';
 
@@ -69,6 +69,40 @@ describe('readWorkbook refusals', () => {
     const bytes = (XLSX.CFB.write(cfb, { type: 'array' }) as Uint8Array | number[]);
     const buffer = Uint8Array.from(bytes).buffer;
     expect(readWorkbook(buffer)).toEqual({ ok: false, reason: 'password', detail: expect.any(String) });
+  });
+
+  // SC-007, FR-054 (convergence T084) — a workbook carrying a macro project and a formula over an external workbook:
+  // previewing it starts nothing and fetches nothing, shows the value the file stored, and keeps no macro.
+  it('runs no macro and follows no external link, showing the stored value', () => {
+    const vba = XLSX.CFB.utils.cfb_new();
+    XLSX.CFB.utils.cfb_add(vba, '/VBA/Module1', new TextEncoder().encode('Sub Auto_Open()\nShell "calc.exe"\nEnd Sub'));
+    const sheet = XLSX.utils.aoa_to_sheet([['linked']]);
+    sheet['A2'] = { t: 'n', v: 42, f: "'https://example.invalid/[remote.xlsx]Sheet1'!A1" };
+    sheet['!ref'] = 'A1:A2';
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, sheet, 'Data');
+    (wb as XLSX.WorkBook & { vbaraw?: unknown }).vbaraw = XLSX.CFB.write(vba, { type: 'array' });
+    const bytes = XLSX.write(wb, { bookType: 'xlsm', bookVBA: true, type: 'array' }) as ArrayBuffer;
+    // The fixture really holds both: a reader that asked for them would get the macro project and the formula.
+    const raw = XLSX.read(bytes, { type: 'array', bookVBA: true, cellFormula: true });
+    expect((raw as XLSX.WorkBook & { vbaraw?: unknown }).vbaraw).toBeDefined();
+    expect(raw.Sheets['Data']?.['A2']?.f).toContain('remote.xlsx');
+
+    const fetchSpy = vi.fn();
+    const xhrSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.stubGlobal('XMLHttpRequest', xhrSpy);
+    try {
+      const result = readWorkbook(bytes);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.sheets[0]?.rows[1]?.[0]).toBe('42');
+      expect(JSON.stringify(result)).not.toMatch(/Auto_Open|calc\.exe/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(xhrSpy).not.toHaveBeenCalled();
   });
 
   it('shows the display text a file records, and a date with none as an ISO 8601 date', () => {
