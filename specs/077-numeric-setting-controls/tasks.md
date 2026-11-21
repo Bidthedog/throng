@@ -135,5 +135,28 @@ ends with its covering tests green (`td run --scope file`).
 - [x] T033 Draw a count's, a column's and a character limit's unit in the singular at 1 ("1 entry", "1 column"), per FR-013 (partial)
 - [x] T034 Fix the docs that drifted from the descriptors: units still in labels, missing steps on count, day and percent rows, and the sentence that says a typed value applies after a pause, per FR-019 and FR-009 (partial)
 - [x] T035 Replace the history-to-interval band table copied into docs/preferences.md with a description of the rule the code owns, per FR-014 (partial)
-- [ ] T036 Add traced tasks for FR-021 to FR-027 and bring plan.md up to date (the Preferences toast of FR-024, shipped-defaults version 38), per plan (missing)
+- [x] T036 Add traced tasks for FR-021 to FR-027 and bring plan.md up to date (the Preferences toast of FR-024, shipped-defaults version 38), per plan (missing)
 - [ ] T037 Correct the stale references: `resourceMonitor.captureIntervalSeconds` in the config-preferences skill's constitution reference, and the `formatGrouped` comment in form-controls.tsx, per FR-001 and FR-019 (partial)
+
+## Phase 11: The 2026-11-21 clarifications (traced, added by T036)
+
+Each was implemented before it had a task; the commit named is the one that did it.
+
+- [x] T038 Move **Clear delay** (`attention.clearDelayMs`) to Notifications › Attention in Preferences and in
+  docs/preferences.md, per FR-021 — `e4bad7e4` feat(077): Put the attention Clear delay under Notifications
+- [x] T039 Move **Kill processes** (`confirmations.killProcesses`) to the Resource Monitor group and its docs section,
+  per FR-022 — `76a37515` feat(077): Put Kill processes in the Resource Monitor group
+- [x] T040 Put the two side-pane maximum widths under General › Window and drop the Panes group, per FR-023 —
+  `911d527c` feat(077): Put the side panes' widths under General › Window
+- [x] T041 Say what is wrong with a Preferences entry in the window's toast, not inline; the box keeps its outline and
+  `aria-invalid` (field-notice.ts), per FR-024 — `6d0d92f7` feat(077): Say what is wrong with a Preferences entry in a
+  toast
+- [x] T042 Edit every unbounded list or table setting in a modal over Preferences behind a row summary and an
+  "Edit <setting>…" button (list-editor.tsx), per FR-025 — `87eb677c` feat(077): Edit a list setting in a modal over
+  Preferences; the terminal-flavour tables FR-025 says inherit it — `38299c41` fix(077): Edit the terminal flavours
+  in Preferences
+- [x] T043 Draw no Theme row in the Settings tab; the Themes tab chooses the theme and the key stays configurable, per
+  FR-026 — `4df8d628` feat(077): Choose the theme only in the Themes tab
+- [x] T044 Give a project row its full width, one popover after **Project popover delay**, and the
+  `projects.popoverEnabled` switch, per FR-027 — `be83ae1f` feat(077): Give a project row its full width, and one
+  popover

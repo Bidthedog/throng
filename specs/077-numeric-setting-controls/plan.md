@@ -91,3 +91,22 @@ and bound message so the control, the notice and the docs test share one source.
 ## Complexity Tracking
 
 None.
+
+## Amendments (2026-11-21, convergence T036 — additive)
+
+What shipped after this plan was written, and where it differs from the text above:
+
+- **FR-024 — the Preferences toast replaces the inline message.** Constitution row VI's "inline message beside the
+  box" and `form-controls.tsx`'s "inline message" in the source tree are superseded: what is wrong with a box's entry
+  is said in the Preferences window's toast through `packages/ui/src/renderer/preferences/field-notice.ts`
+  (`useFieldNotice`, one card per box), and the box keeps only its invalid outline and `aria-invalid`. The same toast
+  serves the text boxes, list entries, the JSON list box, the key and record tables' add boxes and, since T030, the
+  per-language indent table's number cells. FR-008's wording and bound-naming survive in the toast's sentence
+  (`typedProblem` in `numeric-units.ts`).
+- **FR-025 — list and table settings edit in a modal**, `packages/ui/src/renderer/preferences/list-editor.tsx`, over
+  a draft (Save / Ctrl+Enter, Cancel / Escape).
+- **FR-021–FR-023, FR-026, FR-027** — placement changes in `settings-metadata.ts` and `settings-tab.tsx`, and the
+  project row and popover in the Projects pane; tasks T038–T044 trace each to its commit.
+- **Shipped-defaults version.** 077's upgrade (renames and unit conversion, `contracts/settings-upgrade-v37.md`) is
+  version 37, as the Summary and source tree say. `SHIPPED_DEFAULTS_VERSION` is **38** now: a later theme change
+  (#105, `1b255c98`, selected code readable in every bundled theme) bumped it again. The 077 migration still runs at 37.
