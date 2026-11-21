@@ -1140,7 +1140,7 @@ Paths: `packages/ui/src/main/main.ts`
 
 ## MT-109: [Settings] Clear delay, Kill processes and the pane widths in their new groups
 
-Covers: 077 FR-021, 077 FR-022, 077 FR-023
+Covers: 077 FR-021, 077 FR-022, 077 FR-023, 077 FR-026
 Paths: `packages/core/src/config/settings-metadata.ts`, `docs/preferences.md`
 
 ### Steps
@@ -1149,3 +1149,4 @@ Paths: `packages/core/src/config/settings-metadata.ts`, `docs/preferences.md`
 3. Open General › Window. **Projects pane max width** and **File Explorer pane max width** follow Use native Wayland. There is no **Panes** heading anywhere.
 4. Change each of the four settings and close Preferences; reopen it. Each keeps its new value, and throng behaves as before (a mark clears after the delay, ending a process asks or not as set, the panes stop at their widths).
 5. Search Preferences for "clear delay", "kill" and "pane". Each finds its row in the new place.
+6. In Preferences → Settings, General starts at Window, with no Appearance heading, and searching "theme" finds no Theme row. In the Themes tab, choose another theme: the app switches to it.
