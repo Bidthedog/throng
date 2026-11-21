@@ -1503,8 +1503,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     keyKind: 'language',
     columns: [
       { key: 'style', label: 'Indent with', control: 'select', allowedValues: ['spaces', 'tabs'] },
-      { key: 'indentWidth', label: 'Width', control: 'number', min: 1, max: 16 },
-      { key: 'tabWidth', label: 'Tab width', control: 'number', min: 1, max: 16 },
+      // 077 FR-012 — whole columns, a step of 1.
+      { key: 'indentWidth', label: 'Width', control: 'number', min: 1, max: 16, step: 1 },
+      { key: 'tabWidth', label: 'Tab width', control: 'number', min: 1, max: 16, step: 1 },
     ],
     // NOT clearable. Emptying it would not "turn off per-language indentation" — it would silently
     // indent Go with spaces and Python with two. There is no valid empty state here, and offering a

@@ -64,6 +64,8 @@ export interface MapColumn {
   allowedValues?: readonly (string | number)[];
   min?: number;
   max?: number;
+  /** 077 FR-012 — a number column's step, as on {@link FieldDescriptor}. */
+  step?: number;
   /** As on {@link FieldDescriptor}: the enforced bound where it differs from the control's range. */
   hardMin?: number;
   hardMax?: number;

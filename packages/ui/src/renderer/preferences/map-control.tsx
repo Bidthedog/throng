@@ -1,8 +1,10 @@
-import { Fragment, useEffect, useRef, useState, type ReactElement } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   LANGUAGES,
   checkFlavourRecord,
+  checkTyped,
   languageName,
+  typedProblem,
   type FieldDescriptor,
   type MapColumn,
 } from '@throng/core';
@@ -178,6 +180,7 @@ function KeyedMapControl({
                     value={column.key ? (map[key] as Row)?.[column.key] : map[key]}
                     onCommit={(cell) => setCell(key, column, cell)}
                     testId={`map-cell-${descriptor.key}-${key}-${column.key ?? 'value'}`}
+                    label={`${descriptor.label}: ${column.label}`}
                   />
                 </td>
               ))}
@@ -445,6 +448,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
                           setCell(index, column, decodeCell(cell, column.key ? row[column.key] : undefined))
                         }
                         testId={`${noun}-cell-${rowKey}-${column.key ?? 'value'}`}
+                        label={`${descriptor.label}: ${column.label}`}
                       />
                     </td>
                   ))}
@@ -585,39 +589,125 @@ function TextCell({
   );
 }
 
+/**
+ * 077 FR-008, FR-009, FR-012, FR-024 — a number column checked the way every Preferences number box is.
+ *
+ * The cell used to drop a keystroke that left the range and write the rest as typed, so `20` in a 1–16 column
+ * silently stayed `2` and `2.5` was stored. Now the text is the user's until it is confirmed: `checkTyped` names what
+ * is wrong in the Preferences toast as it is typed, Enter or leaving the cell stores a whole number within the
+ * bounds or the nearer bound past one, text that is no whole number stores nothing and stays until it is corrected
+ * (040 FR-007), and Escape restores the stored value.
+ */
+function NumberCell({
+  column,
+  value,
+  label,
+  onCommit,
+  testId,
+}: {
+  column: MapColumn;
+  value: unknown;
+  label: string;
+  onCommit: (value: unknown) => void;
+  testId: string;
+}): ReactElement {
+  // The check takes a descriptor: the column's own bounds and step, named as the toast names the cell.
+  const field = useMemo<FieldDescriptor>(
+    () => ({
+      key: testId,
+      label,
+      description: '',
+      group: '',
+      control: 'number',
+      type: 'number',
+      min: column.min,
+      max: column.max,
+      step: column.step,
+      hardMin: column.hardMin,
+      hardMax: column.hardMax,
+    }),
+    [testId, label, column.min, column.max, column.step, column.hardMin, column.hardMax],
+  );
+  const stored = typeof value === 'number' ? String(value) : '';
+  const [text, setText] = useState(stored);
+  const [invalid, setInvalid] = useState(false);
+  const focused = useRef(false);
+  const fieldNotice = useFieldNotice(`${testId}-invalid`);
+  useEffect(() => {
+    if (!focused.current) setText(stored);
+  }, [stored]);
+  useEffect(() => {
+    fieldNotice(invalid ? typedProblem(text, field) : null);
+  }, [fieldNotice, invalid, text, field]);
+
+  const commit = (raw: string): void => {
+    const check = checkTyped(raw, field);
+    const n = check.ok ? check.value : check.clampTo;
+    if (n === undefined) {
+      setInvalid(true);
+      // The same refused entry confirmed again flashes its toast (one condition, one notice).
+      fieldNotice(typedProblem(raw, field), true);
+      return;
+    }
+    setInvalid(false);
+    setText(String(n));
+    if (n !== value) onCommit(n);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      className={invalid ? 'ctl__input ctl__input--invalid map-control-number' : 'ctl__input map-control-number'}
+      value={text}
+      min={column.min}
+      max={column.max}
+      step={column.step}
+      aria-label={label}
+      aria-invalid={invalid}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onChange={(e) => {
+        setText(e.target.value);
+        // An emptied cell is a value being typed, not a wrong one: it is named only if it is confirmed empty.
+        setInvalid(e.target.value.trim() !== '' && !checkTyped(e.target.value, field).ok);
+      }}
+      onBlur={(e) => {
+        focused.current = false;
+        commit(e.currentTarget.value);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit(e.currentTarget.value);
+        // An Escape that puts the stored value back is the cell's own: prevented, so the list modal stays open.
+        if (e.key === 'Escape' && (invalid || text !== stored)) {
+          e.preventDefault();
+          setInvalid(false);
+          setText(stored);
+        }
+      }}
+      data-testid={testId}
+    />
+  );
+}
+
 interface MapCellProps {
   column: MapColumn;
   value: unknown;
   options?: readonly (string | number)[];
   onCommit: (value: unknown) => void;
   testId: string;
+  /** How the Preferences toast names this cell: the setting and the column ("Indentation by language: Width"). */
+  label: string;
 }
 
-function MapCell({ column, value, options, onCommit, testId }: MapCellProps): ReactElement {
+function MapCell({ column, value, options, onCommit, testId, label }: MapCellProps): ReactElement {
   const choices = column.allowedValues ?? options ?? [];
   // A language-valued cell shows the language's NAME while still storing its id.
   const isLanguage = column.label === 'Language' && !column.allowedValues;
 
   if (column.control === 'number') {
-    return (
-      <input
-        type="number"
-        className="ctl__input map-control-number"
-        value={typeof value === 'number' ? value : ''}
-        min={column.min}
-        max={column.max}
-        onChange={(e) => {
-          const next = Number(e.target.value);
-          // Refuse an out-of-range value rather than writing it: the tolerant parser would drop it
-          // on the next load and the user's setting would silently revert (FR-017).
-          if (!Number.isFinite(next)) return;
-          if (column.min !== undefined && next < column.min) return;
-          if (column.max !== undefined && next > column.max) return;
-          onCommit(next);
-        }}
-        data-testid={testId}
-      />
-    );
+    return <NumberCell column={column} value={value} label={label} onCommit={onCommit} testId={testId} />;
   }
 
   /*

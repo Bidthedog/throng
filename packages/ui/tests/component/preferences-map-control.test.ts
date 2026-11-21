@@ -194,3 +194,57 @@ describe('a language-keyed map (FR-022)', () => {
     expect(offered).toContain('Ruby');
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The number cells: a declared step, and the typed-value check every number box has
+ * (077 FR-008, FR-009, FR-012, FR-024 — T030)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('a number cell in the per-language indent table (077 FR-008, FR-009, FR-012, FR-024)', () => {
+  const byLanguage = SETTINGS_METADATA.find((d) => d.key === 'editor.indentByLanguage') as FieldDescriptor;
+  const cell = 'map-cell-editor.indentByLanguage-csharp-indentWidth';
+  const seed = { csharp: { style: 'spaces', indentWidth: 4, tabWidth: 4 } };
+  const lastWidth = (onCommit: ReturnType<typeof vi.fn>): unknown =>
+    (onCommit.mock.calls.at(-1)?.[0] as Record<string, { indentWidth: number }> | undefined)?.csharp.indentWidth;
+
+  it('declares a step of 1 on both number columns (FR-012)', () => {
+    const numbers = (byLanguage.columns ?? []).filter((c) => c.control === 'number');
+    expect(numbers.map((c) => c.label)).toEqual(['Width', 'Tab width']);
+    for (const c of numbers) expect((c as { step?: number }).step, c.label).toBe(1);
+  });
+
+  it('names a value above the maximum in the Preferences toast as it is typed, and stores the maximum on Enter', async () => {
+    const { user, onCommit } = renderMap(byLanguage, seed);
+    const box = screen.getByTestId(cell);
+    await user.clear(box);
+    await user.type(box, '20');
+    expect(box).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByTestId(`${cell}-invalid`)).toHaveTextContent('must be between 1 and 16');
+    await user.keyboard('{Enter}');
+    expect(lastWidth(onCommit)).toBe(16);
+    expect(screen.queryByTestId(`${cell}-invalid`)).toBeNull();
+  });
+
+  it('refuses a fraction: says it is not a whole number, stores nothing and keeps the entry', async () => {
+    const { user, onCommit } = renderMap(byLanguage, seed);
+    const box = screen.getByTestId(cell);
+    await user.clear(box);
+    await user.type(box, '2.5');
+    await user.keyboard('{Enter}');
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(box).toHaveValue('2.5');
+    expect(screen.getByTestId(`${cell}-invalid`)).toHaveTextContent('must be a whole number');
+    // Escape puts the stored value back and clears the toast.
+    await user.keyboard('{Escape}');
+    expect(box).toHaveValue('4');
+    expect(screen.queryByTestId(`${cell}-invalid`)).toBeNull();
+  });
+
+  it('stores a value within the bounds on Enter', async () => {
+    const { user, onCommit } = renderMap(byLanguage, seed);
+    const box = screen.getByTestId(cell);
+    await user.clear(box);
+    await user.type(box, '8{Enter}');
+    expect(lastWidth(onCommit)).toBe(8);
+  });
+});
