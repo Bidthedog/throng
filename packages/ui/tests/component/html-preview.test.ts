@@ -304,6 +304,43 @@ describe('a link in the page follows on the gesture only, a fragment link includ
   });
 });
 
+// 074 convergence T077 — FR-063a: a plain middle-button drag scrolls the page, as it scrolls every other preview body.
+describe('a middle-button drag scrolls the page (FR-063a)', () => {
+  it('scrolls the page against the pointer’s movement', async () => {
+    const m = await mount(PLAIN);
+    await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
+    update(m, 2, '<p id="t">Long page</p>');
+    await waitFor(() => expect(frameDoc()!.querySelector('#t')).not.toBeNull());
+    const doc = frameDoc()!;
+    const W = doc.defaultView as Window & typeof globalThis;
+    const calls: Array<{ left?: number; top?: number }> = [];
+    const restores: Array<() => void> = [];
+    for (const proto of new Set([W.Element.prototype, Element.prototype])) {
+      const before = proto.scrollBy;
+      proto.scrollBy = function (this: Element, opts?: ScrollToOptions | number) {
+        if (typeof opts === 'object') calls.push({ left: opts.left, top: opts.top });
+      } as typeof proto.scrollBy;
+      restores.push(() => {
+        proto.scrollBy = before;
+      });
+    }
+    try {
+      const target = doc.querySelector('#t')!;
+      const at = (type: string, x: number, y: number, buttons: number): void => {
+        act(() => {
+          target.dispatchEvent(new W.MouseEvent(type, { bubbles: true, cancelable: true, button: 1, buttons, clientX: x, clientY: y }));
+        });
+      };
+      at('mousedown', 100, 100, 4);
+      at('mousemove', 90, 60, 4);
+      at('mouseup', 90, 60, 0);
+      expect(calls).toContainEqual({ left: 10, top: 40 });
+    } finally {
+      for (const restore of restores) restore();
+    }
+  });
+});
+
 // 074 convergence T078 — FR-018a, FR-079 (045 FR-168): a file link's hover says what its Ctrl+click does to that file.
 describe('a file link’s hover names where it opens (FR-018a, FR-079)', () => {
   it('words a link to a file no preview claims for the editor it opens in', async () => {

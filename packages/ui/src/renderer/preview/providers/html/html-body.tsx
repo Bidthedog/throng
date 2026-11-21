@@ -36,6 +36,7 @@ import { sanitiseHtmlPage, type BlockedResource } from './html-sanitise.js';
 import { readFrameScroll, updateFrameInPlace, writeFrameScroll, type FrameScroll } from './html-frame-update.js';
 import { listenToFrameInput } from './frame-input.js';
 import { listenToFrameFragments, listenToFrameLinkMenu } from './frame-fragments.js';
+import { listenToFrameMiddleDrag } from './frame-middle-drag.js';
 import { previewRefreshCount } from '../../refresh-preview.js';
 import { BlockedResourcesNotice, blockedFromViolation } from './blocked-notice.js';
 import './html.css';
@@ -228,6 +229,8 @@ export function HtmlBody({
     const stopInput = listenToFrameInput(frame, doc);
     // FR-079 — a `#fragment` link follows on the gesture only (`frame-fragments.ts`).
     const stopFragments = listenToFrameFragments(doc);
+    // FR-063a — a plain middle-button drag scrolls the page (`frame-middle-drag.ts`).
+    const stopMiddleDrag = listenToFrameMiddleDrag(doc);
     // FR-085a — the menu over a link is the panel's link menu (Open Link, Copy Link to Clipboard).
     const stopLinkMenu = listenToFrameLinkMenu(frame, doc, { docPath: filePathRef.current, projectRoot: projectRootRef.current }, (link, point) =>
       linkMenuRef.current?.(link, point),
@@ -246,6 +249,7 @@ export function HtmlBody({
       stopInput();
       stopFragments();
       stopLinkMenu();
+      stopMiddleDrag();
       doc.removeEventListener('securitypolicyviolation', onViolation);
       doc.removeEventListener('scroll', onScroll);
     };

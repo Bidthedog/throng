@@ -12,8 +12,8 @@
  *   first), so `defaultPrevented` leaves it alone;
  * - Ctrl+middle-click is the panel's zoom reset (`mouse-zoom.ts`), not a drag.
  *
- * An HTML preview's page is an isolated frame (074 FR-074): its pointer events never reach this document, so it
- * cannot be dragged from here.
+ * An HTML preview's page is a frame: its pointer events never reach this document, so the page listens for the same
+ * gesture in its own document (`providers/html/frame-middle-drag.ts`).
  */
 import { useCallback, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 
