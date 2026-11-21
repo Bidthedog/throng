@@ -7,7 +7,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 - **[Markdown]** 075 Markdown preview extensions — owner: the 075 Markdown worker — IDs MT-40 to MT-59. 075 MT-01 to MT-05 become MT-40 to MT-44, in the same order; MT-45 is new.
 - **[Print]** Printing previews — owner: the 075 Markdown worker — IDs MT-60 to MT-79. 075 MT-06 and MT-07 become MT-60 and MT-61; MT-62 is new.
 - **[Settings]** 077 numeric setting controls — owner: the 077 worker — IDs MT-80 to MT-99. All new.
-- **[General]** Behaviour shared by every preview type after the 073/074/075 merge — owner: the orchestrator session — IDs MT-100 to MT-119. All new.
+- **[General]** Behaviour shared by every preview type after the 073/074/075 merge — owner: the orchestrator session — IDs MT-100 to MT-139. All new.
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
@@ -86,6 +86,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-116 | [General] Project rows use full width until hovered, with one popover (#695) | untested | | | |
 | MT-117 | [General] Code stays readable on the editor selection in every theme (#105) | untested | | | |
 | MT-118 | [Markdown] Converge fixes: callout jumps, copy, and printing details | untested | | | |
+| MT-120 | [General] A narrow panel keeps its title, and its buttons give way | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1324,3 +1325,13 @@ Paths: `packages/ui/src/renderer/preferences/records-control.tsx`, `packages/ui/
 2. Preferences › Terminal › Custom terminal flavours: clear an existing flavour's executable. A toast names that flavour. Add a new draft row and remove it again: the toast still names the first flavour until you fix it.
 3. Preferences › Tabs: type 4000 into Tab popover delay. The value is kept and the slider sits greyed at its maximum.
 4. Preferences › Editor › Auto-save delay: the slider runs to 3 s in 100 ms steps, from a default of 300 ms. Type 5 s into the box: 3 s is stored.
+
+## MT-120: [General] A narrow panel keeps its title, and its buttons give way
+
+Covers: 067 FR-069a, 067 FR-069b, 006 FR-085
+Paths: `packages/ui/src/renderer/workspace/panel-header-fit.ts`
+
+### Steps
+1. Drag a split divider until a terminal panel is about 150 px wide, then as far as it goes. Its title stays readable and ends in "…".
+2. Do the same with an editor panel. Header buttons drop out one at a time as it narrows (Save As, Save, Back/Forward, Split, Focus Mode, then ✕), and come back as it widens.
+3. Right-click the narrow panel's header. Every hidden button's action is on the menu and works from there.
