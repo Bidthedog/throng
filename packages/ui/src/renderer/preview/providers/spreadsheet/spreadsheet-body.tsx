@@ -11,7 +11,7 @@
  * clear or insert.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react';
-import { columnLabel, logCaught, logExpected, type PreviewCopyFormat } from '@throng/core';
+import { columnLabel, firstBinding, logCaught, logExpected, type PreviewCopyFormat } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange } from '../../../grid/grid-selection.js';
@@ -21,7 +21,7 @@ import { copyGridRange } from '../../../grid/grid-copy.js';
 import { gridPrintRow } from '../../../grid/grid-print-row.js';
 import { registerGridPrintSource, type GridPrintSource } from '../../../grid/grid-print.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
-import { useAppSettings } from '../../../config/config-store.js';
+import { useAppSettings, useKeybindings } from '../../../config/config-store.js';
 import { useContextMenu } from '../../../context-menu-provider.js';
 import type { MenuAction } from '../../../workspace/context-menu.js';
 import { WORKBOOK_READ_ONLY_TITLE, requestReadOnlyFlash } from '../../read-only-marker.js';
@@ -68,6 +68,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
   const source = content.kind === 'resource' ? content.url : '';
   const firstRowHeader = providerSettings.firstRowHeader === true;
   const settings = useAppSettings();
+  const keybindings = useKeybindings();
   const { openMenu } = useContextMenu();
   const gridRef = useRef<DataGridHandle | null>(null);
   const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' });
@@ -91,6 +92,20 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
   useEffect(() => {
     onViewStateCapture(() => null);
   }, [onViewStateCapture]);
+
+  /*
+   * FR-051 (T079) — the chosen sheet, each sheet's scroll and its column widths belong to the workbook. A reused panel
+   * moving to another file starts that file on its first visible sheet, even where it has a sheet of the same name. A
+   * reload of the same file keeps them (FR-058): only a change of file resets them.
+   */
+  const shownFile = useRef(filePath);
+  useEffect(() => {
+    if (shownFile.current === filePath) return;
+    shownFile.current = filePath;
+    setSheetName(null);
+    setWidths({});
+    scrolls.current.clear();
+  }, [filePath]);
 
   // Read and parse on every new source revision (FR-058).
   useEffect(() => {
@@ -235,10 +250,11 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
               { label: 'Select All', icon: 'selectAll', section: 'content', onClick: () => grid.selectAll() },
               { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open },
             ];
-      items.push(gridPrintRow(undefined, onPrint));
+      // 075 FR-063 — the row shows Print…'s key binding, as the CSV grid's and every other preview's menu does.
+      items.push(gridPrintRow(firstBinding(keybindings, 'preview.print') ?? undefined, onPrint));
       openMenu(point.x, point.y, items);
     },
-    [colCount, copy, goTo.open, onPrint, openMenu, resetWidth, sheetWidths],
+    [colCount, copy, goTo.open, keybindings, onPrint, openMenu, resetWidth, sheetWidths],
   );
 
   // 075 FR-075b — what Print… prints: the sheet on screen, every row, read when it runs; with First row is header on,

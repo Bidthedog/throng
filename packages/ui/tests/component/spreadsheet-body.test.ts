@@ -182,6 +182,13 @@ describe('SpreadsheetBody', () => {
       expect(onPrint).toHaveBeenCalledTimes(3);
     });
 
+    it('the grid menu\'s Print… shows its key binding, as every other preview\'s does (075 FR-063, FR-075b)', async () => {
+      mount('throng-preview://source/s1?rev=1', { onPrint: vi.fn() });
+      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+      fireEvent.contextMenu(document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
+      expect(screen.getByTestId('menu-item-Print…').textContent).toContain('Ctrl+P');
+    });
+
     it('prints the sheet on screen as a table, every row (075 FR-075b)', async () => {
       const { container } = mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
