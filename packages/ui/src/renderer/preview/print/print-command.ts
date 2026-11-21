@@ -6,9 +6,26 @@
  * never prints: only Print Preview's own Print button sends a job (FR-064, SC-012). A provider whose descriptor
  * declares no `print` cannot be printed, and every surface draws its row disabled with {@link PRINT_UNAVAILABLE}.
  */
-import { logCaught, type PrintJobRequest } from '@throng/core';
+import { logCaught, type PrintableOutput, type PrintJobRequest } from '@throng/core';
 import type { PreviewProviderView, PrintableContext } from '../provider-view.js';
 import { PRINT_NOT_READY, type PrintFailed } from '../../print/print-failure.js';
+import type { DrawnPdfPage } from './pdf-printable.js';
+
+/** Draws a PDF's pages, one image each; PDF.js in the app, loaded only when a provider prints ready-made pages. */
+export type DrawPages = (pdf: Uint8Array) => Promise<readonly DrawnPdfPage[]>;
+
+const drawWithPdfJs: DrawPages = async (pdf) => (await import('./pdf-printable.js')).drawPdfPages(pdf);
+
+/**
+ * 075 FR-060, FR-061, SC-011 — ready-made pages reach Print Preview as a document of the pages drawn, fitted whole,
+ * one per sheet: the route the PDF preview already proves (FR-075c). Print Preview lays a document out (FR-066); a
+ * PDF loaded into its host window, which runs no plugins, would lay out nothing.
+ */
+async function asDocument(output: PrintableOutput, title: string, drawPages: DrawPages): Promise<PrintableOutput> {
+  if (output.kind !== 'pages') return output;
+  const { pdfPrintHtml } = await import('./pdf-printable.js');
+  return { kind: 'document', html: pdfPrintHtml(await drawPages(output.pdf), title), fit: 'page', remoteImages: [] };
+}
 
 /** The hover on a disabled Print… row (FR-062): what is wrong, not what the user may not do. */
 export const PRINT_UNAVAILABLE = 'This preview type cannot be printed.';
@@ -39,12 +56,14 @@ export async function printPreviewPanel(
   target: PrintTarget,
   open: PrintOpen | undefined = window.throng?.print?.open,
   onFailed?: PrintFailed,
+  drawPages: DrawPages = drawWithPdfJs,
 ): Promise<boolean> {
   const { view, body } = target;
   if (view?.printable === undefined || body === null || open === undefined) return false;
   const title = printTitle(target.filePath);
   try {
-    const output = await view.printable(body, { title, ...(target.readSource !== undefined ? { readSource: target.readSource } : {}) });
+    const printable = await view.printable(body, { title, ...(target.readSource !== undefined ? { readSource: target.readSource } : {}) });
+    const output = await asDocument(printable, title, drawPages);
     const result = await open({ title, output });
     if (result.cause !== undefined) {
       onFailed?.(title, result.cause); // FR-080 — main refused it, and said why

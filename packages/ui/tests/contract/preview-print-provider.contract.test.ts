@@ -24,12 +24,25 @@ const silentProvider: PreviewProviderDescriptor = { id: 'fakeSilent', displayNam
 const silentView: PreviewProviderView = { id: 'fakeSilent', textSelection: false, load: vi.fn() };
 
 describe('the print seam (FR-060 – FR-062)', () => {
-  it('a provider declaring pages reaches Print Preview with its pages, and main accepts them', async () => {
+  /*
+   * SC-011, US6/AS2 — "the same print preview and print flow run" for ready-made pages. Print Preview lays a DOCUMENT
+   * out (FR-066), so the pages reach it as a document of the pages drawn, one per sheet, fitted whole — the route the
+   * PDF preview already proves (FR-075c) — rather than as a PDF loaded into a window that cannot display one.
+   */
+  it('a provider declaring pages reaches Print Preview as a document of its pages, and main accepts it', async () => {
     expect(canPrint(pagesProvider)).toBe(true);
     const open = vi.fn(async () => ({ opened: true }));
-    expect(await printPreviewPanel({ view: pagesView, body: {} as HTMLElement, filePath: '/proj/doc.fp' }, open)).toBe(true);
-    const request = open.mock.calls[0]![0];
-    expect(request).toEqual({ title: 'doc.fp', output: { kind: 'pages', pdf: PDF } });
+    const drawn: Uint8Array[] = [];
+    const drawPages = async (pdf: Uint8Array) => {
+      drawn.push(pdf);
+      return [{ src: 'data:image/png;base64,AAAA', widthPt: 612, heightPt: 792 }];
+    };
+    expect(await printPreviewPanel({ view: pagesView, body: {} as HTMLElement, filePath: '/proj/doc.fp' }, open, undefined, drawPages)).toBe(true);
+    expect(drawn).toEqual([PDF]);
+    const request = open.mock.calls[0]![0] as { title: string; output: { kind: string; fit?: string; html?: string } };
+    expect(request.title).toBe('doc.fp');
+    expect(request.output).toMatchObject({ kind: 'document', fit: 'page' });
+    expect(request.output.html).toContain('data:image/png;base64,AAAA');
     expect(asPrintRequest(request)).toEqual(request);
   });
 
