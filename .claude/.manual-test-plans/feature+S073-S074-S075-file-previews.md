@@ -79,6 +79,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-112 | [Settings] Terminal flavours and shell arguments are editable in Preferences (#67) | untested | | | |
 | MT-113 | [General] The other-checkout daemon notice goes once the daemon is replaced (#685) | untested | | | |
 | MT-114 | [General] Attention marks survive a restart (#692) | untested | | | |
+| MT-115 | [General] View Whitespace never changes line height (#683) | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1230,3 +1231,12 @@ Paths: `packages/daemon/src/terminal-attention.ts`, `packages/daemon/src/termina
 
 ### Negative cases
 - A mark you attended to before quitting does not come back after the restart.
+
+## MT-115: [General] View Whitespace never changes line height (#683)
+
+Covers: #683, 059 FR-065, 059 FR-066
+Paths: `packages/ui/src/renderer/editor/editor.css`
+
+### Steps
+1. Open a multi-line text file with LF line endings in an editor panel, scrolled so the panel is full.
+2. In each of the throng, Light and Matrix themes, toggle View Whitespace from the editor's context menu. The text does not move down, and the same number of lines fit with it on and off.
