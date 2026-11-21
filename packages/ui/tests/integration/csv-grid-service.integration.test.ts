@@ -112,6 +112,44 @@ describe('a grid edit with no editor open', () => {
     expect(coord.getContent(GRID_DOC)?.text).toBe('a,b\n,\n1,2\n');
   });
 
+  // SC-006 (convergence T094) — twenty grid edits, then twenty undos, give back the original text byte for byte, clean.
+  it('twenty mixed grid edits and twenty undos return the document to its original text, clean (SC-006)', async () => {
+    const original = 'name,"note, with comma",n\r\n"Ann ""A""",x,1\r\nBob,"two\nlines",2\r\n';
+    await writeFile(file, original);
+    const ops = [
+      setB2('one'),
+      { kind: 'insertRows', at: 1, count: 1 },
+      { kind: 'setCells', cells: [{ row: 0, col: 0, value: 'he said "hi"' }] },
+      { kind: 'insertColumn', at: 1 },
+      { kind: 'setCells', cells: [{ row: 2, col: 1, value: 'a,b' }] },
+      { kind: 'deleteRows', from: 1, count: 1 },
+      { kind: 'setCells', cells: [{ row: 1, col: 2, value: 'line\nbreak' }] },
+      { kind: 'insertRows', at: 3, count: 2, values: [['p', 'q'], ['r', 's']] },
+      { kind: 'setCells', cells: [{ row: 3, col: 0, value: '' }, { row: 3, col: 1, value: 'z' }] },
+      { kind: 'insertColumn', at: 0, count: 1, columns: [['c0', 'c1', 'c2', 'c3', 'c4', 'c5']] },
+      setB2('two'),
+      { kind: 'deleteRows', from: 4, count: 1 },
+      { kind: 'setCells', cells: [{ row: 0, col: 3, value: 'semi;colon' }] },
+      { kind: 'insertRows', at: 0, count: 1 },
+      { kind: 'setCells', cells: [{ row: 0, col: 0, value: 'top' }] },
+      { kind: 'insertColumn', at: 2 },
+      setB2('three'),
+      { kind: 'setCells', cells: [{ row: 2, col: 2, value: '"quoted"' }] },
+      { kind: 'deleteRows', from: 0, count: 1 },
+      setB2('four'),
+    ];
+    expect(ops).toHaveLength(20);
+    for (const operation of ops) {
+      expect(await service.edit({ panelId: PREVIEW, filePath: file, operation })).toMatchObject({ ok: true });
+    }
+    expect(coord.getContent(GRID_DOC)?.text).not.toBe(original.replace(/\r\n/g, '\n'));
+    for (let i = 0; i < 20; i++) expect(service.undo(PREVIEW)).toEqual({ ok: true });
+    const back = coord.getContent(GRID_DOC);
+    // The document holds LF-normalised text; the file's CRLF endings are what a save writes back.
+    expect(back?.text).toBe(original.replace(/\r\n/g, '\n'));
+    expect(back?.dirty).toBe(false);
+  });
+
   it('inserts copied rows, or copied columns, with their values in one undo step back to the original text (FR-038a)', async () => {
     await writeFile(file, 'a;b\n1;2\n');
     const rows = await service.edit({
