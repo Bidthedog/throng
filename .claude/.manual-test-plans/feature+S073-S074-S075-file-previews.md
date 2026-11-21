@@ -78,6 +78,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-111 | [Settings] Lists and tables in Preferences open in their own window | untested | | | |
 | MT-112 | [Settings] Terminal flavours and shell arguments are editable in Preferences (#67) | untested | | | |
 | MT-113 | [General] The other-checkout daemon notice goes once the daemon is replaced (#685) | untested | | | |
+| MT-114 | [General] Attention marks survive a restart (#692) | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1215,3 +1216,17 @@ Paths: `packages/ui/src/renderer/statusbar/daemon-indicator.tsx`, `packages/ui/s
 
 ### Negative cases
 - Other notices already in the Notifications panel stay where they are.
+
+## MT-114: [General] Attention marks survive a restart (#692)
+
+Covers: #692, 057 FR-091a
+Paths: `packages/daemon/src/terminal-attention.ts`, `packages/daemon/src/terminal-service.ts`, `packages/persistence/src/attention-ledger-repository.ts`, `packages/persistence/src/migrations/v15-attention-ledger.ts`
+
+### Steps
+1. In two tabs, open a terminal each and run `sleep 3; printf '\a'`, then switch away before it rings. Both tabs and panels show an attention mark, and the Notifications panel lists both.
+2. Quit throng, choosing Terminate all, and start it again. Both tabs and panels show their marks again, and no toast is raised for them.
+3. Make a third terminal raise a mark the same way. The two older Notifications entries stay.
+4. Focus one of the older panels. Its mark and its Notifications entry clear after the clear delay; the other one stays.
+
+### Negative cases
+- A mark you attended to before quitting does not come back after the restart.
