@@ -324,6 +324,35 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
     onlyOn: 'linux',
   },
+  // 077 FR-023 (maintainer, 2026-11-21): the side panes' widths are window layout, under General › Window.
+  {
+    key: 'panes.projects.maxWidth',
+    label: 'Projects pane max width',
+    description: 'The widest (px) the Projects sidebar pane can be dragged.',
+    group: 'General',
+    subgroup: 'Window',
+    control: 'slider',
+    // 077 FR-001, FR-005 — stored in px.
+    storedUnit: 'px',
+    display: 'own',
+    min: 200,
+    max: 1200,
+    step: 10,
+  },
+  {
+    key: 'panes.fileExplorer.maxWidth',
+    label: 'File Explorer pane max width',
+    description: 'The widest (px) the File Explorer pane can be dragged.',
+    group: 'General',
+    subgroup: 'Window',
+    control: 'slider',
+    // 077 FR-001, FR-005 — stored in px.
+    storedUnit: 'px',
+    display: 'own',
+    min: 200,
+    max: 1200,
+    step: 10,
+  },
   {
     key: 'projects.openFromOutside',
     label: 'Folder opened from outside throng',
@@ -364,34 +393,6 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   ),
   // 055 FR-063 — the Resource Monitor's own confirmation sits in its group (077 FR-022); its other actions reuse the
   // rows above.
-
-  // Panes
-  {
-    key: 'panes.projects.maxWidth',
-    label: 'Projects pane max width',
-    description: 'The widest (px) the Projects sidebar pane can be dragged.',
-    group: 'Panes',
-    control: 'slider',
-    // 077 FR-001, FR-005 — stored in px.
-    storedUnit: 'px',
-    display: 'own',
-    min: 200,
-    max: 1200,
-    step: 10,
-  },
-  {
-    key: 'panes.fileExplorer.maxWidth',
-    label: 'File Explorer pane max width',
-    description: 'The widest (px) the File Explorer pane can be dragged.',
-    group: 'Panes',
-    control: 'slider',
-    // 077 FR-001, FR-005 — stored in px.
-    storedUnit: 'px',
-    display: 'own',
-    min: 200,
-    max: 1200,
-    step: 10,
-  },
 
   // Behaviour
   {

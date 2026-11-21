@@ -591,6 +591,13 @@ describe('the Attention settings in the registry (057 US4)', () => {
     expect(attentionGroup.map((d) => d.key)).toEqual(['attention.taskbarBadge']);
   });
 
+  it('puts the side panes\' widths under General › Window, and leaves no Panes group (077 FR-023)', () => {
+    for (const key of ['panes.projects.maxWidth', 'panes.fileExplorer.maxWidth']) {
+      expect(SETTINGS_METADATA.find((d) => d.key === key), key).toMatchObject({ group: 'General', subgroup: 'Window' });
+    }
+    expect(SETTINGS_METADATA.filter((d) => d.group === 'Panes')).toEqual([]);
+  });
+
   it('puts the clear delay under Notifications › Attention, beside the row that announces a mark (077 FR-021)', () => {
     const clearDelay = SETTINGS_METADATA.find((d) => d.key === 'attention.clearDelayMs');
     expect(clearDelay).toMatchObject({ group: 'Notifications', subgroup: 'Attention', label: 'Clear delay' });

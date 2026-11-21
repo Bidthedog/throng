@@ -91,9 +91,13 @@ The window, the app-wide behaviour and the attention marks, each under a heading
 
 ### Window
 
+Each project remembers for itself which side panes are expanded.
+
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Use native Wayland (Linux only) | `window.nativeWayland` | `false` | on · off | Run the window directly on Wayland instead of through XWayland. XWayland suits dragging a tab out, placing windows, and keeping Preferences and About above the main window; dragging files out to GNOME Files needs native Wayland ([Linux](linux.md#display)). Takes effect at the next start. |
+| Projects pane max width | `panes.projects.maxWidth` | 400 px | 200 – 1,200 px, step 10 px | The widest the Projects pane can be dragged. |
+| File Explorer pane max width | `panes.fileExplorer.maxWidth` | 700 px | 200 – 1,200 px, step 10 px | The widest the File Explorer pane can be dragged. |
 
 ### Projects
 
@@ -137,15 +141,6 @@ on Windows and for a portable or archive copy.
 | Destroy a tab | `confirmations.destroyTab` | `double` | `none` · `single` · `double` | Confirmations before a tab and its panels are destroyed. |
 | Destroy a panel | `confirmations.destroyPanel` | `double` | `none` · `single` · `double` | Confirmations before a panel is destroyed. |
 | Destroy a sub-workspace | `confirmations.destroySubWorkspace` | `double` | `none` · `single` · `double` | Confirmations before a sub-workspace is destroyed. |
-
-## Panes
-
-Each project remembers for itself which side panes are expanded.
-
-| Setting | Key | Default | Values | What it does |
-|---|---|---|---|---|
-| Projects pane max width | `panes.projects.maxWidth` | 400 px | 200 – 1,200 px, step 10 px | The widest the Projects pane can be dragged. |
-| File Explorer pane max width | `panes.fileExplorer.maxWidth` | 700 px | 200 – 1,200 px, step 10 px | The widest the File Explorer pane can be dragged. |
 
 ## Tabs
 

@@ -60,6 +60,8 @@ maintainer may still overrule any:
   Notifications beside the Attention row that announces a mark. The taskbar badge stays under General › Attention.
 - Q (maintainer, 08:14): "Move 'Kill Processes' to under 'Resource Monitor'." → FR-022. The key keeps its
   `confirmations.` namespace; only the Preferences group changes.
+- Q (maintainer, 08:16): "The two 'Panes' options can go under 'General -> Window'." → FR-023. Keys unchanged; the
+  Panes group goes.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -289,6 +291,10 @@ effective value after upgrading, now stored in ms or bytes.
 - **FR-022**: *(2026-11-21.)* **Kill processes** (`confirmations.killProcesses`) MUST sit in Preferences in the
   **Resource Monitor** group, and `docs/preferences.md` MUST document it in the Resource Monitor section. Its key,
   values and default are unchanged. *(Supersedes 055 FR-063b's "in Preferences' Confirmations group".)*
+- **FR-023**: *(2026-11-21.)* **Projects pane max width** and **File Explorer pane max width**
+  (`panes.projects.maxWidth`, `panes.fileExplorer.maxWidth`) MUST sit in Preferences under **General › Window**,
+  and `docs/preferences.md` MUST document them in its Window section; there is no Panes group. Keys, bounds and
+  controls are unchanged. *(Extends 069 FR-068, whose General › Window subgroup they join.)*
 
 **Documentation**
 
