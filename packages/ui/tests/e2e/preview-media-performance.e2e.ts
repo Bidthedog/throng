@@ -1,10 +1,11 @@
 /**
- * 074 SC-003, SC-004 — how fast the media previews appear, and that a long PDF never freezes the window.
+ * 074 SC-003, SC-004, SC-005 — how fast the media previews appear, and that a long PDF never freezes the window.
  *
  * - SC-003: a 10 MB image and a 5 MB SVG appear within 1 second of opening; a parented HTML or SVG preview shows an edit
  *   within the configured update delay plus 250 ms.
  * - SC-004: a 500-page PDF shows its first page within 2 seconds of opening, and scrolling through it never freezes
  *   the window for more than 100 ms at a time.
+ * - SC-005: a file over its preview's size limit shows the size notice within 200 ms of opening.
  *
  * ══ WHERE THESE ARE ADJUDICATED ══
  *
@@ -208,6 +209,46 @@ test('a parented SVG preview shows an edit within the update delay plus 250 ms (
     );
   } finally {
     cleanupTemp(svgRoot);
+    cleanupTemp(cfgRoot);
+  }
+});
+
+/*
+ * 074 convergence T079 — SC-005: opening a file over its preview's size limit shows the size notice within 200 ms. Its
+ * own app, with Images' Maximum file size seeded at 1 MB (inside its hard bounds) and a picture of about 2.5 MB. The
+ * notice's arrival is stamped in the page, as the SVG reading's redraw is.
+ */
+test('a file over its size limit shows the size notice within 200 ms (SC-005)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+  const bigRoot = mkdtempSync(join(tmpdir(), 'throng-preview-perf-limit-'));
+  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-preview-perf-cfg-'));
+  writeSettingsAtomic(cfgRoot, { editor: { previews: { providers: { image: { maxFileBytes: 1024 * 1024 } } } } });
+  writeFileSync(join(bigRoot, 'over.png'), noisePng(800)); // ~2.5 MB
+  try {
+    await runApp(
+      async (_app, win) => {
+        await createProject(win, 'PreviewPerfLimit', bigRoot);
+        await win.evaluate(() => {
+          const g = window as unknown as { __noticeAt?: number };
+          g.__noticeAt = 0;
+          new MutationObserver((_records, observer) => {
+            if ((document.body.textContent ?? '').includes('too large to preview')) {
+              g.__noticeAt = Date.now();
+              observer.disconnect();
+            }
+          }).observe(document.body, { subtree: true, childList: true, characterData: true });
+        });
+        const started = Date.now();
+        await win.getByTestId('file-explorer-tree').getByText('over.png', { exact: true }).click();
+        await expect.poll(() => win.evaluate(() => (window as unknown as { __noticeAt?: number }).__noticeAt ?? 0), { timeout: 10_000 }).toBeGreaterThan(0);
+        const shownAt = await win.evaluate(() => (window as unknown as { __noticeAt?: number }).__noticeAt ?? 0);
+        // The reading, on every run: a pass records no number otherwise.
+        console.log(`[SC-005] over-limit image: notice ${shownAt - started} ms from the click`);
+        expectWithinSla(test.info(), { what: 'an over-limit image, click to its size notice', requirement: '074 SC-005', elapsedMs: shownAt - started, budgetMs: 200 });
+      },
+      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+    );
+  } finally {
+    cleanupTemp(bigRoot);
     cleanupTemp(cfgRoot);
   }
 });
