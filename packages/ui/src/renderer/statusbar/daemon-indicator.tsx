@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import type { DaemonState, DaemonStatus } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { useNotify } from '../common/notification.js';
@@ -37,7 +37,7 @@ export function DaemonIndicator(): ReactElement | null {
    * daemon is perfectly alive, it is just not this build's, so the two facts are held apart.
    */
   const [foreign, setForeign] = useState<{ checkout: string } | null>(null);
-  const { notify } = useNotify();
+  const { notify, withdraw } = useNotify();
 
   useEffect(() => {
     const api = window.throng?.daemon;
@@ -58,8 +58,16 @@ export function DaemonIndicator(): ReactElement | null {
    * reason in this file's header.
    */
   const foreignCheckout = foreign?.checkout;
+  const raisedForeign = useRef(false);
   useEffect(() => {
-    if (foreignCheckout === undefined) return;
+    if (foreignCheckout === undefined) {
+      // #685 — the daemon serving this window is this build's again (main pushed `null` after a replacement): the
+      // notice's condition is over, so its toast and its Notifications-panel entry go with it.
+      if (raisedForeign.current) withdraw('daemon-foreign');
+      raisedForeign.current = false;
+      return;
+    }
+    raisedForeign.current = true;
     notify({
       severity: 'warning',
       // No subject, for the reason the stopped notice gives: the title names the daemon.
@@ -69,7 +77,7 @@ export function DaemonIndicator(): ReactElement | null {
       testId: 'daemon-foreign',
       causeKey: `daemon-foreign:${foreignCheckout}`,
     });
-  }, [foreignCheckout, notify]);
+  }, [foreignCheckout, notify, withdraw]);
 
   /*
    * FR-007 — say it ONCE, when it becomes true.
