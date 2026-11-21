@@ -75,6 +75,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-108 | [General] A quit from the system closes throng without asking (#699) | untested | | | |
 | MT-109 | [Settings] Clear delay, Kill processes and the pane widths in their new groups | untested | | | |
 | MT-110 | [Settings] An invalid entry in Preferences shows a toast, not text under the box | untested | | | |
+| MT-111 | [Settings] Lists and tables in Preferences open in their own window | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1168,3 +1169,22 @@ Paths: `packages/ui/src/renderer/preferences/field-notice.ts`, `packages/ui/src/
 
 ### Negative cases
 - No setting shows error text beneath or beside its box, and no row changes height when an entry is refused.
+
+## MT-111: [Settings] Lists and tables in Preferences open in their own window
+
+Covers: 077 FR-025, 016 FR-022, 074 FR-072c
+Paths: `packages/ui/src/renderer/preferences/list-editor.tsx`, `packages/ui/src/renderer/preferences/form-controls.tsx`, `packages/ui/src/renderer/preferences/map-control.tsx`
+
+### Steps
+1. Preferences → Settings → File Explorer → Excluded globs: the row reads "N entries: **/.git, **/.svn, **/.hg, …" with a pencil button. Press it: a window opens over Preferences listing every glob.
+2. Add `**/dist` and press Save. The window closes and the count goes up by one; reopen it and `**/dist` is there.
+3. Remove an entry and press Esc. Nothing changes; reopen it and the entry is still there. Do the same with Cancel.
+4. Editor › Previews › HTML › Safe preview sources: open it, add `http://x.com` and press Enter. A toast says only https addresses can be sources; Save leaves the list without it.
+5. Editor › Languages and Editor › Indentation: open each table, add an extension, change a language's indentation, and Save. The row summaries name the languages by name.
+6. Open each other list the same way (Excluded from search, Allowed link protocols, File extensions that end a spaced path): each opens in the window and saves.
+7. In any list window, press Tab repeatedly: focus never leaves the window. Close it, and focus is back on the pencil button. Ctrl+Enter saves.
+8. Search Preferences for "globs": both globs rows are found, showing their summaries.
+
+### Negative cases
+- No list or table setting is edited inline in the Settings tab any more.
+- Saving without a change writes nothing (the setting does not show as changed).
