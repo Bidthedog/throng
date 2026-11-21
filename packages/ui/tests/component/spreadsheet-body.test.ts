@@ -160,6 +160,30 @@ describe('SpreadsheetBody', () => {
     await waitFor(() => expect(active()).toBe('4,2'));
   });
 
+  it('opens another workbook on its own first visible sheet, even where it has a sheet of the name chosen before (FR-051, T079)', async () => {
+    const at = (n: number, seq: number, file: string) =>
+      createElement(ContextMenuProvider, {
+        children: createElement(SpreadsheetBody, props(`throng-preview://source/s1?rev=${n}`, { filePath: file, navigationSeq: seq })),
+      });
+    bytes = book({ First: [['a-first']], Data: [['a-data']] });
+    const view = render(at(1, 1, 'D:/proj/a.xlsx'));
+    await waitFor(() => expect(cell(0, 0)).toBe('a-first'));
+    fireEvent.click(screen.getByTestId('spreadsheet-sheet-Data'));
+    await waitFor(() => expect(cell(0, 0)).toBe('a-data'));
+
+    // A reused panel moves to workbook b, which also has a sheet called "Data".
+    bytes = book({ Summary: [['b-summary']], Data: [['b-data']] });
+    view.rerender(at(2, 2, 'D:/proj/b.xlsx'));
+    await waitFor(() => expect(cell(0, 0)).toBe('b-summary'));
+
+    // A reload of the SAME file still keeps the chosen sheet (FR-058).
+    fireEvent.click(screen.getByTestId('spreadsheet-sheet-Data'));
+    await waitFor(() => expect(cell(0, 0)).toBe('b-data'));
+    bytes = book({ Summary: [['b-summary']], Data: [['b-data2']] });
+    view.rerender(at(3, 2, 'D:/proj/b.xlsx'));
+    await waitFor(() => expect(cell(0, 0)).toBe('b-data2'));
+  });
+
   it('says in one inline notice when the file is not a workbook it can read (FR-056)', async () => {
     bytes = new TextEncoder().encode('PK\u0003\u0004 not a zip').buffer;
     mount('throng-preview://source/s1?rev=1');
