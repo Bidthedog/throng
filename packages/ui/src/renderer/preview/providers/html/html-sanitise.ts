@@ -1,7 +1,8 @@
 /**
  * The HTML preview's own sanitiser profile (074 FR-072 – FR-082, FR-090; research R6, steps 1–4).
  *
- * A page is shown as STATIC MARKUP in a sandboxed, opaque-origin `srcdoc` frame (`html-body.tsx`). This module
+ * A page is shown as STATIC MARKUP in a sandboxed `srcdoc` frame that shares the app's origin (FR-074a, `html-body.tsx`),
+ * so the panel can read and select the page; the sandbox still runs no script. This module
  * turns the file's text into that frame's document, and is the first of the four independent layers (FR-091):
  *
  * 1. **Remove what runs or escapes** — DOMPurify, `WHOLE_DOCUMENT`, with a profile of its own (never the Markdown
@@ -27,7 +28,10 @@ import { classifyPreviewLink, logExpected, matchesSafeSource, relPathUnderRoot, 
 import { previewLinkHoverText } from '../../link-dom.js';
 import { primaryModifierLabel } from '../../../config/host-modifiers.js';
 
-/** The frame document's own policy (FR-075): the preview protocol and the page's inline style, nothing else. */
+/**
+ * The frame document's own policy (FR-075) for a page with no safe sources: the preview protocol and the page's inline
+ * style, nothing else. {@link frameCsp} adds a panel's safe sources (FR-072a).
+ */
 export const FRAME_CSP =
   "default-src 'none'; img-src throng-preview:; style-src 'unsafe-inline' throng-preview:; font-src throng-preview:; media-src throng-preview:";
 

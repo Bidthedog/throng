@@ -1,12 +1,14 @@
 /**
  * The HTML provider's descriptor (074 FR-001, FR-070 – FR-088; Q5) — an `.html` / `.htm` file previews as its page,
- * rendered as static markup in an isolated, sandboxed frame: no script runs, nothing is fetched, nothing navigates.
+ * rendered as static markup in a sandboxed frame: no script runs, nothing navigates, and nothing is fetched but the
+ * page's own project files and what its safe sources allow (FR-072, FR-072a).
  *
  * A text provider: parented beside the editor it is written in, following the unsaved buffer. Not a flowing document
- * as far as the chrome is concerned (`flowingDocument: false`): the page lives in an opaque-origin frame the panel
- * cannot read into, so there is no Select All, Go to Heading or Synchronise Scrolling (FR-087), and a Find in Files
- * match opens an editor (`revealsMatches: false`, FR-084). Its runs may load the page's own stylesheets and fonts
- * from the project through the asset route (`assetMimeTypes`, FR-072). Ships Throng Preview (Q5).
+ * as far as the chrome is concerned (`flowingDocument: false`): there is no Go to Heading or Synchronise Scrolling
+ * (FR-087), and a Find in Files match opens an editor (`revealsMatches: false`, FR-084). The frame shares the app's
+ * origin (FR-074a), so the panel reads the page itself: its Copy rows, Select All (FR-085a) and Find (FR-086b). Its runs
+ * may load the page's own stylesheets and fonts from the project through the asset route (`assetMimeTypes`, FR-072).
+ * Ships Throng Preview (Q5).
  *
  * The core half only; the frame is the renderer's `ui/src/renderer/preview/providers/html/`. Pure data.
  */
