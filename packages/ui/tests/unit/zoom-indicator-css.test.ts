@@ -47,6 +47,13 @@ describe('.zoom-indicator', () => {
     expect(z(ring)).toBeGreaterThan(z(rule('.zoom-indicator')));
   });
 
+  // 074 convergence T070 — FR-031g: a preview's resting indicator is full in Focus Mode, as over the pointer.
+  it('shows a resting indicator at full opacity while its panel is in Focus Mode', () => {
+    const at = css.indexOf('.tab-body[data-maximised] .panel-box--maximised .zoom-indicator--resting');
+    expect(at, 'no Focus Mode selector for the resting indicator').toBeGreaterThanOrEqual(0);
+    expect(css.slice(at, css.indexOf('}', at))).toMatch(/opacity:\s*1/);
+  });
+
   it('a panel’s holder takes no height, so showing it moves nothing', () => {
     const anchor = rule('.panel-box__zoom-anchor');
     expect(anchor).toMatch(/position:\s*relative/);

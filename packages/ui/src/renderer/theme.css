@@ -2946,6 +2946,8 @@ textarea,
 .preview-diagram-frame:hover .zoom-indicator--resting,
 .preview-diagram-frame--in-pane .zoom-indicator--resting,
 .preview-pdf-view:hover .zoom-indicator--resting,
+/* FR-031g — full while its panel is in Focus Mode, as it is under the pointer. */
+.tab-body[data-maximised] .panel-box--maximised .zoom-indicator--resting,
 .zoom-indicator--shown {
   opacity: 1;
   transition: opacity var(--throng-popup-fade-in) ease-out;
