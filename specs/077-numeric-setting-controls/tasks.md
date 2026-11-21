@@ -168,3 +168,9 @@ Each was implemented before it had a task; the commit named is the one that did 
 - [x] T047 Amend FR-012's CSV long-cell threshold to the shipped 10 – 1,000 characters (research R6), per FR-012 (contradicts)
 - [x] T048 Bring data-model.md's number-box transitions and message column, and the `numeric-units.ts` comment, to FR-009 and FR-024: a confirmed non-number keeps the entry and the reason is in the toast, per FR-009, FR-024 (contradicts)
 - [x] T049 Drop the fixed violations from the Principle X known-gaps list in `.claude/skills/throng-config-preferences/references/constitution-configuration.md`, leaving only what still stands, per Constitution X (partial)
+
+## Phase 13: Convergence
+
+- [ ] T050 Show a draft table row's problem in the Preferences toast alone, keeping the inline row message for a row that arrived broken from the file (C17), per FR-024 and FR-025 (partial)
+- [ ] T051 Bring plan.md's summary, contracts/numeric-control.md and research R10 to what shipped: the box on every numeric setting, no days migration, the greyed slider in plain CSS, the print fields' own check, per FR-001, FR-006, T008 and T021 (contradicts)
+- [ ] T052 Scope FR-012's 1 KB – 2 GB hard bounds to the editor and preview caps and name research R6's log-limit bounds, per FR-012 (contradicts)
