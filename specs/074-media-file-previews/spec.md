@@ -1001,7 +1001,10 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
   machine, reads zero files outside the project, opens no window and does not navigate — asserted by
   tests in the real engine.
 - **SC-003**: *(2026-11-20: asserted on reference hardware; CI runners record the reading, per the repo's performance-SLA rule.)* A 10 MB image and a 5 MB SVG appear within 1 second of opening on the CI runners; a
-  parented SVG or HTML preview shows an edit within the configured update delay plus 250 ms.
+  parented SVG or HTML preview shows an edit within the configured update delay plus 250 ms. *(2026-11-21, the
+  maintainer's ruling on T059: a 5 MB SVG may take up to **1.5 seconds** to appear, "as long as we have a loading
+  spinner" — the placeholder every preview shows while it loads (075 FR-043a), shown from the open until the picture
+  is drawn. The 10 MB image keeps its 1 second.)*
 - **SC-004**: *(2026-11-20: asserted on reference hardware; CI runners record the reading, per the repo's performance-SLA rule.)* A 500-page PDF shows its first page within 2 seconds of opening, and scrolling through it
   never freezes the window for more than 100 ms at a time.
 - **SC-005**: A file over its provider's size limit shows its notice within 200 ms, with no read of the

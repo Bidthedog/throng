@@ -4,7 +4,7 @@
  *
  * Layer: component — the real chrome and seam; jsdom decodes no image, so the browser picture loader is spied.
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browserPictureLoader } from '../../src/renderer/preview/blocks/picture.js';
 import { diagramActionsAt } from '../../src/renderer/preview/diagram/diagram-actions.js';
@@ -42,6 +42,22 @@ describe('an SVG Preview (FR-030, FR-031, FR-040)', () => {
     expect(within(frame()!).getByTitle('Fit picture')).toBeInTheDocument();
     // FR-031 — no inline Maximise: the panel header's Focus Mode maximises the one picture.
     expect(within(frame()!).queryByTitle('Enter Focus Mode')).toBeNull();
+  });
+
+  // 074 SC-003, the maintainer's ruling of 2026-11-21: a large SVG may take up to 1.5 s to appear "as long as we have a
+  // loading spinner" — the one every preview shows while it loads (075 FR-043a), until the picture is drawn.
+  it('shows the loading spinner while the SVG draws, and takes it away once drawn', async () => {
+    let finish!: (size: { width: number; height: number }) => void;
+    vi.mocked(browserPictureLoader.load).mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    pv = await mountMarkdownPreview('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>', `${ROOT}/big.svg`, {
+      providerId: 'svg',
+    });
+    const spinner = await screen.findByTestId(`diagram-loading-${pv.id}-diagram-0`, {}, COLD);
+    expect(spinner).toHaveClass('preview-loading');
+    expect(within(spinner).getByRole('status', { name: /Drawing SVG/ })).toBeInTheDocument();
+    await act(async () => finish({ width: 20, height: 10 }));
+    await waitFor(() => expect(frame()?.querySelector('image')).toBeTruthy());
+    expect(screen.queryByTestId(`diagram-loading-${pv.id}-diagram-0`)).toBeNull();
   });
 
   it('shows the notice, not a blank panel, for a malformed SVG (FR-045)', async () => {

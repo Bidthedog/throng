@@ -137,7 +137,7 @@ last.
 ## Phase 10: Convergence
 
 - [x] T058 Refuse an entry that is not a safe source in the Preferences editor for `editor.previews.providers.html.safeSources`, saying why, as the Project Settings editor does, instead of saving it and dropping it on read, per FR-072c (partial)
-- [x] T059 Find what throng adds to a 5 MB SVG's open beyond Chromium's own decode (read, transfer, blob, a second decode of the drawn `<image>`) and remove it, re-measuring `preview-media-performance.e2e.ts` at one worker, per SC-003 (partial) — measured 2026-11-20: click→bytes in renderer ~180 ms, Chromium decode of the 110,000-shape fixture ~876 ms, placed ~200 ms; the whole-document parse (~600 ms) was removed (a74c677d). The decode alone nearly fills the budget: maintainer decision on the fixture or the budget.
+- [x] T059 Find what throng adds to a 5 MB SVG's open beyond Chromium's own decode (read, transfer, blob, a second decode of the drawn `<image>`) and remove it, re-measuring `preview-media-performance.e2e.ts` at one worker, per SC-003 (partial) — measured 2026-11-20: click→bytes in renderer ~180 ms, Chromium decode of the 110,000-shape fixture ~876 ms, placed ~200 ms; the whole-document parse (~600 ms) was removed (a74c677d). The decode alone nearly fills the budget: maintainer decision on the fixture or the budget. Ruled 2026-11-21: a 5 MB SVG may take up to 1.5 s "as long as we have a loading spinner"; SC-003 amended, the spinner pinned in `picture-previews-074.test.ts`, the E2E budget 1.5 s.
 
 ## Phase 11: Convergence
 

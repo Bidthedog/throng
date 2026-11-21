@@ -1,7 +1,8 @@
 /**
  * 074 SC-003, SC-004, SC-005 — how fast the media previews appear, and that a long PDF never freezes the window.
  *
- * - SC-003: a 10 MB image and a 5 MB SVG appear within 1 second of opening; a parented HTML or SVG preview shows an edit
+ * - SC-003: a 10 MB image appears within 1 second of opening, and a 5 MB SVG within 1.5 seconds with the loading
+ *   spinner shown meanwhile (the maintainer's ruling, 2026-11-21); a parented HTML or SVG preview shows an edit
  *   within the configured update delay plus 250 ms.
  * - SC-004: a 500-page PDF shows its first page within 2 seconds of opening, and scrolling through it never freezes
  *   the window for more than 100 ms at a time.
@@ -67,14 +68,15 @@ test('a 10 MB image appears within a second of opening (SC-003)', { tag: ['@exte
   expectWithinSla(test.info(), { what: 'a 10 MB image, click to drawn', requirement: '074 SC-003', elapsedMs: Date.now() - started, budgetMs: 1000 });
 });
 
-test('a 5 MB SVG appears within a second of opening (SC-003)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+test('a 5 MB SVG appears within 1.5 seconds of opening (SC-003)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const win = shared!.win;
   const started = Date.now();
   const id = await openFromTree(win, 'heavy.svg');
   const image = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('svg[data-throng-picture] image');
   await expect(image).toHaveAttribute('href', /^blob:/, { timeout: 20_000 });
   await expect(image).toBeVisible();
-  expectWithinSla(test.info(), { what: 'a 5 MB SVG, click to drawn', requirement: '074 SC-003', elapsedMs: Date.now() - started, budgetMs: 1000 });
+  // The maintainer's ruling (2026-11-21): up to 1.5 s, with the loading spinner shown meanwhile (picture-previews-074).
+  expectWithinSla(test.info(), { what: 'a 5 MB SVG, click to drawn', requirement: '074 SC-003', elapsedMs: Date.now() - started, budgetMs: 1500 });
 });
 
 test('a 500-page PDF shows its first page within 2 seconds, and scrolling it never freezes the window over 100 ms (SC-004)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
