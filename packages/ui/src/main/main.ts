@@ -3023,6 +3023,7 @@ if (isPrimaryInstance)
   const shutdownCancelled = (): void => {
     activeShutdown = null;
     macLifecycle?.onShutdownCancelled();
+    systemQuit = 'none';
   };
   // The running terminals (with display metadata) for the close warning. Returns
   // null when the query itself fails (daemon hiccup) — the caller then still WARNS
@@ -3213,9 +3214,39 @@ if (isPrimaryInstance)
     macLifecycle?.onRendererReloaded();
   });
 
+  /*
+   * #699 — a quit from the system. On Windows and Linux the user closes throng by closing its window, so a quit
+   * (`before-quit`) arriving while the window is still open came from outside: Electron turns SIGTERM (power-off,
+   * logout, `kill`) into one. Nobody is there to answer the running-terminals warning, and the system gives up on
+   * throng after a few seconds, so that close saves the workspace and goes, leaving the terminals to the daemon,
+   * which gets its own signal. macOS routes every quit through its lifecycle above (070 FR-028).
+   */
+  let systemQuit: 'none' | 'requested' | 'running' = 'none';
+  if (!macLifecycle) {
+    app.on('before-quit', () => {
+      if (!allowClose && !mainWindow.isDestroyed() && systemQuit === 'none') systemQuit = 'requested';
+    });
+  }
+  const closeForSystemQuit = (): void => {
+    systemQuit = 'running';
+    diagnostics.log.info('app-close: quit from the system — saving the workspace and closing without asking');
+    // A warning already on screen (the user's own close, still unanswered) gives way to this one.
+    activeShutdown?.cancel();
+    mainWindow.webContents.send('throng:appClose:begin');
+    mainWindow.webContents.send('throng:appClose:closing', { message: 'Closing throng…' });
+    const driver = new ShutdownDriver(publishShutdown, () => Date.now());
+    activeShutdown = driver;
+    void finishShutdown(driver, [drainStep], 0);
+  };
+
   mainWindow.on('close', (e) => {
     if (allowClose) return;
     e.preventDefault();
+    if (systemQuit === 'running') return;
+    if (systemQuit === 'requested') {
+      closeForSystemQuit();
+      return;
+    }
     // 070 FR-028: on macOS a close with no quit in progress leaves throng in the Dock, renderer and layout alive.
     if (macLifecycle?.onMainWindowClose() === 'hide') {
       mainWindow.hide();
