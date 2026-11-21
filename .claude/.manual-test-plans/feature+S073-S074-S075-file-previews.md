@@ -1311,6 +1311,7 @@ Paths: `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/re
 5. In an Image or PDF preview, right-click the body → Copy Path → Absolute (POSIX). The file's path is copied.
 6. In a PDF preview, Ctrl+A (or the menu's Select All) selects the PDF's text and nothing outside it. Scroll to the middle of a page, re-save the PDF, and let it reload: it returns to the same point.
 7. In an Image or SVG preview, the Fit button reads "Fit picture". In Focus Mode the zoom percentage shows at full strength.
+8. Open a large SVG (about 5 MB) from the File Explorer. The panel shows a spinner reading "Drawing SVG…" until the picture appears, within about 1.5 s, and is never blank.
 
 ## MT-87: [Settings] Converge fixes: size refusals, table rows report through the toast, hover maximum
 
@@ -1321,3 +1322,4 @@ Paths: `packages/ui/src/renderer/preferences/records-control.tsx`, `packages/ui/
 1. Set Preferences' Max open file size below a Markdown file's size. Open its preview, then embed it as `![[name.md]]` from another note. Both notices quote the file's size and the limit.
 2. Preferences › Terminal › Custom terminal flavours: clear an existing flavour's executable. A toast names that flavour. Add a new draft row and remove it again: the toast still names the first flavour until you fix it.
 3. Preferences › Tabs: type 4000 into Tab popover delay. The value is kept and the slider sits greyed at its maximum.
+4. Preferences › Editor › Auto-save delay: the slider runs to 3 s in 100 ms steps, from a default of 300 ms. Type 5 s into the box: 3 s is stored.
