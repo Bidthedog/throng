@@ -11,6 +11,7 @@ import {
   LANGUAGES,
   raisedIntervalFor,
   settingDiffersFromEntry,
+  unitNote,
   type FieldDescriptor,
 } from '@throng/core';
 import type { DetectedFlavourDto } from '../global.js';
@@ -352,9 +353,10 @@ export function SettingsTab({
     void apply.applyChange(d.key.split('.'), value);
     // FR-004b: a longer history window raises the capture interval to its new minimum AT ONCE, in the same
     // gesture — not left stored below the minimum (resolved around at read time) until the interval is touched.
-    if (d.key === 'resourceMonitor.historyMinutes' && typeof value === 'number') {
-      const raised = raisedIntervalFor(value, settings.resourceMonitor.captureIntervalSeconds);
-      if (raised !== undefined) void apply.applyChange(['resourceMonitor', 'captureIntervalSeconds'], raised);
+    if (d.key === 'resourceMonitor.historyMs' && typeof value === 'number') {
+      // The rule is in minutes and seconds; the settings are in ms (077 FR-001).
+      const raised = raisedIntervalFor(value / 60_000, settings.resourceMonitor.captureIntervalMs / 1000);
+      if (raised !== undefined) void apply.applyChange(['resourceMonitor', 'captureIntervalMs'], raised * 1000);
     }
   };
 
@@ -757,7 +759,11 @@ export function SettingsTab({
             <div className="settings-row" key={d.key} data-testid={`setting-${d.key}`}>
               <div className="settings-row__meta">
                 <label className="settings-row__label">{d.label}</label>
-                <p className="settings-row__desc">{d.description}</p>
+                <p className="settings-row__desc">
+                  {d.description}
+                  {/* 077 FR-003 — a size row says what its MB means, once, with its description. */}
+                  {unitNote(d) !== null ? ` ${unitNote(d)}` : null}
+                </p>
                 {/* 055 R11 — a rule between fields that changes what is in force says so beside the field. */}
                 <FieldNote descriptor={d} settings={settings} />
                 {/* 039 FR-008a — DISABLED WITH A REASON, never hidden. A control that vanishes

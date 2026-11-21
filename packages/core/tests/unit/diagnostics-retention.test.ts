@@ -5,10 +5,44 @@ import {
   logFilePid,
   nextRotatedName,
   normaliseRetention,
+  retentionFromEnv,
   retentionPlan,
   sessionFileName,
   type LogFileInfo,
 } from '@throng/core';
+
+/**
+ * 077 FR-001 — the retention a child process reads from the variables the app hands it: in bytes now
+ * (`THRONG_LOG_MAX_BYTES`, `THRONG_LOG_MAX_TOTAL_BYTES`), with the names v1.0.0-beta1 shipped (`THRONG_LOG_MAX_KB`,
+ * `THRONG_LOG_MAX_TOTAL_MB`) still read, converted, where the new ones are unset — a daemon left running across an
+ * upgrade hands the old names to a newer terminal agent.
+ */
+describe('retentionFromEnv (077)', () => {
+  const MiB = 1024 * 1024;
+  it('reads the byte variables and the day count', () => {
+    expect(retentionFromEnv({ THRONG_LOG_MAX_BYTES: '2097152', THRONG_LOG_KEEP_DAYS: '5', THRONG_LOG_MAX_TOTAL_BYTES: String(300 * MiB) })).toEqual({
+      maxFileBytes: 2_097_152,
+      keepDays: 5,
+      maxTotalBytes: 300 * MiB,
+    });
+  });
+
+  it('reads the old KB and MB names, converted, where the byte ones are unset', () => {
+    expect(retentionFromEnv({ THRONG_LOG_MAX_KB: '2048', THRONG_LOG_MAX_TOTAL_MB: '300' })).toEqual({
+      maxFileBytes: 2_097_152,
+      keepDays: undefined,
+      maxTotalBytes: 300 * MiB,
+    });
+  });
+
+  it('prefers the byte names when both are set, and leaves anything unset or unreadable to the defaults', () => {
+    expect(retentionFromEnv({ THRONG_LOG_MAX_BYTES: '4096', THRONG_LOG_MAX_KB: '2048', THRONG_LOG_MAX_TOTAL_BYTES: 'lots' })).toEqual({
+      maxFileBytes: 4096,
+      keepDays: undefined,
+      maxTotalBytes: undefined,
+    });
+  });
+});
 
 /**
  * 066 FR-018 – FR-020 — what the logs folder keeps. Every process's log rolls over at a size; the folder
@@ -131,11 +165,14 @@ describe('the policy cannot be configured into misbehaving', () => {
     expect(normaliseRetention(undefined)).toEqual(DEFAULT_RETENTION);
   });
 
-  it('clamps keepDays to 1–30, the cap to 50 MB – 65536 MB (the hard maximum) and files to at least 1 KiB', () => {
+  // 077 FR-016 — the bounds are the settings' own hard bounds (`diagnostics.*`), so a value Preferences accepts is
+  // never moved again here: the folder cap's floor is its hardMin, 1 MB, not the slider's 50 MB.
+  it('clamps keepDays to 1–30, the cap to 1 MB – 65536 MB (the hard bounds) and files to at least 1 KiB', () => {
     expect(normaliseRetention({ keepDays: 0 }).keepDays).toBe(1);
     expect(normaliseRetention({ keepDays: 99 }).keepDays).toBe(30);
     expect(normaliseRetention({ keepDays: 2.7 }).keepDays).toBe(2);
-    expect(normaliseRetention({ maxTotalBytes: 1 }).maxTotalBytes).toBe(50 * MB);
+    expect(normaliseRetention({ maxTotalBytes: 1 }).maxTotalBytes).toBe(MB);
+    expect(normaliseRetention({ maxTotalBytes: 10 * MB }).maxTotalBytes).toBe(10 * MB);
     expect(normaliseRetention({ maxTotalBytes: 1e15 }).maxTotalBytes).toBe(65_536 * MB);
     expect(normaliseRetention({ maxFileBytes: 10 }).maxFileBytes).toBe(1024);
     expect(normaliseRetention({ keepDays: Number.NaN }).keepDays).toBe(3);

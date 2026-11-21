@@ -10,7 +10,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
+import { THRONG_THEME, formatGrouped } from '@throng/core';
 import { NotificationProvider } from '../../../src/renderer/common/notification.js';
 import { settleConfigWrites } from '../../../src/renderer/config/write-config.js';
 import { ConfirmProvider } from '../../../src/renderer/confirm-dialog.js';
@@ -18,8 +18,11 @@ import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
 import { ResetNoticeProvider } from '../../../src/renderer/preferences/reset-notice.js';
 import { SettingsTab } from '../../../src/renderer/preferences/settings-tab.js';
 
-const INTERVAL = 'resourceMonitor.captureIntervalSeconds';
-const WINDOW = 'resourceMonitor.historyMinutes';
+// 077 FR-001 — both leaves are stored in ms, and the number box holds the stored value.
+const INTERVAL = 'resourceMonitor.captureIntervalMs';
+const WINDOW = 'resourceMonitor.historyMs';
+const S = 1000;
+const MIN = 60_000;
 
 async function mount(resourceMonitor: Record<string, number>): Promise<ReturnType<typeof vi.fn>> {
   const writes = vi.fn(() => Promise.resolve({ ok: true }));
@@ -42,6 +45,12 @@ async function mount(resourceMonitor: Record<string, number>): Promise<ReturnTyp
     ),
   );
   await screen.findByTestId(`setting-${WINDOW}`);
+  // The row first draws the shipped value; wait for the seeded one. 077 FR-009: confirming the value already
+  // stored writes nothing, so typing the shipped 5 minutes over a not-yet-loaded seed would be a silent no-op.
+  const seeded = resourceMonitor.historyMs;
+  if (seeded !== undefined) {
+    await waitFor(() => expect(screen.getByTestId(`control-${WINDOW}`)).toHaveValue(formatGrouped(seeded)));
+  }
   return writes;
 }
 
@@ -65,19 +74,28 @@ afterEach(() => {
 
 describe('History window → capture interval (FR-004b)', () => {
   it.each([
-    { name: 'a longer window needs it', start: { captureIntervalSeconds: 2, historyMinutes: 5 }, window: 30, interval: 30 },
-    { name: 'the band’s minimum, not the window: a 10-minute window needs 5 s', start: { captureIntervalSeconds: 2, historyMinutes: 5 }, window: 10, interval: 5 },
+    { name: 'a longer window needs it', start: { captureIntervalMs: 2 * S, historyMs: 5 * MIN }, window: 30 * MIN, interval: 30 * S },
+    {
+      name: 'the band’s minimum, not the window: a 10-minute window needs 5 s',
+      start: { captureIntervalMs: 2 * S, historyMs: 5 * MIN },
+      window: 10 * MIN,
+      interval: 5 * S,
+    },
   ])('raises the interval to the new minimum — $name', async ({ start, window, interval }) => {
     const writes = await mount(start);
     await set(writes, WINDOW, window);
     const patches = written(writes);
-    expect(patches).toContainEqual({ path: ['resourceMonitor', 'historyMinutes'], value: window });
-    expect(patches).toContainEqual({ path: ['resourceMonitor', 'captureIntervalSeconds'], value: interval });
+    expect(patches).toContainEqual({ path: ['resourceMonitor', 'historyMs'], value: window });
+    expect(patches).toContainEqual({ path: ['resourceMonitor', 'captureIntervalMs'], value: interval });
   });
 
   it.each([
-    { name: 'it already meets the new minimum', start: { captureIntervalSeconds: 30, historyMinutes: 5 }, window: 30 },
-    { name: 'the window gets shorter (the user’s slower choice stands)', start: { captureIntervalSeconds: 30, historyMinutes: 30 }, window: 5 },
+    { name: 'it already meets the new minimum', start: { captureIntervalMs: 30 * S, historyMs: 5 * MIN }, window: 30 * MIN },
+    {
+      name: 'the window gets shorter (the user’s slower choice stands)',
+      start: { captureIntervalMs: 30 * S, historyMs: 30 * MIN },
+      window: 5 * MIN,
+    },
   ])('leaves the interval alone when $name', async ({ start, window }) => {
     const writes = await mount(start);
     await set(writes, WINDOW, window);

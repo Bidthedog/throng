@@ -41,7 +41,7 @@ export interface AnchorElement {
 /** What the anchor reads and writes of the scroll container. */
 export interface AnchorContainer {
   scrollTop: number;
-  getBoundingClientRect(): { top: number };
+  getBoundingClientRect(): { top: number; height?: number };
   querySelectorAll(selector: string): Iterable<AnchorElement>;
 }
 
@@ -166,6 +166,23 @@ export function topBlockLine(container: AnchorContainer): number | null {
   return (blockAtTop(blocks) ?? blocks[0]!).line;
 }
 
+/**
+ * 073 FR-033e — the source line of the block at the VERTICAL CENTRE of the viewport: the deepest block straddling the
+ * middle, else the nearest one below it, else the last one above. For the sync mark only; sync keys on {@link topBlockLine}.
+ */
+export function centreBlockLine(container: AnchorContainer): number | null {
+  const blocks = measure(container);
+  if (blocks.length === 0) return null;
+  const middle = (container.getBoundingClientRect().height ?? 0) / 2;
+  let chosen: Measured | undefined;
+  for (const b of blocks) if (b.top <= middle && b.top + b.height > middle) chosen = b; // later = deeper
+  if (chosen === undefined) {
+    for (const b of blocks) if (b.top > middle && (chosen === undefined || b.top <= chosen.top)) chosen = b;
+  }
+  if (chosen === undefined) for (const b of blocks) if (b.top <= middle) chosen = b;
+  return (chosen ?? blocks[0]!).line;
+}
+
 /** What {@link blockLineFor} reads: the source-mapped blocks, and nothing about where they are drawn. */
 export interface BlockSource {
   querySelectorAll(selector: string): Iterable<{ getAttribute(name: string): string | null }>;
@@ -181,6 +198,22 @@ export function blockLineFor(body: BlockSource, line: number): number | null {
     const at = Number(el.getAttribute('data-source-line'));
     if (!Number.isFinite(at) || at > line) continue;
     if (found === null || at > found) found = at;
+  }
+  return found;
+}
+
+/**
+ * 073 FR-033d — the element of the block {@link blockLineFor} names for `line`: the greatest `data-source-line` at or
+ * before it. `null` when every block starts after the line.
+ */
+export function blockElementFor(root: ParentNode, line: number): HTMLElement | null {
+  let found: HTMLElement | null = null;
+  let foundAt = -1;
+  for (const el of root.querySelectorAll<HTMLElement>(SELECTOR)) {
+    const at = Number(el.getAttribute('data-source-line'));
+    if (!Number.isFinite(at) || at > line || at <= foundAt) continue;
+    found = el;
+    foundAt = at;
   }
   return found;
 }

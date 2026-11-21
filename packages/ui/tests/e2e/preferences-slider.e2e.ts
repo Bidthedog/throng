@@ -89,17 +89,18 @@ test('a bounded numeric renders a slider AND a field; each drives the other (FR-
 
       // Drive the slider → the field follows, and the value persists.
       //
-      // The field shows `2,000`, not `2000`: constitution 4.5.0 groups at every magnitude, dropping
+      // The field shows `1,450`, not `1450`: constitution 4.5.0 groups at every magnitude, dropping
       // 018 FR-037's five-digit floor. The slider's own value stays plain — it is an `input[range]`,
-      // whose value is a number and never a rendering.
-      await setSlider(slider, '2000');
-      await expect.poll(() => field.inputValue()).toBe('2,000');
+      // whose value is a number and never a rendering. 077 research R6 — the slider runs 0–1,500 ms (a
+      // longer delay is typed in the box), so the value driven is one of its stops.
+      await setSlider(slider, '1450');
+      await expect.poll(() => field.inputValue()).toBe('1,450');
       await expect
         .poll(() => {
           const s = readSettings(cfgRoot) as { behaviour?: { tabHoverActivateMs?: number } };
           return s?.behaviour?.tabHoverActivateMs;
         })
-        .toBe(2000);
+        .toBe(1450);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );

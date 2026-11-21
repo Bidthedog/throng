@@ -1250,7 +1250,8 @@ reopens from it.
   lineage (FR-021) still attributes to the panel.
   It is offered only where the subtree holds at least one live process.
 - **FR-063b**: Kill Process and Kill All Below MUST share **one new confirmation setting**,
-  `confirmations.killProcesses` ("Kill processes"), in Preferences' Confirmations group with the same
+  `confirmations.killProcesses` ("Kill processes"), in Preferences' Confirmations group *(Resource Monitor group since
+  2026-11-21: 077 FR-022)* with the same
   values as the other confirmation settings (none, single, double) and default **double**. Its
   confirmation MUST name the node (process, panel, tab or project, with its owning project, tab and
   panel as applicable) and **list the processes that will end**, by friendly name and id, collapsing

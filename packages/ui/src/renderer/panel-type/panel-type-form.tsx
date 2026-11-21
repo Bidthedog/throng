@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactElement } from 'react';
 import {
   defaultPanelTypeRegistry,
+  type PanelKind,
   type PanelTypeContext,
   type TerminalMemory,
 } from '@throng/core';
@@ -46,6 +47,7 @@ export function PanelTypeForm({
   projectRoot,
   rootless = false,
   terminalMemory,
+  formerKind,
 }: {
   panelId: string;
   projectRoot: string | null;
@@ -58,6 +60,8 @@ export function PanelTypeForm({
    * is exactly today's behaviour.
    */
   terminalMemory?: TerminalMemory;
+  /** 002 FR-016a — the type the panel had before it returned to this form; preselected when the form offers it. */
+  formerKind?: PanelKind;
 }): ReactElement {
   const ws = useWorkspace();
   const focusTarget = usePanelFocusTarget(panelId);
@@ -115,6 +119,17 @@ export function PanelTypeForm({
   // `listOfferable()`, not `list()` (043 FR-017): the registry holds every type so a panel's header
   // can resolve its label and icon, and this dropdown offers only the ones a user may pick.
   const types = registry.listOfferable();
+  /*
+   * 002 FR-016a — a panel back at the blank form starts on the type it last had, when that type is one the form offers
+   * (a Find in Files panel's is not, so nothing is selected). Only while no draft exists: a choice the reader has made,
+   * here or in a mirrored window, is never replaced. Not broadcast — every window holding the panel seeds the same.
+   */
+  useEffect(() => {
+    if (formerKind === undefined || getDraft(panelId) !== EMPTY_DRAFT) return;
+    if (!types.some((t) => t.id === formerKind)) return;
+    setDraft(panelId, selectKind(EMPTY_DRAFT, formerKind, deps), { broadcast: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelId, formerKind]);
   const confirmable = canConfirm(state, deps);
   const historyEnabled = settings.terminals.formHistory.enabled;
 

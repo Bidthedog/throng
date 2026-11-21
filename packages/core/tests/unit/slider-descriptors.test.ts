@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SETTINGS_METADATA, THEME_METADATA, type FieldDescriptor } from '../../src/index.js';
+import { DEFAULT_APP_SETTINGS, SETTINGS_METADATA, THEME_METADATA, applyDeclaredBounds, type FieldDescriptor } from '../../src/index.js';
 
 /**
  * 018 / FR-034, FR-035 — the slider's bounds and step are DECLARED, and the declaration is honest.
@@ -89,5 +89,161 @@ describe('SC-007 — the CONVERSE: bounds imply a slider', () => {
       offenders,
       `these declare bounds but not the control those bounds exist for:\n${offenders.join('\n')}`,
     ).toEqual([]);
+  });
+});
+
+/**
+ * 077 FR-001, FR-005, FR-010, FR-011, FR-013 (SC-001) — every numeric SETTING (theme tokens are not settings) declares
+ * the unit it is stored in and shown in; its slider is a grid the shipped default sits on and whose right end is its
+ * maximum; and its label leaves the unit to the control.
+ */
+describe('077 — every numeric setting is consistent', () => {
+  const NUMERIC = SETTINGS_METADATA.filter((x) => x.control === 'slider');
+  const defaultOf = (key: string): unknown =>
+    key.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], DEFAULT_APP_SETTINGS);
+
+  it('declares its stored unit and its display unit', () => {
+    for (const d of NUMERIC) {
+      expect(d.storedUnit, `${d.key} declares no stored unit`).toBeDefined();
+      expect(d.display, `${d.key} declares no display unit`).toBeDefined();
+    }
+  });
+
+  it('stores every size in bytes shown in MB, and every duration in ms', () => {
+    for (const d of NUMERIC) {
+      if (d.storedUnit === 'bytes') expect(d.display, d.key).toBe('MB');
+      if (/Ms$|Bytes$/.test(d.key)) expect(['ms', 'bytes'], d.key).toContain(d.storedUnit);
+      expect(d.key, `${d.key} is stored in a unit 077 retired`).not.toMatch(/(Seconds|Minutes|Kb|Mb)$/);
+    }
+  });
+
+  it('shows a duration in the unit its range calls for (FR-005)', () => {
+    for (const d of NUMERIC.filter((x) => x.storedUnit === 'ms')) {
+      const max = d.max!;
+      const want = d.display === 'days' ? 'days' : max <= 2000 ? 'ms' : max <= 600_000 ? 's' : 'min';
+      expect(d.display, `${d.key}: maximum ${max} ms`).toBe(want);
+    }
+  });
+
+  /**
+   * FR-005's step table, and the exceptions spec.md records beside it — each a setting whose range or shipped default
+   * sits off every step the table allows, where re-stepping would shrink the range (clamping stored values) or move
+   * the default. An exception names the step it keeps, so a change to it is a change to the spec as well.
+   */
+  const FR005_EXCEPTIONS: Record<string, number> = {
+    'editor.autoSaveDebounceMs': 100,
+    'editor.links.existenceCheckTimeoutMs': 250,
+    'terminals.commandPollMs': 250,
+    'diagnostics.maxFileBytes': 262_144,
+    'editor.previews.providers.spreadsheet.maxPreviewBytes': 5_242_880,
+  };
+  const MB = 1_048_576;
+  const allowedSteps = (d: FieldDescriptor): readonly number[] | null => {
+    switch (d.display) {
+      case 'MB':
+        return [d.max! <= 32 * MB ? MB : d.max! <= 250 * MB ? 5 * MB : 50 * MB];
+      case 'ms':
+        return [10, 25, 50, 100];
+      case 's':
+        return [500, 1000, 5000, 10_000];
+      case 'min':
+        return [60_000];
+      default:
+        return null; // counts, lengths, pixels and percentages keep their own unit and step
+    }
+  };
+
+  it('steps by FR-005’s table for its display unit, or by the exception the spec records', () => {
+    for (const d of NUMERIC) {
+      const exception = FR005_EXCEPTIONS[d.key];
+      if (exception !== undefined) {
+        expect(d.step, `${d.key} is a recorded FR-005 exception at step ${exception}`).toBe(exception);
+        continue;
+      }
+      const allowed = allowedSteps(d);
+      if (allowed === null) continue;
+      expect(allowed, `${d.key}: step ${d.step} in ${d.display} (slider to ${d.max})`).toContain(d.step);
+    }
+  });
+
+  it('lists only exceptions the table would refuse', () => {
+    for (const [key, step] of Object.entries(FR005_EXCEPTIONS)) {
+      const d = NUMERIC.find((x) => x.key === key);
+      expect(d, `${key} is not a numeric setting`).toBeDefined();
+      expect(allowedSteps(d!), `${key} no longer needs its exception`).not.toContain(step);
+    }
+  });
+
+  it('reaches its maximum: the range is a whole number of steps', () => {
+    for (const d of NUMERIC) {
+      const k = (d.max! - d.min!) / d.step!;
+      expect(Number.isInteger(k), `${d.key}: (${d.max} − ${d.min}) / ${d.step} = ${k}`).toBe(true);
+    }
+  });
+
+  it('ships a default that is one of its stops', () => {
+    for (const d of NUMERIC) {
+      const v = defaultOf(d.key);
+      expect(typeof v, `${d.key} has no numeric default`).toBe('number');
+      const k = ((v as number) - d.min!) / d.step!;
+      expect(Number.isInteger(k) && (v as number) <= d.max!, `${d.key}: default ${String(v)} is off its slider grid`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('declares hard bounds that contain the slider', () => {
+    for (const d of NUMERIC) {
+      if (d.hardMin !== undefined) expect(d.hardMin, d.key).toBeLessThanOrEqual(d.min!);
+      if (d.hardMax !== undefined) expect(d.hardMax, d.key).toBeGreaterThanOrEqual(d.max!);
+    }
+  });
+
+  it('leaves the unit out of its label (FR-013)', () => {
+    for (const d of NUMERIC) {
+      expect(d.label, d.key).not.toMatch(/\((ms|s|MB|KB|bytes|%|px|seconds|minutes|days)\)/i);
+    }
+  });
+});
+
+/**
+ * 077 FR-012, research R6 (Hover dwells) — every hover dwell is one band: 0–1,500 ms on the slider in 25 ms steps, and
+ * up to 10,000 ms typed in the box. Three of them declared no hard maximum, so a typed 4,000 ms was pulled back to
+ * 1,500 while the submenu and Resource Monitor dwells kept it (T046).
+ */
+describe('the hover dwells (077 FR-012, R6)', () => {
+  const HOVER_DWELLS = [
+    'behaviour.submenuHoverMs',
+    'behaviour.tabHoverActivateMs',
+    'tabs.popoverDelayMs',
+    'explorer.popoverDelayMs',
+    'projects.popoverDelayMs',
+    'notifications.hoverDelayMs',
+    'resourceMonitor.popoverDelayMs',
+  ];
+
+  it('declares 0 – 1,500 ms in 25 ms steps on the slider and 10,000 ms in the box', () => {
+    for (const key of HOVER_DWELLS) {
+      const d = SETTINGS_METADATA.find((x) => x.key === key);
+      expect(d, `no descriptor for ${key}`).toBeDefined();
+      expect([d!.min, d!.max, d!.step, d!.hardMax], key).toEqual([0, 1500, 25, 10_000]);
+    }
+  });
+});
+
+// 077 FR-005 — the maintainer's ruling of 2026-11-21 on the auto-save delay: 300 ms by default, in 100 ms steps, at
+// most 3 s. A stored value above 3 s clamps to 3 s on load, as any value past a setting's bounds does.
+describe('the auto-save delay (FR-005, ruling 2026-11-21)', () => {
+  const d = SETTINGS_METADATA.find((x) => x.key === 'editor.autoSaveDebounceMs')!;
+
+  it('runs 0 – 3 s in 100 ms steps, from 300 ms', () => {
+    expect([d.min, d.max, d.step, d.hardMax]).toEqual([0, 3000, 100, undefined]);
+    expect(DEFAULT_APP_SETTINGS.editor.autoSaveDebounceMs).toBe(300);
+  });
+
+  it('clamps a stored value above 3 s to 3 s', () => {
+    const raw = { editor: { autoSaveDebounceMs: 5000 } };
+    const { value } = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
+    expect((value as { editor: { autoSaveDebounceMs: number } }).editor.autoSaveDebounceMs).toBe(3000);
   });
 });

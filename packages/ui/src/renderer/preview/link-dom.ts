@@ -115,6 +115,11 @@ export interface PreviewLinkWording {
    * registry is not made to guess.
    */
   readonly previewable?: (absPath: string) => boolean;
+  /**
+   * 074 FR-018a — whether a followed link to this file goes to the OS default program (its type's **Open <files> in**
+   * is Default OS Program, 074 FR-018). Absent: never.
+   */
+  readonly opensInOs?: (absPath: string) => boolean;
   /** 023 FR-025 / FR-026 — which editor an `openedInEditor` follow lands in. Absent: `lastActive`. */
   readonly openTarget?: 'lastActive' | 'new';
 }
@@ -125,6 +130,7 @@ export function previewLinkDestination(
 ): LinkHoverDestination {
   switch (link.kind) {
     case 'file':
+      if (wording.opensInOs?.(link.absPath) === true) return { kind: 'osDefaultProgram' };
       return wording.previewable?.(link.absPath) === false
         ? { kind: 'editor', openTarget: wording.openTarget ?? 'lastActive' }
         : { kind: 'preview' };

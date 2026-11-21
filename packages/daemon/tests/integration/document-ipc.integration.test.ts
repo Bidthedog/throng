@@ -114,6 +114,8 @@ describe('document.* IPC', () => {
       projectId,
       relPath: 'src/main.rs',
       languageId: 'python',
+      // 073 FR-040 — the second leaf of the row, empty here.
+      gridColumnWidths: null,
     });
   });
 
@@ -221,5 +223,106 @@ describe('document.* IPC', () => {
     const bad = await call('document.setState', { projectId, languageId: 'go' }); // no relPath
     expect(bad.error).toBeDefined();
     expect(bad.error.code).toBe(-32602);
+  });
+});
+
+/**
+ * `document.setGridColumnWidths` over the pipe (073 FR-040). The daemon validates the widths before
+ * the store sees them, so the store only ever holds the declared shape: column index → px, 40–2000.
+ * Out-of-range widths are REFUSED (the whole set), not clamped — clamping is the renderer's job.
+ */
+describe('document.setGridColumnWidths IPC', () => {
+  const widthsOf = async (relPath: string): Promise<unknown> =>
+    (await call('document.getState', { projectId, relPath })).result.state?.gridColumnWidths;
+
+  it('round-trips a width set, rounding each width, beside the language override', async () => {
+    await call('document.setState', { projectId, relPath: 'data.csv', languageId: 'plaintext' });
+    const set = await call('document.setGridColumnWidths', {
+      projectId,
+      relPath: 'data.csv',
+      widths: { 0: 40, 3: 120.6, 9999999: 2000 },
+    });
+    expect(set.error).toBeUndefined();
+    expect(set.result.state).toEqual({
+      projectId,
+      relPath: 'data.csv',
+      languageId: 'plaintext',
+      gridColumnWidths: { 0: 40, 3: 121, 9999999: 2000 },
+    });
+    expect(await widthsOf('data.csv')).toEqual({ 0: 40, 3: 121, 9999999: 2000 });
+  });
+
+  it('refuses a width outside 40–2000 or a key outside the column-index pattern, and keeps what was stored', async () => {
+    await call('document.setGridColumnWidths', { projectId, relPath: 'data.csv', widths: { 1: 90 } });
+    const refused: unknown[] = [
+      { 1: 39.9 }, // below the floor — checked before rounding, so not rounded up to 40
+      { 1: 2000.1 }, // above the ceiling
+      { 1: -50 },
+      { 1: '100' }, // not a number
+      { 1: null },
+      { 1: 90, 2: 10 }, // one bad entry refuses the whole set
+      { '01': 90 }, // leading zero
+      { '-1': 90 },
+      { '1.5': 90 },
+      { a: 90 },
+      { '': 90 },
+      { 12345678: 90 }, // eight digits: past the seven-digit cap
+      [90], // an array is not a map
+      'nope',
+      42,
+    ];
+    for (const widths of refused) {
+      const res = await call('document.setGridColumnWidths', { projectId, relPath: 'data.csv', widths });
+      expect(res.error?.code, JSON.stringify(widths)).toBe(-32602);
+    }
+    // Absent `widths` is not `null`: it does not clear.
+    expect((await call('document.setGridColumnWidths', { projectId, relPath: 'data.csv' })).error?.code).toBe(-32602);
+    expect(await widthsOf('data.csv')).toEqual({ 1: 90 });
+  });
+
+  it('null clears the stored widths, and the row goes when no language override remains', async () => {
+    await call('document.setState', { projectId, relPath: 'kept.csv', languageId: 'plaintext' });
+    await call('document.setGridColumnWidths', { projectId, relPath: 'kept.csv', widths: { 0: 200 } });
+    await call('document.setGridColumnWidths', { projectId, relPath: 'bare.csv', widths: { 0: 200 } });
+
+    const cleared = await call('document.setGridColumnWidths', { projectId, relPath: 'kept.csv', widths: null });
+    expect(cleared.result.state).toEqual({ projectId, relPath: 'kept.csv', languageId: 'plaintext', gridColumnWidths: null });
+    expect((await call('document.getState', { projectId, relPath: 'kept.csv' })).result.state.languageId).toBe('plaintext');
+
+    // language_id NULL and widths '' → the repository deletes the row.
+    const gone = await call('document.setGridColumnWidths', { projectId, relPath: 'bare.csv', widths: null });
+    expect(gone.result.state).toEqual({ projectId, relPath: 'bare.csv', languageId: null, gridColumnWidths: null });
+    expect((await call('document.getState', { projectId, relPath: 'bare.csv' })).result.state).toBeNull();
+    expect(
+      db.prepare(`SELECT COUNT(*) AS n FROM document_state WHERE rel_path = 'bare.csv'`).get(),
+    ).toEqual({ n: 0 });
+  });
+
+  it('an empty width map clears exactly as null does', async () => {
+    await call('document.setGridColumnWidths', { projectId, relPath: 'e.csv', widths: { 2: 300 } });
+    const res = await call('document.setGridColumnWidths', { projectId, relPath: 'e.csv', widths: {} });
+    expect(res.error).toBeUndefined();
+    expect((await call('document.getState', { projectId, relPath: 'e.csv' })).result.state).toBeNull();
+  });
+
+  it('drops a stored widths value that no longer parses, or no longer has the declared shape, keeping the row', async () => {
+    // Written straight to the store, past the daemon's validation — what an older build or a damaged
+    // file could leave behind.
+    const repo = new DocumentStateRepository(db);
+    repo.set('alice', projectId, 'broken.csv', 'plaintext');
+    repo.setGridColumnWidths('alice', projectId, 'broken.csv', '{not json');
+    repo.setGridColumnWidths('alice', projectId, 'stale.csv', '{"0":5}');
+
+    const broken = await call('document.getState', { projectId, relPath: 'broken.csv' });
+    expect(broken.error).toBeUndefined();
+    expect(broken.result.state).toEqual({ projectId, relPath: 'broken.csv', languageId: 'plaintext', gridColumnWidths: null });
+    const stale = await call('document.getState', { projectId, relPath: 'stale.csv' });
+    expect(stale.error).toBeUndefined();
+    expect(stale.result.state).toEqual({ projectId, relPath: 'stale.csv', languageId: null, gridColumnWidths: null });
+
+    // Reading never rewrites the stored value; the next valid write replaces it.
+    expect(repo.get('alice', projectId, 'broken.csv')?.gridColumnWidths).toBe('{not json');
+    await call('document.setGridColumnWidths', { projectId, relPath: 'broken.csv', widths: { 0: 80 } });
+    expect(await widthsOf('broken.csv')).toEqual({ 0: 80 });
   });
 });

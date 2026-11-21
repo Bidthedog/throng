@@ -61,7 +61,7 @@ describe('a diagram does not carry state into another file (FR-044, FR-046g)', (
   it('a valid diagram in the new file starts in Fit, whatever the old one was zoomed to', async () => {
     pv = await mountMarkdownPreview(fence('graph TD; A-->B'), README);
     await waitFor(() => expect(frame()?.querySelector('svg')).toBeTruthy(), COLD);
-    fireEvent.click(within(frame()!).getByTitle('Zoom in'));
+    fireEvent.click(within(frame()!).getByTitle(/^Zoom in \(/));
     expect(frame()!.getAttribute('data-mode')).toBe('zoom');
 
     navigateTo(fence('graph LR; X-->Y'));
@@ -91,7 +91,7 @@ describe('a diagram does not carry state into another file (FR-044, FR-046g)', (
   it('an edit WITHIN the same file keeps the zoom (the ordinal keying stays)', async () => {
     pv = await mountMarkdownPreview(fence('graph TD; A-->B'), README);
     await waitFor(() => expect(frame()?.querySelector('svg')).toBeTruthy(), COLD);
-    fireEvent.click(within(frame()!).getByTitle('Zoom in'));
+    fireEvent.click(within(frame()!).getByTitle(/^Zoom in \(/));
 
     pv.push(previewUpdate({ panelId: pv.id, revision: 2, content: { kind: 'text', text: fence('graph TD; A-->B') + '\nMore.\n' } }));
 

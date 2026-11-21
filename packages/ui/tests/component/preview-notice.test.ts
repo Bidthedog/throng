@@ -260,7 +260,8 @@ describe('a deleted file shows the notice and nothing else (US2 scenario 6)', ()
 
     expect(banners()).toHaveLength(1);
     expect(body()).not.toBeVisible();
-    expect(screen.getByText('Readme body.')).not.toBeVisible();
+    // #696 — unloaded, not only covered: the rendered document is gone from the panel.
+    expect(screen.queryByText('Readme body.')).toBeNull();
     expect(linkNotice()).toBeNull();
     expect(screen.getByTestId(`preview-${panel().id}`).querySelectorAll('.panel-failure')).toHaveLength(1);
 

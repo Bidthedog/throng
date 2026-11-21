@@ -155,13 +155,30 @@ describe('the readouts are display-only and never parsed back (FR-028)', () => {
      * Asserted as an exhaustive set rather than as "the status bar does not call it", because the
      * second form is satisfied by a helper module the bar calls that does the parsing for it.
      */
-    const callers = callersOf('parseGrouped', productionSources());
+    const sources = productionSources();
+    const callers = callersOf('parseGrouped', sources);
     expect(
       callers,
       `parseGrouped is called from ${callers.join(', ')}. A displayed figure is parsed back in ` +
         `exactly one place — the preferences numeric control, where the user typed it. A readout ` +
         `is not an input (FR-028).`,
-    ).toEqual(['packages/ui/src/renderer/preferences/form-controls.tsx']);
+    ).toEqual([
+      // 077 FR-008 — the preferences numeric box parses through `checkTyped`, its keystroke check, which
+      // lives in core beside the unit conversions it shares with the box. It is that control's parser;
+      // the assertion below keeps it so.
+      'packages/core/src/config/numeric-units.ts',
+    ]);
+    // The helper loophole the exhaustive set is there to close: `numeric-units.ts` parses only through
+    // `checkTyped`, and only the preferences number inputs call that. There are two, both a number the user
+    // TYPED into Preferences — never a readout (040 FR-028):
+    // - form-controls.tsx — the numeric setting's own box (077 FR-008);
+    // - map-control.tsx — a number cell of a table setting, such as the per-language indent widths, which 077
+    //   FR-008, FR-009 and FR-012 hold to the same typed-value check, step and clamp as the box (077 T030).
+    const typedCallers = callersOf('checkTyped', sources).filter((f) => !f.endsWith('config/numeric-units.ts'));
+    expect(
+      typedCallers,
+      'checkTyped parses what a user typed into a preferences number input, and nothing else',
+    ).toEqual(['packages/ui/src/renderer/preferences/form-controls.tsx', 'packages/ui/src/renderer/preferences/map-control.tsx']);
   });
 
   it('no editor module parses a displayed figure back', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ICON_KEYS, type IconKey } from '@throng/core';
+import { ICON_KEYS, SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS, type IconKey } from '@throng/core';
 import { fileIconToken, folderIconToken } from '../../src/renderer/explorer/tree-icons.js';
 
 /**
@@ -63,6 +63,17 @@ describe('the tree’s file icons (069 FR-056, FR-057)', () => {
     const fileKinds = ICON_KEYS.filter((k) => /^file[A-Z]/.test(k) && k !== 'fileImage') as IconKey[];
     const reached = new Set(FILES.map(([, key]) => key));
     expect(fileKinds.filter((k) => !reached.has(k))).toEqual([]);
+  });
+});
+
+// 074 (2026-11-19) — a file the Image or SVG preview opens shows as a picture in the tree, extension for extension.
+describe('the tree draws every picture preview extension as an image', () => {
+  const picture = SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.filter((p) => p.id === 'image' || p.id === 'svg').flatMap((p) => p.extensions);
+
+  it.each(picture)('%s', (ext) => {
+    expect(picture.length).toBeGreaterThan(10);
+    expect(fileIconToken(`picture${ext}`)).toBe('fileImage');
+    expect(fileIconToken(`PICTURE${ext.toUpperCase()}`)).toBe('fileImage');
   });
 });
 

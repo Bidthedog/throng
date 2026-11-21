@@ -575,6 +575,14 @@ A click on the resource popup dismisses it, so it is never in the way.
 
 - **FR-069**: Every editor panel's title bar MUST show Save and Save As icon buttons, right-aligned, left of the common panel icons, with a visual separator between the two groups.
 - **FR-069a**: When a title bar is too narrow, Save As MUST hide first and then Save, along with the separator once both are hidden, and widening MUST restore them. Both actions MUST remain reachable through the panel menu and their chords.
+- **FR-069b** *(Added 2026-11-21, the maintainer's ruling on a narrow panel's title — additive)*: A panel's title MUST stay
+  visible, ellipsised, at every panel width down to the narrowest a split allows. In a panel about 150 px wide the
+  header's controls took the whole width and the title was drawn 0 px wide. The title keeps a minimum share of the
+  header (4em, or half the header when that is less). The controls give way instead, a whole control at a time: after
+  Save As and Save (FR-069a), Back / Forward, then Split, then Focus Mode, then Destroy. Widening MUST restore them,
+  and each MUST stay reachable through the header's menu (Principle VI). The owner text (006 FR-085, FR-087) gives
+  way, ellipsised, only once the title is at its floor; this narrows 006 FR-085's "always visible" to the widths
+  where both fit.
 - **FR-070**: Non-editor panels MUST show no save icons and no extra separator.
 - **FR-071**: The buttons MUST invoke the same actions as the header-menu items and chords, with no second save path.
 - **FR-072**: Each button MUST have an accessible name and a tooltip naming the action and its live key binding.

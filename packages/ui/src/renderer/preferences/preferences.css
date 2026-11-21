@@ -550,15 +550,12 @@
   min-width: 120px;
 }
 
+/*
+ * 077 FR-024 — an invalid entry is marked by its outline alone, which takes no room; what is wrong is said in the
+ * Preferences toast, so nothing beneath the box moves.
+ */
 .ctl__input--invalid {
   border-color: var(--danger, #e14b4b);
-}
-
-.ctl__error {
-  display: block;
-  margin-top: 3px;
-  color: var(--danger, #e14b4b);
-  font-size: 11px;
 }
 
 .ctl--array {
@@ -575,6 +572,14 @@
 }
 
 .ctl__array-row .ctl__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 074 FR-072c — a validated entry: its box, with the reason it was refused under it. */
+.ctl__array-item {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -1099,6 +1104,13 @@
   min-height: 0;
 }
 
+/* The editor's theme scope (`editor.css`'s `.editor-panel`, 007 FR-021a), laid out as a column so the editor inside
+   still takes the tab's height and scrolls within it. */
+.json-tab > .editor-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .standalone-editor {
   flex: 1 1 auto;
   min-height: 200px;
@@ -1328,11 +1340,6 @@
   min-width: 0;
 }
 
-.map-control-error {
-  color: var(--throng-colour-danger, #f85149);
-  font-size: 12px;
-}
-
 /**
  * WHERE a command's chord is live (016, FR-017b0) — the Key Bindings tab's scope chip.
  *
@@ -1514,6 +1521,21 @@
 .ctl__slider:focus-visible {
   outline: 2px solid var(--throng-colour-accent);
   outline-offset: 4px;
+}
+
+/* 077 FR-007 — the box holds a value off the slider's grid: the slider is drawn greyed, and still moves. */
+.ctl__slider--overridden {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
+/* 077 FR-004 — the value in the slider's display unit (25 MB, 1.5 s), between the slider and the exact box. */
+.ctl__value {
+  flex: 0 0 auto;
+  min-width: 5.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--throng-colour-textMuted);
 }
 
 .ctl__slider::-webkit-slider-thumb {

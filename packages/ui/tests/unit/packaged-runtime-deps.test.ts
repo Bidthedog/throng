@@ -109,6 +109,27 @@ describe('packaged runtime dependencies are declared at the root (020 T049 / FR-
 });
 
 /**
+ * 074 — PDF.js is renderer-only: Vite bundles it, worker included, into the renderer's assets. Its package and its
+ * optional Node canvas (`@napi-rs/canvas`, ~35 MB of native binary) stay out of the installer only because neither is
+ * a root dependency, so electron-builder prunes them. Checked on 3c0537fa's macOS archive: neither ships. Listing
+ * either at the root, or importing either from code that is not bundled, would ship ~70 MB nothing loads.
+ */
+describe('renderer-bundled PDF.js stays out of the installer (074)', () => {
+  const RENDERER_ONLY = ['pdfjs-dist', '@napi-rs/canvas'];
+
+  it('neither PDF.js nor its Node canvas is a root dependency', () => {
+    const rootDeps = Object.keys(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).dependencies ?? {});
+    expect(rootDeps.filter((d) => RENDERER_ONLY.includes(d))).toEqual([]);
+  });
+
+  it('no non-bundled runtime code imports either', () => {
+    const imported = new Set<string>();
+    for (const dir of NON_BUNDLED_DIRS) collectImports(join(root, dir), imported);
+    expect([...imported].filter((d) => RENDERER_ONLY.includes(d))).toEqual([]);
+  });
+});
+
+/**
  * 020 T048 / FR-041 — packaging adds NO outbound network call to the application (auto-update is out
  * of scope). This guard scans the feature's app-runtime source for network APIs so a future "just
  * fetch the latest version" cannot slip in unnoticed.

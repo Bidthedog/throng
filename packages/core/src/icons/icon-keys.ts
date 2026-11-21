@@ -128,6 +128,14 @@ export const ICON_KEYS = [
   'chevronRight',
   'chevronDown',
   'preview',
+  'previewMarkdown',
+  'previewMermaid',
+  'previewImage',
+  'previewSvg',
+  'previewPdf',
+  'previewHtml',
+  'previewCsv',
+  'previewSpreadsheet',
   'refresh',
   'navigateBack',
   'navigateForward',
@@ -143,6 +151,9 @@ export const ICON_KEYS = [
   'diagramFit',
   'diagramZoomReset',
   'diagramFullPane',
+  'pageLayoutSingle',
+  'pageLayoutTwo',
+  'pageLayoutWrap',
   'warning',
   'whitespace',
   'busy',
@@ -159,6 +170,37 @@ export const ICON_KEYS = [
   'rememberCommand',
   'rememberDirectory',
   'terminalNotifications',
+  'cellDialog',
+  'insertRowAbove',
+  'insertRowBelow',
+  'insertColumnLeft',
+  'insertColumnRight',
+  'resetColumnWidth',
+  'goToRow',
+  'wrapCells',
+  'lockFirstRow',
+  'lockFirstColumn',
+  // 073 FR-050a — the workbook preview's Read-only marker.
+  'readOnly',
+  // 075 FR-024 — one per canonical callout type.
+  'calloutNote',
+  'calloutAbstract',
+  'calloutInfo',
+  'calloutTodo',
+  'calloutTip',
+  'calloutSuccess',
+  'calloutQuestion',
+  'calloutWarning',
+  'calloutFailure',
+  'calloutDanger',
+  'calloutBug',
+  'calloutExample',
+  'calloutQuote',
+  // 075 FR-063 — Print… and Print Preview's Print button.
+  'print',
+  // 075 FR-068a — Print Preview's Back and Forward through the pages.
+  'pagePrevious',
+  'pageNext',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -410,7 +452,23 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
   chevronDown:
     'The icon on the tab strip control that drops open a searchable list of every tab in the window, however many are on screen.',
   preview:
-    'The icon on the editor status bar button and menu rows that open a rendered, read-only view of a file such as a Markdown document, and at the head of that preview panel’s title.',
+    'The icon on the editor status bar button and menu rows that open a rendered, read-only view of a file, and at the head of that preview panel’s title, for a kind of preview that has no icon of its own.',
+  previewMarkdown:
+    'The icon that names a Markdown preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with an M and a down arrow beneath its eye.',
+  previewMermaid:
+    'The icon that names a Mermaid preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with a box joined to a diamond, a flowchart, beneath its eye.',
+  previewImage:
+    'The icon that names an Image preview: at the head of its panel’s title, in a tab’s list of panels and on the menu rows that open one. The preview icon with hills and a sun beneath its eye.',
+  previewSvg:
+    'The icon that names an SVG preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with a curve between two nodes beneath its eye.',
+  previewPdf:
+    'The icon that names a PDF preview: at the head of its panel’s title, in a tab’s list of panels and on the menu rows that open one. The preview icon with the letters PDF beneath its eye.',
+  previewHtml:
+    'The icon that names an HTML preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with a pair of angle brackets and a slash beneath its eye.',
+  previewCsv:
+    'The icon that names a CSV preview: at the head of its panel’s title, in a tab’s list of panels, on the editor status bar button and on the menu rows that open one. The preview icon with the letters CSV beneath its eye.',
+  previewSpreadsheet:
+    'The icon that names a Spreadsheet preview: at the head of its panel’s title, in a tab’s list of panels and on the menu rows that open one. The preview icon with a small grid of cells beneath its eye.',
   refresh:
     'The icon on the preview panel menu row that reads the file or its open document again and redraws the preview straight away.',
   navigateBack:
@@ -439,6 +497,12 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on a diagram\'s Fit control, which shrinks the diagram to fit the width of its box.',
   diagramZoomReset:
     'The icon on a diagram\'s Zoom 100% control, which shows the diagram at its actual size, between the zoom-out and zoom-in controls.',
+  pageLayoutSingle:
+    'The icon on a PDF preview\'s Single Page control, which shows the pages one under another.',
+  pageLayoutTwo:
+    'The icon on a PDF preview\'s Two Pages control, which shows the pages two to a row, like an open book.',
+  pageLayoutWrap:
+    'The icon on a PDF preview\'s Pages Side by Side control, which lays the pages out in rows as many to a row as fit the panel.',
   diagramFullPane:
     'The icon on a diagram\'s Enter Focus Mode control, which fills the whole middle section with the diagram and hides the side panes until you leave Focus Mode.',
   warning:
@@ -473,6 +537,57 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on the terminal status bar toggle that reopens a terminal in the folder it was last working in, rather than where it first started. Draw it plain: throng greys it out and draws a line through it while the toggle is off.',
   terminalNotifications:
     'The icon on the terminal status bar toggle that lets that one terminal raise attention marks, pop-ups and desktop notifications, or silences it. Draw it plain: throng greys it out and draws a line through it while the toggle is off.',
+  cellDialog:
+    'The icon on the CSV Preview Editor status bar toggle that turns the cell dialog, the editor long cells open in, on or off for that panel.',
+  insertRowAbove:
+    'The icon on the grid menu row that inserts an empty row above the active row.',
+  insertRowBelow:
+    'The icon on the grid menu row that inserts an empty row below the active row.',
+  insertColumnLeft:
+    'The icon on the grid menu row that inserts an empty column to the left of the active column.',
+  insertColumnRight:
+    'The icon on the grid menu row that inserts an empty column to the right of the active column.',
+  resetColumnWidth:
+    'The icon on the grid menu row that puts a column back to the default width.',
+  goToRow:
+    'The icon on the grid menu row that asks for a row number and goes to that row.',
+  wrapCells:
+    'The icon on the CSV Preview Editor status bar toggle and the panel menu item that wraps cells, so every row shows its whole content.',
+  lockFirstRow:
+    'The icon on the CSV Preview Editor status bar toggle and the panel menu item that locks the first row in place.',
+  lockFirstColumn:
+    'The icon on the CSV Preview Editor status bar toggle and the panel menu item that locks the first column in place.',
+  readOnly:
+    'The padlock on a spreadsheet preview\'s status bar that marks the workbook read-only, and flashes when an edit is tried.',
+  calloutNote:
+    'The icon at the start of a note callout’s title row in a document preview.',
+  calloutAbstract:
+    'The icon at the start of an abstract callout’s title row in a document preview (also written summary or tldr).',
+  calloutInfo:
+    'The icon at the start of an info callout’s title row in a document preview.',
+  calloutTodo:
+    'The icon at the start of a todo callout’s title row in a document preview.',
+  calloutTip:
+    'The icon at the start of a tip callout’s title row in a document preview (also written hint or important).',
+  calloutSuccess:
+    'The icon at the start of a success callout’s title row in a document preview (also written check or done).',
+  calloutQuestion:
+    'The icon at the start of a question callout’s title row in a document preview (also written help or faq).',
+  calloutWarning:
+    'The icon at the start of a warning callout’s title row in a document preview (also written caution, attention or warn).',
+  calloutFailure:
+    'The icon at the start of a failure callout’s title row in a document preview (also written fail or missing).',
+  calloutDanger:
+    'The icon at the start of a danger callout’s title row in a document preview (also written error).',
+  calloutBug:
+    'The icon at the start of a bug callout’s title row in a document preview.',
+  calloutExample:
+    'The icon at the start of an example callout’s title row in a document preview.',
+  calloutQuote:
+    'The icon at the start of a quote callout’s title row in a document preview (also written cite).',
+  print: 'The icon on Print… in a preview’s menus, and on the Print button in Print Preview.',
+  pagePrevious: 'The icon on the Print Preview button that shows the page before the one on screen.',
+  pageNext: 'The icon on the Print Preview button that shows the page after the one on screen.',
 };
 
 /** Is `value` one of the icon keys? */

@@ -13,6 +13,7 @@ export {
   PROJECTS_REORDER_METHOD,
   PROJECTS_SET_HIDDEN_METHOD,
   PROJECTS_SET_SEARCH_EXCLUDES_METHOD,
+  PROJECTS_SET_HTML_SAFE_SOURCES_METHOD,
   PROJECTS_CATEGORIES_LIST_METHOD,
   PROJECTS_CATEGORIES_CREATE_METHOD,
   PROJECTS_CATEGORIES_RENAME_METHOD,
@@ -37,6 +38,8 @@ export type {
   ProjectsReorderResult,
   ProjectsSetHiddenParams,
   ProjectsSetHiddenResult,
+  ProjectsSetHtmlSafeSourcesParams,
+  ProjectsSetHtmlSafeSourcesResult,
   ProjectsSetSearchExcludesParams,
   ProjectsSetSearchExcludesResult,
   ProjectCategoryDto,
@@ -180,6 +183,7 @@ export {
   DOCUMENT_SET_STATE_METHOD,
   DOCUMENT_MOVE_PATH_METHOD,
   DOCUMENT_PRUNE_METHOD,
+  DOCUMENT_SET_GRID_COLUMN_WIDTHS_METHOD,
 } from './document.js';
 export type {
   DocumentStateDto,
@@ -191,6 +195,8 @@ export type {
   DocumentMovePathResult,
   DocumentPruneParams,
   DocumentPruneResult,
+  DocumentSetGridColumnWidthsParams,
+  DocumentSetGridColumnWidthsResult,
 } from './document.js';
 // fileopUndo.* (024 US3, #85) — the per-project file-operation undo/redo stack.
 export {

@@ -38,6 +38,10 @@ import {
   createSettleScheduler,
   editorAutoTitle,
   effectiveMaxWaitMs,
+  defaultOpenActionFor,
+  maxFileBytesFor,
+  maxFileBytesKeyFor,
+  hasOwnSizeCap,
   enabledProviderFor,
   isUnderPath,
   logCaught,
@@ -77,7 +81,7 @@ import {
   type SettleScheduler,
   type WikiTarget,
 } from '@throng/core';
-import { fileKey, movedPathOf, type DocumentLifecycleListener } from './editor-coordinator.js';
+import { GRID_DOCUMENT_PREFIX, fileKey, isGridDocumentId, movedPathOf, type DocumentLifecycleListener } from './editor-coordinator.js';
 import type { EditorService, LoadResult } from './editor-service.js';
 import type { MovePair } from './files-service.js';
 import type { PreviewLookup, PreviewRunRef } from './preview-protocol.js';
@@ -95,15 +99,23 @@ export const OPEN_RESERVATION_TIMEOUT_MS = 10_000;
  *
  * `contentless` — the document has NO content of its file to follow: it could not read its path and has
  * never read it in its panel (the FR-106d stand-in, a restore-time `register(…, { unloadable: true })`).
- * Only then does a parented preview show FR-026's notice instead of the document (adversarial review, main
- * item 1). A document that WAS read and then lost its file keeps its buffer (FR-099) with the editor's
- * banner owning that condition, so its preview keeps following the buffer (FR-022; fix round 1 ruling).
- * The coordinator fires `changed` on every flip of it.
+ * `fileMissing` / `unloadable` — it WAS read, and its file has since gone (deleted, moved away outside throng)
+ * or cannot be read at its path. While any of them holds a parented preview shows FR-026's notice instead of the
+ * document (adversarial review, main item 1; #696, which superseded the fix round 1 ruling that kept a read
+ * document's preview following its buffer). The editor keeps that buffer (006 FR-099). The coordinator fires
+ * `changed` on every flip.
  */
 export interface PreviewDocumentContent {
   text: string;
   dirty: boolean;
   contentless: boolean;
+  fileMissing?: boolean;
+  unloadable?: boolean;
+}
+
+/** #696 — the document's own file is gone, or was never read: there is no file for a preview to show. */
+function documentHasNoFile(content: PreviewDocumentContent): boolean {
+  return content.contentless === true || content.fileMissing === true || content.unloadable === true;
 }
 
 /** The coordinator, as a preview may see it: read-only. `EditorCoordinator` satisfies it. */
@@ -177,7 +189,8 @@ export interface PreviewServiceDeps {
   documents: PreviewDocuments;
   /** `EditorService.load` — the standalone read path (FR-025). */
   reader: Pick<EditorService, 'load'>;
-  fs: Pick<IFileSystem, 'exists' | 'stat' | 'realpath'>;
+  /** `size` (074 FR-012) — optional, so a harness without it simply skips the provider size cap. */
+  fs: Pick<IFileSystem, 'exists' | 'stat' | 'realpath'> & Partial<Pick<IFileSystem, 'size'>>;
   fileWatcher: IFileWatcher;
   /** Read live: a changed delay, max wait, size limit or provider toggle applies to the next use. */
   settings: () => AppSettings;
@@ -189,6 +202,15 @@ export interface PreviewServiceDeps {
   clock?: SettleClock;
   history?: PreviewHistoryHooks;
   foldRekey?: PreviewFoldHooks;
+  /** 073 — a preview panel is gone for good: `CsvGridService` releases the grid document it may hold. */
+  runEnded?: (panelId: string) => void;
+  /**
+   * 073 T035 — a run moved off the file its own (clean) grid document holds: `CsvGridService` releases that
+   * document, so reopening the file finds no stale "document" and reuses the panel (FR-060).
+   */
+  gridDocumentLeft?: (panelId: string) => void;
+  /** 073 FR-033b — save the run's own grid document (the prompt's "Save & open"); `false` when the save did not complete. */
+  saveGridDocument?: (panelId: string) => Promise<boolean>;
 }
 
 type RunSource = { kind: 'document'; documentPanelId: string } | { kind: 'disk'; watch: Disposable };
@@ -277,6 +299,13 @@ const canon = (path: string): string => normaliseForCompare(path);
 
 export class PreviewService implements DocumentLifecycleListener, PreviewLookup {
   private readonly runs = new Map<string, PreviewRun>();
+  /**
+   * 074 (2026-11-19) — the `?rev=` of every binary source URL, from one counter, so no read ever hands a panel a URL it
+   * has had: a binary body reloads only when its URL changes. It was `run.revision + 1`, which an attach (answered at
+   * the run's revision, not a new one) and the run's first move to another file both produced, so a reused PDF panel
+   * kept showing the file before.
+   */
+  private sourceSeq = 0;
   /**
    * 047 FR-041d, data-model.md "FoldState" — the per-history-entry fold snapshot: what a run's fold
    * state was on the entry it is LEAVING, so Back/Forward can restore it. Held here, not in
@@ -448,7 +477,15 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       case 'deleted':
         return { ref, ok: false, reason: 'missing' };
       case 'too-large':
-        return { ref, ok: false, reason: 'too-large' };
+        // 077 FR-014 — the size and the limit travel with the refusal, so the embed's notice can quote them.
+        return {
+          ref,
+          ok: false,
+          reason: 'too-large',
+          ...(read.notice.size !== undefined ? { size: read.notice.size } : {}),
+          ...(read.notice.limit !== undefined ? { limit: read.notice.limit } : {}),
+          ...(read.notice.limitKey !== undefined ? { limitKey: read.notice.limitKey } : {}),
+        };
       default:
         return { ref, ok: false, reason: 'unreadable' };
     }
@@ -471,7 +508,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     if (real === null) return { kind: 'refused', reason: 'no-file' };
     if (!real) return { kind: 'refused', reason: 'outside-project' };
 
-    // Everything below is one synchronous turn, so two opens racing for a path cannot both reserve it.
+    // Everything below is one synchronous turn, so two opens racing for a path cannot both reserve it — except where a
+    // Last Active reuse awaits its move (before step 3; a reuse that does not move asks again from the top).
     const key = canon(absPath);
     // 047 FR-081 — echoed on whichever message this open sends, which the window acts on too.
     const keepFocus = req.keepFocus === true ? ({ keepFocus: true } as const) : {};
@@ -489,6 +527,24 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       // Already being placed: raise the placing window, but there is no panel yet to send `focus` to.
       this.deps.windows.raise(reserved.webContentsId);
       return { kind: 'focused', panelId: null };
+    }
+
+    // 047 US2, R8 (contracts/preview-ipc-047.md §1, FR-010–FR-016) — Last Active reuse, before step 3: a live run
+    // named by `target.reusePanelId`, VIEWED BY THE REQUESTING WINDOW, is moved to `absPath` in place rather than a
+    // new panel placed, and the move pairs it with the file's editor when it has one (044 FR-013, 047 FR-016a).
+    //
+    // One rule for every provider: 075 FR-093a (2026-11-20) supersedes 047 FR-012 for Last Active — a file open in an
+    // editor reuses the last active preview of its type too, rather than a second one opening beside the editor — and
+    // with it 073 T078 (FR-060), which made the same exception for a Preview Editor alone. 073 T035's unsaved-grid
+    // question still guards the move (`reuseLastActive`). A second preview opens only when asked for: Open In → New
+    // Preview Panel, or Open previews in: New.
+    const reusable = this.reusableRun(fromWebContentsId, req);
+    if (reusable !== undefined) {
+      const reused = await this.reuseLastActive(fromWebContentsId, req, reusable);
+      if (reused !== null) return reused;
+      // Not moved (the reader chose `new` over unsaved grid edits, or the move was refused): a fresh placement. Asked
+      // again from the top, because steps 1–3 must judge the file as it stands after this one waited.
+      return this.open(fromWebContentsId, { ...req, target: { mode: 'new', reusePanelId: null } });
     }
 
     // 3. The file has a document: beside its parent, wherever that lives (FR-010).
@@ -535,29 +591,63 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     }
 
     // 4. No document: standalone, where a new editor would go (FR-011).
-    //
-    // 047 US2, R8 (contracts/preview-ipc-047.md §1, FR-010–FR-016) — Last Active reuse first: a live
-    // run named by `target.reusePanelId`, VIEWED BY THE REQUESTING WINDOW, is moved to `absPath` in
-    // place rather than a new panel placed. `target` plays no part in steps 1–3 above (FR-012): a
-    // parented placement is exactly what it was before this spec.
-    if (req.target?.mode === 'lastActive' && req.target.reusePanelId) {
-      const reuse = this.runs.get(req.target.reusePanelId);
-      if (reuse && reuse.viewers.has(fromWebContentsId)) {
-        // The SAME move a followed link makes (moveRun, history append, FR-103; unbind FR-090a/FR-016)
-        // — `navigate`'s generic branch already treats `open` exactly like `link`.
-        const moved = await this.navigate(fromWebContentsId, {
-          panelId: reuse.panelId,
-          target: { absPath },
-          intent: { kind: 'open' },
-        });
-        if (moved.kind === 'shown') return { kind: 'navigated', panelId: reuse.panelId };
-        // Every precondition for a move was already checked above (provider, containment, a real
-        // file) — a refusal here is not expected, but this is not the place to surface one the
-        // renderer has no `navigated`-branch handling for. Fall through to a fresh placement.
-      }
-    }
     this.reserve(key, reservation, fromWebContentsId, false);
     return { kind: 'placeLocally', reservation, besidePanelId: null };
+  }
+
+  /**
+   * 047 US2, R8 — the run Last Active may move: the one `target.reusePanelId` names, live and viewed by the requesting
+   * window. Synchronous, so an open with nothing to reuse places its panel in the same turn it reserves the path.
+   */
+  private reusableRun(fromWebContentsId: number, req: PreviewOpenRequest): PreviewRun | undefined {
+    if (req.target?.mode !== 'lastActive' || !req.target.reusePanelId) return undefined;
+    const run = this.runs.get(req.target.reusePanelId);
+    return run?.viewers.has(fromWebContentsId) === true ? run : undefined;
+  }
+
+  /**
+   * 047 US2, R8 — Last Active reuse: move `reuse` (`reusableRun`'s answer) to `req.absPath` in place. `null` when it
+   * did not move, and the caller places a panel instead. Called after `open`'s step 2 (no preview of the file exists
+   * or is being placed), before step 3; it reserves nothing.
+   */
+  private async reuseLastActive(
+    fromWebContentsId: number,
+    req: PreviewOpenRequest,
+    reuse: PreviewRun,
+  ): Promise<PreviewOpenResponse | null> {
+    const { absPath } = req;
+    // 073 T035 (FR-033, FR-033b) — a CSV Preview Editor holding unsaved grid edits is not reused until the reader has
+    // said what becomes of them: moving it would hide them. Main answers `unsavedGrid` and the renderer asks, as
+    // the editor's unsaved-on-open prompt does, then asks again with the choice. `new` keeps them where they are
+    // and places a new panel (falls through); `save` and `discard` free the panel to move.
+    const unsaved = this.holdsUnsavedGridDocument(reuse);
+    if (unsaved && req.unsavedChoice === undefined) return { kind: 'unsavedGrid', panelId: reuse.panelId };
+    if (unsaved && req.unsavedChoice === 'save') {
+      // A save that did not complete leaves the panel, its edits and the file as they were: the reader is back at it.
+      if (!(await (this.deps.saveGridDocument?.(reuse.panelId) ?? Promise.resolve(false)))) {
+        return { kind: 'focused', panelId: reuse.panelId };
+      }
+    }
+    if (!unsaved || req.unsavedChoice === 'save' || req.unsavedChoice === 'discard') {
+      // The SAME move a followed link makes (moveRun, history append, FR-103; unbind FR-090a/FR-016)
+      // — `navigate`'s generic branch already treats `open` exactly like `link`. A `discard` is the one move over
+      // unsaved edits: leaving the file releases the grid document with them (`gridDocumentLeft`).
+      const moved = await this.navigate(
+        fromWebContentsId,
+        { panelId: reuse.panelId, target: { absPath }, intent: { kind: 'open' } },
+        unsaved && req.unsavedChoice === 'discard',
+      );
+      if (moved.kind === 'shown') return { kind: 'navigated', panelId: reuse.panelId };
+      // Every precondition for a move was already checked above (provider, containment, a real file), so a refusal
+      // here means the file changed under the move. The renderer has no `navigated`-branch handling for one; the
+      // open itself still succeeds, as a fresh placement.
+      logExpected(
+        'preview-service: Last Active move',
+        'the file changed between the open and the move; a new preview is placed instead',
+        moved.kind === 'refused' ? moved.notice.kind : moved.kind,
+      );
+    }
+    return null;
   }
 
   /**
@@ -673,6 +763,78 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     this.tellHistory('purge', (h) => h.purge(panelId));
     const run = this.runs.get(panelId);
     if (run) this.dropRun(run);
+    if (this.deps.runEnded !== undefined) {
+      try {
+        this.deps.runEnded(panelId);
+      } catch (error) {
+        logCaught('preview-service: release a grid document', error);
+      }
+    }
+  }
+
+  /**
+   * 073 (research R1) — the run behind a CSV Preview Editor, as `CsvGridService` needs it: where the
+   * file is, who owns it, which window last viewed it, and the document it follows, if any.
+   */
+  /** 073 — the grid document a CSV Preview Editor's own edits opened (`csv-grid:<panelId>`), if the run follows it. */
+  private ownGridDocument(run: PreviewRun): string | null {
+    if (run.source.kind !== 'document') return null;
+    const id = run.source.documentPanelId;
+    return id === `${GRID_DOCUMENT_PREFIX}${run.panelId}` ? id : null;
+  }
+
+  /**
+   * #696 — a parented run has no file to show: its document never read it, or read it and the file has since gone.
+   * Then the run shows FR-026's notice rather than the document's text. Not for the CSV Preview Editor's OWN grid
+   * document: that panel IS the editor of its file, and keeps its buffer when the file goes, as an editor does
+   * (073, *A file deleted under an open panel*) — only a grid that never read its file shows the notice.
+   */
+  private showsNoFile(run: PreviewRun, current: PreviewDocumentContent | null | undefined): boolean {
+    if (!current) return false;
+    if (current.contentless === true) return true;
+    if (this.ownGridDocument(run) !== null) return false;
+    return documentHasNoFile(current);
+  }
+
+  /** 073 T035 — the run follows its own grid document and that document has unsaved edits. */
+  private holdsUnsavedGridDocument(run: PreviewRun): boolean {
+    const id = this.ownGridDocument(run);
+    return id !== null && this.deps.documents.getContent(id)?.dirty === true;
+  }
+
+  gridRun(panelId: string):
+    | {
+        projectId: string;
+        projectRoot: string;
+        filePath: string;
+        editable: boolean;
+        movedOut: boolean;
+        windowId: string;
+        documentPanelId: string | null;
+      }
+    | undefined {
+    const run = this.runs.get(panelId);
+    if (run === undefined) return undefined;
+    return {
+      projectId: run.projectId,
+      projectRoot: run.projectRoot,
+      filePath: run.filePath,
+      editable: this.deps.registry.get(run.providerId)?.editable === true,
+      movedOut: run.movedOut,
+      windowId: String(run.lastViewer),
+      documentPanelId: run.source.kind === 'document' ? run.source.documentPanelId : null,
+    };
+  }
+
+  /**
+   * 073 contracts/preview-ipc-073.md — show the run's document NOW, skipping the update delay: the grid's
+   * own edit must appear in the grid at once. A run on the disk has nothing pending.
+   */
+  flush(panelId: string): void {
+    const run = this.runs.get(panelId);
+    if (run === undefined || run.source.kind !== 'document') return;
+    run.scheduler?.cancel();
+    this.settleDocument(run);
   }
 
   /** FR-063 — every run of a provider that was just turned off. */
@@ -701,12 +863,12 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       run.scheduler?.cancel();
       const current = this.deps.documents.getContent(run.source.documentPanelId);
       // Still unable to read its file: Refresh asks the disk again and FLASHES the notice (FR-026, FR-028).
-      if (current?.contentless === true) {
+      if (this.showsNoFile(run, current)) {
         return { update: (await this.showUnloadable(run, { repeat: true })) ?? this.snapshot(run) };
       }
       run.documentContentless = false;
-      if (current) run.lastSent = { kind: 'text', text: current.text };
       run.notice = this.providerNotice(run);
+      if (current) run.lastSent = this.documentContent(run, current.text);
       return { update: this.emit(run, run.lastSent) };
     }
     const update = await this.readAndApply(run, { force: true, repeat: true });
@@ -747,7 +909,12 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
    * The HISTORY intent is {@link navigateHistory}; the HEADING intent is {@link navigateHeading}, decided
    * before the "already shown" short-circuit below, which would otherwise swallow it.
    */
-  async navigate(_fromWebContentsId: number, req: PreviewNavigateRequest): Promise<PreviewNavigateResponse> {
+  async navigate(
+    _fromWebContentsId: number,
+    req: PreviewNavigateRequest,
+    /** 073 FR-033b — the reader chose to discard the run's unsaved grid edits: the move goes ahead over them. */
+    discardUnsaved = false,
+  ): Promise<PreviewNavigateResponse> {
     const target = req.target.absPath;
     if (req.intent.kind === 'heading') return this.navigateHeading(req);
     if (req.intent.kind === 'history') return this.navigateHistory(req, req.intent.index);
@@ -773,6 +940,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // 3. No enabled provider: an editor, as from File Explorer.
     const provider = enabledProviderFor(this.deps.registry, this.previewSettings(), target);
     if (!provider) return { kind: 'openedInEditor' };
+    // 074 FR-018 — a target whose type opens in the OS default program goes back the same way: the renderer's
+    // open router hands it to the OS, as from File Explorer.
+    if (defaultOpenActionFor(this.deps.registry, this.previewSettings(), target) === 'os') return { kind: 'openedInEditor' };
 
     // 4. One preview per file (FR-012): focus the one that exists.
     const other = this.runForPath(canon(target));
@@ -781,6 +951,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // 054 FR-007, FR-008 — a preview never becomes another preview TYPE. A target of another provider is
     // handed back for an ordinary open, which reuses or places a preview of its own type.
     if (provider.id !== run.providerId) return { kind: 'reroute' };
+    // 073 T035 (FR-033) — unsaved grid edits are never moved out of sight: an ordinary open places the
+    // target in a panel of its own (`open` does not reuse this run while they are unsaved).
+    if (!discardUnsaved && this.holdsUnsavedGridDocument(run)) return { kind: 'reroute' };
 
     // 5. In place — but READ FIRST, and change nothing until the read has answered (fix round 1).
     //
@@ -915,6 +1088,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
 
     const other = this.runForPath(canon(target));
     if (other && other !== run) return this.focusOtherPreview(other, undefined);
+    // 073 T035 (FR-033) — Back/Forward never moves unsaved grid edits out of sight.
+    if (this.holdsUnsavedGridDocument(run)) return refused('unsaved');
 
     const token = ++run.navigateSeq;
     // A document for the target makes the run parented even when the file is gone (FR-013): the FR-106d
@@ -973,6 +1148,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     leavingIndex: number | undefined,
   ): void {
     this.snapshotFoldOnLeave(run, leavingIndex);
+    // 073 T035 — the run's own grid document (clean: a dirty one never moves, see `holdsUnsavedGridDocument`)
+    // is released once the run has left it, so the file it held reads as having no document again (FR-060).
+    const leftGridDocument = this.ownGridDocument(run);
     run.scheduler?.cancel();
     run.scheduler = null;
     run.timing = null;
@@ -999,10 +1177,14 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // A document that cannot read the target is the only way a document-sourced read fails (`documentRead`).
     run.documentContentless = doc !== null && !read.ok;
     if (read.ok) {
-      run.lastSent = read.content;
+      // A document's unsaved text passes the provider's cap as every other way onto it does (FR-012).
+      run.lastSent = doc !== null && read.content.kind === 'text' ? this.documentContent(run, read.content.text) : read.content;
     } else {
       run.lastSent = CLEARED_CONTENT;
       run.notice = read.notice;
+    }
+    if (leftGridDocument !== null && leftGridDocument !== this.ownGridDocument(run)) {
+      this.deps.gridDocumentLeft?.(run.panelId);
     }
   }
 
@@ -1059,7 +1241,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     content: PreviewDocumentContent,
     missing: boolean,
   ): Promise<DiskRead> {
-    if (content.contentless !== true) return { ok: true, content: { kind: 'text', text: content.text } };
+    if (!documentHasNoFile(content)) return { ok: true, content: { kind: 'text', text: content.text } };
     if (missing) return { ok: false, notice: { kind: 'deleted' } };
     return { ok: false, notice: await this.unloadableNotice(run, target, providerId) };
   }
@@ -1092,7 +1274,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     if (run.source.kind !== 'document' || run.source.documentPanelId !== documentPanelId) return null;
     const current = this.deps.documents.getContent(documentPanelId);
     if (!current) return null;
-    if (current.contentless !== true) return this.showReadableDocument(run, current);
+    if (!this.showsNoFile(run, current)) return this.showReadableDocument(run, current);
     run.lastSent = { kind: 'text', text: current.text };
     run.dirty = current.dirty;
     const flash = opts.repeat && run.notice?.kind === notice.kind;
@@ -1104,9 +1286,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private showReadableDocument(run: PreviewRun, current: PreviewDocumentContent): PreviewUpdate {
     run.readSeq += 1; // any classification still in flight describes a document that is gone
     run.documentContentless = false;
-    run.lastSent = { kind: 'text', text: current.text };
     run.dirty = current.dirty;
     run.notice = this.providerNotice(run);
+    run.lastSent = this.documentContent(run, current.text);
     return this.emit(run, run.lastSent);
   }
 
@@ -1285,7 +1467,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   changed(documentPanelId: string): void {
     for (const run of this.parentedTo(documentPanelId)) {
       const current = this.deps.documents.getContent(documentPanelId);
-      const contentless = current?.contentless === true;
+      const contentless = this.showsNoFile(run, current);
       if (current && contentless !== run.documentContentless) {
         if (contentless) void this.showUnloadable(run, { repeat: false });
         else this.showReadableDocument(run, current);
@@ -1467,9 +1649,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       run.source = { kind: 'document', documentPanelId: doc.panelId };
       const current = this.deps.documents.getContent(doc.panelId);
       run.dirty = current?.dirty ?? false;
-      run.lastSent = current ? { kind: 'text', text: current.text } : null;
-      if (current?.contentless === true) {
-        // Parented to a document that could not read this file: FR-026's notice, never its empty text.
+      run.lastSent = current ? this.documentContent(run, current.text) : null;
+      if (this.showsNoFile(run, current)) {
+        // Parented to a document whose file is gone or was never read: FR-026's notice, never its text (#696).
         run.documentContentless = true;
         const seq = ++run.readSeq;
         const notice = await this.unloadableNotice(run, filePath, provider.id);
@@ -1535,6 +1717,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private parentOf(run: PreviewRun): PreviewUpdate['parent'] {
     if (run.source.kind !== 'document') return null;
     const id = run.source.documentPanelId;
+    // 073 R1 — a grid document is no editor: there is nothing to go to (FR-015), so the run reads as standalone.
+    if (isGridDocumentId(id)) return null;
     return { panelId: id, title: this.editorTitles.get(id) ?? editorAutoTitle(run.filePath) };
   }
 
@@ -1561,6 +1745,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       // 044 T177 — on EVERY update, so a renderer that misses one still learns the count from the next.
       navigationSeq: run.navigationSeq,
     };
+    if (run.source.kind === 'document' && isGridDocumentId(run.source.documentPanelId)) update.ownsDocument = true;
     if (viewState !== undefined) update.viewState = viewState;
     return update;
   }
@@ -1616,6 +1801,37 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   }
 
   /** FR-027 — the notice a run carries while no ENABLED provider claims its current file. */
+/**
+   * 074 FR-012 — a parented run's document text as the preview may show it: past the provider's Maximum file size
+   * (measured in UTF-8 bytes, as the file would be), the run says so — one too-large notice naming the size and the
+   * limit — and shows nothing; back under it, the notice the size cap raised clears. Every path that turns a
+   * document's text into the run's content comes through here.
+   */
+  private documentContent(run: PreviewRun, text: string): PreviewContent {
+    const over = this.bufferOverLimit(run.providerId, text);
+    if (over !== null) {
+      // 073 FR-072 (T083) — once, as the run crosses the limit, not on every keystroke past it.
+      if (run.notice?.kind !== 'too-large') {
+        logExpected('preview-service: show the document', `over the preview size limit (${over.kind === 'too-large' ? `${over.size} > ${over.limit} bytes` : ''}), ${run.filePath}`);
+      }
+      run.notice = over;
+      return CLEARED_CONTENT;
+    }
+    if (run.notice?.kind === 'too-large') run.notice = this.providerNotice(run);
+    return { kind: 'text', text };
+  }
+
+  private bufferOverLimit(providerId: string, text: string): PreviewNotice | null {
+    // 077 FR-018 — the one size-cap check every path uses.
+    if (!hasOwnSizeCap(this.deps.registry, providerId)) return null;
+    const settings = this.deps.settings();
+    const limit = maxFileBytesFor(this.deps.registry, settings.editor.previews, providerId, settings.editor.maxOpenFileBytes);
+    // Cheap bound first: a UTF-8 string is at most 3 bytes per UTF-16 unit, at least 1.
+    if (text.length * 3 <= limit) return null;
+    const size = Buffer.byteLength(text, 'utf8');
+    return size > limit ? { kind: 'too-large', size, limit, limitKey: maxFileBytesKeyFor(this.deps.registry, providerId) } : null;
+  }
+
   private providerNotice(run: PreviewRun): PreviewNotice | null {
     return enabledProviderFor(this.deps.registry, this.previewSettings(), run.filePath)
       ? null
@@ -1649,8 +1865,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     if (this.runs.get(run.panelId) !== run || run.source.kind !== 'document') return;
     const current = this.deps.documents.getContent(run.source.documentPanelId);
     if (!current) return;
-    if (run.lastSent?.kind === 'text' && run.lastSent.text === current.text) return;
-    run.lastSent = { kind: 'text', text: current.text };
+    if (run.lastSent?.kind === 'text' && run.lastSent.text === current.text && run.notice?.kind !== 'too-large') return;
+    const before = run.notice;
+    const content = this.documentContent(run, current.text);
+    if (run.notice === before && run.lastSent?.kind === 'text' && content.kind === 'text' && run.lastSent.text === content.text) return;
+    run.lastSent = content;
     this.emit(run, run.lastSent);
   }
 
@@ -1667,16 +1886,16 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // `registered` carries no dirtyChanged: the initial state is read, not assumed (§3).
     const current = this.deps.documents.getContent(documentPanelId);
     run.dirty = current?.dirty ?? false;
-    if (current) run.lastSent = { kind: 'text', text: current.text };
     // A document that could not read the file — a restore of a deleted file, the FR-106d stand-in — is not
     // the file: the run keeps saying what is wrong (FR-026) rather than showing that document's empty text.
     // Nothing is emitted until the disk has said why, so the notice already on screen never blinks off.
-    if (current?.contentless === true) {
+    if (this.showsNoFile(run, current)) {
       void this.showUnloadable(run, { repeat: false });
       return;
     }
     run.documentContentless = false;
     run.notice = this.providerNotice(run);
+    if (current) run.lastSent = this.documentContent(run, current.text);
     this.emit(run, run.lastSent);
   }
 
@@ -1689,6 +1908,13 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // before anything else about the run changes: the preview keeps what it showed.
     this.deps.foldRekey?.reparent(run.panelId, fileKey(run.filePath), false);
     this.watchDisk(run);
+    /*
+     * #698 — the run is standalone NOW: say so at once, as a dirty or title change is said (FR-022), and let the
+     * disk's text follow when it is read. Waiting for the read left every viewer believing the preview still followed
+     * the document — its parent, its dirty mark — for as long as the disk took; on the nightly's macOS runner that
+     * outlasted the integration test's settle and the preview's update was missing (pipeline 44848109329).
+     */
+    this.emit(run, null);
     void this.readAndApply(run, { force: true, repeat: false });
   }
 
@@ -1733,6 +1959,26 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     run.source = { kind: 'disk', watch };
   }
 
+  /**
+   * 074 FR-012, SC-005 — a provider with its own Maximum file size refuses a file over it BEFORE anything is read:
+   * the notice names the size and the limit. `null` when the provider has no such setting, the file is within it,
+   * or its size cannot be asked (the read that follows reports that).
+   */
+  private async overProviderLimit(path: string, providerId: string): Promise<PreviewNotice | null> {
+    // 073 FR-062, 074 FR-012 — one cap for every provider with its own limit, binary or text, before anything is read.
+    if (!hasOwnSizeCap(this.deps.registry, providerId) || this.deps.fs.size === undefined) return null;
+    const settings = this.deps.settings();
+    const limit = maxFileBytesFor(this.deps.registry, settings.editor.previews, providerId, settings.editor.maxOpenFileBytes);
+    let size: number;
+    try {
+      size = await this.deps.fs.size(path);
+    } catch (error) {
+      logExpected('preview-service: size before read', 'a file may vanish or be unreadable; the read reports it', error);
+      return null;
+    }
+    return size > limit ? { kind: 'too-large', size, limit, limitKey: maxFileBytesKeyFor(this.deps.registry, providerId) } : null;
+  }
+
   private readDisk(run: PreviewRun): Promise<DiskRead> {
     return this.readPath(run, run.filePath, run.providerId);
   }
@@ -1740,11 +1986,22 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   /** Read `path` for `run` as provider `providerId` would show it — the run's own file or a link's target. */
   private async readPath(run: PreviewRun, path: string, providerId: string): Promise<DiskRead> {
     const provider = this.deps.registry.get(providerId);
+    const tooLarge = await this.overProviderLimit(path, providerId);
+    if (tooLarge !== null) {
+      // 073 FR-072 (T083) — a refused preview leaves a record of why.
+      logExpected('preview-service: read the file', `over the preview size limit (${tooLarge.kind === 'too-large' ? `${tooLarge.size} > ${tooLarge.limit} bytes` : ''}), ${path}`);
+      return { ok: false, notice: tooLarge };
+    }
     if (provider?.kind === 'binary') {
       if (!(await this.isFile(path))) return { ok: false, notice: { kind: 'deleted' } };
-      const url = `throng-preview://source/${encodeURIComponent(run.panelId)}?rev=${run.revision + 1}`;
+      const url = `throng-preview://source/${encodeURIComponent(run.panelId)}?rev=${++this.sourceSeq}`;
       return { ok: true, content: { kind: 'resource', url } };
     }
+    // 077 FR-016, FR-018 (T056) — a provider with its own Maximum file size reads under that cap alone, never also
+    // under Max open file size; one without reads under the editor's limit.
+    const ownCap = hasOwnSizeCap(this.deps.registry, providerId);
+    const settings = this.deps.settings();
+    const limitKey = ownCap ? maxFileBytesKeyFor(this.deps.registry, providerId) : 'editor.maxOpenFileBytes';
     let result: LoadResult;
     try {
       result = await this.deps.reader.load({
@@ -1752,6 +2009,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         ownerRoot: run.projectRoot,
         ownerKind: 'project',
         allProjectRoots: [run.projectRoot],
+        ...(ownCap ? { maxBytes: maxFileBytesFor(this.deps.registry, settings.editor.previews, providerId, settings.editor.maxOpenFileBytes) } : {}),
       });
     } catch (error) {
       logCaught('preview-service: read document', error);
@@ -1766,8 +2024,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         return { ok: false, notice: { kind: 'not-decodable', encoding: result.encoding } };
       case 'utf32':
         return { ok: false, notice: { kind: 'utf32' } };
+      // 077 FR-014, FR-015 — the read's cap refused it: the notice quotes the file's size and that limit, in the one
+      // wording every provider's too-large notice uses.
       case 'too-large':
-        return { ok: false, notice: { kind: 'too-large' } };
+        return { ok: false, notice: { kind: 'too-large', size: result.size, limit: result.limit, limitKey } };
       case 'not-found':
         return { ok: false, notice: { kind: 'deleted' } };
       case 'io': {

@@ -72,6 +72,8 @@ export function linkNoticeMessage(notice: LinkNotice, projectRoot: string | null
     case 'link-missing-heading':
       return `No heading “${stripBidiControls(notice.target)}” was found.`;
     case 'history-refused':
+      // 073 FR-033a — Back/Forward never moves a CSV grid's unsaved edits out of sight.
+      if (notice.reason === 'unsaved') return 'This grid has unsaved changes. Save them to go back or forward.';
       return `${shown(notice.target)} could not be shown.`;
     default:
       return 'That link could not be followed.';

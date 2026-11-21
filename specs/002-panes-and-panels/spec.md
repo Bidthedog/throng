@@ -319,6 +319,18 @@ stays single-project; restart and confirm sub-workspaces are restored.
 - **FR-016**: Dragging the last Panel out of a split slot MUST collapse that slot; a Tab whose last
   Panel is removed MUST be removed; the active project's workspace MUST always retain at least one Tab
   containing at least one Panel.
+- **FR-016a** *(maintainer, 2026-11-20)*: Closing (×) the active project workspace's **last Panel** — the one
+  FR-016 retains — MUST run that panel's standard close checks (the unsaved-changes prompt for an editor or a
+  CSV Preview Editor, the confirmation for a running terminal) and, on confirm, return the panel to the
+  **blank panel form** (005 FR-001) instead of leaving it holding the content just closed; Cancel leaves it
+  untouched. Whenever a panel returns to the blank panel form — by this route, **Clear panel type** (030
+  FR-043), a terminal ending (005 FR-020) or a preview closed or refused (044 FR-064, FR-067) — the form MUST
+  preselect the type the panel had, when the form offers that type, and otherwise select nothing (a Find in
+  Files panel's or a preview's type is never offered). The panel's name returns with it: a panel that was
+  never renamed is called **Blank Panel** again. Closing any other panel is unchanged (FR-016), and a
+  sub-workspace's last panel still closes the sub-workspace (005 FR-029). *(Supersedes 003's "the destroy is
+  refused" for the main workspace's last panel, and 005 FR-001's empty selection for a panel returning to the
+  form; a newly created panel still opens with nothing selected.)*
 - **FR-017**: All workspace docking — moving, grouping, splitting, tab reordering, and detaching —
   MUST be operable via **mouse drag-and-drop only** in this iteration; keyboard-/command-driven
   docking is out of scope.

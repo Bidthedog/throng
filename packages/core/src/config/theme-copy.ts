@@ -237,6 +237,52 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The colour of the File Explorer and Find in Files icon for a file whose kind throng does not recognise. Leave it empty and it takes the Icon Colour, like the folders.',
   },
+  'colours.pictureCanvas': {
+    label: 'Picture Preview Background',
+    description:
+      'The background an Image or SVG preview draws its picture on, filling the panel around it. Leave it empty and it is the editor background a shade toward the text colour, so the picture\'s edges stand out.',
+  },
+  'colours.pictureHatch': {
+    label: 'Picture Transparency Marker',
+    description:
+      'The colour of the diagonal hatching drawn behind the transparent parts of a picture in a preview. Leave it empty and it is mixed from the editor background and text colour. Turn the hatching off per preview type with its Hatch transparent areas setting.',
+  },
+  // 075 FR-021 — the seven callout colour roles. Each names the callout types it colours (registry, FR-019).
+  'colours.calloutNeutral': {
+    label: 'Neutral Callout Accent',
+    description:
+      'The border, icon and title of note and quote callouts in a document preview, and the tint behind them.',
+  },
+  'colours.calloutInfo': {
+    label: 'Information Callout Accent',
+    description:
+      'The border, icon and title of abstract, info and todo callouts in a document preview, and the tint behind them.',
+  },
+  'colours.calloutAccent': {
+    label: 'Highlight Callout Accent',
+    description:
+      'The border, icon and title of tip and example callouts in a document preview, and the tint behind them.',
+  },
+  'colours.calloutSuccess': {
+    label: 'Success Callout Accent',
+    description:
+      'The border, icon and title of success callouts in a document preview (also written check or done), and the tint behind them.',
+  },
+  'colours.calloutQuestion': {
+    label: 'Question Callout Accent',
+    description:
+      'The border, icon and title of question callouts in a document preview (also written help or faq), and the tint behind them.',
+  },
+  'colours.calloutWarning': {
+    label: 'Warning Callout Accent',
+    description:
+      'The border, icon and title of warning callouts in a document preview (also written caution, attention or warn), and the tint behind them.',
+  },
+  'colours.calloutDanger': {
+    label: 'Danger Callout Accent',
+    description:
+      'The border, icon and title of failure, danger and bug callouts in a document preview, and the tint behind them.',
+  },
   'colours.titleBarSurface': {
     label: 'Title Bar Background',
     description:

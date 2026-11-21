@@ -89,25 +89,28 @@ describe('the terminal status bar toggle row (076)', () => {
   });
 
   it('draws an on toggle bright, and an off one greyed out with a line through it (FR-002)', () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/terminal/terminal.css'), 'utf8');
+    // 073 FR-007a — the look is the shared `setting-toggle` class, drawn once for every setting toggle; the terminal's
+    // buttons carry it beside their own layout class.
+    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/common/setting-toggle.css'), 'utf8');
     const rule = (selector: string): string => {
       const at = css.indexOf(`${selector} {`);
       expect(at, `${selector} has a rule`).toBeGreaterThanOrEqual(0);
       return css.slice(at, css.indexOf('}', at));
     };
-    // On: the theme's full-contrast text colour, not the accent, and no line.
-    expect(rule(".terminal-status-bar__toggle[aria-pressed='true'] .icon")).toMatch(
-      /color:\s*var\(--throng-colour-text\)/,
-    );
-    // Off: the muted text colour, and a line drawn across the glyph from top left to bottom right.
-    expect(rule(".terminal-status-bar__toggle[aria-pressed='false'] .icon")).toMatch(
-      /color:\s*var\(--throng-colour-textMuted\)/,
-    );
-    const slash = rule(".terminal-status-bar__toggle[aria-pressed='false']::after");
+    expect(rule(".setting-toggle[aria-pressed='true'] .icon")).toMatch(/color:\s*var\(--throng-colour-text\)/);
+    expect(rule(".setting-toggle[aria-pressed='false'] .icon")).toMatch(/color:\s*var\(--throng-colour-textMuted\)/);
+    const slash = rule(".setting-toggle[aria-pressed='false']::after");
     expect(slash).toMatch(/content:\s*''/);
     expect(slash).toMatch(/background:\s*var\(--throng-colour-textMuted\)/);
     expect(slash).toMatch(/rotate\(45deg\)/);
-    expect(rule('.terminal-status-bar__toggle')).toMatch(/position:\s*relative/);
+    expect(rule('.setting-toggle')).toMatch(/position:\s*relative/);
+  });
+
+  it('draws every toggle with the shared setting-toggle class, beside its own layout class (073 FR-007a)', () => {
+    mount(toggles().list);
+    for (const id of ['rememberCommand', 'rememberDirectory', 'notifications']) {
+      expect(button(id)).toHaveClass('setting-toggle', 'terminal-status-bar__toggle');
+    }
   });
 
   it('keeps the row whole under width pressure: the toggles never shrink, the readout truncates first (FR-007)', () => {

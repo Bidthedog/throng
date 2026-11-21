@@ -13,9 +13,11 @@
  * a link or raise a notice rather than doing either itself.
  */
 import type { ComponentType } from 'react';
-import type { DocumentSymbol, FoldState, PreviewContent, PreviewEmbedRead, PreviewLink, PreviewNotice, ProviderSettings } from '@throng/core';
+import type { DocumentSymbol, FoldState, PreviewContent, PreviewEmbedRead, PreviewLink, PreviewNotice, PrintableOutput, ProviderSettings } from '@throng/core';
 import type { PreviewLinkWording } from './link-dom.js';
 import type { TaskToggle } from './task-toggle.js';
+
+import type { SyncMark, SyncMarkSource } from './sync-mark-store.js';
 
 export interface PreviewBodyProps {
   panelId: string;
@@ -23,6 +25,29 @@ export interface PreviewBodyProps {
   filePath: string;
   projectRoot: string;
   providerSettings: ProviderSettings;
+  /**
+   * 073 FR-036b — this panel's own choice to offer the cell dialog (the CSV Preview Editor's status-bar toggle,
+   * persisted with the panel). Absent: the panel follows the provider's "Edit long cells in a dialog" setting.
+   */
+  cellDialogChoice?: boolean;
+  /**
+   * 073 FR-013 — this panel's own choice to wrap its cells (the CSV Preview Editor's Wrap toggle, persisted with the
+   * panel). Absent: the panel follows the provider's "Wrap cells" setting.
+   */
+  wrapChoice?: boolean;
+  /**
+   * 073 FR-039a — this panel's own choice to lock its first row / first column (the CSV Preview Editor's status-bar
+   * toggles, persisted with the panel). Absent: the panel follows the provider's "Lock first row" / "Lock first
+   * column" setting.
+   */
+  lockFirstRowChoice?: boolean;
+  lockFirstColumnChoice?: boolean;
+  /**
+   * 073 FR-043a, 074 FR-062b — a body that has a Go to (a grid: rows; a PDF: pages) hands the panel its opener, and
+   * takes it back with `null` on unmount. `preview.goToHeading` (Ctrl+G) and the menus' Go to Page… run it in place
+   * of the heading pop-down. The chrome names no provider.
+   */
+  registerGoTo?(open: (() => void) | null): void;
   /**
    * 045 FR-168 (review round four, editor M2) — what this window's settings make a link's Ctrl+click
    * DO, for the tooltip and the plain-click hint only. The chrome supplies it because judging it
@@ -81,13 +106,25 @@ export interface PreviewBodyProps {
    * An answer of `false` means the chrome could not act on it yet — the body compared its block with an
    * editor line that is no longer the latest — and the body reports again once `syncLine` next changes.
    */
-  onTopLineChange?(line: number): boolean | void;
+  onTopLineChange?(line: number, centreLine?: number | null): boolean | void;
   /**
    * 044 FR-121h — the body hands the chrome a way to read the source line of the block at its top now, for
    * placing a newly adopted editor where the preview already is. The reader answers `null` before anything
    * is drawn. Optional, like `onTopLineChange`.
    */
   onTopLineRead?(read: () => number | null): void;
+  /**
+   * 073 FR-033d — the source line (0-based) the preview and its editor are in step at, while a sync scroll moves one with
+   * the other: `on` while it is shown, false while it fades out. `null` when sync does not apply or nothing has moved.
+   * The body marks where that line is drawn — a CSV its row, Markdown a gutter indicator beside its block — and touches no
+   * focus, selection or scroll. Optional: a body that ignores it still conforms.
+   */
+  syncMark?: SyncMark | null;
+  /**
+   * 073 T075 — the same mark as a subscribable source, which the panel chrome gives a body in place of `syncMark` so a mark
+   * that moves every frame re-renders the body and not the chrome. When present it wins over `syncMark`.
+   */
+  syncMarkSource?: SyncMarkSource | null;
   /**
    * 044 FR-121e, FR-121h (data-model §15.2) — how the body treats `initialViewState`:
    *
@@ -200,9 +237,83 @@ export interface PreviewBodyProps {
    * lists never calls it.
    */
   onToggleTask?(task: TaskToggle): void;
+
+  /**
+   * 073 — this panel's own zoom factor (044 FR-034), for a body that lays out in JavaScript (the grid's
+   * row heights and column widths) rather than through `--throng-zoom-preview`. Optional: absent reads 1.
+   */
+  zoom?: number;
+  /**
+   * 073 FR-046 — the chrome's Open in Editor / Go to Editor route (044 FR-015), for a body whose own
+   * notice or menu offers it. Optional: a body that offers no such route never calls it.
+   */
+  onOpenInEditor?(): void;
+  /**
+   * 044 FR-015 (073 T089) — whether that route goes to an editor this preview is linked to: a body's own menu then
+   * names it **Go to Editor**, as the preview content menu does, else **Open in Editor**.
+   */
+  editorRouteParented?: boolean;
+  /**
+   * 073 FR-024 (T082) — a grid's Copy or Cut stopped at the cell bound: `copied` of `selected` cells went to the
+   * clipboard, and `bound` is the most one copy holds. A cut capped so removes nothing. The chrome says so, naming the
+   * panel. Absent, the body says nothing.
+   */
+  onCopyCapped?(copied: number, selected: number, bound: number, verb: 'copy' | 'cut'): void;
+  /**
+   * 075 FR-075b — the chrome's Print…, for a body that builds its own menus (the grids). Absent when the preview's
+   * provider cannot print.
+   */
+  onPrint?(): void;
+  /**
+   * 074 R8 (FR-022, FR-062) — a short sentence about what is drawn, for the status bar's readout slot: an image's
+   * pixel size and file size, a PDF's page. `null` clears it. A followed link's target, when there is one, is shown
+   * instead. Optional: a body that never calls it shows nothing there.
+   */
+  onStatusReadout?(text: string | null): void;
+
+  /**
+   * 074 R4 — this run's SOURCE bytes, read by main through the preview protocol's own handler (confined, MIME-checked,
+   * size-capped): what a binary provider needs when an `<img>` URL is not enough — PDF.js, or a bitmap for Copy
+   * Image. With `asset` (a root-relative path), that asset of the run instead, confined as an `<img>` load is. A
+   * passthrough to `window.throng.preview.readSource`. Optional: absent, every read is refused.
+   */
+  readSource?(asset?: string): Promise<{ ok: true; bytes: Uint8Array; mime: string } | { ok: false; status: number }>;
+  /**
+   * 074 FR-062c — a paged body (PDF) hands the panel its page layout, read and set, and `null` when it unmounts; the
+   * body menu draws one checked row per layout from it (every panel action has a menu item, Principle VI).
+   */
+  registerPageLayout?(control: PageLayoutControl | null): void;
+  /**
+   * 074 FR-085a — a body that draws its page in a same-origin frame (HTML) hands the panel the element whose
+   * selection is the page's — the frame document's body — and `null` when it goes. The panel's Copy, Copy as…,
+   * Select All, the copy gesture and the body menu read the selection there instead of in its own body host.
+   */
+  registerSelectionHost?(host: (() => HTMLElement | null) | null): void;
+  /**
+   * 074 FR-079, Constitution VI — a body whose headings and anchors live outside the panel's body host (an HTML page's
+   * frame) hands the panel how to scroll to a `#fragment` in what it shows, and `null` when it goes. The panel's
+   * heading follows (Open Link, a link to the shown file with a fragment) use it instead of looking in its own body
+   * host; it answers whether the fragment named anything.
+   */
+  registerFragmentReveal?(reveal: ((fragment: string) => boolean) | null): void;
+}
+
+/** 074 FR-062c — how a paged body lays its pages out: one under another, two to a row, or as many as fit. */
+export type PageLayout = 'single' | 'two' | 'wrap';
+
+export interface PageLayoutControl {
+  get(): PageLayout;
+  set(layout: PageLayout): void;
 }
 
 export type PreviewBody = ComponentType<PreviewBodyProps>;
+
+/** 075 FR-060 — what a view's `printable` is told besides the body. */
+export interface PrintableContext {
+  readonly title: string;
+  /** 075 FR-075c — the previewed file's bytes, through the source route; absent where the chrome offers none. */
+  readonly readSource?: () => Promise<{ ok: true; bytes: Uint8Array } | { ok: false; status: number }>;
+}
 
 export interface PreviewProviderView {
   /** The id of the core descriptor this view draws. */
@@ -212,10 +323,27 @@ export interface PreviewProviderView {
   /** The body menu offers Copy and Select All only when true (FR-035). */
   textSelection: boolean;
   /**
+   * 074 FR-086 — whether the find bar can search the drawn body. Absent reads `true`. `false` shows Find DISABLED on
+   * the panel's body menu, header menu and chord. No shipped provider sets it: the HTML page it was for shares the
+   * app's origin and is searched like any preview (FR-074a, FR-086b), and FR-086d gives a provider without the exact
+   * Find none at all (`findable: false`), never a lesser one.
+   */
+  searchable?: boolean;
+  /**
+   * 074 FR-086a — `false`: the body has no text to search at all (a picture), so Find is not offered — absent from the
+   * body and header menus, its chord consumed. Absent reads `true`.
+   */
+  findable?: boolean;
+  /**
    * FR-035a — the HTML a RICH copy puts on the clipboard, from a clone of the selected part of this
    * provider's body: the provider's own export profile, since only the provider knows what its DOM carries
    * that must not travel. Loaded on first use, like the body. A provider without one copies rich text as
    * its plain text alone.
    */
   exportHtml?(selection: DocumentFragment): Promise<string>;
+  /**
+   * 075 FR-060 — what Print Preview prints for what `body` shows now. Required when the core descriptor declares
+   * `print` (`provider-views.test.ts`); a provider without it cannot print, and Print… says so (FR-062).
+   */
+  printable?(body: HTMLElement, context: PrintableContext): Promise<PrintableOutput>;
 }

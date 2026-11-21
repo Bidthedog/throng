@@ -289,11 +289,20 @@ interface ScanRun {
    * else's change. Cleared with {@link ScanRun.held}.
    */
   ownWritesInFlight: Map<string, number>;
+  /**
+   * 062 FR-051 — what this run leaves out, root-relative, for telling the project watch which folders it scans.
+   * Compiled on first ask and forgotten when the run is retargeted. Only a run with the global list OFF has one
+   * worth asking: with it on, the run ignores at least what the watch leaves out.
+   */
+  watchExcluder?: ((relPath: string) => boolean) | null;
 }
 
 export class FileSearchService {
   /** Keyed by panel id (R23). The windows watching each run are in its own `viewers` set. */
   private readonly runs = new Map<string, ScanRun>();
+
+  /** 062 FR-051 — re-asks the project watch; set by the composition root. */
+  private watchNeedsListener: (() => void) | null = null;
 
   /**
    * Windows that have attached to a panel with NO run yet, so the next scan reaches them (FR-078).
@@ -766,6 +775,46 @@ export class FileSearchService {
     }
     this.runs.clear();
     this.waiting.clear();
+    this.watchNeedsListener = null;
+  }
+
+  /** Told when an open run's need of the project watch may have changed (062 FR-051). One listener: main's. */
+  onWatchNeedsChanged(listener: () => void): void {
+    this.watchNeedsListener = listener;
+  }
+
+  /**
+   * Does an open run scan the folder `relPath` of `absRoot`, so the project watch must keep following it
+   * (062 FR-051)? The watch leaves out what the tree and this service's DEFAULT lists both ignore; a run with its
+   * global list switched off scans folders those lists ignore, and holds results there that must go stale when
+   * their files change (FR-045a). Its folders stay watched while it is open and are given up when it closes.
+   */
+  needsWatched(absRoot: string, relPath: string): boolean {
+    const rootKey = normaliseForCompare(absRoot);
+    for (const run of this.runs.values()) {
+      if (run.useExcludeGlobs) continue;
+      if (normaliseForCompare(run.scope.projectRoot) !== rootKey) continue;
+      const sub = run.scope.subPath;
+      if (sub) {
+        if (sub === relPath || sub.startsWith(`${relPath}/`)) return true; // on the way to the run's scope
+        if (!relPath.startsWith(`${sub}/`)) continue; // outside it
+      }
+      run.watchExcluder ??= compileExcluder(
+        searchExcludeGlobs({
+          global: [],
+          useGlobal: false,
+          project: this.projectSearchExcludes(run.scope.projectRoot),
+          extra: run.extraExcludes,
+        }),
+      );
+      if (!run.watchExcluder(relPath)) return true;
+    }
+    return false;
+  }
+
+  /** A run that can need the watch opened, changed or closed: ask the watch again. */
+  private noteWatchNeeds(mattered: boolean): void {
+    if (mattered && !this.disposed) this.watchNeedsListener?.();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -794,6 +843,7 @@ export class FileSearchService {
     run.staleFiles.clear();
     run.ownWritesInFlight.clear();
     this.runs.delete(run.id);
+    this.noteWatchNeeds(!run.useExcludeGlobs);
   }
 
   /**
@@ -942,8 +992,11 @@ export class FileSearchService {
       existing.scope = scope;
       existing.term = request.term;
       existing.modes = request.modes;
+      const neededWatch = !existing.useExcludeGlobs;
       existing.useExcludeGlobs = request.useExcludeGlobs ?? true;
       existing.extraExcludes = [...(request.extraExcludes ?? [])];
+      existing.watchExcluder = null;
+      this.noteWatchNeeds(neededWatch || !existing.useExcludeGlobs);
       existing.skipped = 0;
       existing.filesScanned = 0;
       existing.totalMatches = 0;
@@ -988,6 +1041,7 @@ export class FileSearchService {
       ownWritesInFlight: new Map(),
     };
     this.runs.set(run.id, run);
+    this.noteWatchNeeds(!run.useExcludeGlobs);
     return run;
   }
 

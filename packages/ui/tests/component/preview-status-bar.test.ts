@@ -226,16 +226,18 @@ describe('the scroll-sync toggle (FR-122c)', () => {
     expect(toggle(id)).toBeEnabled();
   });
 
-  it('is pressed from the setting, live, and titled Synchronise Scrolling', async () => {
+  it('is pressed from the setting, live, and titled Synchronise Scrolling with its state', async () => {
     const mounted = await mountText();
     const { id } = mounted;
     const t = await screen.findByTestId(`preview-sync-scroll-${id}`);
     expect(t).toHaveAttribute('aria-pressed', 'true');
-    expect(t).toHaveAttribute('title', 'Synchronise Scrolling');
-    expect(t).toHaveAccessibleName('Synchronise Scrolling');
+    expect(t).toHaveAttribute('title', 'Synchronise Scrolling: enabled');
+    expect(t).toHaveAccessibleName('Synchronise Scrolling: enabled');
+    expect(t).toHaveClass('setting-toggle');
 
     mounted.setSettings({ editor: { previews: { syncScroll: false } } });
     await waitFor(() => expect(toggle(id)).toHaveAttribute('aria-pressed', 'false'));
+    expect(toggle(id)).toHaveAttribute('title', 'Synchronise Scrolling: disabled');
   });
 
   it('names the chord in its title only when preview.toggleSyncScroll is bound', async () => {
@@ -260,7 +262,7 @@ describe('the scroll-sync toggle (FR-122c)', () => {
           }),
         ),
       );
-      await waitFor(() => expect(screen.getByTestId('preview-sync-scroll-pv')).toHaveAttribute('title', 'Synchronise Scrolling (Ctrl+Alt+F8)'));
+      await waitFor(() => expect(screen.getByTestId('preview-sync-scroll-pv')).toHaveAttribute('title', 'Synchronise Scrolling: disabled (Ctrl+Alt+F8)'));
       expect(screen.getByTestId('preview-sync-scroll-pv')).toHaveAttribute('aria-pressed', 'false');
     } finally {
       Reflect.deleteProperty(window, 'throng');
@@ -275,6 +277,7 @@ describe('the scroll-sync toggle (FR-122c)', () => {
     await waitFor(() => expect(writePatch).toHaveBeenCalledTimes(1));
     expect(writePatch.mock.calls[0]).toEqual([{ kind: 'settings' }, [{ path: ['editor', 'previews', 'syncScroll'], value: false }]]);
     await waitFor(() => expect(toggle(id)).toHaveAttribute('aria-pressed', 'false'));
+    expect(toggle(id)).toHaveAttribute('title', 'Synchronise Scrolling: disabled');
   });
 
   it('stays pressed when the write fails — no optimistic state (FR-122e)', async () => {

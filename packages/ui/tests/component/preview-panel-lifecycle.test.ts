@@ -18,7 +18,7 @@
  */
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { StrictMode, createElement, type ReactElement } from 'react';
+import { StrictMode, createElement, useEffect, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PREVIEW_KIND,
@@ -33,7 +33,7 @@ import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js
 import { PreviewPanel } from '../../src/renderer/preview/preview-panel.js';
 import type { DropContext } from '../../src/renderer/editor/drop-target.js';
 import { PreviewProviderRegistryContext } from '../../src/renderer/preview/provider-registry-context.js';
-import { __resetPreviewStore, getPreviewFailure } from '../../src/renderer/preview/preview-store.js';
+import { __resetPreviewStore, applyPreviewUpdate, getPreviewFailure } from '../../src/renderer/preview/preview-store.js';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
 import { WorkspaceProvider } from '../../src/renderer/state/workspace-store.js';
 import { WorkspaceClient } from '../../src/renderer/state/workspace-client.js';
@@ -215,6 +215,56 @@ beforeEach(() => {
 });
 afterEach(() => {
   Reflect.deleteProperty(window, 'throng');
+});
+
+/**
+ * #696 (044 FR-026, US2 scenario 6) — a previewed file that disappears (deleted, or moved away outside throng, 052)
+ * shows one inline notice, "the file no longer exists", and nothing else: the document it showed is unloaded, not
+ * left on screen under the notice. When the file comes back, it shows again.
+ */
+describe('a previewed file that disappears (#696)', () => {
+  it('unloads the document and shows only the notice, then shows the file again when it returns', async () => {
+    installBridge();
+    renderPanel(fakeView(() => Promise.resolve(FakeBody)));
+    expect((await screen.findByTestId('fake-body-p1', undefined, COLD)).textContent).toBe('# Heading');
+
+    // What main sends when the watch finds the file gone: the notice, and content `null` ("unchanged").
+    act(() => void applyPreviewUpdate(update({ revision: 2, content: null, notice: { kind: 'deleted' } })));
+    expect(screen.queryByTestId('fake-body-p1')).toBeNull();
+    expect(screen.getByText(/no longer exists/i)).toBeTruthy();
+
+    act(() => void applyPreviewUpdate(update({ revision: 3, content: { kind: 'text', text: '# Back' }, notice: null })));
+    expect((await screen.findByTestId('fake-body-p1')).textContent).toBe('# Back');
+    expect(screen.queryByText(/no longer exists/i)).toBeNull();
+  });
+
+  /*
+   * FR-024, FR-107 (US7 scenario 3; pipeline 44762998591, every platform) — the file coming back shows where the
+   * reader was. The place is kept as the body unloads; the update that brings the file back carries no place of its
+   * own, and must not wipe it, or the remounted body draws at the top.
+   */
+  it('remounts the body at the place the reader left when the file comes back', async () => {
+    installBridge();
+    const mounted: Array<{ place: unknown; policy: unknown }> = [];
+    function PlacedBody({ content, panelId, initialViewState, placePolicy, onViewStateCapture }: PreviewBodyProps): ReactElement {
+      onViewStateCapture(() => ({ line: 42, offsetRatio: 0.25 }));
+      useEffect(() => {
+        mounted.push({ place: initialViewState, policy: placePolicy });
+        // Mount-time props only, as a real body reads them.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return createElement('div', { 'data-testid': `fake-body-${panelId}` }, content.kind === 'text' ? content.text : '');
+    }
+    renderPanel(fakeView(() => Promise.resolve(PlacedBody)));
+    await screen.findByTestId('fake-body-p1', undefined, COLD);
+
+    act(() => void applyPreviewUpdate(update({ revision: 2, content: null, notice: { kind: 'deleted' } })));
+    expect(screen.queryByTestId('fake-body-p1')).toBeNull();
+    act(() => void applyPreviewUpdate(update({ revision: 3, notice: null })));
+    await screen.findByTestId('fake-body-p1');
+
+    expect(mounted.at(-1)).toEqual({ place: { line: 42, offsetRatio: 0.25 }, policy: 'keep' });
+  });
 });
 
 describe('the attach lifecycle under StrictMode’s double mount (review item 5)', () => {

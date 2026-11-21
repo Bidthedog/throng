@@ -129,6 +129,7 @@ describe('area grouping (021, FR-001..FR-009)', () => {
     expect(THEME_AREA_GROUPS).toEqual([
       'General',
       'Editor',
+      'Markdown preview',
       'Main panel / workspace',
       'Sub-workspace',
       'Terminal',

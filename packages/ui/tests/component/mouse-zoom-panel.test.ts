@@ -203,6 +203,25 @@ describe('Ctrl+Wheel / Ctrl+MiddleClick zoom the panel UNDER THE POINTER (T118, 
     expect(zoomReset, 'this is a PANEL reset — the window zoom reset must never be touched').not.toHaveBeenCalled();
   });
 
+  // 073 FR-008g (2026-11-21) — a terminal stops every middle-button event in the capture phase so its program never
+  // sees one. The reset must still be heard over it.
+  it('Ctrl+MiddleClick still resets a panel whose content stops middle-button events from going further', async () => {
+    await mount();
+    const inner = document.createElement('div');
+    p2El.appendChild(inner);
+    const stopMiddle = (e: MouseEvent): void => {
+      if (e.button === 1) e.stopImmediatePropagation();
+    };
+    p2El.addEventListener('mousedown', stopMiddle, true);
+    try {
+      ctrlMiddleClick(inner);
+      await waitFor(() => expect(zoomOf('p2')).toBe(0));
+    } finally {
+      p2El.removeEventListener('mousedown', stopMiddle, true);
+      inner.remove();
+    }
+  });
+
   it('over the title bar, nothing is dispatched — but the event is still consumed [derived: no unhandled Ctrl+wheel reaches Chromium]', async () => {
     await mount();
     const notPrevented = wheel(titleBarEl, -100);

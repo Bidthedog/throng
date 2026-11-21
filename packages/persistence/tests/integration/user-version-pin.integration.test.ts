@@ -14,8 +14,8 @@ import { LATEST_VERSION } from '@throng/persistence';
  * LATEST_VERSION.
  */
 describe('the schema version and the migration chain agree', () => {
-  it('LATEST_VERSION is 12 — 060 #532 adds a project\'s own Find in Files exclusions', () => {
-    expect(LATEST_VERSION).toBe(12);
+  it('LATEST_VERSION is 15 — 073 adds a CSV\'s per-file grid column widths (v13), 074 a project\'s safe HTML preview sources (v14), #692 the attention ledger (v15)', () => {
+    expect(LATEST_VERSION).toBe(15);
   });
 
   // DELETED: 'a freshly migrated store actually REACHES LATEST_VERSION'. migration-runner.integration.test.ts

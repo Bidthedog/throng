@@ -54,13 +54,17 @@ import {
   type Panel,
   type PanelKind,
   type PreviewAffordance,
+  type PreviewGoToKind,
   type PreviewProviderKind,
   type SplitDirection,
-  isFlowingDocument,
+  supportsScrollSync,
+  previewIconOf,
 } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
+import { PRINT_UNAVAILABLE } from '../preview/print/print-command.js';
 import { splitSubmenu } from './split-menu.js';
 import { isPanelSectionMaximised, isPanelTabMaximised } from './maximise-store.js';
+import { isPanelFindAbsent, isPanelUnsearchable } from '../preview/unsearchable-panels.js';
 
 /**
  * The panel kinds that actually RENDER their zoom level (043 FR-062a, plan D2).
@@ -161,12 +165,24 @@ export interface PanelHeaderMenuActions {
   navigateForward: () => void;
   /** 044 FR-028 — a preview's Refresh. */
   refreshPreview: () => void;
+  /**
+   * 075 FR-061 — a preview's Print… (`preview.print`), or an editor's (`editor.print`). Optional: absent, the row is
+   * not drawn. A terminal never draws it.
+   */
+  print?: () => void;
   /** 044 FR-015c — a standalone text preview's route to an editor. */
   openInEditor: () => void;
   /** 044 FR-015d — a parented text preview's route to its editor. */
   goToEditor: () => void;
   /** 044 FR-122 — flip `editor.previews.syncScroll` (`toggleSyncScroll`, the one command body). */
   toggleSyncScroll: () => void;
+  /** 073 FR-036b — flip this panel's own choice to offer the cell dialog (persisted with the panel). */
+  toggleCellDialog: () => void;
+  /** 073 FR-013 — flip this panel's own choice to wrap its cells (persisted with the panel). */
+  toggleWrap: () => void;
+  /** 073 FR-039a — flip this panel's own choice to lock its first row / first column (persisted with the panel). */
+  toggleLockFirstRow: () => void;
+  toggleLockFirstColumn: () => void;
   /** 057 FR-125 — raise a user-flagged Attention mark on this panel (`attention.flag`). */
   flag: () => void;
 }
@@ -179,6 +195,22 @@ export interface PanelHeaderPreviewState {
   parented: boolean;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no Synchronise Scrolling. Absent reads `true`. */
   flowingDocument?: boolean;
+  /** 073 FR-033c — the provider's preview scrolls in step with its editor (Synchronise Scrolling). Absent reads `flowingDocument`. */
+  scrollSync?: boolean;
+  /** 073 FR-036b — the provider has a cell dialog; `on` is whether it is on for this panel (its own choice, else the setting). */
+  cellDialog?: { on: boolean };
+  /** 073 FR-013 — the provider wraps cells; `on` is whether it does for this panel (its own choice, else the setting). */
+  wrap?: { on: boolean };
+  /** 073 FR-039a — the provider locks its first row / column; `on` is whether it does for this panel (its own choice, else the setting). */
+  lockFirstRow?: { on: boolean };
+  lockFirstColumn?: { on: boolean };
+  /**
+   * 074 FR-062b — where the Go to row goes (`previewGoToKind`): `'page'` labels it Go to Page…, `'row'` Go to Row…
+   * (073 FR-043a). Absent: Go to Heading….
+   */
+  goTo?: PreviewGoToKind;
+  /** 075 FR-062 — whether its provider prints. Absent reads `false`: Print… is drawn disabled with the reason. */
+  printable?: boolean;
 }
 
 /**
@@ -381,22 +413,41 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
           : { label: 'Open in Editor', icon: 'editorPanel' as const, section: 'navigate', disabled, onClick: () => actions.openInEditor() },
       );
     }
-    items.push({
+    // 074 FR-086a — a picture has no text: no Find row at all.
+    if (!isPanelFindAbsent(panel.id)) items.push({
       label: 'Find…',
       icon: 'search' as const,
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'search.find'),
       ...documentCovered,
+      // 074 FR-086 — a body the find bar cannot read (a sandboxed page) shows Find disabled.
+      ...(isPanelUnsearchable(panel.id) ? { disabled: true } : {}),
       onClick: () => actions.find(),
     });
-    items.push({
-      label: 'Go to Heading…',
+    // 074 FR-062b — nothing to go to (a single picture): no row, as the body menu has none.
+    if (args.preview?.goTo !== null) items.push({
+      label: args.preview?.goTo === 'page' ? 'Go to Page…' : args.preview?.goTo === 'row' ? 'Go to Row…' : 'Go to Heading…',
+      ...(args.preview?.goTo === 'row' ? { icon: 'goToRow' as const } : {}),
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'preview.goToHeading'),
       ...documentCovered,
       onClick: () => actions.goToHeading(),
     });
     items.push(...historyItems(args.history, keybindings, actions));
+    // 075 FR-061 – FR-063 — Print…, on every preview; disabled, with the reason, when its provider cannot print.
+    if (actions.print !== undefined) {
+      const print = actions.print;
+      const printable = args.preview?.printable === true;
+      items.push({
+        label: 'Print…',
+        icon: 'print' as const,
+        section: 'navigate',
+        group: 'print',
+        shortcut: firstBinding(keybindings, 'preview.print'),
+        ...(printable ? documentCovered : { disabled: true, title: PRINT_UNAVAILABLE }),
+        onClick: () => print(),
+      });
+    }
     items.push({
       label: 'Refresh',
       icon: 'refresh' as const,
@@ -539,7 +590,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     if (openPreview !== undefined && openPreview.state !== 'absent') {
       items.push({
         label: 'Open Preview',
-        icon: 'preview' as const,
+        // 074 FR-103 — the provider's own preview icon.
+        icon: previewIconOf(openPreview.provider),
         section: 'navigate',
         shortcut: firstBinding(keybindings, 'preview.open'),
         disabled: openPreview.state === 'disabled',
@@ -548,10 +600,22 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     }
     // 044 FR-111 — Back and Forward, on every editor.
     items.push(...historyItems(args.history, keybindings, actions));
+    // Print… (`editor.print`) — on every editor, untitled included: it prints the document as it stands now.
+    if (actions.print !== undefined) {
+      const print = actions.print;
+      items.push({
+        label: 'Print…',
+        icon: 'print' as const,
+        section: 'navigate',
+        group: 'print',
+        shortcut: firstBinding(keybindings, 'editor.print'),
+        onClick: () => print(),
+      });
+    }
 
     // 044 FR-122a/b — Synchronise Scrolling, exactly where Open Preview is drawn, disabled or not.
     // 054 — none for a source whose preview is one picture (a Mermaid file).
-    if (openPreview !== undefined && openPreview.state !== 'absent' && isFlowingDocument(openPreview.provider)) {
+    if (openPreview !== undefined && openPreview.state !== 'absent' && supportsScrollSync(openPreview.provider)) {
       items.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
     }
 
@@ -560,8 +624,57 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
 
   // 044 FR-122a/b — a text preview's Synchronise Scrolling, after its Zoom; a binary provider has no editor to
   // keep in step with, so none.
-  if (isPreview && args.preview?.providerKind === 'text' && args.preview.flowingDocument !== false) {
+  if (isPreview && args.preview?.providerKind === 'text' && (args.preview.scrollSync ?? args.preview.flowingDocument !== false)) {
     items.push({ ...syncScrollItem(args.syncScroll ?? false, keybindings, actions), ...documentCovered });
+  }
+
+  // 073 FR-036b — a grid provider's cell dialog, on or off for THIS panel: a checked toggle in View & state, the menu route
+  // the status bar's toggle is an accelerator over.
+  if (isPreview && args.preview?.cellDialog !== undefined) {
+    items.push({
+      label: 'Edit Long Cells in Dialog',
+      checked: args.preview.cellDialog.on,
+      testId: 'menu-item-Edit Long Cells in Dialog',
+      icon: 'cellDialog' as const,
+      section: 'viewState',
+      onClick: () => actions.toggleCellDialog(),
+    });
+  }
+
+  // 073 FR-013 — a grid provider's Wrap, on or off for THIS panel: a checked toggle in View & state, the menu route the
+  // status bar's toggle is an accelerator over.
+  if (isPreview && args.preview?.wrap !== undefined) {
+    items.push({
+      label: 'Wrap',
+      checked: args.preview.wrap.on,
+      testId: 'menu-item-Wrap',
+      icon: 'wrapCells' as const,
+      section: 'viewState',
+      onClick: () => actions.toggleWrap(),
+    });
+  }
+
+  // 073 FR-039a — a grid provider's two locks, each on or off for THIS panel: checked toggles in View & state, the menu
+  // route the status bar's toggles are accelerators over.
+  if (isPreview && args.preview?.lockFirstRow !== undefined) {
+    items.push({
+      label: 'Lock First Row',
+      checked: args.preview.lockFirstRow.on,
+      testId: 'menu-item-Lock First Row',
+      icon: 'lockFirstRow' as const,
+      section: 'viewState',
+      onClick: () => actions.toggleLockFirstRow(),
+    });
+  }
+  if (isPreview && args.preview?.lockFirstColumn !== undefined) {
+    items.push({
+      label: 'Lock First Column',
+      checked: args.preview.lockFirstColumn.on,
+      testId: 'menu-item-Lock First Column',
+      icon: 'lockFirstColumn' as const,
+      section: 'viewState',
+      onClick: () => actions.toggleLockFirstColumn(),
+    });
   }
 
   // 044 FR-033 — a preview's banner commands, after its Zoom (View & state: Refresh · Zoom · Synchronise

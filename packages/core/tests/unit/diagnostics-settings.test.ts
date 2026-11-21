@@ -23,16 +23,28 @@ describe('the retention settings', () => {
     expect(DEFAULT_APP_SETTINGS.diagnostics.keepDays).toBe(DEFAULT_RETENTION.keepDays);
   });
 
-  it('declares diagnostics.maxTotalMb: a slider, 50–2000 in steps of 50, default 100, hardMax 65536', () => {
-    const d = descriptor('diagnostics.maxTotalMb');
-    expect(d).toMatchObject({ control: 'slider', min: 50, max: 2000, step: 50, hardMax: 65_536, group: 'Logging' });
-    expect(DEFAULT_APP_SETTINGS.diagnostics.maxTotalMb).toBe(100);
-    expect(DEFAULT_APP_SETTINGS.diagnostics.maxTotalMb * 1024 * 1024).toBe(DEFAULT_RETENTION.maxTotalBytes);
+  // 077 FR-001 — stored in bytes, shown in MB: 50–2000 MB in steps of 50 MB, default 100 MB, hard maximum 64 GB.
+  it('declares diagnostics.maxTotalBytes: a slider, 50–2000 MB in steps of 50 MB, default 100 MB, hardMax 64 GB', () => {
+    const MB = 1024 * 1024;
+    const d = descriptor('diagnostics.maxTotalBytes');
+    expect(d).toMatchObject({
+      control: 'slider',
+      storedUnit: 'bytes',
+      display: 'MB',
+      min: 50 * MB,
+      max: 2000 * MB,
+      step: 50 * MB,
+      hardMin: MB,
+      hardMax: 65_536 * MB,
+      group: 'Logging',
+    });
+    expect(DEFAULT_APP_SETTINGS.diagnostics.maxTotalBytes).toBe(100 * MB);
+    expect(DEFAULT_APP_SETTINGS.diagnostics.maxTotalBytes).toBe(DEFAULT_RETENTION.maxTotalBytes);
   });
 
   it('ships both defaults', () => {
     const shipped = buildShippedDefaults().settings.diagnostics;
-    expect(shipped).toMatchObject({ keepDays: 3, maxTotalMb: 100 });
+    expect(shipped).toMatchObject({ keepDays: 3, maxTotalBytes: 104_857_600 });
   });
 
   it('no longer has diagnostics.keepFiles (superseded by 066 FR-020)', () => {
@@ -52,9 +64,9 @@ describe('the retention settings', () => {
   it('keeps a hand-set folder cap above the slider, up to its hard maximum', () => {
     const { value } = parseSettingsGuarded({
       ...structuredClone(DEFAULT_APP_SETTINGS),
-      diagnostics: { ...DEFAULT_APP_SETTINGS.diagnostics, maxTotalMb: 40_000, keepDays: 99 },
+      diagnostics: { ...DEFAULT_APP_SETTINGS.diagnostics, maxTotalBytes: 40_000 * 1024 * 1024, keepDays: 99 },
     });
-    expect(value.diagnostics.maxTotalMb).toBe(40_000);
+    expect(value.diagnostics.maxTotalBytes).toBe(40_000 * 1024 * 1024);
     expect(value.diagnostics.keepDays).toBe(30);
   });
 });

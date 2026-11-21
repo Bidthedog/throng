@@ -32,19 +32,23 @@
  * FR-046a (manual test change request, 2026-10-13) — a standalone .mmd preview: its one diagram fills the
  * panel's body, every box down to the viewport taking the height that is left, and the body never scrolls. A
  * diagram larger than the panel is panned (FR-046e); the frame's Fit uses the viewport's own height.
+ *
+ * 074 FR-031 (2026-11-19) — every one-drawing body (`DiagramFileBody`: Mermaid, Image, SVG) fills its panel the
+ * same way. These rules once named `.preview-mermaid` alone, so an Image or SVG preview's viewport collapsed to its
+ * 36px floor: the picture sat off-centre, the toolbar was clipped, and zoom drew into a box too small to show it.
  */
-.preview-panel__body:has(.preview-mermaid) {
+.preview-panel__body:has(.preview-drawing-file) {
   overflow: hidden;
 }
 
-.preview-mermaid {
+.preview-drawing-file {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-.preview-mermaid > .preview-diagram-host,
-.preview-mermaid .preview-diagram {
+.preview-drawing-file > .preview-diagram-host,
+.preview-drawing-file .preview-diagram {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -68,6 +72,32 @@
 .preview-diagram-frame--fills > .preview-diagram-frame__viewport {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/*
+ * 074 FR-031a, FR-027a (2026-11-19) — an Image or SVG preview: the viewport scrolls on both axes once the picture at
+ * its scale outgrows it (the frame sizes the stage inside it), on a solid canvas that fills the panel. The canvas is
+ * the theme's Picture Preview Background (`pictureCanvas`); unset, the editor background a twentieth of the way toward the text, so even an opaque
+ * picture in the editor's own colour shows where it ends.
+ */
+.preview-diagram-frame--scrolls {
+  background: var(
+    --throng-colour-pictureCanvas,
+    color-mix(in srgb, var(--throng-colour-editorBg) 95%, var(--throng-colour-text))
+  );
+}
+
+.preview-diagram-frame--scrolls .preview-diagram-frame__viewport {
+  overflow: auto;
+}
+
+.preview-diagram-frame--scrolls .preview-diagram-frame__stage {
+  overflow: hidden;
+}
+
+/* Fitted, the picture fits: nothing scrolls, and a sub-pixel of rounding never raises a scrollbar (diagram-frame.tsx). */
+.preview-diagram-frame--scrolls .preview-diagram-frame__viewport--fitted {
+  overflow: hidden;
 }
 
 /*
@@ -191,15 +221,6 @@
   outline: none;
 }
 
-/* A diagram's first draw, until its SVG arrives. */
-.preview-diagram__loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  color: var(--throng-colour-textMuted);
-}
-
 /* A middle-button pan in progress, in place, in a .mmd preview or in Focus Mode alike. */
 .preview-diagram-frame__viewport--panning,
 .preview-diagram-frame__viewport--panning * {
@@ -213,12 +234,132 @@
   white-space: nowrap;
 }
 
+.preview-diagram-frame__stage {
+  position: relative;
+}
+
 .preview-diagram-frame__layer {
   transform-origin: 0 0;
 }
 
 .preview-diagram-frame__layer > svg {
   display: block;
+}
+
+/* 074 FR-034 — a picture enlarged past 100% shows its pixels; shrunk, it is smoothed as usual. */
+.preview-diagram-frame__layer[data-magnified] image {
+  image-rendering: pixelated;
+}
+
+/*
+ * 074 FR-027b (2026-11-19, superseding FR-027's checkerboard) — a picture's transparent areas show a diagonal hatch in
+ * the theme's Picture Transparency Marker (`pictureHatch`; unset: the editor background a fifth of the way toward the text), over the
+ * canvas. A backdrop the frame sizes to the scaled picture, outside the scaled layer, so the lines keep their screen
+ * spacing at every zoom. Off (the provider's Hatch transparent areas), the canvas shows through plainly.
+ */
+.preview-diagram-frame__hatch {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  /*
+   * 2026-11-20 — ten thin lines, then ten thicker ones, repeated: one 160px tile of forty lines, generated, each
+   * centred on a whole pixel of x+y and 8px from the next, so every thin line draws alike and every thick one does
+   * (generated: thin 0.45%, thick 0.9% of the tile's 226px diagonal — about 1px and 2px across the line). The
+   * repeating-linear-gradient before it, with a 6px period, put its stops between device pixels along the diagonal,
+   * and each line anti-aliased differently.
+   */
+  --hatch-line: var(--throng-colour-pictureHatch, color-mix(in srgb, var(--throng-colour-editorBg) 80%, var(--throng-colour-text)));
+  background-image: linear-gradient(
+    -45deg,
+    transparent 0 1.025%,
+    var(--hatch-line) 1.025% 1.475%,
+    transparent 0 3.525%,
+    var(--hatch-line) 3.525% 3.975%,
+    transparent 0 6.025%,
+    var(--hatch-line) 6.025% 6.475%,
+    transparent 0 8.525%,
+    var(--hatch-line) 8.525% 8.975%,
+    transparent 0 11.025%,
+    var(--hatch-line) 11.025% 11.475%,
+    transparent 0 13.525%,
+    var(--hatch-line) 13.525% 13.975%,
+    transparent 0 16.025%,
+    var(--hatch-line) 16.025% 16.475%,
+    transparent 0 18.525%,
+    var(--hatch-line) 18.525% 18.975%,
+    transparent 0 21.025%,
+    var(--hatch-line) 21.025% 21.475%,
+    transparent 0 23.525%,
+    var(--hatch-line) 23.525% 23.975%,
+    transparent 0 25.8%,
+    var(--hatch-line) 25.8% 26.7%,
+    transparent 0 28.3%,
+    var(--hatch-line) 28.3% 29.2%,
+    transparent 0 30.8%,
+    var(--hatch-line) 30.8% 31.7%,
+    transparent 0 33.3%,
+    var(--hatch-line) 33.3% 34.2%,
+    transparent 0 35.8%,
+    var(--hatch-line) 35.8% 36.7%,
+    transparent 0 38.3%,
+    var(--hatch-line) 38.3% 39.2%,
+    transparent 0 40.8%,
+    var(--hatch-line) 40.8% 41.7%,
+    transparent 0 43.3%,
+    var(--hatch-line) 43.3% 44.2%,
+    transparent 0 45.8%,
+    var(--hatch-line) 45.8% 46.7%,
+    transparent 0 48.3%,
+    var(--hatch-line) 48.3% 49.2%,
+    transparent 0 51.025%,
+    var(--hatch-line) 51.025% 51.475%,
+    transparent 0 53.525%,
+    var(--hatch-line) 53.525% 53.975%,
+    transparent 0 56.025%,
+    var(--hatch-line) 56.025% 56.475%,
+    transparent 0 58.525%,
+    var(--hatch-line) 58.525% 58.975%,
+    transparent 0 61.025%,
+    var(--hatch-line) 61.025% 61.475%,
+    transparent 0 63.525%,
+    var(--hatch-line) 63.525% 63.975%,
+    transparent 0 66.025%,
+    var(--hatch-line) 66.025% 66.475%,
+    transparent 0 68.525%,
+    var(--hatch-line) 68.525% 68.975%,
+    transparent 0 71.025%,
+    var(--hatch-line) 71.025% 71.475%,
+    transparent 0 73.525%,
+    var(--hatch-line) 73.525% 73.975%,
+    transparent 0 75.8%,
+    var(--hatch-line) 75.8% 76.7%,
+    transparent 0 78.3%,
+    var(--hatch-line) 78.3% 79.2%,
+    transparent 0 80.8%,
+    var(--hatch-line) 80.8% 81.7%,
+    transparent 0 83.3%,
+    var(--hatch-line) 83.3% 84.2%,
+    transparent 0 85.8%,
+    var(--hatch-line) 85.8% 86.7%,
+    transparent 0 88.3%,
+    var(--hatch-line) 88.3% 89.2%,
+    transparent 0 90.8%,
+    var(--hatch-line) 90.8% 91.7%,
+    transparent 0 93.3%,
+    var(--hatch-line) 93.3% 94.2%,
+    transparent 0 95.8%,
+    var(--hatch-line) 95.8% 96.7%,
+    transparent 0 98.3%,
+    var(--hatch-line) 98.3% 99.2%,
+    transparent 0 100%
+  );
+  background-size: 160px 160px;
+  pointer-events: none;
+}
+
+.preview-diagram-frame--dimmed .preview-diagram-frame__hatch {
+  opacity: 0.45;
 }
 
 /* FR-044 — one inline notice naming the parse error, above the diagram (or alone). */

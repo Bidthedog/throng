@@ -191,7 +191,8 @@ export type {
   ValidatedConfig,
   ConfigValidator,
 } from './abstractions/config-store.js';
-export type { IFileWatcher, Disposable, WatchBatch, WatchOptions } from './abstractions/file-watcher.js';
+export type { IFileWatcher, Disposable, RescopableWatch, WatchBatch, WatchOptions } from './abstractions/file-watcher.js';
+export { rescopeWatch } from './abstractions/file-watcher.js';
 
 // File Explorer tree (004): OS seams + pure domain.
 export type { IFileSystem, DirEntry } from './abstractions/file-system.js';
@@ -611,6 +612,8 @@ export {
   contrastFailures,
   assertInScopeContrast,
   assertSyntaxBodyContrast,
+  assertSyntaxSelectionContrast,
+  SYNTAX_SELECTION_MIN,
   knownContrastIssues,
   // Search-match mutual distinctness (043, FR-067).
   MATCH_SURFACE_PAIRS,
@@ -661,6 +664,7 @@ export {
   // compares an installed file against. Copies, never references: see their doc comments.
   V6_SEARCH_MATCH_COLOURS,
   V19_MOVED_COLOURS,
+  V37_MOVED_COLOURS,
   V6_SEARCH_IN_FILES_SETTINGS,
   SEARCH_MATCH_TOKENS,
   planThemeValueUpgrade,
@@ -704,7 +708,9 @@ export type { IFontEnumeration } from './abstractions/font-enumeration.js';
 export type {
   ControlKind,
   FieldDescriptor,
+  DisplayUnit,
   MapColumn,
+  StoredUnit,
   MetadataRegistry,
   RegistryAudit,
 } from './config/metadata.js';
@@ -767,6 +773,7 @@ export {
   sanitiseHiddenPaths,
   applyHiddenPaths,
   applySearchExcludeGlobs,
+  applyHtmlSafeSources,
   sanitiseSearchExcludeGlobs,
   assertOrderedIds,
 } from './projects/project.js';
@@ -1104,7 +1111,6 @@ export {
 export {
   TERMINAL_PANEL_TOGGLES,
   resolveTerminalToggles,
-  terminalToggleTitle,
   type TerminalPanelToggle,
   type TerminalToggleId,
   type TerminalToggleValues,
@@ -1208,6 +1214,20 @@ export { parseHex, isValidHex, toHex, rgbToHsv, hsvToRgb } from './config/colour
 // 018 / US7 — digit grouping. Strictly a VIEW concern: the parser is the exact inverse of the
 // formatter for the active locale, so a grouping character can never reach a settings file.
 export { formatGrouped, parseGrouped } from './config/number-format.js';
+// 077 — a numeric setting between its stored and displayed unit, its bounds, and what a typed value means.
+export {
+  BYTES_PER_MB,
+  checkTyped,
+  clampToHard,
+  formatSetting,
+  hardBounds,
+  isStop,
+  nearestStop,
+  toDisplay,
+  typedProblem,
+  unitNote,
+  type TypedCheck,
+} from './config/numeric-units.js';
 
 // 024 US3 (#85) — file-operation undo/redo engine (pure; the main process applies, persistence v8 stores).
 export {
@@ -1355,7 +1375,10 @@ export type {
   PreviewProviderDescriptor,
   PreviewProviderRegistry,
 } from './preview/provider.js';
-export { isFlowingDocument } from './preview/provider.js';
+export { canPrint, isFlowingDocument, previewGoToKind, previewIconOf, supportsScrollSync } from './preview/provider.js';
+export type { PreviewGoToKind } from './preview/provider.js';
+export { recordAtLine, recordStartLines } from './csv/record-lines.js';
+export type { PrintCapability } from './preview/provider.js';
 export type {
   PreviewCopyFormat,
   DefaultOpenAction,
@@ -1387,12 +1410,19 @@ export {
 export {
   PREVIEW_COPY_FORMATS,
   DEFAULT_OPEN_ACTIONS,
+  // 074 FR-016 — what a provider's Open <files> in offers.
+  offeredOpenActions,
   // 047 (research R8/R11, FR-015a).
   PREVIEW_OPEN_TARGETS,
   previewSettingsDefaults,
   previewSettingsDescriptors,
   parsePreviewSettings,
   effectiveMaxWaitMs,
+  // 074 FR-012 — a provider's own size cap.
+  maxFileBytesFor,
+  maxFileBytesKeyFor,
+  hasOwnSizeCap,
+  htmlSafeSourcesFrom,
   defaultOpenActionFor,
   // 054 FR-051 — the file's own provider's Open previews in.
   previewOpenTargetFor,
@@ -1407,6 +1437,14 @@ export {
   languageForFenceInfo,
 } from './preview/links.js';
 export type { PreviewLink, PreviewImage } from './preview/links.js';
+export {
+  SHIPPED_HTML_SAFE_SOURCES,
+  matchesSafeSource,
+  normaliseSafeSource,
+  safeSourceFault,
+  safeSourceList,
+  sourceOf,
+} from './preview/safe-sources.js';
 export { decideRendererRequest, resolvePreviewAsset } from './preview/request-policy.js';
 export type { PreviewAssetResolution } from './preview/request-policy.js';
 export { createSettleScheduler } from './preview/settle-scheduler.js';
@@ -1465,6 +1503,72 @@ export { PREVIEW_KIND, previewPanelType, previewPanelTypeLabel, previewProviderI
 // 054 FR-001, FR-002 — the preview recency a restored tab starts from.
 export { initialPreviewRecency } from './workspace/preview-recency.js';
 export type { PreviewValues } from './preview/panel-type.js';
+// 075 FR-018 – FR-019a — throng's own callout type registry.
+export {
+  CALLOUT_ROLES,
+  CALLOUT_TYPES,
+  FALLBACK_CALLOUT_TYPE,
+  calloutTitle,
+  calloutTypeEntry,
+  isCalloutTypeId,
+  resolveCalloutType,
+} from './preview/callouts.js';
+export type { CalloutRole, CalloutTypeEntry } from './preview/callouts.js';
+// 075 FR-040, FR-041 — GitHub's maths delimiter rules.
+export { matchDisplayBlock, matchInlineMath } from './preview/math-delimiters.js';
+export type { DisplayMathBlock, InlineMathMatch, InlineMathOpen } from './preview/math-delimiters.js';
+export {
+  COPIES_MAX,
+  DEFAULT_PRINT_SETTINGS,
+  MARGIN_MAX_MM,
+  MARGIN_PRESETS_MM,
+  PAGE_SIZE_MM,
+  paperSizeLabel,
+  paperSizeMm,
+  paperOf,
+  paperForPage,
+  defaultPdfSave,
+  PRINT_CENTRE_CSS,
+  PRINT_FIELDS,
+  PRINT_PAGE_SIZES,
+  SCALE_MAX,
+  SCALE_MIN,
+  checkPrintField,
+  marginsMm,
+  parsePageRanges,
+  clipPageRanges,
+  formatPageRanges,
+  parsePrintSettings,
+  pickDefaultPrinter,
+  printerChoices,
+  serialisePrintSettings,
+  toPdfOptions,
+  toPrintOptions,
+  printSheetHtml,
+} from './preview/print.js';
+export type {
+  PdfOptions,
+  PrintFieldBounds,
+  PrintFieldCheck,
+  PrintableOutput,
+  PrinterChoice,
+  PrinterInfoLike,
+  PrintJobRequest,
+  PrintJobView,
+  PrintRenderResult,
+  PrintMarginPreset,
+  PrintMargins,
+  PrintOptions,
+  PrintSheet,
+  PrintOrientation,
+  PrintPageSize,
+  PrintPaperSize,
+  PrintSaveResult,
+  PaperMm,
+  PrintSettings,
+} from './preview/print.js';
+export { PRINT_PALETTE, printPaletteCss } from './preview/print-palette.js';
+export type { IPrintEngine, PrintHostHandle, PrintSendResult } from './abstractions/print-engine.js';
 
 // 044 — per-panel navigation history (#136): the pure reducer main's authority is built on.
 export {
@@ -1486,6 +1590,7 @@ export {
   serialiseHistory,
 } from './navigation/history.js';
 export type { NavigationEntry, NavigationHistory } from './navigation/history.js';
+export { isGotoInput, resolveGotoNumber } from './navigation/go-to-input.js';
 
 // 045 — clickable file links (#394 / #198). The grammar and every decision, pure and OS-free.
 // `core/src/links/**` names no operating system, extension or drive mapping; the OS facts arrive
@@ -1567,3 +1672,51 @@ export {
   deriveFileIconColours,
   type FileIconCategory,
 } from './config/file-icon-colours.js';
+// 073 — the CSV grid model, its minimal-change writer, grid operations and clipboard formats.
+export {
+  cellValue,
+  detectDelimiter,
+  parseCsv,
+  recordFieldCount,
+  type CsvDelimiter,
+  type CsvLineEnding,
+  type CsvModel,
+} from './csv/csv-model.js';
+export { applyCsvChanges, encodeCsvField, type CsvCellEdit, type CsvTextChange } from './csv/csv-edit.js';
+export {
+  GRID_MAX_CELLS,
+  GRID_MAX_ROW_COUNT,
+  resolveGridOperation,
+  validateGridOperation,
+  type CsvGridOperation,
+  type GridOperationResolution,
+} from './csv/grid-operation.js';
+export {
+  CSV_LONG_CELL_THRESHOLD,
+  cellDialogOn,
+  cellDialogText,
+  wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
+  flattenCellText,
+  isJsonContainer,
+  isLongCell,
+  longCellThresholdOf,
+} from './csv/cell-text.js';
+export { columnLabel, gridToHtmlTable, gridToTsv, parseTsv } from './csv/grid-clipboard.js';
+
+// 073 FR-007a — the title of every on/off setting toggle (076 FR-002 first drew it for the terminal's).
+export { settingToggleTitle } from './config/setting-toggle.js';
+
+// 075 FR-020 – FR-023 — the callout colour roles as theme tokens, and their contrast guard.
+export {
+  CALLOUT_ICON_MIN_CONTRAST,
+  CALLOUT_ROLE_TOKENS,
+  CALLOUT_TEXT_MIN_CONTRAST,
+  CALLOUT_TINT,
+  calloutContrastFailures,
+  calloutTint,
+  deriveCalloutColours,
+  measureCalloutContrast,
+} from './config/callout-colours.js';
+export type { CalloutContrastResult } from './config/callout-colours.js';

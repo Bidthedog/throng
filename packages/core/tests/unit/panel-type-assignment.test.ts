@@ -97,3 +97,27 @@ describe('Panel kind/config round-trip through a layout blob (FR-007)', () => {
     expect(panel(restored, 'p1')!.config).toBeUndefined();
   });
 });
+
+/*
+ * 002 FR-016a — a panel that returns to the blank form remembers the type it had, so the form can offer it again, and the
+ * memory persists with the layout as `terminalMemory` does.
+ */
+describe('clearPanelType remembers the former type (002 FR-016a)', () => {
+  it('records the type the panel had', () => {
+    const cleared = clearPanelType(setPanelType(base(), 'p1', 'editor', { filePath: 'C:/p/a.txt' }), 'p1');
+    expect(panel(cleared, 'p1')!.kind).toBeUndefined();
+    expect(panel(cleared, 'p1')!.formerKind).toBe('editor');
+    expect(panel(JSON.parse(JSON.stringify(cleared)) as WorkspaceLayout, 'p1')!.formerKind).toBe('editor');
+  });
+
+  it('typing the panel again forgets it', () => {
+    const cleared = clearPanelType(setPanelType(base(), 'p1', 'editor', {}), 'p1');
+    const retyped = setPanelType(cleared, 'p1', 'terminal', CONFIG);
+    expect(panel(retyped, 'p1')!.formerKind).toBeUndefined();
+  });
+
+  it('clearing an already blank panel keeps what it remembered', () => {
+    const cleared = clearPanelType(setPanelType(base(), 'p1', 'terminal', CONFIG), 'p1');
+    expect(panel(clearPanelType(cleared, 'p1'), 'p1')!.formerKind).toBe('terminal');
+  });
+});

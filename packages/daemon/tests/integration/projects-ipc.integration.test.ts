@@ -136,6 +136,36 @@ describe('projects.* IPC', () => {
     expect(bad.error?.code).toBe(-32602);
   });
 
+  it('defaults htmlSafeSources to empty and round-trips projects.setHtmlSafeSources (074 FR-072a)', async () => {
+    const created = (await call('projects.create', validInput)).result.project;
+    expect(created.htmlSafeSources).toEqual([]);
+
+    const set = await call('projects.setHtmlSafeSources', {
+      id: created.id,
+      // Canonicalised, invalid entries dropped and de-duplicated by core.
+      htmlSafeSources: ['https://CDN.example.com/x', 'https://cdn.example.com', 'http://plain.example', '*.example.org'],
+    });
+    expect(set.result.project.htmlSafeSources).toEqual(['https://cdn.example.com', 'https://*.example.org']);
+    // Independent of the other two lists, which it leaves alone.
+    expect(set.result.project.hiddenPaths).toEqual([]);
+    expect(set.result.project.searchExcludeGlobs).toEqual([]);
+
+    const listed = (await call('projects.list', {})).result.projects as Array<{
+      id: string;
+      htmlSafeSources: string[];
+    }>;
+    expect(listed.find((p) => p.id === created.id)?.htmlSafeSources).toEqual([
+      'https://cdn.example.com',
+      'https://*.example.org',
+    ]);
+  });
+
+  it('refuses projects.setHtmlSafeSources without an array of strings', async () => {
+    const created = (await call('projects.create', validInput)).result.project;
+    const bad = await call('projects.setHtmlSafeSources', { id: created.id, htmlSafeSources: [1] });
+    expect(bad.error?.code).toBe(-32602);
+  });
+
   it('updates only the provided fields and bumps updatedAt', async () => {
     const created = (await call('projects.create', validInput)).result.project;
     // Ensure a distinct timestamp.

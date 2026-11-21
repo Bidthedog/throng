@@ -264,7 +264,7 @@ describe('an image’s tooltip is its source as written, then its title (FR-120)
   });
 
   it('an image whose error fires becomes an alternative-text span carrying its tooltip', async () => {
-    render(createElement(MarkdownBody, bodyProps('![A diagram](missing.png "Missing")')));
+    render(createElement(MarkdownBody, bodyProps('See ![A diagram](missing.png "Missing") inline.')));
     const host = screen.getByTestId('preview-markdown-pv-1');
     const image = await waitFor(() => {
       const found = host.querySelector('img');

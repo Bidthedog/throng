@@ -1,6 +1,6 @@
 import 'reflect-metadata';
-import { fileURLToPath } from 'node:url';
-import { join, dirname } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join, dirname, extname } from 'node:path';
 import * as fsPromises from 'node:fs/promises';
 import { readFile, stat as statAsync } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
@@ -107,12 +107,14 @@ import { ICON_SETS_CHANNELS, registerIconSetsIpc } from './icon-sets-ipc.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { installNavigationGuards, installRendererRequestFilter } from './renderer-request-filter.js';
-import { createPreviewProtocolHandler, PREVIEW_SCHEME } from './preview-protocol.js';
+import { createFrameSources, registerFrameSourcesIpc } from './frame-sources.js';
+import { createPreviewProtocolHandler, PREVIEW_SCHEME, readPreviewSource } from './preview-protocol.js';
 import { PreviewService } from './preview-service.js';
 import { previewPurgePredicate, purgeUnloadedPreviews } from './preview-purge.js';
 import { heldRecords, walkMovedLayouts } from './moved-layout-walk.js';
 import { createPreviewPush, registerPreviewIpc } from './preview-ipc.js';
 import { TaskToggleService } from './task-toggle-service.js';
+import { CsvGridService } from './csv-grid-service.js';
 import { NavigationHistoryService } from './navigation-history-service.js';
 import { createHistoryPush, registerNavigationHistoryIpc } from './navigation-history-ipc.js';
 import { PanelStateHandoff } from './panel-state-handoff.js';
@@ -167,6 +169,7 @@ import { registerLinkIpc } from './link-ipc.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { SharedFileWatcher } from './shared-file-watcher.js';
+import { projectWatchLeavesOut, withSearchNeeds } from './project-watch-exclusion.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
 import { reconnectWatcher } from './reconnect-watcher.js';
 import { createAppShellIntegration } from './electron-shell-integration.js';
@@ -195,6 +198,11 @@ import { EditorRecovery } from './editor-recovery.js';
 import { EditorCoordinator, type DocumentLifecycleListener } from './editor-coordinator.js';
 import { registerEditorIpc } from './editor-ipc.js';
 import { registerClipboardIpc } from './clipboard-ipc.js';
+import { ElectronPrintEngine } from './electron-print-engine.js';
+import { PrintController } from './print-controller.js';
+import { registerPrintIpc } from './print-ipc.js';
+import { openPrintPreviewWindow } from './print-preview-window.js';
+import { PrintSettingsStore } from './print-settings-store.js';
 import type { ClipboardService } from './clipboard-service.js';
 import { startPlatform } from '@throng/platform';
 import { createShellDetectionService } from './shell-detection-service.js';
@@ -763,9 +771,9 @@ const platformLogDir = hasUserDataDirSwitch(process.argv) ? undefined : platform
 const diagnostics = startUiDiagnostics({
   level: startupLogLevel,
   retention: {
-    maxFileBytes: startupDiagnostics.maxFileSizeKb * 1024,
+    maxFileBytes: startupDiagnostics.maxFileBytes,
     keepDays: startupDiagnostics.keepDays,
-    maxTotalBytes: startupDiagnostics.maxTotalMb * 1024 * 1024,
+    maxTotalBytes: startupDiagnostics.maxTotalBytes,
   },
   userDataDir: app.getPath('userData'),
   ...(platformLogDir ? { logDir: platformLogDir } : {}),
@@ -1079,9 +1087,9 @@ if (isPrimaryInstance)
       // the setting inert, the exact thing Principle X forbids.
       THRONG_CONFIG_ROOT: container.get<IConfigSettings>(UI_TYPES.ConfigSettings).configRoot,
       THRONG_LOG_LEVEL: startupLogLevel,
-      THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
+      THRONG_LOG_MAX_BYTES: String(startupDiagnostics.maxFileBytes),
       THRONG_LOG_KEEP_DAYS: String(startupDiagnostics.keepDays),
-      THRONG_LOG_MAX_TOTAL_MB: String(startupDiagnostics.maxTotalMb),
+      THRONG_LOG_MAX_TOTAL_BYTES: String(startupDiagnostics.maxTotalBytes),
       // 068 FR-034a — one salt per install, so one value gets one token in every process's log.
       THRONG_LOG_SALT: diagnostics.salt,
       THRONG_VERSION: productInfo.version,
@@ -1208,11 +1216,15 @@ if (isPrimaryInstance)
   // 044 Layer 4 (contracts/security-policy.md): installed here, before ANY window exists, so no
   // renderer ever makes a request the filter did not see. The settings getter is read on every request
   // (FR-092); `rendererDir` is the directory every window's `index.html` loads from.
+  // 074 FR-072a — each HTML Preview frame's safe sources, registered by its renderer, read by the filter.
+  const frameSources = createFrameSources();
+  registerFrameSourcesIpc(ipcMain, frameSources);
   installRendererRequestFilter(
     session.defaultSession,
     () => currentSettings,
     SHIPPED_PREVIEW_PROVIDERS,
     resolveFromHere('../renderer'),
+    frameSources,
   );
   // The active theme, kept fresh by `broadcast` below. Every window's preload pulls
   // it SYNCHRONOUSLY before first paint and applies it to <html>, so no window or
@@ -1703,6 +1715,29 @@ if (isPrimaryInstance)
    * events and triggering its own re-read.
    */
   const projectWatcher = new SharedFileWatcher(new NodeFileWatcher(150));
+  /*
+   * 062 FR-051 — what the project watch may leave out: folders both the tree and Find in Files ignore. Compiled once
+   * per root and forgotten whenever an input changes (the settings, a project's hidden set or search list), at which
+   * point the watch is re-asked in place. `projectsByRoot` is read at call time, once a window has asked for a root.
+   */
+  const watchExclusions = new Map<string, (relPath: string) => boolean>();
+  /** Find in Files' open runs' needs, wired once the service exists below; until then no run is open. */
+  let searchNeedsWatched: (absRoot: string, relPath: string) => boolean = () => false;
+  const projectWatchExclusion = (absRoot: string): ((relPath: string) => boolean) => {
+    const key = normaliseForCompare(absRoot);
+    let compiled = watchExclusions.get(key);
+    if (!compiled) {
+      const project = projectsByRoot.get(key);
+      compiled = projectWatchLeavesOut({
+        treeGlobs: currentSettings.explorer.excludeGlobs,
+        hiddenPaths: project?.hiddenPaths ?? [],
+        searchGlobs: currentSettings.search.inFiles.excludeGlobs,
+        projectSearchGlobs: project?.searchExcludeGlobs ?? [],
+      });
+      watchExclusions.set(key, compiled);
+    }
+    return withSearchNeeds(compiled, (rel) => searchNeedsWatched(absRoot, rel));
+  };
   const explorerWatcher = new ExplorerWatcher(
     projectWatcher,
     (evt, absRoot, relPaths) => {
@@ -1731,6 +1766,7 @@ if (isPrimaryInstance)
     (root, reason) => {
       broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:watchFailed', { root, reason });
     },
+    projectWatchExclusion,
   );
   const filesService = new FilesService(fileSystem, shellIntegration);
   // FR-018 — a raw error that a classified message replaces still reaches the log, so it outlives
@@ -1810,7 +1846,8 @@ if (isPrimaryInstance)
   const projectsByRoot = new Map<
     string,
     // 060 #532 — `searchExcludeGlobs` rides the same list call: Find in Files reads it at scan time.
-    { id: string; rootFolder: string; hiddenPaths: string[]; searchExcludeGlobs: string[] }
+    // 074 FR-072a — `htmlSafeSources`, the project's own safe HTML preview sources, rides the same call.
+    { id: string; rootFolder: string; hiddenPaths: string[]; searchExcludeGlobs: string[]; htmlSafeSources: string[] }
   >();
   let attentionOnProjectsListed: ((projectIds: ReadonlySet<string>) => void) | null = null;
   const sameHidden = (a: readonly string[], b: readonly string[]): boolean =>
@@ -1823,6 +1860,7 @@ if (isPrimaryInstance)
       rootFolder: string;
       hiddenPaths?: string[];
       searchExcludeGlobs?: string[];
+      htmlSafeSources?: string[];
     };
     let projects: ListedProject[];
     try {
@@ -1852,6 +1890,7 @@ if (isPrimaryInstance)
         rootFolder: p.rootFolder,
         hiddenPaths,
         searchExcludeGlobs: [...(p.searchExcludeGlobs ?? [])],
+        htmlSafeSources: [...(p.htmlSafeSources ?? [])],
       });
     }
     for (const [key, gone] of [...projectsByRoot]) {
@@ -1861,6 +1900,9 @@ if (isPrimaryInstance)
       // its hidden set going away is a change like any other.
       if (gone.hiddenPaths.length > 0) changed.push(gone.rootFolder);
     }
+    // 062 FR-051 — a project's hidden set or search list may have changed: the project watch re-asks what it may leave out.
+    watchExclusions.clear();
+    explorerWatcher.rescope();
     // 050 FR-011 — a project removed or re-rooted empties a clipboard holding its items. Here, inside
     // the refresh, so EVERY caller's fresh list is checked — and only a list the daemon actually gave.
     fileClipboard.retainProjects(new Map(projects.map((p) => [p.id, p.rootFolder])));
@@ -1930,6 +1972,14 @@ if (isPrimaryInstance)
    * is precisely the divergence "the same glob list and the same hidden set the tree obeys" denies.
    */
   onSettingsChanged.push((previous, next) => {
+    // 062 FR-051 — the project watch leaves out what the tree AND Find in Files ignore, so it follows either list.
+    if (
+      !sameHidden(previous.explorer.excludeGlobs, next.explorer.excludeGlobs) ||
+      !sameHidden(previous.search.inFiles.excludeGlobs, next.search.inFiles.excludeGlobs)
+    ) {
+      watchExclusions.clear();
+      explorerWatcher.rescope();
+    }
     if (sameHidden(previous.explorer.excludeGlobs, next.explorer.excludeGlobs)) return;
     projectFileIndex.refresh();
   });
@@ -1964,6 +2014,9 @@ if (isPrimaryInstance)
     pushFileSearchUpdate,
     () => currentSettings.editor.fallbackEncoding,
   );
+  // 062 FR-051 — an open run with its global exclusion list off keeps the folders it scans watched.
+  searchNeedsWatched = (absRoot, relPath) => fileSearch.needsWatched(absRoot, relPath);
+  fileSearch.onWatchNeedsChanged(() => explorerWatcher.rescope());
   /*
    * The commit half is registered LOWER DOWN, once the editor coordinator exists (043 T094).
    *
@@ -2156,9 +2209,11 @@ if (isPrimaryInstance)
        */
       const ownerUnknown = (ownership?.ownerKind ?? 'project') === 'project' && !ownership?.ownerRoot;
       if (result.reason === 'out-of-tree' && ownerUnknown) return undefined;
-      return result.reason === 'not-decodable'
-        ? { reason: result.reason, encoding: result.encoding }
-        : { reason: result.reason };
+      // 059 FR-053 names the encoding a not-decodable file was read as; 077 FR-014 quotes a too-large file's
+      // size and the limit it is over.
+      if (result.reason === 'not-decodable') return { reason: result.reason, encoding: result.encoding };
+      if (result.reason === 'too-large') return { reason: result.reason, size: result.size, limit: result.limit };
+      return { reason: result.reason };
     },
     // Raise the window that already owns an open file and focus its Panel (FR-011a).
     focusEditor: (windowId, panelId) => {
@@ -2177,6 +2232,8 @@ if (isPrimaryInstance)
    * `settings` is the live getter: the update delay, maximum wait, size limit and provider toggles all
    * apply to the next use. Project roots are main's own, from the daemon cache, never the renderer's.
    */
+  // 073 R1 — set just below, once the preview service it reads runs from exists.
+  const csvGridRef: { current?: CsvGridService } = {};
   const previews = new PreviewService({
     documents: editorCoordinator,
     reader: editorService,
@@ -2210,8 +2267,29 @@ if (isPrimaryInstance)
       read: (key) => editorCoordinator.readFold(key),
       restore: (key, state) => editorCoordinator.setFoldState(key, state, -1),
     },
+    // 073 — a CSV Preview Editor that closes for good releases its grid document (or hands it to an editor).
+    runEnded: (panelId) => csvGridRef.current?.release(panelId),
+    // 073 T035 — the run moved off the file its own clean grid document held: release that document (FR-060).
+    gridDocumentLeft: (panelId) => csvGridRef.current?.release(panelId),
+    // 073 FR-033b — the unsaved-on-open prompt's "Save & open" saves the panel's grid document first.
+    saveGridDocument: async (panelId) => (await csvGridRef.current?.save(panelId))?.ok === true,
   });
   previewService = previews;
+  const csvGrid = new CsvGridService(editorCoordinator, previews);
+  csvGridRef.current = csvGrid;
+  /*
+   * 044 — the `throng-preview:` protocol handler. The project root and document for a request come from the
+   * preview run `previews` holds for the panel id in the URL, never from the URL itself. 073 R7, 074 R4: the same
+   * handler also answers `preview.readSource`, so a renderer that needs a binary provider's BYTES (a workbook,
+   * PDF.js, Copy Image) gets them through exactly the confinement, MIME allowlist and size cap an `<img>` request
+   * meets — one code path, no second reader.
+   */
+  const previewProtocol = createPreviewProtocolHandler({
+    fs: fileSystem,
+    previews,
+    settings: () => currentSettings,
+    registry: SHIPPED_PREVIEW_PROVIDERS,
+  });
   // 054 US2 — a task checkbox in a preview edits its source through the editor authority (FR-024).
   registerPreviewIpc(
     ipcMain,
@@ -2222,6 +2300,7 @@ if (isPrimaryInstance)
       (panelId) => previews.run(panelId),
       () => currentSettings.editor.fallbackEncoding,
     ),
+    { grid: csvGrid, readSource: (panelId, asset) => readPreviewSource(previewProtocol, panelId, asset) },
   );
   // A window that has gone views no preview any more; the runs themselves live until `destroyed`.
   app.on('web-contents-created', (_event, contents) => {
@@ -2233,15 +2312,7 @@ if (isPrimaryInstance)
    * for the panel id in the URL, never from the URL itself. Handled here, once the service exists and
    * well before the first window is created below, so no window can load a preview URL unhandled.
    */
-  protocol.handle(
-    PREVIEW_SCHEME,
-    createPreviewProtocolHandler({
-      fs: fileSystem,
-      previews,
-      settings: () => currentSettings,
-      registry: SHIPPED_PREVIEW_PROVIDERS,
-    }),
-  );
+  protocol.handle(PREVIEW_SCHEME, previewProtocol);
   /*
    * 043 US4 — the replace commit, and the whole of `throng:fileSearch:*` (T086, T094).
    *
@@ -2313,6 +2384,45 @@ if (isPrimaryInstance)
   // The OS clipboard, behind the seam (016, FR-013a) — one app-global record of what throng last
   // copied and what SHAPE it was, so a block cut in one window pastes as a block in another.
   registerClipboardIpc(container.get<ClipboardService>(UI_TYPES.ClipboardService));
+  /*
+   * 075 — Print Preview. One controller for the app (the window is single, FR-071); its print host runs in a
+   * session of its own whose only routes are the printable document, the bundled assets and the preview's own
+   * images (the app's own `throng-preview:` handler, `previewProtocol`), plus the remote images the preview had shown.
+   */
+  {
+    const rendererRoot = pathToFileURL(resolveFromHere('../renderer/')).href;
+    // Built now, at start: its host documents' folder is swept of what a crashed session left (print-host-files.ts).
+    const printEngine = new ElectronPrintEngine({
+      dir: join(app.getPath('userData'), 'print-jobs', 'hosts'),
+      isBundledAsset: (url) => url.startsWith(rendererRoot),
+      registerPreviewRoute: (printSession) => printSession.protocol.handle(PREVIEW_SCHEME, previewProtocol),
+    });
+    app.on('will-quit', () => printEngine.closeAll());
+    const printController = new PrintController({
+      engine: printEngine,
+      store: new PrintSettingsStore(join(app.getPath('userData'), 'print-settings.json')),
+      openWindow: (parent, jobId) =>
+        openPrintPreviewWindow(parent, jobId, {
+          indexHtml: resolveFromHere('../renderer/index.html'),
+          preloadPath: resolveFromHere('../preload/preload.cjs'),
+          shellIntegration,
+          backgroundColor: themeBackground,
+          chrome: () => secondaryWindowChrome(platform.windowChrome(), hostTraits().os, { maximise: true }),
+        }),
+      // 075 FR-082 — Save as PDF: the OS's Save dialog over Print Preview, and the window that asked told where it went.
+      chooseSavePath: async (window, defaultPath) => {
+        const owner = window instanceof BrowserWindow && !window.isDestroyed() ? window : undefined;
+        const options = { defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] };
+        const answer = owner !== undefined ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+        if (answer.canceled || !answer.filePath) return null;
+        return extname(answer.filePath) === '' ? `${answer.filePath}.pdf` : answer.filePath;
+      },
+      onSaved: (parent, path) => {
+        if (parent instanceof BrowserWindow && !parent.isDestroyed()) parent.webContents.send('throng:print:saved', { path });
+      },
+    });
+    registerPrintIpc(printController, shellIntegration);
+  }
   // Deleting a file that is open in an editor marks that editor dirty (FR-099): the
   // buffer survives so the user can save it back (re-creating the file) or discard.
   // 050 FR-009 — and a deleted pending item leaves the File Explorer clipboard.
@@ -2775,9 +2885,9 @@ if (isPrimaryInstance)
     ...collectorEnv,
     THRONG_LOG_DIR: diagnostics.logDir,
     THRONG_LOG_LEVEL: startupLogLevel,
-    THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
+    THRONG_LOG_MAX_BYTES: String(startupDiagnostics.maxFileBytes),
     THRONG_LOG_KEEP_DAYS: String(startupDiagnostics.keepDays),
-    THRONG_LOG_MAX_TOTAL_MB: String(startupDiagnostics.maxTotalMb),
+    THRONG_LOG_MAX_TOTAL_BYTES: String(startupDiagnostics.maxTotalBytes),
     THRONG_LOG_SALT: diagnostics.salt,
   };
   const resourceMonitor = new ResourceMonitorHost({
@@ -2965,6 +3075,7 @@ if (isPrimaryInstance)
   const shutdownCancelled = (): void => {
     activeShutdown = null;
     macLifecycle?.onShutdownCancelled();
+    systemQuit = 'none';
   };
   // The running terminals (with display metadata) for the close warning. Returns
   // null when the query itself fails (daemon hiccup) — the caller then still WARNS
@@ -3155,9 +3266,39 @@ if (isPrimaryInstance)
     macLifecycle?.onRendererReloaded();
   });
 
+  /*
+   * #699 — a quit from the system. On Windows and Linux the user closes throng by closing its window, so a quit
+   * (`before-quit`) arriving while the window is still open came from outside: Electron turns SIGTERM (power-off,
+   * logout, `kill`) into one. Nobody is there to answer the running-terminals warning, and the system gives up on
+   * throng after a few seconds, so that close saves the workspace and goes, leaving the terminals to the daemon,
+   * which gets its own signal. macOS routes every quit through its lifecycle above (070 FR-028).
+   */
+  let systemQuit: 'none' | 'requested' | 'running' = 'none';
+  if (!macLifecycle) {
+    app.on('before-quit', () => {
+      if (!allowClose && !mainWindow.isDestroyed() && systemQuit === 'none') systemQuit = 'requested';
+    });
+  }
+  const closeForSystemQuit = (): void => {
+    systemQuit = 'running';
+    diagnostics.log.info('app-close: quit from the system — saving the workspace and closing without asking');
+    // A warning already on screen (the user's own close, still unanswered) gives way to this one.
+    activeShutdown?.cancel();
+    mainWindow.webContents.send('throng:appClose:begin');
+    mainWindow.webContents.send('throng:appClose:closing', { message: 'Closing throng…' });
+    const driver = new ShutdownDriver(publishShutdown, () => Date.now());
+    activeShutdown = driver;
+    void finishShutdown(driver, [drainStep], 0);
+  };
+
   mainWindow.on('close', (e) => {
     if (allowClose) return;
     e.preventDefault();
+    if (systemQuit === 'running') return;
+    if (systemQuit === 'requested') {
+      closeForSystemQuit();
+      return;
+    }
     // 070 FR-028: on macOS a close with no quit in progress leaves throng in the Dock, renderer and layout alive.
     if (macLifecycle?.onMainWindowClose() === 'hide') {
       mainWindow.hide();

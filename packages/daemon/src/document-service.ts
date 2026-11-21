@@ -3,16 +3,19 @@ import {
   DOCUMENT_SET_STATE_METHOD,
   DOCUMENT_MOVE_PATH_METHOD,
   DOCUMENT_PRUNE_METHOD,
+  DOCUMENT_SET_GRID_COLUMN_WIDTHS_METHOD,
   JSON_RPC_INVALID_PARAMS,
+  type DocumentStateDto,
+  type DocumentSetGridColumnWidthsResult,
   type DocumentGetStateResult,
   type DocumentMovePathResult,
   type DocumentPruneResult,
   type DocumentSetStateResult,
 } from '@throng/ipc-contract';
-import type { DocumentStateRepository } from '@throng/persistence';
+import type { DocumentState, DocumentStateRepository } from '@throng/persistence';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { IUserContext } from '@throng/core';
+import { logExpected, type IUserContext } from '@throng/core';
 import { RpcError, type RpcRouter } from './rpc-router.js';
 
 function asObject(params: unknown): Record<string, unknown> {
@@ -51,6 +54,7 @@ export class DocumentIpcService {
     router.register(DOCUMENT_SET_STATE_METHOD, (params) => this.setState(params));
     router.register(DOCUMENT_MOVE_PATH_METHOD, (params) => this.movePath(params));
     router.register(DOCUMENT_PRUNE_METHOD, (params) => this.pruneMissing(params));
+    router.register(DOCUMENT_SET_GRID_COLUMN_WIDTHS_METHOD, (params) => this.setGridColumnWidths(params));
   }
 
   private owner(): string {
@@ -61,7 +65,7 @@ export class DocumentIpcService {
   private getState(params: unknown): DocumentGetStateResult {
     const p = asObject(params);
     const state = this.repo.get(this.owner(), requireString(p, 'projectId'), requireString(p, 'relPath'));
-    return { state };
+    return { state: state === null ? null : toDto(state) };
   }
 
   private setState(params: unknown): DocumentSetStateResult {
@@ -79,7 +83,19 @@ export class DocumentIpcService {
       requireString(p, 'relPath'),
       languageId,
     );
-    return { state };
+    return { state: toDto(state) };
+  }
+
+  /** 073 FR-040 — the widths are validated here, so the store only ever holds the declared shape. */
+  private setGridColumnWidths(params: unknown): DocumentSetGridColumnWidthsResult {
+    const p = asObject(params);
+    const widths = p.widths === null ? null : gridWidthsOf(p.widths);
+    if (widths === undefined) {
+      throw new RpcError('"widths" must map column indexes to widths, or be null', JSON_RPC_INVALID_PARAMS);
+    }
+    const json = widths === null || Object.keys(widths).length === 0 ? null : JSON.stringify(widths);
+    const state = this.repo.setGridColumnWidths(this.owner(), requireString(p, 'projectId'), requireString(p, 'relPath'), json);
+    return { state: toDto(state) };
   }
 
   private movePath(params: unknown): DocumentMovePathResult {
@@ -116,4 +132,34 @@ export class DocumentIpcService {
     );
     return { pruned };
   }
+}
+
+/** The most columns a file's widths may name — an abuse limit, not a preference. */
+const MAX_WIDTH_ENTRIES = 10_000;
+
+/** Column index → px (40–2000), or `undefined` for anything else. */
+function gridWidthsOf(raw: unknown): Record<string, number> | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > MAX_WIDTH_ENTRIES) return undefined;
+  const out: Record<string, number> = {};
+  for (const [k, v] of entries) {
+    if (!/^(0|[1-9]\d{0,6})$/.test(k) || typeof v !== 'number' || !Number.isFinite(v) || v < 40 || v > 2000) return undefined;
+    out[k] = Math.round(v);
+  }
+  return out;
+}
+
+/** A stored row as the wire carries it: the widths' JSON parsed, and dropped if it no longer parses. */
+function toDto(state: DocumentState): DocumentStateDto {
+  let gridColumnWidths: Record<string, number> | null = null;
+  if (state.gridColumnWidths !== null) {
+    try {
+      gridColumnWidths = gridWidthsOf(JSON.parse(state.gridColumnWidths)) ?? null;
+    } catch (error) {
+      logExpected('document-service: read stored grid widths', 'a stored widths value that no longer parses is read as none', error);
+      gridColumnWidths = null;
+    }
+  }
+  return { projectId: state.projectId, relPath: state.relPath, languageId: state.languageId, gridColumnWidths };
 }

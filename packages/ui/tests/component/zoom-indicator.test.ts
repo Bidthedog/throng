@@ -13,6 +13,7 @@ import { stepZoomLevel, zoomFactor } from '@throng/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DiagramFrame } from '../../src/renderer/preview/diagram/diagram-frame.js';
 import { ZOOM_INDICATOR_HOLD_MS, ZoomIndicator } from '../../src/renderer/workspace/zoom-indicator.js';
+import { imageReadout } from '../../src/renderer/preview/providers/image/image-body.js';
 import { COLD, README, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
 const SHOWN = 'zoom-indicator--shown';
@@ -71,8 +72,41 @@ describe('a diagram’s zoom', () => {
     fireEvent.click(within(frame).getByTitle('Zoom 100%'));
     expect(indicator()).toHaveClass(SHOWN);
     expect(indicator()).toHaveTextContent('100%');
-    fireEvent.click(within(frame).getByTitle('Zoom in'));
+    fireEvent.click(within(frame).getByTitle(/^Zoom in \(/));
     expect(indicator()).toHaveTextContent('125%');
+  });
+});
+
+// 074 (2026-11-20) — a preview's zoom is always there, faded as its controls are until the pointer is over it.
+describe('a preview’s resting zoom', () => {
+  it('shows its figure before any step, resting rather than shown, and comes up full on a step', () => {
+    const { rerender } = render(createElement(ZoomIndicator, { percent: 100, cue: 0, testId: 'zi', resting: true }));
+    const el = screen.getByTestId('zi');
+    expect(el).toHaveTextContent('100%');
+    expect(el).toHaveClass('zoom-indicator--resting');
+    expect(el).not.toHaveClass(SHOWN);
+    rerender(createElement(ZoomIndicator, { percent: 125, cue: 1, testId: 'zi', resting: true }));
+    expect(el).toHaveClass(SHOWN);
+    expect(el).toHaveTextContent('125%');
+  });
+
+  it('a diagram frame rests its zoom, and reports its scale for the status bar on every change', () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement;
+    svg.setAttribute('viewBox', '0 0 400 200');
+    const onScale = vi.fn();
+    render(createElement(DiagramFrame, { svg, panelId: 'p1', sectionId: 'diagram-0', onScale }));
+    const frame = screen.getByTestId('diagram-frame-p1-diagram-0');
+    expect(within(frame).getByTestId('diagram-zoom-indicator-p1-diagram-0')).toHaveClass('zoom-indicator--resting');
+    fireEvent.click(within(frame).getByTitle('Zoom 100%'));
+    expect(onScale).toHaveBeenLastCalledWith(1);
+    fireEvent.click(within(frame).getByTitle(/^Zoom in \(/));
+    expect(onScale).toHaveBeenLastCalledWith(1.25);
+  });
+
+  it('the status bar names the zoom beside an image’s size, digit-grouped', () => {
+    expect(imageReadout({ width: 1920, height: 1080 }, 2_048_000, 1.25)).toBe('1,920 × 1,080 pixels · 2,048,000 bytes · 125%');
+    expect(imageReadout({ width: 10, height: 10 }, null, 12)).toBe('10 × 10 pixels · 1,200%');
+    expect(imageReadout({ width: 10, height: 10 }, null)).toBe('10 × 10 pixels');
   });
 });
 

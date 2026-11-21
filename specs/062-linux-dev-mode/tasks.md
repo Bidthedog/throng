@@ -129,3 +129,8 @@ T010-T013 touch separate files; T017-T018; T024-T025; T045-T046.
 ## Implementation strategy
 
 Foundation first with Windows proved unchanged at each commit by unit tests; then the window and terminals, since nothing else can be seen without them; then the sweep of existing suites; CI last, once there is something for it to prove.
+
+## Phase 11: Convergence
+
+- [x] T054 Add `WatchOptions.excluded` and `rescopeWatch` cases to the shared behaviour-only suite `packages/core/src/testing/file-watcher-contract.ts` (an event inside an excluded folder is not reported, the folder's own creation is, and a rescope that stops excluding it brings its events back) per FR-049, FR-051 (partial)
+- [x] T055 Cover the watch following an edited ignore list: `ExplorerWatcher.rescope` after its exclusion answer changes, and `ProjectFileIndexService.refresh` after the globs or hidden set change, each widening and narrowing the same watch without a second `watch` call, per FR-051 (partial)

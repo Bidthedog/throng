@@ -307,7 +307,7 @@ terminal, and the component that can see every panel in every project.
   `fileopUndo.*` and `panelName.*`.
 - `packages/persistence/src` holds `database.ts`, `migration-runner.ts`, `schema-guard.ts` and one
   repository per store (projects, project categories, workspace layouts, sub-workspaces, document
-  state, file-operation undo), with migrations in `migrations/v2…v10`.
+  state, file-operation undo), with migrations in `migrations/v2…v14`.
 - UI main's side of the wire is `daemon-client.ts` (requests), `daemon-events.ts` (the events
   socket), `daemon-lifecycle.ts` (spawn, adopt, retire) and `daemon-supervisor.ts` (reachability).
 
@@ -476,7 +476,7 @@ boundary so no layer knows more than it has to.
 - *Deciding what a mark is* is main's. `main/attention-service.ts` owns the mark model from
   `core/attention/`: at most one mark per panel, merged and sticky when Failed, cleared once the panel
   has held keyboard focus, in a focused window, for the
-  [clear delay](preferences.md#attention). Main also sends the daemon the set of attended panels
+  [clear delay](preferences.md#notifications). Main also sends the daemon the set of attended panels
   (`terminal.attentionFocus`), and the daemon writes `CSI I` / `CSI O` to every program that turned on
   focus reporting (DEC 1004) as its panel enters or leaves that set — the view cannot, because a tab or
   project switch unmounts it. Windows report which panels they host and which has focus; main
@@ -638,7 +638,8 @@ copy, delete to the Recycle Bin, and undo.
   `core/src/fs/path-id.ts` and `core/src/fileop-undo/undo-stack.ts`.
 - Main: `files-service.ts`, `files-ipc.ts`, `node-file-system.ts` (the `IFileSystem` binding,
   with the Recycle Bin), `node-file-watcher.ts`, `shared-file-watcher.ts` (one watch per folder,
-  shared by the tree, the file index, editors and previews), `explorer-watcher.ts`, `recycle-bin-restore.ts`,
+  shared by the tree, the file index, editors and previews, leaving out only folders every reader ignores;
+  `project-watch-exclusion.ts` says which those are for the tree and Find in Files), `explorer-watcher.ts`, `recycle-bin-restore.ts`,
   `undo-service.ts` and `in-app-moves.ts`; `file-clipboard.ts`, `transfer-service.ts` and
   `transfer-ipc.ts` for the clipboard and pastes.
 - Renderer: `renderer/explorer/`, with the tree on react-arborist, its drags driven by mouse events through a react-dnd backend of throng's own (`tree-pointer-backend.ts`).
@@ -721,6 +722,34 @@ target's candidates, from the document's folder then the project root, come from
 `wikiCandidates`, and the first that exists wins. That one answer governs the link's click, hover text,
 context menu and readout, and an `![[image.png]]` embed's source. A candidate that leaves the project is
 never probed.
+
+**Printing.** A provider whose descriptor declares `print` (`document` or `pages`) supplies `printable`
+on its view; Markdown and Mermaid share `renderer/preview/print/printable.ts`, which clones the body,
+opens every fold, strips throng's controls and writes a self-contained document in the fixed print
+palette (`core/src/preview/print-palette.ts`). A panel that holds text prints through
+`renderer/print/text-printable.ts` instead: the whole text, escaped, highlighted with the editor's own style in
+the same palette; an editor reaches it through `renderer/editor/editor-print.ts`, and a future text panel joins
+by supplying its text, title and syntax tree the same way. Main's `print-controller.ts` owns the one job: it loads
+that document into a hidden host with JavaScript off (`electron-print-engine.ts`, behind core's
+`IPrintEngine`), hands the modal Print Preview window (`print-preview-window.ts`) the `printToPDF` of it, which
+the window draws one page at a time with PDF.js (`renderer/print-preview/print-pages.ts`), so stepping between
+pages lays nothing out again. **Print** sends what the window shows: it draws every page at 300 dpi
+(`print-pages.ts` `sheet()`), and the controller prints those images from a second host
+(`printSheetHtml`) silently, with no margin, scale or page range of its own, so the paper is the preview.
+**Save as PDF…** writes the very `printToPDF` the window drew its pages from, through the OS's Save dialog, then
+tells the window that asked (`throng:print:saved`), whose `renderer/print/print-saved-notice.tsx` offers Open or a
+reveal in the tree; Open goes back through main, which opens only a PDF it saved.
+Settings persist in `print-settings.json`; the window re-reads the OS's printers every few seconds.
+
+```mermaid
+flowchart LR
+  P["Preview body"] -->|printable| R["throng.print.open"]
+  R --> C["print-controller"]
+  C --> E["IPrintEngine: hidden host"]
+  E -->|printToPDF| W["Print Preview window"]
+  W -->|Print: the pages, drawn| C
+  C -->|print the sheet, silent| E
+```
 
 ### Adding a preview provider
 

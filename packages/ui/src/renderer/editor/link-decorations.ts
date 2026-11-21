@@ -277,6 +277,32 @@ export function editorLinkRequest(text: string, site: EditorLinkSite): LinkResol
   };
 }
 
+/** The most lines {@link scanCached} keeps per scan options before it starts again. */
+const SCAN_CACHE_LINES = 4096;
+/** Per scan options (memoised by `linkScanOptions`, so a settings edit is a new key), each line text's scan. */
+const scanCache = new WeakMap<ScanOptions, Map<string, ReturnType<typeof scanLinkLine>>>();
+
+/**
+ * `scanLinkLine`, remembered by line text for the same options. The marks are rebuilt over every visible line on each
+ * viewport change, and an editor scrolled in step with a preview changes its viewport every frame: without this, the
+ * lines that stayed in view were scanned again each time (Principle XII; a CSV of 2 KB JSON records, 2026-11-21). A
+ * line's scan is a pure function of its text and the options, so an edited line is a new text and is scanned afresh.
+ */
+function scanCached(text: string, options: ScanOptions): ReturnType<typeof scanLinkLine> {
+  let lines = scanCache.get(options);
+  if (lines === undefined) {
+    lines = new Map();
+    scanCache.set(options, lines);
+  }
+  let scanned = lines.get(text);
+  if (scanned === undefined) {
+    if (lines.size >= SCAN_CACHE_LINES) lines.clear();
+    scanned = scanLinkLine(text, options);
+    lines.set(text, scanned);
+  }
+  return scanned;
+}
+
 /**
  * Every link on the lines `from..to` touches: web spans, and path candidates that RESOLVED.
  *
@@ -308,7 +334,7 @@ export function linkHitsBetween(
   let pos = from;
   while (pos <= to) {
     const line = state.doc.lineAt(pos);
-    const scanned = scanLinkLine(line.text, options);
+    const scanned = scanCached(line.text, options);
     // L2: the cap covers declared addresses as well as guessed paths. A terminal line is bounded by
     // the column count; an EDITOR line is not, so a one-line minified or generated file dense in
     // `mailto:`/`tel:` tokens is the reachable case — and `detectProtocolSpans` has no cap of its own.

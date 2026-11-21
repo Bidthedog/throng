@@ -26,6 +26,15 @@ Nothing about a release is done by hand copying files around, and no step has an
 stands in for a person's review is that a release can only come from a commit already on `master`,
 so it went through a pull request and its required checks. Why: [spec 065](../specs/065-unattended-releases/spec.md).
 
+## A dependency no sweep updates
+
+SheetJS CE (`xlsx`, the workbook reader behind the spreadsheet preview) is installed from its own CDN
+tarball, not the npm registry, whose copy is abandoned with known vulnerabilities. Nothing that reads the
+registry sees a new SheetJS release, so it is checked by hand at release time against
+[cdn.sheetjs.com](https://cdn.sheetjs.com/): a newer version means changing the tarball URL in
+`packages/ui/package.json` and reinstalling, which records its integrity in `package-lock.json`. Why:
+[spec 073](../specs/073-csv-spreadsheet-previews/research.md).
+
 ## Versions
 
 There is one authoritative version: `version` in the root [`package.json`](../package.json). Every

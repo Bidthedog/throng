@@ -1,6 +1,6 @@
 ---
 name: throng-renderer-ui
-description: Load before working on the React renderer — panes, tabs, panels and the docking model, the sidebar, title bar, status bars, explorer tree, context menus, notifications, dialogs, theming and icon controls, focus and keyboard scope, and renderer state clients. Triggers include adding or changing any visible UI, "where does this component go", a context menu or menu item, a theme token or icon, drag/tear-off/sub-workspace behaviour, focus or z-order problems, and any change that must satisfy the themeable-icon-control or every-panel-action-has-a-menu-item rules.
+description: Load before working on the React renderer — panes, tabs, panels and the docking model, the sidebar, title bar, status bars, explorer tree, context menus, notifications, dialogs, theming and icon controls, focus and keyboard scope, and renderer state clients. Triggers include adding or changing any visible UI, "where does this component go", a context menu or menu item, a theme token or icon, drag/tear-off/sub-workspace behaviour, focus or z-order problems, and any change that must satisfy the themeable-icon-control or every-panel-action-is-reachable rules.
 ---
 
 # throng — React renderer and the docking workspace
@@ -26,6 +26,13 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
 
 ## Rules a UI change must satisfy
 
+The binding text is in two references: [references/constitution-ux.md](references/constitution-ux.md)
+(binding: constitution Principle VI and the action-controls gate — reachability, menu sections,
+disabled vs absent, links, variants, OS and setting naming, popups, icon controls, dialog defaults,
+toast controls, setting toggles, and their known gaps) and
+[references/constitution-workspace.md](references/constitution-workspace.md) (binding: constitution
+Principle XI — layout, sub-workspaces, focus, Panel state). The bullets below are the working summary.
+
 - **Themeable icon controls.** Every interactive control that performs an action is an icon from the
   active theme's icon set with a hover title naming the action — not a text label. Icon colours come
   from theme tokens; hardcoded CSS colours and inline SVG are forbidden. The narrow exception is
@@ -33,10 +40,9 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
   consented to. Use `common/icon.tsx` and `common/icon-button.tsx`; the unit tests
   `icon-tokens-exist`, `icon-call-sites`, `css-variables-defined` and `button-token-exclusion`
   enforce this.
-- **Every panel action has a menu item.** Discrete commands and state toggles must appear in the
-  Panel's menu; a status bar control or chord is an accelerator over the menu, not a substitute.
-  Continuous/navigational input (scroll, find-next, column-select) is exempt but still rebindable.
-  The constitution enumerates the known pre-existing gaps — do not add to them.
+- **Every panel action is reachable.** Every discrete command or state toggle on a Panel has a
+  mouse-click or keyboard route, and never only one the user can hide; which routes a command gets is
+  the feature's choice.
 - **One gesture follows a link** (constitution **5.5.0**). A link rendered inside content — terminal
   output, document text, a preview, a dialog or notice body — follows on **Ctrl+click**, and on
   **Ctrl+Enter** where it holds a keyboard position; a plain click never navigates. Hover names the
@@ -58,10 +64,10 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
     (`Panel 1024`, `report copy 1024.txt` — see `unique-name.ts`, `naming.ts`); a number **seeded into
     an editable field** whose parser takes bare digits (see the comment in `navigate/goto-line.tsx`);
     and anything **machine-read**, such as a log field.
-  - 5.4.0 enumerates four known gaps in this package that predate the widening — `find-bar.tsx`,
-    `app-close-prompt.tsx`, `subworkspaces-panel.tsx`, `subworkspace-app.tsx`. Do not add to them, and
-    close the one you are touching before its next numeric change. `navigate/quick-open.tsx` is the
-    worked example of compliance.
+  - The known gaps are listed in `throng-config-preferences`'
+    `references/constitution-configuration.md`. Do not add to them, and close the one you are
+    touching before its next numeric change. `navigate/quick-open.tsx` is the worked example of
+    compliance.
 - **Every UI change ships with passing coverage at the lowest layer that can prove it** (Principle
   V). For most renderer work that is a **component test** (`vitest --project component`, jsdom):
   what the component renders, its computed style, focus movement inside it, its keyboard handling,

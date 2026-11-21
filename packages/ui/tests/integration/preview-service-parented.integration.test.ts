@@ -41,6 +41,11 @@ let coord: EditorCoordinator;
 let previews: PreviewService;
 let watcher: ReturnType<typeof manualWatcher>;
 let relay: ReturnType<typeof lateListener>;
+/**
+ * #698 — a disk read the service makes for a standalone run, held until this resolves (`null`: read at once). The
+ * macOS runner's disk can answer later than a fixed number of event-loop turns; a test that holds a read stands in for it.
+ */
+let holdRead: ((absPath: string) => Promise<void>) | null = null;
 
 const VIEWER = 7;
 
@@ -125,7 +130,13 @@ beforeEach(async () => {
   });
   previews = new PreviewService({
     documents: coord,
-    reader: service,
+    // #698 — the real reader, behind a hold a test can set to stand in for a slow disk.
+    reader: {
+      load: async (req: Parameters<EditorService['load']>[0]) => {
+        await holdRead?.(req.absPath);
+        return service.load(req);
+      },
+    },
     fs,
     fileWatcher: watcher,
     settings: settings.get,
@@ -139,6 +150,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  holdRead = null;
   for (const id of ['ed1', 'ed2', 'ed3']) coord.destroy(id);
   for (const id of ['v1', 'v2', 'v3']) previews.destroyed(id);
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
@@ -451,6 +463,12 @@ describe('a parented preview follows its document’s identity (FR-013c, FR-066)
     await attach('v1', from);
     await attach('v2', to);
     push.clear();
+    /*
+     * #698 (nightly 44848109329, macOS): the run left on `from` re-reads its file from disk before it says it is
+     * standalone, and that read can outlast any fixed number of event-loop turns. Held here for 100 ms, the slowest
+     * the runner's disk need be for the failure.
+     */
+    holdRead = (absPath) => (samePath(absPath, from) ? new Promise((r) => setTimeout(r, 100)) : Promise.resolve());
 
     await coord.save({ panelId: 'ed1', absPath: to });
     await settle();

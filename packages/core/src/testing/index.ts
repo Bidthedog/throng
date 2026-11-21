@@ -52,3 +52,4 @@ export { runVolumeRootsContract, type VolumeRootsContractEnv } from './volume-ro
 export { runFileAttributesContract, type FileAttributesContractEnv } from './file-attributes-contract.js';
 export { runFileAccessInfoContract, type FileAccessInfoContractEnv } from './file-access-info-contract.js';
 export { runCommandLineInstallContract, type CommandLineInstallHarness } from './command-line-install-contract.js';
+export { RecordingPrintEngine, type PrintEngineCall } from './recording-print-engine.js';

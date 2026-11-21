@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { formatGrouped, parseGrouped, type AppSettings, type FieldDescriptor } from '@throng/core';
+import {
+  checkTyped,
+  formatGrouped,
+  isStop,
+  nearestStop,
+  toDisplay,
+  type AppSettings,
+  type FieldDescriptor,
+} from '@throng/core';
 
 import { FolderPicker } from '../common/folder-picker.js';
 import { IconButton } from '../common/icon-button.js';
 import { MapControl } from './map-control.js';
-import { logExpected } from '@throng/core';
+import { ListSettingControl } from './list-editor.js';
+import { useFieldNotice } from './field-notice.js';
+import { logExpected, typedProblem } from '@throng/core';
 
 /**
  * Generic descriptor-driven form controls (feature 007, FR-028/029). One control
@@ -66,8 +76,17 @@ export function SettingControl(props: SettingControlProps): ReactElement {
     case 'number':
     case 'font-size':
       return <NumberControl {...props} />;
+    // 077 FR-025 — a list is summarised in its row and edited in a modal, by the same editor it had inline.
     case 'array':
-      return <ArrayControl {...props} />;
+      return (
+        <ListSettingControl
+          descriptor={props.descriptor}
+          value={props.value}
+          disabled={props.disabled}
+          onCommit={props.onCommit}
+          editor={(draft, setDraft) => <ArrayControl {...props} value={draft} onCommit={setDraft} />}
+        />
+      );
     case 'folder':
       return <FolderControl {...props} />;
     // A keyed map (016). WITHOUT this case it falls through to `default:` and renders as a TEXT
@@ -79,7 +98,17 @@ export function SettingControl(props: SettingControlProps): ReactElement {
     // `terminals.flavours` does not crash, it renders as a TEXT FIELD full of "[object Object]".
     case 'map':
     case 'records':
-      return <MapControl {...props} />;
+      return (
+        <ListSettingControl
+          descriptor={props.descriptor}
+          value={props.value}
+          disabled={props.disabled}
+          onCommit={props.onCommit}
+          editor={(draft, setDraft) => (
+            <MapControl descriptor={props.descriptor} value={draft} options={props.options} onCommit={setDraft} />
+          )}
+        />
+      );
     default:
       // text / colour / font-family / icon / chord fall back to a text field here;
       // richer pickers live in the Themes/Key Bindings tabs (US3/US4).
@@ -305,13 +334,21 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
   // 018 / FR-037 — the DISPLAYED value is grouped; the STORED value never is.
   //
   // `editor.maxOpenFileBytes` showed as `10485760`: eight digits with no grouping, which nobody
-  // reads as ten megabytes. `formatGrouped` leaves anything under five digits alone, because a
-  // 5000 ms delay rendered as `5,000` reads as a typo rather than a kindness.
+  // reads as ten megabytes. `formatGrouped` groups every number at every magnitude (constitution
+  // 4.5.0 removed 018's five-digit floor), so `5,000` sits beside `10,000` in the same shape.
   const display = (v: unknown): string =>
     typeof v === 'number' ? formatGrouped(v) : v === undefined ? '' : String(v);
 
   const [text, setText] = useState<string>(() => display(value));
-  const [invalid, setInvalid] = useState(false);
+  /** 077 FR-008 — what is wrong with the text in the box, said while it is typed; `null` while it is fine. */
+  const [message, setMessage] = useState<string | null>(null);
+  const invalid = message !== null;
+  // 077 FR-024 — what is wrong is said in the Preferences toast, naming the setting and its range; the box keeps only
+  // its outline. An inert control cannot be typed into, so it has nothing to complain about.
+  const fieldNotice = useFieldNotice(`${testId(descriptor.key)}-invalid`);
+  useEffect(() => {
+    fieldNotice(invalid && !disabled ? (typedProblem(text, descriptor) ?? message) : null);
+  }, [fieldNotice, invalid, disabled, text, message, descriptor]);
   const focused = useRef(false);
 
   /**
@@ -369,22 +406,21 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
     setDragging(null);
     if (!focused.current) {
       setText(display(value));
-      setInvalid(false);
+      setMessage(null);
     }
   }, [value]);
 
-  const parse = (raw: string): number | null => {
-    // `parseGrouped` is the exact inverse of `formatGrouped` for the active locale, so the
-    // separators the field just PUT IN come straight back out — and a grouping character can never
-    // reach the settings file (FR-038). A bare `Number(raw)` would simply reject `10,485,760`.
-    const n = parseGrouped(raw);
-    if (n === null) return null;
-    if (descriptor.min !== undefined && n < descriptor.min) return null;
-    if (descriptor.max !== undefined && n > descriptor.max) return null;
-    return n;
-  };
-
   const isSlider = descriptor.control === 'slider';
+
+  /*
+   * 077 FR-004, FR-005, FR-007 — the value beside the slider is in the setting's DISPLAY unit (MB, s), as is the
+   * slider's spoken value; the slider's own range stays in the STORED unit (research R1), as does the box, which holds
+   * the exact value (bytes, ms). A stored value that is not one of the slider's stops — typed in the box,
+   * or found in the file — greys the slider, which stays live: moving it stores the stop it lands on.
+   */
+  const stored = typeof shown === 'number' ? shown : undefined;
+  const overridden = isSlider && dragging === null && stored !== undefined && !isStop(stored, descriptor);
+  const shownText = stored === undefined ? '' : descriptor.storedUnit !== undefined ? toDisplay(stored, descriptor) : formatGrouped(stored);
 
   /*
    * Commit the value that is ACTUALLY IN THE BOX, read from the DOM — not the `text` state.
@@ -395,14 +431,29 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
    * value instead is immune to that — the box shows what the user sees, and that is what commits.
    * (This was a real flake: a debounce setting filled to 1500, blurred, and stayed 900.)
    */
+  /*
+   * 077 FR-009 — Enter or leaving the box stores a whole number within the hard bounds; past a bound it stores that
+   * bound; text that is no number stores nothing and STAYS, with its message, until it is corrected or Escape puts
+   * the stored value back — an entry is never discarded (040 FR-007; 018 FR-017). `checkTyped` parses with
+   * `parseGrouped`, the exact inverse of `formatGrouped`, so no grouping character reaches the file (FR-038).
+   */
   const commit = (raw: string): void => {
-    const n = parse(raw);
-    if (n === null) {
-      setInvalid(true); // not applied; last valid value remains (FR-017)
+    const check = checkTyped(raw, descriptor);
+    const n = check.ok ? check.value : check.clampTo;
+    if (n === undefined) {
+      setMessage(check.ok ? null : check.message);
+      // The same refused entry confirmed again flashes its toast (one condition, one notice).
+      if (!check.ok && !disabled) fieldNotice(typedProblem(raw, descriptor) ?? check.message, true);
       return;
     }
-    setInvalid(false);
+    setMessage(null);
+    setText(display(n));
     if (n !== value) onCommit(n);
+  };
+
+  const restore = (): void => {
+    setMessage(null);
+    setText(display(value));
   };
 
   return (
@@ -436,16 +487,18 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
          */
         <input
           type="range"
-          className="ctl__slider"
+          className={overridden ? 'ctl__slider ctl__slider--overridden' : 'ctl__slider'}
           data-testid={`${testId(descriptor.key)}-slider`}
+          data-overridden={overridden ? 'true' : undefined}
           aria-label={descriptor.label}
+          aria-valuetext={shownText}
           disabled={disabled}
           min={descriptor.min}
           max={descriptor.max}
           // `step` has been declared since feature 007 and read by NOBODY — dead metadata describing
           // a behaviour that did not exist. This is what makes it load-bearing (FR-035).
           step={descriptor.step}
-          value={typeof shown === 'number' ? shown : (descriptor.min ?? 0)}
+          value={stored !== undefined ? (dragging ?? nearestStop(stored, descriptor)) : (descriptor.min ?? 0)}
           onChange={(e) => {
             const n = Number(e.target.value);
             // Show it NOW — in the slider and in the field beside it, which must agree with the thumb
@@ -457,6 +510,11 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
           onKeyUp={commitDrag}
           onBlur={commitDrag}
         />
+      ) : null}
+      {isSlider ? (
+        <span className="ctl__value" data-testid={`${testId(descriptor.key)}-value`}>
+          {shownText}
+        </span>
       ) : null}
       <input
         type="text"
@@ -475,7 +533,10 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
         }}
         onChange={(e) => {
           setText(e.target.value);
-          setInvalid(false);
+          // 077 FR-008 — checked as it is typed, so a bad value is named before it is confirmed. An emptied box is a
+          // value being typed, not a wrong one: it is named only if it is confirmed empty.
+          const check = checkTyped(e.target.value, descriptor);
+          setMessage(check.ok || e.target.value.trim() === '' ? null : check.message);
         }}
         onBlur={(e) => {
           focused.current = false;
@@ -483,16 +544,9 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') commit(e.currentTarget.value);
+          if (e.key === 'Escape') restore();
         }}
       />
-      {/* An inert control cannot be typed into, so a complaint about what was typed into it is
-          stale by construction — hide it rather than leave it accusing a box nobody can reach. */}
-      {invalid && !disabled ? (
-        <span className="ctl__error" data-testid={`${testId(descriptor.key)}-invalid`}>
-          Enter a number{descriptor.min !== undefined ? ` ≥ ${descriptor.min}` : ''}
-          {descriptor.max !== undefined ? ` ≤ ${descriptor.max}` : ''}.
-        </span>
-      ) : null}
     </span>
   );
 }
@@ -503,6 +557,11 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
   // edited again, and the commit is refused, so the last valid value stays what is saved.
   const [error, setError] = useState<string | null>(null);
   const focused = useRef(false);
+  // 077 FR-024 — the refusal is the Preferences toast's, naming the setting; the box keeps its outline.
+  const fieldNotice = useFieldNotice(`${testId(descriptor.key)}-invalid`);
+  useEffect(() => {
+    fieldNotice(error === null ? null : `${descriptor.label}: ${error}`);
+  }, [fieldNotice, error, descriptor.label]);
   useEffect(() => {
     if (!focused.current) {
       setText(value === undefined ? '' : String(value));
@@ -513,7 +572,10 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
   const commit = (raw: string): boolean => {
     const message = descriptor.validate?.(raw) ?? null;
     setError(message);
-    if (message !== null) return false;
+    if (message !== null) {
+      fieldNotice(`${descriptor.label}: ${message}`, true);
+      return false;
+    }
     if (raw !== value) onCommit(raw);
     return true;
   };
@@ -547,11 +609,6 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
           commit(e.currentTarget.value);
         }}
       />
-      {error !== null ? (
-        <span className="ctl__error" data-testid={`${testId(descriptor.key)}-invalid`}>
-          {error}
-        </span>
-      ) : null}
     </>
   );
 }
@@ -600,28 +657,120 @@ function ArrayControl(props: SettingControlProps): ReactElement {
   return isStringArray ? <StringArrayControl {...props} /> : <JsonArrayControl {...props} />;
 }
 
+/**
+ * One entry of a list whose descriptor declares `validateItem` (074 FR-072c). It holds its own draft and writes only
+ * on Enter or blur, and only an entry the rule accepts: a refused entry keeps its text and focus, and says why in
+ * the Preferences toast (077 FR-024). `onCommit` is told whether the entry was written. An entry still empty when let go of calls `onEmpty` instead —
+ * an added row nobody typed into is dropped, not complained about.
+ */
+function ValidatedArrayItem({
+  id,
+  label,
+  value,
+  validate,
+  onCommit,
+  onEmpty,
+}: {
+  id: string;
+  /** The setting's label, which names the list in its toast (077 FR-024). */
+  label: string;
+  value: string;
+  validate: (item: string) => string | null;
+  onCommit: (item: string) => void;
+  onEmpty?: () => void;
+}): ReactElement {
+  const [text, setText] = useState(value);
+  const [error, setError] = useState<string | null>(null);
+  const focused = useRef(false);
+  // 077 FR-024 — a refused entry is named in the Preferences toast; the box keeps its outline.
+  const fieldNotice = useFieldNotice(`${id}-invalid`);
+  useEffect(() => {
+    fieldNotice(error === null ? null : `${label}: ${error}`);
+  }, [fieldNotice, error, label]);
+  useEffect(() => {
+    if (!focused.current) {
+      setText(value);
+      setError(null);
+    }
+  }, [value]);
+  const commit = (raw: string): boolean => {
+    if (raw.trim() === '' && onEmpty !== undefined) {
+      onEmpty();
+      return true;
+    }
+    const message = validate(raw);
+    setError(message);
+    if (message !== null) {
+      fieldNotice(`${label}: ${message}`, true);
+      return false;
+    }
+    if (raw !== value) onCommit(raw);
+    return true;
+  };
+  return (
+    <span className="ctl__array-item">
+      <input
+        className={error !== null ? 'ctl__input ctl__input--invalid' : 'ctl__input'}
+        data-testid={id}
+        aria-invalid={error !== null}
+        // An added row takes focus, so typing follows the click on Add.
+        autoFocus={onEmpty !== undefined}
+        value={text}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onChange={(e) => {
+          setText(e.target.value);
+          setError(null);
+        }}
+        // A refused entry keeps focus, so the user corrects it where it was typed.
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && commit(e.currentTarget.value)) e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          focused.current = false;
+          commit(e.currentTarget.value);
+        }}
+      />
+    </span>
+  );
+}
+
 function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
   const items = Array.isArray(value) ? value.map(String) : [];
   const set = (next: string[]): void => onCommit(next);
+  const validate = descriptor.validateItem;
+  // 074 FR-072c — with a rule, Add opens an unsaved row: nothing is written until its entry passes.
+  const [adding, setAdding] = useState(false);
   return (
     <div className="ctl ctl--array" data-testid={testId(descriptor.key)}>
       {items.map((item, i) => (
         <div className="ctl__array-row" key={i}>
-          <input
-            className="ctl__input"
-            data-testid={`${testId(descriptor.key)}-item-${i}`}
-            value={item}
-            onChange={(e) => {
-              const next = [...items];
-              next[i] = e.target.value;
-              set(next);
-            }}
-            // Enter confirms, like every other box in the window. (This row already commits as you
-            // type, so Enter's job is to say "done" and let go of the field.)
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur();
-            }}
-          />
+          {validate !== undefined ? (
+            <ValidatedArrayItem
+              id={`${testId(descriptor.key)}-item-${i}`}
+              label={descriptor.label}
+              value={item}
+              validate={validate}
+              onCommit={(entry) => set(items.map((x, j) => (j === i ? entry : x)))}
+            />
+          ) : (
+            <input
+              className="ctl__input"
+              data-testid={`${testId(descriptor.key)}-item-${i}`}
+              value={item}
+              onChange={(e) => {
+                const next = [...items];
+                next[i] = e.target.value;
+                set(next);
+              }}
+              // Enter confirms, like every other box in the window. (This row already commits as you
+              // type, so Enter's job is to say "done" and let go of the field.)
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
+            />
+          )}
           <IconButton
             token="moveUp"
             className="ctl__array-btn"
@@ -653,12 +802,27 @@ function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps
           />
         </div>
       ))}
+      {validate !== undefined && adding ? (
+        <div className="ctl__array-row">
+          <ValidatedArrayItem
+            id={`${testId(descriptor.key)}-item-${items.length}`}
+            label={descriptor.label}
+            value=""
+            validate={validate}
+            onCommit={(entry) => {
+              setAdding(false);
+              set([...items, entry]);
+            }}
+            onEmpty={() => setAdding(false)}
+          />
+        </div>
+      ) : null}
       <IconButton
         token="add"
         className="ctl__array-add"
         testId={`${testId(descriptor.key)}-add`}
         title="Add an entry"
-        onClick={() => set([...items, ''])}
+        onClick={() => (validate !== undefined ? setAdding(true) : set([...items, '']))}
       />
     </div>
   );
@@ -668,6 +832,12 @@ function JsonArrayControl({ descriptor, value, onCommit }: SettingControlProps):
   const [text, setText] = useState<string>(() => JSON.stringify(value ?? [], null, 2));
   const [invalid, setInvalid] = useState(false);
   const focused = useRef(false);
+  // 077 FR-024 — said in the Preferences toast; the box keeps its outline.
+  const problem = `${descriptor.label} must be a valid JSON array`;
+  const fieldNotice = useFieldNotice(`${testId(descriptor.key)}-invalid`);
+  useEffect(() => {
+    fieldNotice(invalid ? problem : null);
+  }, [fieldNotice, invalid, problem]);
   useEffect(() => {
     if (!focused.current) {
       setText(JSON.stringify(value ?? [], null, 2));
@@ -683,6 +853,7 @@ function JsonArrayControl({ descriptor, value, onCommit }: SettingControlProps):
     } catch (error) {
       logExpected('form-controls: parse a JSON array field', 'the user typed something that is not a JSON array; the field is marked invalid', error);
       setInvalid(true);
+      fieldNotice(problem, true);
     }
   };
   return (
@@ -705,11 +876,6 @@ function JsonArrayControl({ descriptor, value, onCommit }: SettingControlProps):
           commit();
         }}
       />
-      {invalid ? (
-        <span className="ctl__error" data-testid={`${testId(descriptor.key)}-invalid`}>
-          Must be a valid JSON array.
-        </span>
-      ) : null}
     </span>
   );
 }

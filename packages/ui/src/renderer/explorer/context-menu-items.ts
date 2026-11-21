@@ -5,6 +5,7 @@
  * so more items can be added as the feature grows.
  */
 import type { MenuAction } from '../workspace/context-menu.js';
+import { copyPathSubmenu } from '../common/copy-path-menu.js';
 import { previewOpenInRows } from '../preview/preview-open-in.js';
 import type { FileClipboard } from '@throng/core';
 import {
@@ -313,25 +314,8 @@ export function buildContextMenuItems(args: {
 
   // US9 (#156): "Copy Path" submenu, directly below "Open In" in the location group (FR-018a).
   // Four forms — absolute/relative × Windows(\)/Linux(/); relative is against the project root.
-  if (projectRoot !== undefined) {
-    const forms = pathForms(projectRoot, node.relPath);
-    const copyText = (text: string): void => {
-      void window.throng?.clipboard?.write({ text, mode: 'verbatim' });
-    };
-    // Every form copies a path to the clipboard, so the whole group — parent and each leaf — carries
-    // the shared `copy` glyph (023): the row is a copy action whichever form the user picks.
-    items.push({
-      label: 'Copy Path',
-      icon: 'copy',
-      section: 'navigate',
-      submenu: [
-        { label: 'Absolute (Windows)', icon: 'copy', section: 'navigate', onClick: () => copyText(forms.absWin) },
-        { label: 'Absolute (POSIX)', icon: 'copy', section: 'navigate', onClick: () => copyText(forms.absPosix) },
-        { label: 'Relative (Windows)', icon: 'copy', section: 'navigate', onClick: () => copyText(forms.relWin) },
-        { label: 'Relative (POSIX)', icon: 'copy', section: 'navigate', onClick: () => copyText(forms.relPosix) },
-      ],
-    });
-  }
+  // The submenu is the one every menu offering Copy Path builds (`copy-path-menu.ts`).
+  if (projectRoot !== undefined) items.push(copyPathSubmenu(pathForms(projectRoot, node.relPath), 'navigate'));
 
   /*
    * 033 US4 (FR-038, contract E1/E2) — Collapse All Children then Expand All Children, closing the

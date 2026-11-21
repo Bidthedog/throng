@@ -49,9 +49,10 @@ They are set by throng; each only mirrors a preference, so change the preference
 | Variable | Mirrors |
 |---|---|
 | `THRONG_LOG_LEVEL` | [`diagnostics.logLevel`](preferences.md#logging) |
-| `THRONG_LOG_MAX_KB` | [`diagnostics.maxFileSizeKb`](preferences.md#logging) |
+| `THRONG_LOG_MAX_BYTES` | [`diagnostics.maxFileBytes`](preferences.md#logging) |
 | `THRONG_LOG_KEEP_DAYS` | [`diagnostics.keepDays`](preferences.md#logging) |
-| `THRONG_LOG_MAX_TOTAL_MB` | [`diagnostics.maxTotalMb`](preferences.md#logging) |
+| `THRONG_LOG_MAX_TOTAL_BYTES` | [`diagnostics.maxTotalBytes`](preferences.md#logging) |
+| `THRONG_LOG_MAX_KB`, `THRONG_LOG_MAX_TOTAL_MB` | The same two limits in KB and MB, as v1.0.0-beta1 passed them. Still read, converted, where the byte variables are unset, so a daemon left running across an upgrade still hands a newer terminal agent its limits. Nothing sets them now. |
 | `THRONG_LOG_DIR` | The [log folder](preferences.md#logging). A daemon started by hand without it logs nothing; the terminal agent falls back to `%TEMP%`. |
 | `FORCE_HYPERLINK` | Set to `1` in each new terminal by [`terminals.advertiseHyperlinks`](preferences.md#terminal), unless the environment already carries it. |
 

@@ -28,7 +28,9 @@ handshake.
 
 1. **Idempotent, always** (constitution, Technology & Architecture Constraints). A migration must be
    safe to re-run and safe against an already-migrated store, converging on the same state without
-   erroring or duplicating data.
+   erroring or duplicating data. Binding text:
+   [references/constitution-persistence.md](references/constitution-persistence.md) (binding:
+   constitution, Technology & Architecture Constraints).
 2. **Every `ALTER TABLE … ADD COLUMN` must be registered in `schema-guard.ts`** and applied through
    `addColumnsFor`. The runner only applies migrations above SQLite's `user_version`; the guard is
    what heals a database left half-migrated by an intermediate build. An unregistered additive column

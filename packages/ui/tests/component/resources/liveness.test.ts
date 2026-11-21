@@ -31,7 +31,7 @@ afterEach(() => {
 async function mountWindow(intervalSeconds?: number): Promise<void> {
   if (intervalSeconds !== undefined) {
     Reflect.set(window.throng as object, 'config', {
-      get: () => Promise.resolve({ settings: { resourceMonitor: { captureIntervalSeconds: intervalSeconds, historyMinutes: 5 } }, theme: THRONG_THEME }),
+      get: () => Promise.resolve({ settings: { resourceMonitor: { captureIntervalMs: intervalSeconds * 1000, historyMs: 300_000 } }, theme: THRONG_THEME }),
       onChange: () => () => {},
     });
   }

@@ -24,6 +24,7 @@ import { countOf, indexFrom, NO_MATCHES, seedFrom, stepIndex, type MatchModes, t
 import type { BaseSearchController } from '../search/search-controller.js';
 import { setPanelRanges } from './highlight-registry.js';
 import { buildPreviewTextModel, findPreviewMatches, locate, type TextModelNode } from './preview-search-model.js';
+import { logExpected } from '@throng/core';
 
 /** The two named highlights this feature paints (R1); colours come from theme tokens in `preview.css`. */
 export const PREVIEW_MATCH_HIGHLIGHT = 'throng-preview-match';
@@ -106,6 +107,39 @@ export function createDomFramePainter(layer: () => HTMLElement | null): FramePai
       if (!el) return;
       el.replaceChildren();
     },
+  };
+}
+
+type Box = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+
+/**
+ * 074 R6d — how a client rect of `range` maps into `panelDoc`'s viewport: `null` when the range is in that document
+ * (no mapping), a mapping when it is in a same-origin frame below it, `undefined` when it is in a document no longer
+ * framed there (a replaced page). The mapping walks out through each frame: its box, its border, and its scale (the
+ * panel's zoom scales an HTML Preview's frame with a transform, FR-083); a rect outside a frame's viewport is not on
+ * screen and maps to `null`.
+ */
+function frameMapping(range: Range, panelDoc: Document): ((rect: DOMRectReadOnly) => Box | null) | null | undefined {
+  const doc = (range.startContainer as Node | undefined)?.ownerDocument;
+  if (doc === undefined || doc === null || doc === panelDoc) return null;
+  const frames: HTMLIFrameElement[] = [];
+  for (let at: Document | null = doc; at !== null && at !== panelDoc; ) {
+    const frame = at.defaultView?.frameElement as HTMLIFrameElement | null | undefined;
+    if (frame === null || frame === undefined) return undefined;
+    frames.push(frame);
+    at = frame.ownerDocument;
+  }
+  return (rect) => {
+    let box: Box = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+    for (const frame of frames) {
+      if (box.bottom < 0 || box.right < 0 || box.top > frame.clientHeight || box.left > frame.clientWidth) return null;
+      const outer = frame.getBoundingClientRect();
+      const scale = frame.offsetWidth > 0 && outer.width > 0 ? outer.width / frame.offsetWidth : 1;
+      const left = outer.left + (frame.clientLeft + box.left) * scale;
+      const top = outer.top + (frame.clientTop + box.top) * scale;
+      box = { left, top, right: left + box.width * scale, bottom: top + box.height * scale, width: box.width * scale, height: box.height * scale };
+    }
+    return box;
   };
 }
 
@@ -203,13 +237,13 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
   const rangesFor = (ms: Match[]): Range[] => {
     const h = host();
     if (!h) return [];
-    const doc = h.ownerDocument;
     const out: Range[] = [];
     for (const m of ms) {
       const start = locate(model, m.from);
       const end = locate(model, m.to);
       if (!start || !end) continue;
-      const range = doc.createRange();
+      // 074 R6d — a match in a same-origin frame is a range of the frame's document, painted by its registry.
+      const range = ((start.node as unknown as Node).ownerDocument ?? h.ownerDocument).createRange();
       range.setStart(start.node as unknown as Node, start.offset);
       range.setEnd(end.node as unknown as Node, end.offset);
       out.push(range);
@@ -250,12 +284,44 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
     const out: MatchFrame[] = [];
     ranges.forEach((range, i) => {
       if (typeof range.getClientRects !== 'function') return;
-      for (const r of Array.from(range.getClientRects())) {
+      const toPanel = frameMapping(range, h.ownerDocument);
+      if (toPanel === undefined) return;
+      for (const rect of Array.from(range.getClientRects())) {
+        const r = toPanel === null ? rect : toPanel(rect);
+        if (r === null) continue;
         if (r.right < view.left - bandX || r.left > view.right + bandX || r.bottom < view.top - bandY || r.top > view.bottom + bandY) continue;
         out.push({ left: r.left, top: r.top, width: r.width, height: r.height, current: i === current });
       }
     });
     framePainter.paint(out);
+  };
+
+  /*
+   * 074 R6d — a match in a same-origin frame is framed from the frame's own viewport rects, so the frames follow
+   * that frame's scroll as well as the body's: each frame window the matches are in repaints them as it scrolls.
+   */
+  const frameWindows = new Set<Window>();
+  const onFrameScroll = (): void => repaintFrames();
+  const listenToFrames = (): void => {
+    const h = host();
+    for (const range of ranges) {
+      const view = (range.startContainer as Node | undefined)?.ownerDocument?.defaultView ?? null;
+      if (view === null || view === h?.ownerDocument.defaultView || frameWindows.has(view)) continue;
+      frameWindows.add(view);
+      view.addEventListener('scroll', onFrameScroll, { passive: true });
+    }
+  };
+  const stopListeningToFrames = (): void => {
+    for (const view of frameWindows) view.removeEventListener('scroll', onFrameScroll);
+    frameWindows.clear();
+  };
+
+  const repaintFrames = (): void => {
+    if (!framePainter || ranges.length === 0 || frameHandle !== null) return;
+    frameHandle = requestFrame(() => {
+      frameHandle = null;
+      paintFrames();
+    });
   };
 
   const paint = (): void => {
@@ -264,6 +330,7 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
     ranges = rangesFor(matches);
     painter.paint(ranges, current);
     paintFrames();
+    if (framePainter) listenToFrames();
     deps.onPaint?.();
   };
 
@@ -295,11 +362,23 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
 
     seedFromSelection(): string {
       const h = host();
-      const sel = h?.ownerDocument.defaultView?.getSelection();
-      if (!h || !sel || sel.isCollapsed || sel.rangeCount === 0) return '';
-      const range = sel.getRangeAt(0);
-      if (!h.contains(range.commonAncestorContainer)) return '';
-      return seedFrom(sel.toString());
+      if (!h) return '';
+      const sel = h.ownerDocument.defaultView?.getSelection();
+      if (sel && !sel.isCollapsed && sel.rangeCount > 0 && h.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+        return seedFrom(sel.toString());
+      }
+      // 074 R6d — a selection inside a same-origin frame (an HTML Preview's page) is that frame's own.
+      for (const frame of h.querySelectorAll('iframe')) {
+        let inner: Selection | null | undefined;
+        try {
+          inner = frame.contentDocument?.getSelection();
+        } catch (error) {
+          logExpected('preview-search: a frame\'s selection', 'a cross-origin frame is not ours to read', error);
+          inner = null;
+        }
+        if (inner && !inner.isCollapsed && inner.rangeCount > 0) return seedFrom(inner.toString());
+      }
+      return '';
     },
 
     setQuery(nextTerm: string, nextModes: MatchModes): SearchCount {
@@ -399,13 +478,7 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
       if (!inside) this.repaintFrames();
     },
 
-    repaintFrames(): void {
-      if (!framePainter || ranges.length === 0 || frameHandle !== null) return;
-      frameHandle = requestFrame(() => {
-        frameHandle = null;
-        paintFrames();
-      });
-    },
+    repaintFrames,
 
     close(opts?: { refocus?: boolean }): void {
       term = '';
@@ -415,6 +488,7 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
       model = EMPTY_MODEL;
       ranges = [];
       cancelPendingFrame();
+      stopListeningToFrames();
       painter.clear();
       framePainter?.clear();
       deps.onPaint?.();

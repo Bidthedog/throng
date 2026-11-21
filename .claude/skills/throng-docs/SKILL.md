@@ -32,6 +32,10 @@ other file mentions it in a clause and links there. The rules below are the main
 **New file?** Only when a topic has no home above, and it is added to `docs/README.md` and to this
 table in the same change.
 
+The constitution's documentation-currency gate, which this skill serves, has its binding text in
+[references/constitution-docs-currency.md](references/constitution-docs-currency.md) (binding:
+constitution, Development Workflow & Quality Gates).
+
 ## House style
 
 - **Breadcrumb first line**, above the H1: `[throng](../README.md) › [Docs](README.md) › <Page>`

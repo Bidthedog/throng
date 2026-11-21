@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { APP_CLOSE_TIMEOUT_MS, LONG_RUNNING_COMMAND, TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, firstPanelId, panelIds, runApp, splitPanelViaMenu, requestAppClose } from './harness.js';
+import { APP_CLOSE_TIMEOUT_MS, HOST_OS, LONG_RUNNING_COMMAND, TERMINAL_OUTPUT_TIMEOUT_MS, TEST_SHELL, cleanupTemp, createProject, firstPanelId, panelIds, runApp, splitPanelViaMenu, requestAppClose } from './harness.js';
 // T068 (US3 / FR-015): closing the app while terminals are running must warn with
 // a three-choice prompt (leave running / terminate all / cancel) instead of
 // silently killing them. Cancel keeps the app open.
@@ -14,7 +14,10 @@ import { APP_CLOSE_TIMEOUT_MS, LONG_RUNNING_COMMAND, TERMINAL_OUTPUT_TIMEOUT_MS,
 // the tail of that same test.
 
 /** The label throng's shell detection gives {@link TEST_SHELL}: Windows' built-in table, or the POSIX one's `Bash`. */
-const TEST_SHELL_LABEL = TEST_SHELL === 'cmd' ? 'Command Prompt' : 'Bash';
+/** Well inside the 18 s a GNOME power-off gives open apps (#699), and past the save step's budget. */
+const SYSTEM_QUIT_TIMEOUT_MS = 10_000;
+
+const TEST_SHELL_LABEL =TEST_SHELL === 'cmd' ? 'Command Prompt' : 'Bash';
 
 test('warns with the right count when several terminals run (incl. a busy one); Cancel keeps the app open, Terminate all quits', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close-many-'));
@@ -71,6 +74,33 @@ test('warns with the right count when several terminals run (incl. a busy one); 
       // Terminate all → the app quits (clean teardown, no lingering terminals).
       const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
       await win.getByTestId('app-close-terminate').click();
+      await closed;
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+/*
+ * #699 — a quit the system asks for (power-off, logout, `kill`) arrives as SIGTERM, which Electron turns into a quit
+ * that closes the main window. Nobody is there to answer the running-terminals warning, so it must not be asked: the
+ * workspace is saved and throng closes, leaving the terminals to the daemon. Linux only: on Windows SIGTERM is
+ * TerminateProcess, and macOS routes every quit through its own lifecycle (070 FR-028).
+ */
+test('a quit from the system (SIGTERM) with a terminal running closes promptly, without the warning', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+  test.skip(HOST_OS !== 'linux', 'SIGTERM is the Linux system quit');
+  const root = mkdtempSync(join(tmpdir(), 'throng-close-sigterm-'));
+  try {
+    await runApp(async (app, win) => {
+      await createProject(win, 'SigTerm', root);
+      const a = await firstPanelId(win);
+      await win.getByTestId(`panel-type-select-${a}`).selectOption('terminal');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
+      await win.getByTestId(`panel-type-confirm-${a}`).click();
+      await expect(win.getByTestId(`terminal-${a}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+
+      const closed = app.waitForEvent('close', { timeout: SYSTEM_QUIT_TIMEOUT_MS });
+      process.kill(app.process().pid!, 'SIGTERM');
       await closed;
     });
   } finally {

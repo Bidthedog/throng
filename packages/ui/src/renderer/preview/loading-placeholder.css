@@ -1,0 +1,22 @@
+/*
+ * The one placeholder for anything in a preview still loading (075 FR-043a, `loading-placeholder.ts`): an equation,
+ * an image, a diagram. The spinner inside is the app's own (`common/loading.css`, `common/busy-glyph.css`).
+ */
+.preview-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  vertical-align: middle;
+  color: var(--throng-colour-textMuted);
+}
+
+/* On its own line, naming what it waits for: a displayed equation, a diagram. */
+.preview-loading--block {
+  display: flex;
+  padding: 8px;
+}
+
+/* An image still arriving is hidden — it still loads — while the placeholder before it stands in. */
+img[data-image-pending] {
+  display: none;
+}

@@ -244,9 +244,9 @@ describe('previewAffordance — the six-row decision table (data-model §2)', ()
 });
 
 describe('the shipped registration (FR-065, FR-080)', () => {
-  it('registers exactly Markdown then Mermaid, Markdown for .md and .markdown, as a text provider', () => {
-    // 054 FR-005 — Mermaid is the second shipped provider, registered after Markdown.
-    expect(SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((p) => p.id)).toEqual(['markdown', 'mermaid']);
+  it('registers Markdown, Mermaid, CSV, Spreadsheet, then 074 Image, SVG, PDF and HTML; Markdown for .md and .markdown, as text', () => {
+    // 054 FR-005 — Mermaid is the second shipped provider; 073 adds CSV and Spreadsheet, 074 FR-001 four more, in Preferences order.
+    expect(SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((p) => p.id)).toEqual(['markdown', 'mermaid', 'csv', 'spreadsheet', 'image', 'svg', 'pdf', 'html']);
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown');
     expect(md?.kind).toBe('text');
     expect(md?.extensions).toEqual(['.md', '.markdown']);
@@ -262,11 +262,13 @@ describe('the shipped registration (FR-065, FR-080)', () => {
     expect(md.sourceMimeTypes).toBeUndefined();
   });
 
-  it('declares exactly its five own settings — 054’s Render Mermaid diagrams, Load remote images, Show front matter, then the 047 gutter and heading-jump leaves — Load remote images and Show front matter shipping on (FR-092, FR-117)', () => {
+  it('declares exactly its six own settings — 054’s Render Mermaid diagrams, 075’s Typeset math, Load remote images, Show front matter, then the 047 gutter and heading-jump leaves — Load remote images and Show front matter shipping on (FR-092, FR-117)', () => {
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
     expect(md.settings?.map((s) => s.leaf)).toEqual([
       // 054 FR-041 — Render Mermaid diagrams is Markdown's first own setting.
       'renderMermaid',
+      // 075 FR-042 — Typeset math, after Render Mermaid diagrams.
+      'typesetMath',
       'loadRemoteImages',
       'showFrontMatter',
       'gutter',
@@ -289,16 +291,47 @@ describe('the shipped registration (FR-065, FR-080)', () => {
     expect(gutter?.description.trim().length).toBeGreaterThan(0);
   });
 
-  it('declares its own Heading jump scroll duration, bounded 0-2000, shipping at 200ms (FR-042d)', () => {
+  // 077 FR-012 narrowed the range to 0-1500; FR-001 moved the unit out of the label into storedUnit/display.
+  it('declares its own Heading jump scroll duration, bounded 0-1500, shipping at 200ms (FR-042d)', () => {
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
     const jump = md.settings?.find((s) => s.leaf === 'headingJumpMs');
     expect(jump).toMatchObject({
-      label: 'Heading jump scroll duration (ms)',
+      label: 'Heading jump scroll duration',
       control: 'number',
+      storedUnit: 'ms',
+      display: 'ms',
       default: 200,
       min: 0,
-      max: 2000,
+      max: 1500,
     });
     expect(jump?.description.trim().length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 073 data-model §4 — `editable`, and the size cap. 077 FR-018 folded 073's `sizeLimitSetting` (MB) into
+ * 074's `maxFileBytesSetting`, the one size-cap field, which must name one of the provider's numbers in bytes.
+ */
+describe('editable and maxFileBytesSetting (073, 077 FR-018)', () => {
+  it('lets a text provider be editable, and refuses an editable binary provider', () => {
+    expect(() => createPreviewProviderRegistry([text({ editable: true })])).not.toThrow();
+    expect(() => createPreviewProviderRegistry([binary({ editable: true })])).toThrow(/editable/);
+  });
+
+  it('accepts a size cap that names one of the provider number settings in bytes, and nothing else', () => {
+    const limit = {
+      leaf: 'maxBytes',
+      label: 'Limit',
+      description: 'd',
+      control: 'number' as const,
+      storedUnit: 'bytes' as const,
+      default: 25 * 1024 * 1024,
+    };
+    const inMs = { ...limit, leaf: 'delayMs', storedUnit: 'ms' as const, default: 25 };
+    const flag = { leaf: 'flag', label: 'Flag', description: 'd', control: 'toggle' as const, default: false };
+    expect(() => createPreviewProviderRegistry([binary({ settings: [limit], maxFileBytesSetting: 'maxBytes' })])).not.toThrow();
+    expect(() => createPreviewProviderRegistry([binary({ settings: [inMs], maxFileBytesSetting: 'delayMs' })])).toThrow(/size cap/);
+    expect(() => createPreviewProviderRegistry([binary({ settings: [flag], maxFileBytesSetting: 'flag' })])).toThrow(/size cap/);
+    expect(() => createPreviewProviderRegistry([binary({ maxFileBytesSetting: 'missing' })])).toThrow(/size cap/);
   });
 });

@@ -41,6 +41,11 @@ function walk(dir: string, match: RegExp): string[] {
  * Registered, not merely listed: the value is the ANSWER to "does this flip and clamp, and where?".
  */
 const REGISTERED: Readonly<Record<string, string>> = {
+  // 073 — both sit INSIDE the grid's own scroller or body, positioned against it, never over the page.
+  '.data-grid__editor':
+    'grid/data-grid.tsx — laid over its cell inside the grid canvas; it scrolls with the cell and cannot leave the panel',
+  '.preview-grid-width':
+    'grid/grid.css — anchored to the top-right corner of the grid body inside the panel; nothing to flip or clamp',
   '.context-menu':
     'workspace/context-menu.tsx — measures and flips X/Y against the viewport; submenus flip too',
   '.ctl__font-list':
@@ -107,6 +112,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — the tab strip itself. Its z-index belongs to the ::before/::after OVERFLOW FADES (031/#225), which are decoration painted over the scrolling track and are `pointer-events: none`. Nothing opens out of it, so there is no edge to flip away from; the fades are clamped to the strip by construction',
   '.explorer-path-popover':
     'explorer/path-popover.tsx — the File Explorer row hover popover (069 FR-059): the row\'s icon, large, beside its path. ANCHORED to its row through the same useAnchoredPosition as the tab popover, so it opens below the row, flips above it when there is no room below, and clamps whatever remains so no part leaves the viewport; held `visibility: hidden` until placed',
+  '.project-popover':
+    "sidebar/project-row-popover.tsx — the Projects pane row popover (#695, 077 FR-027): the full name, ID, path and counts. ANCHORED to its row through the same useAnchoredPosition as the tab popover, so it opens below the row, flips above it when there is no room below (the last rows of the list), and clamps whatever remains so no part leaves the viewport; held `visibility: hidden` until placed, portaled to the body, and `pointer-events: none` so it never swallows the row's click",
   '.tabstrip-popover':
     "workspace/tab-popover.tsx — the tab hover popover (031 US6 / FR-051). ANCHORED to its chip, so it has edges to run off and really does flip: it opens down-left by default and clampToViewport right-aligns it to the chip when opening at the chip's left edge would overflow the window (the LAST tab in the strip, which is where a hover is most likely to be asked for), flips it above the chip when there is no room below, and clamps whatever remains so no part leaves the viewport. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints at the wrong position first",
   '.notification-place-popover':
@@ -123,6 +130,12 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — 054 FR-046l / FR-032: a diagram\'s focus ring and its Find in Files reveal mark (preview/diagram/diagram.css), ::after / ::before overlays inset over their own diagram box, which clips them (overflow: hidden), `pointer-events: none`; anchored to nothing, so nothing to flip away from',
   '.preview-diagram-host--revealed':
     'chrome — 054 FR-032\'s reveal mark, selected through the host it marks (`.preview-diagram-host--revealed .preview-diagram-frame::before`): the same inset overlay over its own diagram box as `.preview-diagram-frame` above',
+  '.preview-pdf__toolbar':
+    'chrome — 074 FR-062a\'s PDF view controls (preview/providers/pdf/pdf-body.tsx): pinned to the top-left INSIDE the PDF view, outside its scrolling pages; anchored to nothing that moves, so nothing to flip away from',
+  '.preview-pdf__text':
+    'chrome — 074 FR-068a\'s selectable text layer (PDF.js TextLayer): inset over its own page canvas, clamped to that page by construction; anchored to nothing, so nothing to flip away from',
+  '.preview-pdf__link':
+    'chrome — 074 FR-066\'s link hotspots: inset over their own page at the link\'s rectangle, clamped to that page by construction; anchored to nothing, so nothing to flip away from',
   '.zoom-indicator':
     'chrome — #486 / 054 FR-046n\'s zoom percentage (workspace/zoom-indicator.tsx): pinned to the top-right INSIDE the panel or diagram box that zoomed, which clips it, `pointer-events: none`, no controls; anchored to nothing that moves, so nothing to flip away from',
   '.title-tooltip':
@@ -133,8 +146,10 @@ const REGISTERED: Readonly<Record<string, string>> = {
 };
 
 /** A rule that leaves the flow AND lifts above the page is a floating surface, whatever it is called. */
-function floatingSelectors(css: string): string[] {
+function floatingSelectors(source: string): string[] {
   const found = new Set<string>();
+  // Comments first: a file name in one (`pdf.css`, `diagram-frame.tsx`) would otherwise read as a class selector.
+  const css = source.replace(/\/\*[\s\S]*?\*\//g, '');
   // Crude but honest block splitting: selectors up to `{`, declarations up to `}`.
   for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selector = (match[1] ?? '').trim();

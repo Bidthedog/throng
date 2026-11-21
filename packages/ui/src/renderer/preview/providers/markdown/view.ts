@@ -32,4 +32,6 @@ export const markdownView: PreviewProviderView = {
   textSelection: true,
   load: () => import('./markdown-body.js').then((m) => m.MarkdownBody),
   exportHtml: (selection) => htmlExporter().then((exportHtml) => exportHtml(selection)),
+  // 075 FR-060 — a flowing document, at the text column's width.
+  printable: (body, { title }) => import('../../print/printable.js').then((m) => m.buildPrintable(body, { title, fit: 'width' })),
 };

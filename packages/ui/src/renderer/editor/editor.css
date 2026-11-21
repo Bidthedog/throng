@@ -60,11 +60,11 @@
 
 .editor-panel .cm-selectionBackground,
 .editor-panel .cm-content ::selection {
-  background: var(--throng-colour-editorSelection, #2a3a57) !important;
+  background: var(--throng-colour-editorSelection, #25334d) !important;
 }
 
 .editor-panel .cm-focused .cm-selectionBackground {
-  background: var(--throng-colour-editorSelection, #2a3a57) !important;
+  background: var(--throng-colour-editorSelection, #25334d) !important;
 }
 
 /* 049 (#457) — a selection kept in an editor that does not have focus. CodeMirror keeps drawing it
@@ -418,6 +418,13 @@ li + .encoding-picker__heading {
   vertical-align: 0.1em;
 }
 
+/* #683 — the zero-width image CodeMirror puts beside every inline widget (the markers above) is 1em tall and sits on
+   the baseline, so in an editor font whose ascent is shorter than 1em inside the line it raises the line box: every
+   line grew a pixel when View Whitespace went on. Hung from the line's top, it fits inside the line's own height. */
+.editor-panel .cm-editor .cm-widgetBuffer {
+  vertical-align: top;
+}
+
 /* 044 FR-001/FR-014 — the preview button: an icon control in the strip's own colours. It is drawn
    like the language indicator, and PRESSED (the file has a preview) holds the hover surface, so the
    state reads without a colour of its own. Disabled (the provider is off, FR-062) dims and stops
@@ -592,4 +599,18 @@ li + .encoding-picker__heading {
   background: var(--throng-colour-surfaceActive);
   color: var(--throng-colour-textMuted, #93a0b4);
   cursor: pointer;
+}
+
+/* 073 FR-033d — the line Synchronise Scrolling has the preview in step at. Drawn on the whole line, soft, from the `accent`
+   token (NOT `accentText`, which is the colour of text ON an accent fill and equals the background in the shipped themes,
+   so a wash of it is invisible: editor-sync-mark-css.test.ts). It fades out when the class goes (the highlight duration
+   after the last sync scroll), and never moves the caret or selection. */
+.cm-line.throng-sync-mark {
+  background-color: transparent;
+  transition: background-color 600ms ease-out;
+}
+
+.cm-line.throng-sync-mark--on {
+  background-color: color-mix(in srgb, var(--throng-colour-accent) 22%, transparent);
+  transition-duration: 120ms;
 }

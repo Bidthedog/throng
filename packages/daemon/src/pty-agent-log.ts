@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative } from 'node:path';
-import { parseLogLevel, sensitive, sessionFileName } from '@throng/core';
+import { parseLogLevel, retentionFromEnv, sensitive, sessionFileName } from '@throng/core';
 import { createFileLog, createProcessAnonymiser, type DiagnosticLog } from '@throng/platform-node';
 
 /**
@@ -90,11 +90,8 @@ export function openAgentLog(options: AgentLogOptions): DiagnosticLog | null {
     component: 'pty-agent',
     anonymiser,
     level: parseLogLevel(env.THRONG_LOG_LEVEL),
-    retention: {
-      maxFileBytes: Number(env.THRONG_LOG_MAX_KB) * 1024 || undefined,
-      keepDays: Number(env.THRONG_LOG_KEEP_DAYS) || undefined,
-      maxTotalBytes: Number(env.THRONG_LOG_MAX_TOTAL_MB) * 1024 * 1024 || undefined,
-    },
+    // 077 FR-001 — in bytes; the KB/MB names v1.0.0-beta1 shipped are still read where these are unset.
+    retention: retentionFromEnv(env),
     // Detached with no console: writing through to stdout would only feed the tee nobody reads.
     mirrorToConsole: false,
   });

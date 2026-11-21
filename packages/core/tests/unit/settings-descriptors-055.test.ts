@@ -13,8 +13,8 @@ import { SETTINGS_METADATA } from '../../src/config/settings-metadata.js';
  */
 
 const LEAVES = [
-  'captureIntervalSeconds',
-  'historyMinutes',
+  'captureIntervalMs',
+  'historyMs',
   'cpuWarningPercent',
   'cpuCriticalPercent',
   'memoryWarningPercent',

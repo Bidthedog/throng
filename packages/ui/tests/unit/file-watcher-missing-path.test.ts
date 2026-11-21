@@ -71,7 +71,7 @@ vi.mock('node:fs', () => ({
   },
 }));
 
-const { NodeFileWatcher } = await import('../../src/main/node-file-watcher.js');
+const { NodeFileWatcher, guardsRootByDefault } = await import('../../src/main/node-file-watcher.js');
 
 /**
  * These tests drive the wrapper's state machine against a mocked NATIVE recursive `fs.watch`, so
@@ -267,6 +267,18 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
     expect(changes).toEqual([]);
   });
 
+  /*
+   * #696 — Windows is silent too. Its native watch holds the folder open with delete sharing, so a rename outside
+   * throng succeeds and the watch follows the folder to its new name, reporting nothing about the old one: no storm
+   * (no file inside went), no error. A preview of a file in it kept showing the file (pipeline 44760413458, Windows,
+   * preview-file-disappears "its folder renamed outside throng"). Linux's own watch raises ENOENT and needs no poll.
+   */
+  it('polls the watched folder by default where its rename is silent: macOS and Windows, not Linux (#696)', () => {
+    expect(guardsRootByDefault('darwin')).toBe(true);
+    expect(guardsRootByDefault('win32')).toBe(true);
+    expect(guardsRootByDefault('linux')).toBe(false);
+  });
+
   it('where the watch goes silent when its own folder is renamed away (macOS), a poll notices and it waits (070)', async () => {
     // FSEvents through libuv drops every event about the watched folder itself: no storm, no ENOENT,
     // nothing. Only a poll of the folder sees it go.
@@ -285,8 +297,11 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
 
     present.delete(ROOT);
     absent.add(ROOT);
+    const before = changes.length;
     poll!();
     expect(live!.watcher.closed, 'the silent watch was left open').toBe(true);
+    // #696 — and its readers are told: whatever was in it is gone, and no event inside it said so.
+    expect(changes.length, 'the folder went and nobody was told').toBeGreaterThan(before);
     expect(polls.has(ROOT), 'the poll outlived the watch it guards').toBe(false);
     const waiting = watchOn(PARENT);
     expect(waiting, 'the renamed folder is not being waited for').toBeDefined();

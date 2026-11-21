@@ -114,7 +114,8 @@ describe('openAgentLog', () => {
 
   it('rolls over at the configured size', () => {
     const dir = scratch();
-    const log = open(dir, { THRONG_LOG_MAX_KB: '1' });
+    // 077 FR-001 — the cap is given in bytes.
+    const log = open(dir, { THRONG_LOG_MAX_BYTES: '1024' });
     for (let i = 0; i < 40; i += 1) log?.info(`line ${i} ${'x'.repeat(60)}`);
     expect(existsSync(join(dir, FILE.replace(/\.log$/, '.1.log')))).toBe(true);
   });

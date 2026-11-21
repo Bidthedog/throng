@@ -13,6 +13,8 @@ export const DOCUMENT_GET_STATE_METHOD = 'document.getState';
 export const DOCUMENT_SET_STATE_METHOD = 'document.setState';
 export const DOCUMENT_MOVE_PATH_METHOD = 'document.movePath';
 export const DOCUMENT_PRUNE_METHOD = 'document.pruneMissing';
+/** 073 FR-040 — a CSV's column widths in the CSV Preview Editor, per file. */
+export const DOCUMENT_SET_GRID_COLUMN_WIDTHS_METHOD = 'document.setGridColumnWidths';
 
 /** Per-document state, keyed by project + project-relative path. */
 export interface DocumentStateDto {
@@ -20,6 +22,8 @@ export interface DocumentStateDto {
   relPath: string;
   /** The manual language override; null when none. A stale id is PRESERVED, never rewritten. */
   languageId: string | null;
+  /** 073 FR-040 — column index → width in px at zoom 1; null when none. Absent from an older daemon. */
+  gridColumnWidths?: Record<string, number> | null;
 }
 
 export interface DocumentGetStateParams {
@@ -69,4 +73,14 @@ export interface DocumentPruneParams {
 }
 export interface DocumentPruneResult {
   pruned: number;
+}
+
+/** 073 FR-040 — set a file's grid column widths, or clear them with `null`. */
+export interface DocumentSetGridColumnWidthsParams {
+  projectId: string;
+  relPath: string;
+  widths: Record<string, number> | null;
+}
+export interface DocumentSetGridColumnWidthsResult {
+  state: DocumentStateDto;
 }

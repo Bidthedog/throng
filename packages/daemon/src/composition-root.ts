@@ -42,6 +42,7 @@ import {
   DocumentStateRepository,
   FileOpUndoRepository,
   AttentionFlagRepository,
+  AttentionLedgerRepository,
   type ThrongDatabase,
 } from '@throng/persistence';
 import { DAEMON_TYPES } from './tokens.js';
@@ -352,6 +353,8 @@ export function createDaemonContainer(
     TERMINAL_END_TIMEOUT_MS, // 051 FR-013a: the one limit every end and the shutdown wait read
     {
       livePanels,
+      // #692, 057 FR-091a — the ledger outlives the daemon: a power-off, an upgrade or Terminate all keeps main's marks.
+      ledgerStore: new AttentionLedgerRepository(database),
       // 076 FR-021, research R3 — the panel's own `notifications` from the layout the daemon holds: the
       // project's first, then the sub-workspaces'. Read at publish, as `resolveNames` below is.
       storedNotifications: ({ panelId, projectId }) => {

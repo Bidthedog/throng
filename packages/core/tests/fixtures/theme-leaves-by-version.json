@@ -114,6 +114,19 @@
         "colours.fileIconOther"
       ],
       "removed": []
+    },
+    {
+      "version": 36,
+      "added": [
+        "colours.calloutAccent",
+        "colours.calloutDanger",
+        "colours.calloutInfo",
+        "colours.calloutNeutral",
+        "colours.calloutQuestion",
+        "colours.calloutSuccess",
+        "colours.calloutWarning"
+      ],
+      "removed": []
     }
   ]
 }

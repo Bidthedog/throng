@@ -31,6 +31,13 @@ Configuration is a constitutional area, not a convenience. Two rules govern ever
      anything **machine-read** are excluded; grouping those is a defect. `navigate/goto-line.tsx`
      carries the worked reasoning for the editable-seed case.
 
+The binding text of these rules, of theme ownership and of settings quoted by value, with their
+known gaps, is [references/constitution-configuration.md](references/constitution-configuration.md)
+(binding: constitution Principle X and the configuration-editor and digit-grouping gates). The
+modifier tiers and every other default-chord rule are
+[references/constitution-chords.md](references/constitution-chords.md) (binding: constitution
+Principle IV).
+
 So a "one-line setting" is never one line. The minimum change set is: the value in the model, a
 descriptor in the matching metadata registry, the shipped default, the editor control, and a test.
 

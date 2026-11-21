@@ -99,6 +99,12 @@ import {
 } from 'react';
 import { diagramActionsAt } from './diagram/diagram-actions.js';
 import {
+  cellDialogOn,
+  wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
+  classifyPreviewLink,
+  canPrint,
   collapseAll as foldCollapseAll,
   defaultOpenActionFor,
   enabledProviderFor,
@@ -134,6 +140,9 @@ import {
   countCharacters,
   expandWithin,
   isFlowingDocument,
+  supportsScrollSync,
+  previewGoToKind,
+  type PreviewGoToKind,
 } from '@throng/core';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -158,6 +167,7 @@ import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSec
 import { docDirectory, openPreviewLinkMenu } from './preview-link-menu.js';
 import { focusLocalPanel, requestPreviewOpen } from './open-preview.js';
 import { FindBar } from '../search/find-bar.js';
+import { setPanelUnsearchable } from './unsearchable-panels.js';
 import { attachPanelSearch, closeFind, getFindSession, openFind, updateCount } from '../search/search-store.js';
 import { unregisterPanelSearch } from '../search/search-controller.js';
 import { clearPanel } from './highlight-registry.js';
@@ -169,6 +179,7 @@ import { sourceLinesOf, type PreviewSelectionReadout } from './preview-readouts.
 import { forgetDocumentMetrics, scheduleDocumentMetrics, useDocumentMetrics } from '../editor/document-metrics-store.js';
 import { createCssHighlightPainter, createDomFramePainter, createPreviewSearchController } from './preview-search.js';
 import { recordLastActivePreview } from './last-active-preview.js';
+import { holdWidthWhileResizing } from './resize-freeze.js';
 import { HeadingOutline } from './heading-outline.js';
 import { flattenHeadings, currentHeadingSlug, type HeadingPosition } from './heading-outline-model.js';
 import { sectionAtPoint } from './fold-menu-section.js';
@@ -229,9 +240,11 @@ import {
 } from './copy.js';
 import { PreviewStatusBar } from './preview-status-bar.js';
 import { toggleSyncScroll } from './sync-scroll-toggle.js';
+import { clearSyncMark, settleSyncMark, syncMarkSource } from './sync-mark-store.js';
 import {
   editorDocLinesOf,
   editorTopLineOf,
+  editorCentreLineOf,
   requestEditorTopLine,
   useEditorDocLines,
   useEditorTopLine,
@@ -240,17 +253,21 @@ import {
 import { pairStart } from './scroll-sync-policy.js';
 import { usePreviewProviders } from './provider-registry-context.js';
 import { clearPreviewReservation, previewReservationFor } from './preview-reservations.js';
+import { useMiddleDragScroll } from './middle-drag-scroll.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
-import type { PreviewBody, PreviewBodyProps } from './provider-view.js';
+import type { PageLayout, PageLayoutControl, PreviewBody, PreviewBodyProps } from './provider-view.js';
+import { PRINT_UNAVAILABLE, printPreviewPanel } from './print/print-command.js';
+import { usePrintFailureNotice } from '../print/print-failure.js';
 import {
   TASK_NOTICE_ACTION,
   taskNoticeMessage,
   taskNoticeTestId,
   type TaskToggle,
 } from './task-toggle.js';
+import { revealNodeAt } from './node-reveal.js';
 import './preview.css';
 import './match-frames.css';
-import { logCaught, logExpected } from '@throng/core';
+import { formatGrouped, logCaught, logExpected, pathForms, relPathUnderRoot } from '@throng/core';
 
 /** The refusals that mean the preview must not be restored here (FR-067). Everything else is kept. */
 const CLEARING_REFUSALS: ReadonlySet<string> = new Set(['no-provider', 'disabled', 'outside-project']);
@@ -420,6 +437,14 @@ export interface PreviewPanelProps {
   dropCtx: DropContext;
 }
 
+/** 073 FR-024 (T082) — what a grid copy or cut stopped at the cell bound says; quantities digit-grouped (5.4.0). */
+export function copyCappedMessage(copied: number, selected: number, bound: number, verb: 'copy' | 'cut'): string {
+  const limit = `A copy holds at most ${formatGrouped(bound)} cells`;
+  return verb === 'cut'
+    ? `${limit}, so only ${formatGrouped(copied)} of the ${formatGrouped(selected)} selected cells were copied, and nothing was cut. Select fewer cells to cut them.`
+    : `${limit}, so only the first ${formatGrouped(copied)} of the ${formatGrouped(selected)} selected cells were copied.`;
+}
+
 export function PreviewPanel({
   panel,
   projectRoot,
@@ -587,6 +612,9 @@ export function PreviewPanel({
 
   // The body: whatever view the injected registry holds for this run's provider, loaded on first use.
   const view = state ? views[state.providerId] : undefined;
+  /** 075 — read by Print…, which runs from a menu or a chord after this render. */
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const [body, setBody] = useState<{ id: string; Body: PreviewBody } | null>(null);
   /** Bumped to remount the body, so a body whose renderer failed builds it again (retry). */
   const [bodyGeneration, setBodyGeneration] = useState(0);
@@ -676,6 +704,8 @@ export function PreviewPanel({
   const bodyHostRef = useRef<HTMLDivElement | null>(null);
   // 054 — whether this preview is a flowing document (`isFlowingDocument`); set each render, read by handlers.
   const flowingRef = useRef(true);
+  /** 074 FR-062b — what this preview's Go to command goes to (`previewGoToKind`), as of the last render. */
+  const goToKindRef = useRef<PreviewGoToKind>('heading');
   const panelRootRef = useRef<HTMLDivElement | null>(null);
   /** Whether the body is covered by a file notice right now — read by the focus callback below. */
   const bodyCoveredRef = useRef(false);
@@ -822,6 +852,7 @@ export function PreviewPanel({
    * a different one clears the last first; a link followed or a step taken clears it.
    */
   const { notify, clear } = useNotify();
+  const printFailed = usePrintFailureNotice();
   const linkNoticeTestId = previewLinkNoticeTestId(panelId);
   const lastLinkNotice = useRef<LinkNotice | null>(null);
   const projectRootRef = useRef(projectRoot);
@@ -843,6 +874,23 @@ export function PreviewPanel({
       });
     },
     [notify, clear, linkNoticeTestId],
+  );
+  /*
+   * 073 FR-024 (T082) — a grid copy or cut stopped at the cell bound. One warning naming the panel, replaced by the
+   * next (one condition, one notice); it carries no action, so a toast.
+   */
+  const copyCappedTestId = `preview-copy-capped-${panelId}`;
+  const onCopyCapped = useCallback(
+    (copied: number, selected: number, bound: number, verb: 'copy' | 'cut'): void => {
+      clear(copyCappedTestId);
+      notify({
+        severity: 'warning',
+        subject: panelSubject(placeRef.current),
+        message: copyCappedMessage(copied, selected, bound, verb),
+        testId: copyCappedTestId,
+      });
+    },
+    [notify, clear, copyCappedTestId],
   );
   const clearLinkNotice = useCallback((): void => {
     if (lastLinkNotice.current === null) return;
@@ -931,7 +979,10 @@ export function PreviewPanel({
   useEffect(() => {
     setLinkTargets((current) => (current.hover === null && current.focus === null ? current : { hover: null, focus: null }));
   }, [shownFile]);
-  const linkReadout = linkTargets.hover ?? linkTargets.focus;
+  // 074 R8 — the body's own readout (an image's size, a PDF's page), shown when no link names a target.
+  const [bodyReadout, setBodyReadout] = useState<string | null>(null);
+  const onStatusReadout = useCallback((text: string | null): void => setBodyReadout(text), []);
+  const linkReadout = linkTargets.hover ?? linkTargets.focus ?? bodyReadout;
 
   /*
    * MT-02 (review, 2026-09-28) — a NAVIGATION onto another file (a Last Active open, a followed link, a
@@ -985,8 +1036,20 @@ export function PreviewPanel({
     heldDocument.current = null;
   }, []);
   useEffect(() => endHeadingHold, [endHeadingHold]);
+  /** 074 FR-079 — the body's own fragment reveal, when its page lives outside the body host (an HTML frame). */
+  const bodyFragmentReveal = useRef<((fragment: string) => boolean) | null>(null);
   const scrollToHeading = useCallback(
     (fragment: string, animateMs?: number, expandTarget = false): boolean => {
+      // 074 FR-079 — a body that draws its page in a frame scrolls the frame itself (`registerFragmentReveal`).
+      const ownReveal = bodyFragmentReveal.current;
+      if (ownReveal !== null) {
+        if (ownReveal(fragment)) {
+          clearLinkNotice();
+          return true;
+        }
+        raiseLinkNotice({ kind: 'link-missing-heading', target: fragment });
+        return false;
+      }
       const host = bodyHostRef.current;
       const heading = host ? findHeading(host, fragment) : null;
       if (host && heading) {
@@ -1000,6 +1063,10 @@ export function PreviewPanel({
         // The reveal is keyed by the heading's SLUG, read off the element. The fragment is not one: Go
         // to Heading passes the heading's name ("Three"), which names no section, so the reveal
         // changed nothing and the deferred scroll never ran.
+        // 075 FR-010 — a heading inside a collapsed callout: the callout, and every collapsed one around it, opens
+        // first. The body folds a callout itself (CSS on its body), so the heading is never `hidden` and the section
+        // reveal below would not notice; synchronous, so the measurement after it sees the opened callout.
+        revealNodeAt(heading);
         const slug = heading.getAttribute('data-heading-slug');
         const needsReveal = heading.hidden || (expandTarget && slug !== null && isCollapsed(foldStateRef.current, slug));
         if (needsReveal && slug !== null && revealRef.current) {
@@ -1118,12 +1185,59 @@ export function PreviewPanel({
     return currentHeadingSlug(positions, 0);
   }, []);
 
+  // 073 FR-043a, 074 FR-062b — a body with its own Go to (a grid's rows, a PDF's pages) claims `preview.goToHeading`;
+  // the chrome names no provider.
+  const bodyGoToRef = useRef<(() => void) | null>(null);
+  const registerGoTo = useCallback((open: (() => void) | null): void => {
+    bodyGoToRef.current = open;
+  }, []);
+  // 074 FR-062c — a paged body's layout, for the body menu's layout rows.
+  const bodyPageLayout = useRef<PageLayoutControl | null>(null);
+  const registerPageLayout = useCallback((control: PageLayoutControl | null): void => {
+    bodyPageLayout.current = control;
+  }, []);
+  // 074 FR-085a — a framed page's own document holds its selection.
+  const bodySelectionHost = useRef<(() => HTMLElement | null) | null>(null);
+  const registerFragmentReveal = useCallback((reveal: ((fragment: string) => boolean) | null): void => {
+    bodyFragmentReveal.current = reveal;
+  }, []);
+  const registerSelectionHost = useCallback((host: (() => HTMLElement | null) | null): void => {
+    bodySelectionHost.current = host;
+  }, []);
+  /** Where the body's selection lives: the page's own document for a framed page, else the body host. */
+  const selectionHost = useCallback((): HTMLElement | null => bodySelectionHost.current?.() ?? bodyHostRef.current, []);
+
   const openHeadingOutlineHandler = useCallback((): void => {
+    if (bodyGoToRef.current !== null) {
+      bodyGoToRef.current();
+      return;
+    }
     // A single picture (a Mermaid preview) has no headings to go to.
     if (!flowingRef.current) return;
     setHeadingOutlineCurrentSlug(computeCurrentHeadingSlug());
     setHeadingOutlineOpen(true);
   }, [computeCurrentHeadingSlug]);
+
+  /**
+   * 075 FR-061, FR-064 — Print…: the body as drawn now, handed to Print Preview. `false` when this preview's
+   * provider cannot print, or it has not drawn yet.
+   */
+  const printPanel = useCallback((): boolean => {
+    const current = stateRef.current;
+    if (!current || !canPrint(registry.get(current.providerId))) return false;
+    void printPreviewPanel(
+      {
+        view: viewRef.current,
+        body: bodyHostRef.current,
+        filePath: current.filePath,
+        // 075 FR-075c — a PDF prints its own pages, read from its file.
+        readSource: () => window.throng?.preview?.readSource?.(panelId) ?? Promise.resolve({ ok: false as const, status: 404 }),
+      },
+      undefined,
+      printFailed, // FR-080
+    );
+    return true;
+  }, [registry, panelId, printFailed]);
 
   const onHeadingOutlineClose = useCallback((): void => {
     setHeadingOutlineOpen(false);
@@ -1226,6 +1340,9 @@ export function PreviewPanel({
   const pendingReveal = useRef<{ kind: 'heading'; fragment: string; animateMs?: number } | { kind: 'search' } | null>(null);
 
   revealBeforeScrollRef.current = (node: Node): boolean => {
+    // 075 FR-010 — whatever the body folds itself around the node (a collapsed callout) opens first. Synchronous DOM,
+    // through the body's own revealer (node-reveal.ts); a no-op for a body that registers none.
+    revealNodeAt(node);
     if (!isFoldableProvider || !revealRef.current) return false;
     const host = bodyHostRef.current;
     const slug = host ? sectionAtPoint(host, node) : null;
@@ -1657,6 +1774,22 @@ export function PreviewPanel({
     [panelId, panel.originProjectId, raiseLinkNotice, clearLinkNotice, revealFragmentIn, placeLeft],
   );
 
+  /*
+   * 074 research R6 (FR-079) — a link Ctrl+clicked inside a body's SANDBOXED page (an HTML preview's frame, which
+   * the panel cannot reach into) arrives from main's window-open guard, addressed by panel id. It is classified
+   * exactly as a link in a Markdown preview is — against this document's folder and project — and followed.
+   */
+  useEffect(() => {
+    const subscribe = window.throng?.preview?.onFrameLink;
+    if (subscribe === undefined) return undefined;
+    return subscribe(({ panelId: from, href }) => {
+      if (from !== panelId) return;
+      const root = projectRootRef.current;
+      if (root === null) return;
+      onFollow(classifyPreviewLink(href, { docPath: stateRef.current?.filePath ?? mountFile.current, projectRoot: root }));
+    });
+  }, [panelId, onFollow]);
+
   /* ── Back and Forward (044 US7: FR-102, FR-106b–d, FR-107) ───────────────────────────────────── */
 
   /**
@@ -1778,11 +1911,15 @@ export function PreviewPanel({
               // `throng:editor:resolveDrop` produced (contract §2) — reuse the same link-notice path.
               if (isLinkNotice(res.notice)) raiseLinkNotice(res.notice);
               return;
-            case 'reroute':
+            case 'reroute': {
               // 054 FR-008 — a file of another provider dropped here opens as its own type's preview.
               clearLinkNotice();
-              void requestPreviewOpen({ absPath, projectId: panel.originProjectId });
+              // 073 FR-033b (T096) — one of THIS panel's type was refused only because its grid holds unsaved edits:
+              // the open names this panel whatever "Open previews in" says, so its unsaved-changes prompt comes.
+              const sameType = registry.forPath(absPath)?.id === stateRef.current?.providerId;
+              void requestPreviewOpen({ absPath, projectId: panel.originProjectId, ...(sameType ? { target: { mode: 'lastActive' as const } } : {}) });
               return;
+            }
             default:
               // `focusedOther` (FR-023, 044 FR-090c) — main focused the preview already showing it.
               clearLinkNotice();
@@ -1800,7 +1937,7 @@ export function PreviewPanel({
           );
         });
     },
-    [panelId, placeLeft, clearLinkNotice, raiseLinkNotice, panel.originProjectId, ws],
+    [panelId, placeLeft, clearLinkNotice, raiseLinkNotice, panel.originProjectId, registry, ws],
   );
 
   /*
@@ -1847,24 +1984,71 @@ export function PreviewPanel({
   );
 
   const selectAll = useCallback((): void => {
-    const host = bodyHostRef.current;
+    const host = selectionHost();
     if (host === null) return;
     // Focus FIRST: moving focus into the host collapses a selection made before it (observed in jsdom, and
-    // the order is harmless in Chromium), so the keyboard lands in the body and the selection survives.
-    host.focus({ preventScroll: true });
+    // the order is harmless in Chromium), so the keyboard lands in the body and the selection survives. A framed
+    // page (074 FR-085a) takes focus through its own window.
+    if (host.ownerDocument === document) host.focus({ preventScroll: true });
+    else host.ownerDocument.defaultView?.focus();
     selectAllIn(host);
-  }, []);
+  }, [selectionHost]);
 
   /* ── The body menu (FR-015b, FR-035, FR-095, FR-096d) ────────────────────────────────────────── */
 
   const { openMenu, updateMenu } = useContextMenu();
   const textSelection = view?.textSelection ?? false;
+  // 074 FR-086 — a body find cannot read: Find is shown disabled here, in the header menu and on the chord.
+  const searchable = view?.searchable !== false;
+  // 074 FR-086a — a body with no text at all (a picture): no Find anywhere, the chord consumed.
+  const findable = view?.findable !== false;
+  useEffect(() => {
+    setPanelUnsearchable(panelId, !findable ? 'absent' : !searchable);
+    return () => setPanelUnsearchable(panelId, false);
+  }, [panelId, searchable, findable]);
   const providerKind =
     (state ? registry.get(state.providerId) : undefined)?.kind ?? registry.forPath(mountFile.current)?.kind ?? 'text';
   // 054 — a provider that draws one picture (Mermaid) has no Select All, Go to Heading or scroll sync.
   const flowing = isFlowingDocument((state ? registry.get(state.providerId) : undefined) ?? registry.forPath(mountFile.current));
   flowingRef.current = flowing;
+  // 073 FR-037 — an editable provider's body (the CSV Preview Editor) owns paste and cut, its cell editor's included.
+  const editableBody = (state ? registry.get(state.providerId) : undefined)?.editable === true;
+  goToKindRef.current = previewGoToKind((state ? registry.get(state.providerId) : undefined) ?? registry.forPath(mountFile.current));
   const parented = state?.parent != null;
+  // 073 FR-036b — a provider whose grid has a cell dialog: on for THIS panel by its own choice, else by the setting.
+  const hasCellDialog = (state ? registry.get(state.providerId) : undefined)?.cellDialog === true;
+  const cellDialogChoice = config?.cellDialog;
+  const cellDialogEffective = cellDialogOn(
+    cellDialogChoice,
+    state ? settings.editor.previews.providers[state.providerId]?.editLongCellsInDialog : undefined,
+  );
+  const onToggleCellDialog = useCallback((): void => {
+    ws.updatePanelConfig(panelId, { cellDialog: !cellDialogEffective });
+  }, [ws, panelId, cellDialogEffective]);
+  // 073 FR-013 — a provider whose grid can wrap its cells: on for THIS panel by its own choice, else by the setting.
+  const hasWrapToggle = (state ? registry.get(state.providerId) : undefined)?.wrapToggle === true;
+  const wrapChoice = config?.wrapCells;
+  const wrapEffective = wrapCellsOn(wrapChoice, state ? settings.editor.previews.providers[state.providerId]?.wrapCells : undefined);
+  const onToggleWrap = useCallback((): void => {
+    ws.updatePanelConfig(panelId, { wrapCells: !wrapEffective });
+  }, [ws, panelId, wrapEffective]);
+  // 073 FR-039a — a provider whose grid can lock its first row / column: each on for THIS panel by its own choice, else by the setting.
+  const hasLockToggles = (state ? registry.get(state.providerId) : undefined)?.lockToggles === true;
+  // 073 FR-050a — a provider whose grid is read-only (a workbook): its bar carries the Read-only marker.
+  const readOnlyGrid = (state ? registry.get(state.providerId) : undefined)?.readOnly === true;
+  const lockFirstRowChoice = config?.lockFirstRow;
+  const lockFirstColumnChoice = config?.lockFirstColumn;
+  const lockRowEffective = lockFirstRowOn(lockFirstRowChoice, state ? settings.editor.previews.providers[state.providerId]?.lockFirstRow : undefined);
+  const lockColumnEffective = lockFirstColumnOn(
+    lockFirstColumnChoice,
+    state ? settings.editor.previews.providers[state.providerId]?.lockFirstColumn : undefined,
+  );
+  const onToggleLockRow = useCallback((): void => {
+    ws.updatePanelConfig(panelId, { lockFirstRow: !lockRowEffective });
+  }, [ws, panelId, lockRowEffective]);
+  const onToggleLockColumn = useCallback((): void => {
+    ws.updatePanelConfig(panelId, { lockFirstColumn: !lockColumnEffective });
+  }, [ws, panelId, lockColumnEffective]);
 
   /*
    * FR-113, FR-114, FR-121 — two-way scroll sync. The parent editor's top line, from the store its view in
@@ -1874,11 +2058,37 @@ export function PreviewPanel({
    * (`requestEditorTopLine`), never a write into the store; a sync scroll records no history (FR-101).
    */
   const parentId = state?.parent?.panelId ?? null;
-  const syncing = settings.editor.previews.syncScroll && flowing && parentId !== null;
+  // 073 FR-033c — scroll sync is its own capability: a CSV grid takes part though it is not a flowing document.
+  const scrollSyncs = supportsScrollSync((state ? registry.get(state.providerId) : undefined) ?? registry.forPath(mountFile.current));
+  const syncing = settings.editor.previews.syncScroll && scrollSyncs && parentId !== null;
   const parentTop = useEditorTopLine(syncing ? parentId : null);
   const parentDocLines = useEditorDocLines(syncing ? parentId : null);
   const syncingRef = useRef(syncing);
   syncingRef.current = syncing;
+  /** 073 FR-033f — `editor.previews.syncHighlightMs` as the window holds it now; read at each sync scroll. */
+  const highlightMs = settings.editor.previews.syncHighlightMs;
+  const highlightMsRef = useRef(highlightMs);
+  highlightMsRef.current = highlightMs;
+  /*
+   * 073 FR-033d — the place the pair is in step at, marked in both views while a sync scroll moves one with the other.
+   * The editor leading is noticed here (its published top line moved, and not because this preview asked); this view
+   * leading is marked where it asks the editor to follow (`onTopLineChange`). The first line seen is only recorded.
+   */
+  const syncMarkSrc = useMemo(() => (syncing && parentId !== null ? syncMarkSource(parentId) : null), [syncing, parentId]);
+  const lastEditorLine = useRef<EditorTopLine | null>(null);
+  useEffect(() => {
+    const seen = lastEditorLine.current;
+    lastEditorLine.current = parentTop;
+    if (!syncing || parentId === null || parentTop === null || seen === null || seen === parentTop) return;
+    if (parentTop.fromSync || seen.line === parentTop.line) return;
+    // 073 FR-033g — nothing is drawn while scrolling continues; the mark is made 300 ms after the last scroll, from
+    // where the editor is THEN. 073 FR-033e — its centre line, not its top (sync itself keys on the top).
+    settleSyncMark(parentId, () => editorCentreLineOf(parentId) ?? editorTopLineOf(parentId)?.line ?? null, highlightMsRef.current);
+  }, [parentTop, parentId, syncing]);
+  useEffect(() => {
+    if (!syncing || parentId === null) return;
+    return () => clearSyncMark(parentId);
+  }, [syncing, parentId]);
 
   /** FR-121h — the body's way to read the line of the block at its top, for adoption. */
   const readTopLine = useRef<(() => number | null) | null>(null);
@@ -1972,7 +2182,7 @@ export function PreviewPanel({
    * that is not the editor's latest: while the drawn text is behind (U2), or when the editor has published a
    * line this chrome has not yet handed down (a draw's report can run before the render that releases it).
    */
-  const onTopLineChange = useCallback((line: number): boolean => {
+  const onTopLineChange = useCallback((line: number, centreLine?: number | null): boolean => {
     const current = stateRef.current;
     const editor = current?.parent?.panelId;
     if (!syncingRef.current || editor === undefined) return true;
@@ -1983,6 +2193,10 @@ export function PreviewPanel({
     const passed = lastPassed.current;
     if (passed === null || passed.parent !== editor || passed.value !== editorTopLineOf(editor)) return false;
     requestEditorTopLine(editor, line);
+    // 073 FR-033d — this view led: the pair is in step at its top line.
+    // 073 FR-033e — the mark names the line at the CENTRE of this view; sync itself keyed on the top.
+    // 073 FR-033g — drawn once scrolling has stopped for 300 ms, at the latest place this view reported.
+    settleSyncMark(editor, () => centreLine ?? line, highlightMsRef.current);
     return true;
   }, []);
 
@@ -2127,6 +2341,8 @@ export function PreviewPanel({
     () => ({
       previewable: (absPath: string) =>
         defaultOpenActionFor(registry, settings.editor.previews, absPath) === 'preview',
+      // 074 FR-018a — main hands such a follow to the open router, which gives it to the OS (FR-018).
+      opensInOs: (absPath: string) => defaultOpenActionFor(registry, settings.editor.previews, absPath) === 'os',
       openTarget: settings.editor.openTarget === 'new' ? ('new' as const) : ('lastActive' as const),
     }),
     [registry, settings.editor.previews, settings.editor.openTarget],
@@ -2139,7 +2355,7 @@ export function PreviewPanel({
    */
   const openBodyMenu = useCallback(
     (link: PreviewLink | null, point: { x: number; y: number }, target: Node | null = null): void => {
-      const host = bodyHostRef.current;
+      const host = selectionHost();
       const captured = host === null ? null : captureSelection(host);
       const selectionEmpty = captured === null;
 
@@ -2150,6 +2366,8 @@ export function PreviewPanel({
             copyFormat: copyFormatRef.current,
             copy: (format) => copySelection(captured, format),
             selectAll,
+            // 074 FR-085a — a framed page has Select All though it is not a flowing document.
+            pageSelectAll: bodySelectionHost.current !== null,
           }
         : null;
       const editorRoute: PreviewEditorRouteItem | null =
@@ -2160,6 +2378,13 @@ export function PreviewPanel({
         selectionEmpty,
         content,
         editorRoute,
+        // 074 FR-028, FR-068a — Copy Path, in the File Explorer's four forms, for a file inside the project.
+        copyPath: (() => {
+          const root = projectRootRef.current;
+          const file = stateRef.current?.filePath;
+          const rel = root !== null && file !== undefined ? relPathUnderRoot(root, file) : null;
+          return root !== null && rel !== null ? pathForms(root, rel) : null;
+        })(),
         // FR-122a/b — every text-provider preview, whatever is under the pointer; never a binary one.
         syncScroll:
           flowingRef.current
@@ -2170,9 +2395,24 @@ export function PreviewPanel({
               }
             : null,
         // 047 US1 (FR-007) — always offered, whatever is under the pointer.
-        find: { run: () => openFind(panelId, 'preview'), chord: firstBinding(keybindings, 'search.find') },
+        find: {
+          run: () => openFind(panelId, 'preview'),
+          chord: firstBinding(keybindings, 'search.find'),
+          ...(searchable ? {} : { disabled: true }),
+          ...(findable ? {} : { absent: true }),
+        },
         // 047 US4 — always offered too, even with no headings (the pop-down itself says so).
-        goToHeading: { run: openHeadingOutlineHandler, chord: firstBinding(keybindings, 'preview.goToHeading') },
+        goToHeading: {
+          run: openHeadingOutlineHandler,
+          chord: firstBinding(keybindings, 'preview.goToHeading'),
+          kind: goToKindRef.current,
+        },
+        // 075 FR-062, FR-063 — always drawn; disabled, with the reason, for a provider that cannot print.
+        print: {
+          run: () => void printPanel(),
+          chord: firstBinding(keybindings, 'preview.print'),
+          ...(canPrint(stateRef.current ? registry.get(stateRef.current.providerId) : undefined) ? {} : { unavailable: PRINT_UNAVAILABLE }),
+        },
         // 047 US3 (T048, FR-036) — the fold rows, resolved at the point the menu opened.
         fold: buildFoldMenuArgs(target),
         // 048 — the Split submenu, splitting this panel.
@@ -2180,6 +2420,10 @@ export function PreviewPanel({
         // 054 FR-074 — this panel's inline diagram is maximised over the document.
         focusLocked: isPanelSectionMaximised(panelId),
         flowingDocument: flowingRef.current,
+        pageLayout: (() => {
+          const control = bodyPageLayout.current;
+          return control === null ? null : { value: control.get(), set: (layout: PageLayout) => control.set(layout) };
+        })(),
         diagram: (() => {
           const found = diagramActionsAt(target);
           return found
@@ -2188,6 +2432,7 @@ export function PreviewPanel({
                 copyImage: () => found.copyImage(),
                 toggleFocus: () => found.toggleFocus(),
                 ...(found.focusChord !== undefined ? { focusChord: found.focusChord } : {}),
+                ...(found.picture === true ? { picture: true } : {}),
               }
             : null;
         })(),
@@ -2208,6 +2453,11 @@ export function PreviewPanel({
       panelId,
       openHeadingOutlineHandler,
       buildFoldMenuArgs,
+      searchable,
+      findable,
+      selectionHost,
+      printPanel,
+      registry,
     ],
   );
 
@@ -2244,14 +2494,14 @@ export function PreviewPanel({
    */
   const onRootCopy = useCallback(
     (e: ReactClipboardEvent<HTMLDivElement>): void => {
-      const host = bodyHostRef.current;
+      const host = selectionHost();
       if (host === null || selectionRangeIn(host) === null) return;
       e.preventDefault();
       // 054 FR-074 — the document is covered by its maximised diagram: nothing is copied from it.
       if (isPanelSectionMaximised(panelId)) return;
       copySelection(captureSelection(host), copyFormatRef.current);
     },
-    [copySelection, panelId],
+    [copySelection, panelId, selectionHost],
   );
 
   /** Paste and cut change a document; a preview has none to change. */
@@ -2276,6 +2526,9 @@ export function PreviewPanel({
   );
 
   /** Ctrl+A selects the body, not the window. */
+  // 074 (2026-11-19) — middle-button drag scrolls whatever scrolls under the pointer (middle-drag-scroll.ts).
+  const middleDrag = useMiddleDragScroll();
+
   const onHostKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>): void => {
       const selectAllKey = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a';
@@ -2288,7 +2541,8 @@ export function PreviewPanel({
       }
       // 047 T049 — the markdown.* fold chords, consumed before anything else on this key.
       if (chordEngineRef.current?.keydown(e)) return;
-      if (!textSelection || !flowingRef.current) return;
+      // 074 FR-068a, FR-085a — a page body (an HTML page, a PDF's text) selects within itself, as a flowing document does.
+      if (!textSelection || (!flowingRef.current && bodySelectionHost.current === null)) return;
       if (selectAllKey) {
         e.preventDefault();
         selectAll();
@@ -2323,8 +2577,9 @@ export function PreviewPanel({
         },
         navigateHistory: onHistoryStep,
         openHeadingOutline: openHeadingOutlineHandler,
+        print: printPanel,
       }),
-    [panelId, onFollow, revealFragmentIn, onHistoryStep, openHeadingOutlineHandler],
+    [panelId, onFollow, revealFragmentIn, onHistoryStep, openHeadingOutlineHandler, printPanel],
   );
 
   // FR-034 — this panel's own zoom, published for `preview.css` to multiply the body text with.
@@ -2381,11 +2636,53 @@ export function PreviewPanel({
   }, [bodyCovered]);
 
   /*
+   * #696 (044 FR-026 as amended 2026-11-20) — a file that no longer exists is UNLOADED, not only covered: the body
+   * goes, and with it everything it holds of the file (the rendered document, its images, a PDF document and its
+   * worker, a workbook, an HTML frame) and anything it draws outside the body (a diagram filling the middle
+   * section). Its place is kept FIRST, while the body is still drawn under the notice, so the file coming back
+   * shows where the reader was (FR-024) — the reason the body was only ever covered before.
+   */
+  const fileGone = fileNotice?.kind === 'deleted';
+  const [bodyUnloaded, setBodyUnloaded] = useState(false);
+  /*
+   * Where the reader was as the body unloaded, held HERE rather than in the store: the update that brings the file
+   * back is a new revision with no place of its own, and the store keeps no place across one (pipeline 44762998591:
+   * the body came back at the top, FR-107 US7 scenario 3). Kept for that file only — a different file loaded into the
+   * panel meanwhile starts where its own load says.
+   */
+  const unloadPlace = useRef<{ filePath: string; place: unknown; basis: PreviewContent | null } | null>(null);
+  useLayoutEffect(() => {
+    if (!fileGone) {
+      setBodyUnloaded(false);
+      return;
+    }
+    const place = placeLeft();
+    const current = getPreviewState(panelId);
+    if (place !== undefined && current !== undefined) {
+      unloadPlace.current = { filePath: current.filePath, place, basis: current.content };
+    }
+    setBodyUnloaded(true);
+  }, [fileGone, panelId, placeLeft]);
+  // The body is back (or never went): the place has been handed to it, once.
+  useEffect(() => {
+    if (!bodyUnloaded) unloadPlace.current = null;
+  }, [bodyUnloaded]);
+  const returning = !bodyUnloaded && unloadPlace.current !== null && unloadPlace.current.filePath === state?.filePath ? unloadPlace.current : null;
+
+  /*
    * 047 US2 (FR-015, research R8) — this panel just became the reader's most recently active preview
    * in its tab, for `open-preview.ts`'s "reuse the last active preview" to find. Both pointerdown AND
    * focus record — unlike `last-active-editor.ts`'s keyboard gap, a preview can be brought to the front
    * by Tab alone (no click), and that must count too.
    */
+  // 075 SC-006 — a drag of the panel's edge lays the body out once it settles, not once per frame: whatever
+  // the provider draws, its content never makes resizing the workspace slow.
+  useEffect(() => {
+    const panel = panelRootRef.current;
+    const body = bodyHostRef.current;
+    return panel === null || body === null ? undefined : holdWidthWhileResizing(panel, body);
+  }, []);
+
   const recordActive = useCallback((): void => {
     const tabId = ws.layout?.activeTabId;
     if (tabId) recordLastActivePreview(tabId, panelId);
@@ -2443,8 +2740,8 @@ export function PreviewPanel({
             // Covered, not hidden — see the note on the `inert` effect above.
             style={bodyCovered ? { visibility: 'hidden' } : undefined}
             onContextMenu={onHostContextMenu}
-            onCut={refuse}
-            onPaste={refuse}
+            onCut={editableBody ? undefined : refuse}
+            onPaste={editableBody ? undefined : refuse}
             // 047 US5 — narrowed to non-file drops (FR-021): a file drag is handled by the drop
             // targets WRAPPING this body, whose own onDrop stops the event before it bubbles here;
             // anything else (a browser text/HTML drag) still lands here and is refused as before.
@@ -2452,8 +2749,9 @@ export function PreviewPanel({
             onKeyDown={onHostKeyDown}
             onKeyUp={onHostKeyUp}
             onBlur={onHostBlur}
+            {...middleDrag}
           >
-        {Body !== null && state?.content ? (
+        {Body !== null && state?.content && !bodyUnloaded ? (
           <Body
             key={bodyGeneration}
             panelId={panelId}
@@ -2461,15 +2759,21 @@ export function PreviewPanel({
             filePath={state.filePath}
             projectRoot={projectRoot ?? ''}
             providerSettings={settings.editor.previews.providers[state.providerId] ?? NO_PROVIDER_SETTINGS}
+            cellDialogChoice={cellDialogChoice}
+            wrapChoice={wrapChoice}
+            lockFirstRowChoice={lockFirstRowChoice}
+            lockFirstColumnChoice={lockFirstColumnChoice}
+            registerGoTo={registerGoTo}
             linkWording={linkWording}
-            initialViewState={state.viewState}
-            initialViewStateBasis={state.viewStateBasis}
+            initialViewState={returning !== null ? returning.place : state.viewState}
+            initialViewStateBasis={returning !== null ? returning.basis : state.viewStateBasis}
             navigationSeq={state.navigationSeq}
             syncLine={syncLine}
             syncEcho={syncEcho}
             onTopLineChange={onTopLineChange}
             onTopLineRead={onTopLineRead}
-            placePolicy={placePolicy}
+            syncMarkSource={syncMarkSrc}
+            placePolicy={returning !== null ? 'keep' : placePolicy}
             onViewStateCapture={onViewStateCapture}
             onFollow={onFollow}
             onNotice={onNotice}
@@ -2477,6 +2781,14 @@ export function PreviewPanel({
             onLinkTarget={onLinkTarget}
             onDrawn={onDrawn}
             onBodyFailure={onBodyFailure}
+            onStatusReadout={onStatusReadout}
+            // 074 R4 — a pure passthrough, as readEmbeds is.
+            registerPageLayout={registerPageLayout}
+            registerSelectionHost={registerSelectionHost}
+            registerFragmentReveal={registerFragmentReveal}
+            readSource={(asset) =>
+              window.throng?.preview?.readSource?.(panelId, asset) ?? Promise.resolve({ ok: false as const, status: 404 })
+            }
             // 047 US6 (T063) — a pure passthrough to main's channel; no chrome-level decision (see
             // provider-view.ts's doc comment on why this one differs from onFollow/onFoldChange).
             readEmbeds={(refs) =>
@@ -2498,6 +2810,12 @@ export function PreviewPanel({
             }}
             // 054 FR-022 — a task box clicked or Space-pressed; main changes the marker (R4).
             onToggleTask={onToggleTask}
+            // 073 — the grid lays out in JS, so it takes the factor itself; its notice and menu offer the editor route.
+            zoom={zoomFactor(panelZoomLevel(panel))}
+            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute, editorRouteParented: parented } : {})}
+            onCopyCapped={onCopyCapped}
+            // 075 FR-075b — a grid's own menus carry Print…, the same command as the header's.
+            {...(state && canPrint(registry.get(state.providerId)) ? { onPrint: () => void printPanel() } : {})}
           />
         ) : null}
         {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a
@@ -2527,15 +2845,21 @@ export function PreviewPanel({
       />
       {/* FR-015a — the editor's bar, under the editor's setting; FR-015e — none for a binary provider. FR-118 —
           its one readout, the hovered or focused link's target, is shown only while the bar is. */}
-      {settings.editor.showStatusBar && onEditorRoute !== undefined ? (
+      {settings.editor.showStatusBar && (onEditorRoute !== undefined || (providerKind === 'binary' && (linkReadout !== null || readOnlyGrid))) ? (
         <PreviewStatusBar
           panelId={panelId}
           providerKind={providerKind}
           parented={parented}
-          onEditorRoute={onEditorRoute}
+          // 074 — a binary preview's bar (its readout only) draws no editor route, so none is needed.
+          onEditorRoute={onEditorRoute ?? (() => undefined)}
           editorRouteDisabled={movedOutTo !== null}
           syncScroll={settings.editor.previews.syncScroll}
-          showSyncScroll={flowing}
+          showSyncScroll={scrollSyncs}
+          cellDialog={hasCellDialog ? { on: cellDialogEffective, onToggle: onToggleCellDialog } : undefined}
+          wrap={hasWrapToggle ? { on: wrapEffective, onToggle: onToggleWrap } : undefined}
+          lockFirstRow={hasLockToggles ? { on: lockRowEffective, onToggle: onToggleLockRow } : undefined}
+          lockFirstColumn={hasLockToggles ? { on: lockColumnEffective, onToggle: onToggleLockColumn } : undefined}
+          readOnly={readOnlyGrid}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}
           metrics={documentMetrics}

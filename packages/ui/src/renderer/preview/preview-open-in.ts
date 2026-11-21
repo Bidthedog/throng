@@ -13,6 +13,7 @@ import {
   collectPanels,
   panelDisplayTitle,
   previewAffordance,
+  previewIconOf,
   previewPathOf,
   previewTitleParts,
   truncateGraphemes,
@@ -36,7 +37,7 @@ export interface PreviewOpenInFacts {
 }
 
 /**
- * 047 FR-080 — Last Preview Panel's name: the panel's name without the header's " - Preview" (the item already
+ * 047 FR-080 — Last Preview Panel's name: the panel's name without the header's " - <Type> Preview" (the item already
  * says it), cut to this many characters whatever the tab limit.
  */
 const LAST_PREVIEW_NAME_MAX = 16;
@@ -113,6 +114,8 @@ export function previewOpenInRows(
   open: { lastActive: () => void; new: () => void },
 ): MenuAction[] {
   if (facts.affordance.state === 'absent') return [];
+  // 074 FR-103 — every row opens a preview of this file's type, so each is drawn with that type's preview icon.
+  const icon = previewIconOf(facts.affordance.provider);
   /*
    * 060 FR-049 — the file already has its one preview (044 FR-012), so there is one place for it to go:
    * that preview. One live Current Preview row replaces the pair, as Current Editor replaces Last Active /
@@ -123,7 +126,7 @@ export function previewOpenInRows(
     return [
       {
         label: 'Current Preview',
-        icon: 'preview',
+        icon,
         section: 'navigate',
         group: 'preview',
         onClick: () => open.lastActive(),
@@ -134,7 +137,7 @@ export function previewOpenInRows(
   return [
     {
       label: facts.lastPreviewTitle === null ? 'Last Preview Panel' : `Last Preview Panel (${facts.lastPreviewTitle})`,
-      icon: 'preview',
+      icon,
       section: 'navigate',
       group: 'preview',
       disabled: disabled || facts.lastPreviewTitle === null,
@@ -142,7 +145,7 @@ export function previewOpenInRows(
     },
     {
       label: 'New Preview Panel',
-      icon: 'preview',
+      icon,
       section: 'navigate',
       group: 'preview',
       disabled,

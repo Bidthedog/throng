@@ -381,6 +381,30 @@
     "preview": {
       "lucide": "scan-eye"
     },
+    "previewMarkdown": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with the Markdown mark, an M and a down arrow, in strokes beneath it in place of the lower corners"
+    },
+    "previewMermaid": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with a flowchart, a box joined to a diamond, in strokes beneath it in place of the lower corners"
+    },
+    "previewImage": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with Lucide image's hills and sun in strokes beneath it in place of the lower corners"
+    },
+    "previewSvg": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with a vector curve between two square nodes beneath it in place of the lower corners"
+    },
+    "previewPdf": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with the letters PDF in strokes beneath it in place of the lower corners"
+    },
+    "previewHtml": {
+      "throng": "074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with Lucide code-xml's angle brackets and slash beneath it in place of the lower corners"
+    },
+    "previewCsv": {
+      "throng": "073 under 074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with the letters CSV in strokes beneath it in place of the lower corners"
+    },
+    "previewSpreadsheet": {
+      "throng": "073 under 074 FR-103: Lucide scan-eye's two upper corners and its eye at 0.75, centred on (12, 8.25), with a three-by-two grid of cells beneath it in place of the lower corners"
+    },
     "refresh": {
       "lucide": "refresh-cw"
     },
@@ -425,6 +449,15 @@
     },
     "diagramFullPane": {
       "lucide": "expand"
+    },
+    "pageLayoutSingle": {
+      "throng": "Drawn on Lucide's grid: one page"
+    },
+    "pageLayoutTwo": {
+      "throng": "Drawn on Lucide's grid: two pages side by side"
+    },
+    "pageLayoutWrap": {
+      "throng": "Drawn on Lucide's grid: small pages wrapping into rows"
     },
     "warning": {
       "lucide": "triangle-alert"
@@ -473,6 +506,87 @@
     },
     "terminalNotifications": {
       "lucide": "bell"
+    },
+    "cellDialog": {
+      "throng": "A square window with a pencil writing into it: the CSV cell dialog's toggle, drawn so it stays distinct from rename's pencil and the editor panel's icon"
+    },
+    "insertRowAbove": {
+      "throng": "A row outlined at the foot with a plus above it: inserts a row above the chosen one"
+    },
+    "insertRowBelow": {
+      "throng": "A row outlined at the head with a plus below it: inserts a row below the chosen one"
+    },
+    "insertColumnLeft": {
+      "throng": "A column outlined at the right with a plus to its left: inserts a column left of the chosen one"
+    },
+    "insertColumnRight": {
+      "throng": "A column outlined at the left with a plus to its right: inserts a column right of the chosen one"
+    },
+    "resetColumnWidth": {
+      "throng": "A two-headed horizontal arrow with a centre mark: puts a column back to its standard width"
+    },
+    "goToRow": {
+      "throng": "An arrow running to a bar: go to a numbered row"
+    },
+    "wrapCells": {
+      "throng": "Text lines with the last one wrapping back under itself: cells wrap onto further lines"
+    },
+    "lockFirstRow": {
+      "throng": "A table whose top row is drawn heavy: the first row is held in place"
+    },
+    "lockFirstColumn": {
+      "throng": "A table whose left column is drawn heavy: the first column is held in place"
+    },
+    "readOnly": {
+      "lucide": "lock"
+    },
+    "calloutNote": {
+      "lucide": "notebook-pen"
+    },
+    "calloutAbstract": {
+      "lucide": "clipboard-list"
+    },
+    "calloutInfo": {
+      "lucide": "book-open-text"
+    },
+    "calloutTodo": {
+      "lucide": "list-todo"
+    },
+    "calloutTip": {
+      "lucide": "flame"
+    },
+    "calloutSuccess": {
+      "lucide": "circle-check-big"
+    },
+    "calloutQuestion": {
+      "lucide": "message-circle-question-mark"
+    },
+    "calloutWarning": {
+      "lucide": "message-square-warning"
+    },
+    "calloutFailure": {
+      "lucide": "octagon-x"
+    },
+    "calloutDanger": {
+      "lucide": "zap"
+    },
+    "calloutBug": {
+      "lucide": "bug"
+    },
+    "calloutExample": {
+      "lucide": "list"
+    },
+    "calloutQuote": {
+      "lucide": "quote"
+    },
+    "print": {
+      "lucide": "printer"
+    },
+    "pagePrevious": {
+      "lucide": "circle-chevron-left"
+    },
+    "pageNext": {
+      "lucide": "circle-chevron-right"
     }
   }
 }

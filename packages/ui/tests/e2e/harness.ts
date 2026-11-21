@@ -33,6 +33,7 @@ import { quiesceSampler } from './quiesce-sampler.js';
  * an undefined name here is invisible until it runs.
  */
 import { forceKillProcessTree, stdioHolders, stdioIdentities } from './process-tree.js';
+import { appLogTails, keepAppLogs, userDataDirOf } from './app-logs.js';
 import { resolveIpcAddress } from '@throng/core';
 import { shippedPresses, shippedTwoStroke } from '../shared/window-chords.js';
 import { startPlatform } from '@throng/platform';
@@ -389,6 +390,10 @@ export async function runApp(
       pipeName: started.pipeName,
       userDataDir: started.userDataDir,
     });
+  } catch (error) {
+    // The test is failing, but Playwright has not recorded it yet: the teardown below runs first.
+    keepLogsOfFailedTest(started.userDataDir, true);
+    throw error;
   } finally {
     await started.teardown();
   }
@@ -745,6 +750,7 @@ async function launchApp(opts: AppOptions): Promise<{
     };
 
     const teardownBegan = Date.now();
+    keepLogsOfFailedTest(userData);
     if (!daemon) await phase('killAppSpawnedDaemon', () => killAppSpawnedDaemon(pipeName));
     if (started) await phase('shutdownApp', () => shutdownApp(started));
     if (daemon) await phase('stopDaemon', () => stopDaemon(daemon));
@@ -1046,8 +1052,10 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
   // gone, Playwright's `app.process()` throws ("Cannot read properties of undefined"), so read the
   // pid defensively: no process ⇒ nothing to force-kill, and the graceful path below no-ops fast.
   let pid: number | undefined;
+  let userData: string | undefined;
   try {
     pid = app.process().pid;
+    userData = userDataDirOf(app.process().spawnargs);
   } catch {
     pid = undefined;
   }
@@ -1114,6 +1122,15 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
       } catch {
         /* best-effort: the force-kill below still runs */
       }
+      // What the app itself last wrote: the group above says only that the process lingered, never on which step.
+      if (userData !== undefined) {
+        try {
+          console.warn(`[teardown] the app's own logs at the stall:\n${appLogTails(userData)}`);
+          keepAppLogs(userData, join(test.info().outputDir, 'app-logs', `shutdown-stall-${pid}`));
+        } catch {
+          /* best-effort: outside a test, or the folder went with the process */
+        }
+      }
       // macOS: the process group alone cannot say what a live main process is doing. `sample` (shipped with macOS,
       // no privileges for our own child) writes every thread's stack beside the test's other results.
       if (process.platform === 'darwin') {
@@ -1130,6 +1147,22 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
     // The process is gone now, so this resolves immediately and lets Playwright observe the exit
     // rather than waiting on its own internal kill timeout.
     await app.close().catch(() => {});
+  }
+}
+
+/**
+ * A failed test's app logs, copied out of its user-data folder before teardown deletes it, into the test's output
+ * folder, which the E2E jobs upload as `app-logs-e2e-*`. A passing test keeps nothing. `failing` is for a caller that
+ * holds the error before Playwright has recorded it (`runApp`); otherwise the test's status decides, which an
+ * `afterEach` sees and an `afterAll` does not. Best-effort: outside a test it does nothing.
+ */
+function keepLogsOfFailedTest(userData: string, failing = false): void {
+  try {
+    const info = test.info();
+    if (!failing && info.status === info.expectedStatus) return;
+    keepAppLogs(userData, join(info.outputDir, 'app-logs', basename(userData)));
+  } catch {
+    /* not inside a test */
   }
 }
 

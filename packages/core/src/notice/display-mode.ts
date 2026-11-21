@@ -148,10 +148,12 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function boundedInt(raw: unknown, min: number, max: number, fallback: number): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
-  if (raw < min || raw > max) return fallback;
-  return Math.round(raw);
+/**
+ * A whole number, else `fallback`. 077 FR-016 — no range check here: an out-of-range value is moved to the nearer
+ * bound by the bounds guard, from the descriptor; replacing it with the default here disagreed with that (#227 class).
+ */
+function wholeOr(raw: unknown, fallback: number): number {
+  return typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : fallback;
 }
 
 /**
@@ -171,27 +173,12 @@ export function parseNotificationSettings(raw: unknown): NotificationSettings {
     const v = isRecord(section[type]) ? section[type] : {};
     resolved[type] = { ...severitySettings(v, fallback), os: typeof v.os === 'boolean' ? v.os : fallback.os };
   }
-  resolved.toastDurationMs = boundedInt(
-    section.toastDurationMs,
-    TOAST_DURATION_MIN_MS,
-    TOAST_DURATION_MAX_MS,
-    DEFAULT_NOTIFICATION_SETTINGS.toastDurationMs,
-  );
-  resolved.toastWidthPx = boundedInt(
-    section.toastWidthPx,
-    TOAST_WIDTH_MIN_PX,
-    TOAST_WIDTH_MAX_PX,
-    DEFAULT_NOTIFICATION_SETTINGS.toastWidthPx,
-  );
-  resolved.hoverDelayMs = boundedInt(
-    section.hoverDelayMs,
-    NOTICE_HOVER_DELAY_MIN_MS,
-    NOTICE_HOVER_DELAY_MAX_MS,
-    DEFAULT_NOTIFICATION_SETTINGS.hoverDelayMs,
-  );
+  resolved.toastDurationMs = wholeOr(section.toastDurationMs, DEFAULT_NOTIFICATION_SETTINGS.toastDurationMs);
+  resolved.toastWidthPx = wholeOr(section.toastWidthPx, DEFAULT_NOTIFICATION_SETTINGS.toastWidthPx);
+  resolved.hoverDelayMs = wholeOr(section.hoverDelayMs, DEFAULT_NOTIFICATION_SETTINGS.hoverDelayMs);
   resolved.confirmDismissAll =
     typeof section.confirmDismissAll === 'boolean' ? section.confirmDismissAll : DEFAULT_NOTIFICATION_SETTINGS.confirmDismissAll;
-  resolved.panelLimit = boundedInt(section.panelLimit, PANEL_LIMIT_MIN, PANEL_LIMIT_MAX, DEFAULT_NOTIFICATION_SETTINGS.panelLimit);
+  resolved.panelLimit = wholeOr(section.panelLimit, DEFAULT_NOTIFICATION_SETTINGS.panelLimit);
   return resolved;
 }
 

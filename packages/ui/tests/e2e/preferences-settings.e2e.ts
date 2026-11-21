@@ -145,11 +145,13 @@ test('edits toggle / select / number / array controls and applies + persists eac
         .poll(() => readSettings(cfgRoot)?.behaviour?.submenuHoverMs)
         .toBe(250);
 
-      // Array (string): add an explorer.excludeGlobs entry.
+      // Array (string): add an explorer.excludeGlobs entry, in its modal (077 FR-025), written on Save.
       const before = readSettings(cfgRoot)?.explorer?.excludeGlobs?.length ?? 0;
+      await prefs.getByTestId('list-edit-explorer.excludeGlobs').click();
       await prefs.getByTestId('control-explorer.excludeGlobs-add').click();
       const newIdx = before;
       await prefs.getByTestId(`control-explorer.excludeGlobs-item-${newIdx}`).fill('**/dist');
+      await prefs.getByTestId('list-editor-save-explorer.excludeGlobs').click();
       await expect
         .poll(() => readSettings(cfgRoot)?.explorer?.excludeGlobs)
         .toContain('**/dist');
@@ -348,8 +350,11 @@ test('an invalid number is not applied and is surfaced; last valid value stays',
       const num = prefs.getByTestId('control-behaviour.tabHoverActivateMs');
       await num.fill('not-a-number');
       await num.press('Enter');
-      // Invalidity surfaced; the file keeps the default (600), not applied.
+      // Invalidity surfaced — in the Preferences toast, naming the setting (077 FR-024); the file keeps the default
+      // (600), not applied.
       await expect(prefs.getByTestId('control-behaviour.tabHoverActivateMs-invalid')).toBeVisible();
+      await expect(prefs.getByTestId('control-behaviour.tabHoverActivateMs-invalid')).toContainText('must be a whole number');
+      await expect(num).toHaveAttribute('aria-invalid', 'true');
       expect(readSettings(cfgRoot)?.behaviour?.tabHoverActivateMs).toBe(600);
     },
   );

@@ -285,9 +285,12 @@ function enclosedReadings(line: string, from: number, to: number, options: Detec
   let end = to;
   while (start < end && /\s/.test(line[start])) start += 1;
   while (end > start && /\s/.test(line[end - 1])) end -= 1;
-  if (holdsASentence(line.slice(start, end), options)) return [];
   const found: LinkCandidate[] = [];
   if (end > start) emitReadings(found, line.slice(start, end), start, looksLikePath);
+  // The readings first: the sentence rule re-scans the whole contents, and contents that read as no path (a JSON
+  // object, a parenthesised clause) are an empty answer either way. Asked first, it made every bracket pair on a line
+  // of nested brackets re-scan its contents — ten times the line's own cost (2026-11-21, a CSV of JSON documents).
+  if (found.length === 0 || holdsASentence(line.slice(start, end), options)) return [];
   return found;
 }
 

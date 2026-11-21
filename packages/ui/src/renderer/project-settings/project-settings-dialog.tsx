@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactElement } from 'react';
-import { isExcluded, parseExcludeBox } from '@throng/core';
+import { htmlSafeSourcesFrom, isExcluded, normaliseSafeSource, parseExcludeBox, safeSourceFault } from '@throng/core';
 
 import { IconButton } from '../common/icon-button.js';
 import { useFocusTrap } from '../common/focus-trap.js';
@@ -18,6 +18,9 @@ import './project-settings.css';
  * Explorer (`hiddenPaths`, which also governs Quick Open and the file index) and Find & Replace
  * (`searchExcludeGlobs`, which governs only the search). Each section is a heading, an add row, a list
  * in its OWN scroll container, and a note naming the global list that also applies to it.
+ *
+ * 074 FR-072a adds a third, "Safe HTML preview sources" (`htmlSafeSources`): the remote https origins an HTML
+ * Preview in this project may load stylesheets, fonts and images from, beside the global preference.
  *
  * Both writes REPLACE the stored list (`setHidden`, `setSearchExcludes`), so adding is the list plus one
  * and removing is a filter over what the renderer is already holding: no new IPC operation beyond the
@@ -104,10 +107,13 @@ function AddRow({
 }
 
 export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): ReactElement | null {
-  const { activeProject, setProjectHidden, setSearchExcludes } = useProjects();
+  const { activeProject, setProjectHidden, setSearchExcludes, setHtmlSafeSources } = useProjects();
   const settings = useAppSettings();
   const globs = settings.explorer.excludeGlobs;
   const searchGlobs = settings.search.inFiles.excludeGlobs;
+  const globalSources = htmlSafeSourcesFrom(settings.editor.previews);
+  // The one message the safe-source add box can raise, saying what is wrong with the entry.
+  const [sourceProblem, setSourceProblem] = useState<string | null>(null);
   // The one notice the search add box can raise (CLAUDE.md: one condition, one notice).
   const [invalidEntries, setInvalidEntries] = useState<string[]>([]);
   // Same modality as the confirmation dialog: while this is up, Tab belongs to it (018 US6/US8
@@ -134,6 +140,7 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
 
   const hidden = activeProject.hiddenPaths;
   const searchHidden = activeProject.searchExcludeGlobs ?? [];
+  const projectSources = activeProject.htmlSafeSources ?? [];
 
   const unhide = (path: string): void => {
     // The whole list, minus one — `setHidden` replaces rather than removes, so the filter IS the
@@ -163,7 +170,9 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
    * 060 FR-044 — each section's way to its GLOBAL list. 069 FR-053 (#638): Preferences opens at that very
    * setting, its section unfolded and the setting scrolled into view.
    */
-  const editGlobalList = (key: 'explorer.excludeGlobs' | 'search.inFiles.excludeGlobs'): void => {
+  const editGlobalList = (
+    key: 'explorer.excludeGlobs' | 'search.inFiles.excludeGlobs' | 'editor.previews.providers.html.safeSources',
+  ): void => {
     onClose();
     window.throng?.openPreferences?.('settings', key);
   };
@@ -180,6 +189,26 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
     const fresh = parsed.globs.filter((g, i) => !searchHidden.includes(g) && parsed.globs.indexOf(g) === i);
     if (fresh.length > 0) void setSearchExcludes(activeProject.id, [...searchHidden, ...fresh]);
     return true;
+  };
+
+  /** 074 FR-072a — what is wrong with an entry that is not a source, in the user's words. */
+  const addSource = (text: string): boolean => {
+    const source = normaliseSafeSource(text);
+    if (source === null) {
+      // Nothing is written behind a refusal; the text stays so it can be corrected.
+      setSourceProblem(safeSourceFault(text));
+      return false;
+    }
+    setSourceProblem(null);
+    if (!projectSources.includes(source)) void setHtmlSafeSources(activeProject.id, [...projectSources, source]);
+    return true;
+  };
+
+  const removeSource = (source: string): void => {
+    void setHtmlSafeSources(
+      activeProject.id,
+      projectSources.filter((s) => s !== source),
+    );
   };
 
   return (
@@ -331,6 +360,62 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
             <div className="project-settings__globals" data-testid="project-settings-search-globals">
               <p className="project-settings__globals-desc">The search exclusion list in Preferences applies as well, to every project:</p>
               <p className="project-settings__globs">{searchGlobs.join(', ') || 'none'}</p>
+            </div>
+          </section>
+
+          {/* 074 FR-072a — the third list: remote sources an HTML Preview in this project may load
+              stylesheets, fonts and images from, on top of the global preference. */}
+          <section className="project-settings__group" data-testid="project-settings-html">
+            <div className="project-settings__section-head">
+              <h4 className="section-heading project-settings__section">Safe HTML preview sources</h4>
+              <IconButton
+                token="settings"
+                className="icon-button project-settings__prefs"
+                testId="project-settings-html-prefs"
+                title="Edit the global safe preview sources in Preferences"
+                onClick={() => editGlobalList('editor.previews.providers.html.safeSources')}
+              />
+            </div>
+            <AddRow
+              inputTestId="html-source-add-input"
+              buttonTestId="html-source-add"
+              placeholder="https address, e.g. https://cdn.example.com"
+              label="Source an HTML preview may load from"
+              addTitle="Allow HTML previews to load from this source"
+              onAdd={addSource}
+              onEdit={() => setSourceProblem(null)}
+            />
+            {sourceProblem !== null ? (
+              <p className="project-settings__notice" data-testid="html-source-notice" role="status">
+                {sourceProblem}
+              </p>
+            ) : null}
+            {projectSources.length === 0 ? (
+              <p className="project-settings__empty" data-testid="project-settings-html-empty">
+                No extra sources are trusted in this project.
+              </p>
+            ) : (
+              <ul className="project-settings__list" data-testid="project-settings-html-list">
+                {projectSources.map((source) => (
+                  <li key={source} className="search-exclude">
+                    <span className="hidden-path__path">{source}</span>
+                    <IconButton
+                      token="destroy"
+                      className="icon-button hidden-path__remove"
+                      testId={`html-source-remove-${source}`}
+                      title={`Stop allowing HTML previews to load from ${source}`}
+                      onClick={() => removeSource(source)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="project-settings__globals" data-testid="project-settings-html-globals">
+              <p className="project-settings__globals-desc">
+                The global preference HTML: Safe preview sources (Preferences → Editor → Previews → HTML) applies as well,
+                to every project:
+              </p>
+              <p className="project-settings__globs">{globalSources.join(', ') || 'none'}</p>
             </div>
           </section>
         </div>

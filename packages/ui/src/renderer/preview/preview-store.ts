@@ -32,6 +32,8 @@ export interface PreviewPanelState {
   /** `null` until an update has carried content (a run that could not read its file carries none). */
   content: PreviewContent | null;
   dirty: boolean;
+  /** 073 — the run follows the grid document this preview opened (`PreviewUpdate.ownsDocument`). */
+  ownsDocument?: boolean;
   parent: { panelId: string; title: string } | null;
   notice: PreviewNotice | null;
   /**
@@ -140,6 +142,7 @@ export function applyPreviewUpdate(update: PreviewUpdate, source: ViewStateSourc
     providerId: update.providerId,
     content: update.content ?? previous?.content ?? null,
     dirty: update.dirty,
+    ownsDocument: update.ownsDocument === true,
     parent: update.parent,
     notice: update.notice,
     // Present only when main set it; an update without one keeps the reader where they are (FR-024).

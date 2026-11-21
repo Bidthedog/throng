@@ -29,15 +29,39 @@ export interface RetentionPolicy {
 /** Three active days, a 100 MB folder, 1 MiB files (066 clarifications Q2, Q3). */
 export const DEFAULT_RETENTION: RetentionPolicy = { keepDays: 3, maxTotalBytes: 100 * MB, maxFileBytes: 1_048_576 };
 
-/** The bounds a configured policy is clamped to; `maxTotalBytes`' ceiling is the setting's hardMax. */
+/** The bounds a configured policy is clamped to: the `diagnostics.*` settings' hard bounds (the environment variables a
+ * child process reads are not checked by Preferences). */
 export const RETENTION_BOUNDS = {
   keepDays: { min: 1, max: 30 },
-  maxTotalBytes: { min: 50 * MB, max: 65_536 * MB },
+  // 077 FR-016 — the setting's hard bounds (1 MB – 64 GB), so a value Preferences accepts is not moved again here.
+  maxTotalBytes: { min: MB, max: 65_536 * MB },
   maxFileBytes: { min: 1024 },
 } as const;
 
 function finiteOr(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * 077 FR-001 — the retention a child process (daemon, terminal agent, collector) reads from the variables the app
+ * hands it, in bytes. The names v1.0.0-beta1 shipped in KB and MB (`THRONG_LOG_MAX_KB`, `THRONG_LOG_MAX_TOTAL_MB`) are
+ * still read, converted, where the byte names are unset: a daemon left running across an upgrade hands them to a newer
+ * terminal agent. Anything unset or unreadable is `undefined`, which {@link normaliseRetention} fills with its default.
+ */
+export function retentionFromEnv(env: Readonly<Record<string, string | undefined>>): Partial<RetentionPolicy> {
+  const num = (name: string): number | undefined => {
+    const n = Number(env[name]);
+    return env[name] !== undefined && env[name] !== '' && Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+  const scaled = (name: string, factor: number): number | undefined => {
+    const n = num(name);
+    return n === undefined ? undefined : n * factor;
+  };
+  return {
+    maxFileBytes: num('THRONG_LOG_MAX_BYTES') ?? scaled('THRONG_LOG_MAX_KB', 1024),
+    keepDays: num('THRONG_LOG_KEEP_DAYS'),
+    maxTotalBytes: num('THRONG_LOG_MAX_TOTAL_BYTES') ?? scaled('THRONG_LOG_MAX_TOTAL_MB', MB),
+  };
 }
 
 /** Clamp a configured policy into one that cannot misbehave. */

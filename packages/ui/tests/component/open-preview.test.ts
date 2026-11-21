@@ -750,6 +750,70 @@ describe("main answers 'navigated' (047 US2, R8)", () => {
   });
 });
 
+describe("main answers 'unsavedGrid' (073 FR-033b)", () => {
+  /** A bridge that answers each request in turn, recording what it was sent. */
+  function sequence(...answers: PreviewOpenResponse[]) {
+    const queue = [...answers];
+    return {
+      open: vi.fn((_req: PreviewOpenRequest) => Promise.resolve(queue.shift() ?? ({ kind: 'refused', reason: 'no-file' } as const))),
+      placeDeclined: vi.fn(),
+    };
+  }
+  const intent = { absPath: 'D:/proj/b.csv', projectId: PROJECT };
+  const asking = (choice: 'save' | 'discard' | 'new' | 'cancel') => vi.fn((_file: string, _editor: string, _opts?: { newLabel?: string }) => Promise.resolve(choice));
+
+  it('asks the reader, naming the arriving file and the panel, with the third choice worded for a preview', async () => {
+    const ws = fakeWs(twoTabsWithPreview('t1', 'front', 'D:/proj/a.csv'));
+    const prompt = asking('cancel');
+    await openPreview({ ws, bridge: sequence({ kind: 'unsavedGrid', panelId: 'front' }), intent, prompt });
+    expect(prompt).toHaveBeenCalledWith('b.csv', 'Panel front', { newLabel: 'Open in new preview' });
+  });
+
+  it('Cancel opens nothing and asks main nothing more', async () => {
+    const ws = fakeWs(twoTabsWithPreview('t1', 'front', 'D:/proj/a.csv'));
+    const bridge = sequence({ kind: 'unsavedGrid', panelId: 'front' });
+    const outcome = await openPreview({ ws, bridge, intent, prompt: asking('cancel') });
+    expect(outcome).toEqual({ kind: 'cancelled' });
+    expect(bridge.open).toHaveBeenCalledTimes(1);
+    expect(ws.calls).toEqual([]);
+  });
+
+  for (const choice of ['save', 'discard'] as const) {
+    it(`${choice} asks main again with the choice, and carries out its answer (the panel is reused)`, async () => {
+      const ws = fakeWs(twoTabsWithPreview('t1', 'front', 'D:/proj/a.csv'));
+      watchFocus('front');
+      const bridge = sequence({ kind: 'unsavedGrid', panelId: 'front' }, { kind: 'navigated', panelId: 'front' });
+      const outcome = await openPreview({ ws, bridge, intent, prompt: asking(choice) });
+      expect(outcome).toEqual({ kind: 'navigated', panelId: 'front' });
+      expect(bridge.open).toHaveBeenCalledTimes(2);
+      expect(bridge.open.mock.calls[1]?.[0]).toMatchObject({ absPath: 'D:/proj/b.csv', unsavedChoice: choice });
+      expect(bridge.open.mock.calls[0]?.[0].unsavedChoice).toBeUndefined();
+      expect(focused).toEqual(['front']);
+    });
+  }
+
+  it('Open in new preview asks again with new, and places the panel main answers with', async () => {
+    const ws = fakeWs(twoTabsWithPreview('t1', 'front', 'D:/proj/a.csv'));
+    const bridge = sequence({ kind: 'unsavedGrid', panelId: 'front' }, { kind: 'placeLocally', reservation: 'r1', besidePanelId: null });
+    const outcome = await openPreview({ ws, bridge, intent, prompt: asking('new') });
+    expect(bridge.open.mock.calls[1]?.[0]).toMatchObject({ unsavedChoice: 'new' });
+    expect(outcome.kind).toBe('placed');
+  });
+
+  it('asks only once, whatever main answers the second time', async () => {
+    const ws = fakeWs(twoTabsWithPreview('t1', 'front', 'D:/proj/a.csv'));
+    const prompt = asking('save');
+    const outcome = await openPreview({
+      ws,
+      bridge: sequence({ kind: 'unsavedGrid', panelId: 'front' }, { kind: 'unsavedGrid', panelId: 'front' }),
+      intent,
+      prompt,
+    });
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(outcome).toEqual({ kind: 'unavailable' });
+  });
+});
+
 /* ── place (main → this window) ──────────────────────────────────────────────────────────────── */
 
 describe('an incoming place (FR-010)', () => {

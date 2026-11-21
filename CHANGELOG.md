@@ -29,6 +29,38 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+
+- A CSV opens in the CSV Preview Editor, a grid you edit and save like a document; a save changes only
+  the fields you edited. Choose Throng Editor, Throng Preview Editor or your OS program in **Open CSVs in**.
+- Excel, LibreOffice and Numbers workbooks preview read-only, every sheet, with no office suite installed.
+- Images, SVG files, PDFs and HTML pages open in previews of their own. Pictures fit, zoom and pan; an SVG preview
+  follows its editor as you type; a PDF pages, finds text and goes to a page; an HTML page renders with its scripts
+  off and reloads in place when the file changes. Choose Throng Editor, Throng Preview or your OS program for each type
+  in **Open … in**.
+- HTML previews load images, styles and fonts only from sources you allow: **HTML: Safe preview sources** in
+  Preferences, plus a list of the project's own in Project Settings. A page that asks for anything else says what was
+  left out, with **Allow this source** beside it.
+- Each type of preview has its own icon, and its title names the type: `notes.md - Markdown Preview`.
+- Markdown previews draw Obsidian-style callouts (`> [!note]`, `> [!warning]-` and the rest), each with its icon and
+  theme colour, and fold the ones marked to fold.
+- Maths in a Markdown preview is typeset: `$…$` inline, `$$…$$` and `math` blocks on their own lines.
+- **Print…** (**Ctrl+P**) prints a Markdown or Mermaid preview, or an editor, through a Print Preview that shows each
+  page as it will print and sends the printer exactly those pages.
+
+### Changed
+
+- Every number in Preferences reads in its own unit beside its slider (sizes in MB, times in ms, seconds or minutes),
+  with the exact value in the box. A value typed past a limit is named as you type and stored as that limit; a value
+  off the slider's steps greys the slider.
+- Sizes are now stored in bytes and times in milliseconds. A settings file from 1.0.0-beta1 is converted when this
+  version first starts: Quiet time, Capture interval, History window, Log file size and Log folder limit keep
+  their values under new keys.
+- "Too large" notices quote the limit as Preferences shows it, in MB with its bytes.
+- The Resource Monitor's interval menu offers every interval its Preferences slider does.
+- Print Preview's margin, scale and copies boxes say what is wrong with a value, and store the nearest limit when you
+  leave the box.
+
 ## 1.0.0-beta1 — 2026-11-19
 
 ### Added

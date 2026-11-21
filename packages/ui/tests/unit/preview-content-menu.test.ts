@@ -301,6 +301,59 @@ describe('previewContentMenu carries no Contextual section any more (FR-169)', (
       expect.objectContaining({ label: 'Go to Heading…', section: 'navigate' }),
     ]);
   });
+
+  // 074 FR-062b — a PDF is not a flowing document, yet its Go to command goes somewhere: a page.
+  it('a paged preview (PDF) offers Go to Page… in its place, and a single picture neither', () => {
+    const run = vi.fn();
+    const paged = previewContentMenu({
+      selectionEmpty: true,
+      flowingDocument: false,
+      find: { run: vi.fn() },
+      goToHeading: { run, chord: 'Ctrl+G', kind: 'page' },
+    });
+    const row = paged.find((i) => i.label === 'Go to Page…');
+    expect(row).toMatchObject({ section: 'navigate', shortcut: 'Ctrl+G' });
+    expect(paged.some((i) => i.label === 'Go to Heading…')).toBe(false);
+    row!.onClick!();
+    expect(run).toHaveBeenCalledOnce();
+
+    const picture = previewContentMenu({
+      selectionEmpty: true,
+      flowingDocument: false,
+      find: { run: vi.fn() },
+      goToHeading: { run: vi.fn(), kind: null },
+    });
+    expect(picture.some((i) => i.label.startsWith('Go to'))).toBe(false);
+  });
+
+  // 074 FR-086a — a picture has no text: no Find… row at all, rather than a disabled one.
+  it('draws no Find… for a body with no text, and a disabled one for a body find cannot read', () => {
+    const absent = previewContentMenu({ selectionEmpty: true, flowingDocument: false, find: { run: vi.fn(), absent: true }, goToHeading: { run: vi.fn(), kind: null } });
+    expect(absent.some((i) => i.label === 'Find…')).toBe(false);
+    const disabled = previewContentMenu({ selectionEmpty: true, find: { run: vi.fn(), disabled: true }, goToHeading: { run: vi.fn() } });
+    expect(disabled.find((i) => i.label === 'Find…')).toMatchObject({ disabled: true });
+  });
+
+  // 074 FR-062c — a paged preview's page layouts: one checked row each, in the View & state section.
+  it('a paged preview offers its three page layouts, the current one checked, and a row sets its layout', () => {
+    const set = vi.fn();
+    const items = previewContentMenu({
+      selectionEmpty: true,
+      flowingDocument: false,
+      find: { run: vi.fn() },
+      goToHeading: { run: vi.fn(), kind: 'page' },
+      pageLayout: { value: 'two', set },
+    });
+    const rows = items.filter((i) => ['Single Page', 'Two Pages', 'Pages Side by Side'].includes(i.label));
+    expect(rows.map((r) => [r.label, r.checked, r.section, r.icon])).toEqual([
+      ['Single Page', false, 'viewState', 'pageLayoutSingle'],
+      ['Two Pages', true, 'viewState', 'pageLayoutTwo'],
+      ['Pages Side by Side', false, 'viewState', 'pageLayoutWrap'],
+    ]);
+    rows[2]!.onClick!();
+    expect(set).toHaveBeenCalledWith('wrap');
+    expect(previewContentMenu(baseArgs()).some((i) => i.label === 'Single Page')).toBe(false);
+  });
 });
 
 describe('the address a link copies (FR-116)', () => {

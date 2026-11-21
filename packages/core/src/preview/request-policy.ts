@@ -9,6 +9,7 @@
  *
  * Pure: no OS, no DOM, no `node:path`.
  */
+import { matchesSafeSource } from './safe-sources.js';
 import { logExpected } from '../diagnostics/caught.js';
 import { isUnderPath } from '../fs/path-id.js';
 import { relPathUnderRoot } from '../explorer/path-rules.js';
@@ -28,14 +29,32 @@ const SCHEME = /^([a-z][a-z0-9+.-]*):/i;
  * `data:` and `blob:` always (the drag ghost window loads a `data:text/html` page); everything else
  * is cancelled.
  */
+/** 074 FR-072a — what a safe source may serve an HTML preview frame. */
+const SUB_FRAME_REMOTE_TYPES = new Set(['image', 'stylesheet', 'font']);
+
 export function decideRendererRequest(
-  req: { url: string; resourceType: string },
+  /** `fromSubFrame` (074 FR-093): the request came from a frame inside a renderer document — only the HTML preview's sandboxed frame. */
+  req: {
+    url: string;
+    resourceType: string;
+    fromSubFrame?: boolean;
+    /** 074 FR-072a — the Safe HTML preview sources the requesting frame registered (none = none). Sub-frames only. */
+    frameSources?: readonly string[];
+  },
   policy: { rendererDir: string; remoteImages: boolean },
 ): 'allow' | 'cancel' {
   const scheme = SCHEME.exec(req.url)?.[1].toLowerCase();
   if (scheme === undefined) return 'cancel';
   if (ALWAYS_ALLOWED.has(scheme)) return 'allow';
-  if (scheme === 'https') return req.resourceType === 'image' && policy.remoteImages ? 'allow' : 'cancel';
+  if (scheme === 'https') {
+    // 074 FR-072a, FR-093 — a sub-frame (an HTML preview's page) reaches only its own safe sources, and only for a
+    // stylesheet, a font or an image; whatever Load remote images says. FR-092a — a top-level document still loads
+    // nothing remote but a permitted image, though the renderer policy admits https styles and fonts.
+    if (req.fromSubFrame === true) {
+      return SUB_FRAME_REMOTE_TYPES.has(req.resourceType) && matchesSafeSource(req.url, req.frameSources ?? []) ? 'allow' : 'cancel';
+    }
+    return req.resourceType === 'image' && policy.remoteImages ? 'allow' : 'cancel';
+  }
   if (scheme === 'file') {
     const path = pathOfFileUrl(req.url);
     // `isUnderPath` refuses a `..` segment on either separator, so a decoded `%2e%2e` or `%5C..`
@@ -67,7 +86,8 @@ function pathOfFileUrl(url: string): string | null {
 
 /**
  * The MIME type the protocol serves a file as, by extension. Only what a preview can display: the
- * image formats Chromium renders in `<img>`, and PDF for a binary provider (#388). The ALLOWLIST the
+ * image formats Chromium renders in `<img>`, PDF for a binary provider (#388), and the workbook formats
+ * (073). The ALLOWLIST the
  * caller passes decides what is actually served; this table only names the type.
  */
 const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
@@ -75,13 +95,33 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   '.apng': 'image/apng',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.jfif': 'image/jpeg',
+  '.pjpeg': 'image/jpeg',
+  '.pjp': 'image/jpeg',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.avif': 'image/avif',
   '.svg': 'image/svg+xml',
   '.bmp': 'image/bmp',
+  '.dib': 'image/bmp',
   '.ico': 'image/x-icon',
+  // A cursor is an ICO container with a hotspot; Chromium's ICO decoder draws it.
+  '.cur': 'image/x-icon',
   '.pdf': 'application/pdf',
+  // 073 FR-050 — the Spreadsheet provider's workbooks, served only to its own source route.
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  '.xlsb': 'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+  '.xls': 'application/vnd.ms-excel',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.fods': 'application/vnd.oasis.opendocument.spreadsheet-flat-xml',
+  '.numbers': 'application/vnd.apple.numbers',
+  // 074 FR-072 — served only to a provider that lists them in `assetMimeTypes` (an HTML page's stylesheet).
+  '.css': 'text/css',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
 };
 
 function mimeOf(path: string): string | undefined {

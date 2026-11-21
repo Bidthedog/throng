@@ -79,6 +79,33 @@ describe('another checkout\u2019s daemon (#533)', () => {
     await waitFor(() => expect(screen.queryByTestId('status-daemon')).toBeNull());
   });
 
+  /*
+   * #685 \u2014 a notice lasts as long as its condition. After the indicator replaced the daemon, main pushes `null`; the
+   * toast and its Notifications-panel entry both said the window was still on another checkout's daemon, and the user
+   * had to dismiss each by hand.
+   */
+  it('takes its toast and its Notifications-panel entry down once the daemon is this build\u2019s again (#685)', async () => {
+    const { push } = stubDaemon({ checkout: CHECKOUT });
+    const add = vi.fn(async () => ({ outcome: 'added' as const, id: 'entry-foreign' }));
+    const dismiss = vi.fn(async () => undefined);
+    (window as unknown as { throng: Record<string, unknown> }).throng.notifications = {
+      add,
+      dismiss,
+      list: async () => ({ pendingCount: 0 }),
+      onChanged: () => () => undefined,
+    };
+    mount();
+    await screen.findByTestId('daemon-foreign');
+    await waitFor(() => expect(add).toHaveBeenCalledWith(expect.objectContaining({ testId: 'daemon-foreign' })));
+
+    push(null);
+
+    await waitFor(() => expect(dismiss).toHaveBeenCalledWith('entry-foreign'));
+    // Asserted once the withdrawal has run, not polled: a poll can catch the card between renders and pass.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('daemon-foreign')).toBeNull();
+  });
+
   it('draws nothing for this build\u2019s own daemon', async () => {
     stubDaemon(null);
     mount();

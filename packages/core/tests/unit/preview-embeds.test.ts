@@ -113,4 +113,11 @@ describe('embedRefusalText', () => {
     expect(embedRefusalText('../a.mmd', 'outside')).toBe('Embedded diagram is outside the project: ../a.mmd');
     expect(embedRefusalText('a.mmd', 'too-large')).toContain('too large');
   });
+
+  // 077 convergence T058 — FR-014: a too-large embed quotes its size and the limit, as the chrome words them.
+  it('quotes a too-large embed’s size and limit after the reference', () => {
+    expect(embedRefusalText('big.mmd', 'too-large', '2 MB (2,097,152 bytes), over the 1 MB (1,048,576 bytes) limit set in Preferences')).toBe(
+      'Embedded diagram is too large to show: big.mmd — 2 MB (2,097,152 bytes), over the 1 MB (1,048,576 bytes) limit set in Preferences.',
+    );
+  });
 });

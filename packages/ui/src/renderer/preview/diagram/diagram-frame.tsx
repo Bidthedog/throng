@@ -46,6 +46,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -54,8 +55,9 @@ import {
 } from 'react';
 import { firstBinding } from '@throng/core';
 import { useKeybindings } from '../../config/config-store.js';
+import { zoomTitles } from '../zoom-titles.js';
 import { registerDiagramActions } from './diagram-actions.js';
-import { rasteriseSvg } from './rasterise.js';
+import { rasteriseSvg, rasterSourceOf, registerRasterSource } from './rasterise.js';
 import { createPortal } from 'react-dom';
 import { IconButton } from '../../common/icon-button.js';
 import { ZoomIndicator } from '../../workspace/zoom-indicator.js';
@@ -88,7 +90,11 @@ export const PANNING_CLASS = 'preview-diagram-frame__viewport--panning';
 export const DIAGRAM_MAX_SCALE = 8;
 export const ZOOM_STEP = 1.25;
 
-export type DiagramViewMode = 'fit' | 'zoom';
+/**
+ * `open` (074 FR-020a, 2026-11-19): the view a picture opens in — 100%, or Fit where the picture is larger than its
+ * viewport — kept until the reader zooms or chooses Fit, so a resize before then still follows the same rule.
+ */
+export type DiagramViewMode = 'fit' | 'zoom' | 'open';
 
 interface ViewState {
   mode: DiagramViewMode;
@@ -123,7 +129,34 @@ export interface DiagramFrameProps {
    * `![[flow.mmd|300]]`), in CSS pixels; Fit then uses both extents inside it. `null`: the fitted drawing's.
    */
   height?: number | null;
+  /**
+   * 074 FR-020 — the view a newly mounted frame starts in: `fit` (absent), `actual` (the drawing at 100%, centred) or
+   * `open` (FR-020a: 100%, or Fit where the drawing is larger than the viewport — every picture preview). A live
+   * re-render keeps whatever view the reader has since chosen.
+   */
+  initialMode?: 'fit' | 'actual' | 'open';
+  /**
+   * 074 FR-031a (2026-11-19) — the viewport SCROLLS, on both axes, wherever the drawing at its scale outgrows it: an
+   * Image or SVG preview. The drawing sits on a stage as large as the larger of the viewport and the scaled drawing,
+   * centred while it is the smaller; the pan is the scroll position, so a middle-button drag and a zoom about a point
+   * move the scrollbars rather than a transform. Default `false`: 054's pan-only view.
+   */
+  scrolls?: boolean;
+  /**
+   * 074 FR-027b — a picture's transparent areas are drawn over a hatch in the theme's `pictureHatch` (a backdrop the
+   * size of the scaled picture, so the hatch keeps its screen spacing at every zoom). Default `true`. A drawing that
+   * is not a picture (a Mermaid diagram) has no backdrop either way.
+   */
+  hatch?: boolean;
+  /** 074 (2026-11-20) — the scale the drawing is shown at, on every change: for the status bar's zoom readout. */
+  onScale?: (scale: number) => void;
 }
+
+/** Where a scrolling frame's next render puts its scroll position (FR-031a). */
+type PendingScroll =
+  | { kind: 'centre' }
+  /** Keep drawing point (`drawnX`, `drawnY`) under viewport point (`px`, `py`) — a zoom about that point. */
+  | { kind: 'point'; drawnX: number; drawnY: number; px: number; py: number };
 
 /** The SVG's drawing size, from its `viewBox` (mermaid always writes one), else its width/height. */
 function naturalSize(svg: SVGSVGElement): { width: number; height: number } {
@@ -137,6 +170,10 @@ function naturalSize(svg: SVGSVGElement): { width: number; height: number } {
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 const FIT: ViewState = { mode: 'fit', scale: 1, x: 0, y: 0 };
+/** 074 FR-020 — Zoom 100%'s view, as a starting point. */
+const ACTUAL: ViewState = { mode: 'zoom', scale: 1, x: 0, y: 0 };
+/** 074 FR-020a — the opening view: 100%, or Fit when the drawing is larger than its viewport. */
+const OPEN: ViewState = { mode: 'open', scale: 1, x: 0, y: 0 };
 
 export function DiagramFrame({
   svg,
@@ -146,12 +183,26 @@ export function DiagramFrame({
   maximisable = true,
   fillsPanel = false,
   height = null,
+  initialMode = 'fit',
+  scrolls = false,
+  hatch = true,
+  onScale,
 }: DiagramFrameProps): ReactElement {
-  const [view, setView] = useState<ViewState>(FIT);
+  const [view, setView] = useState<ViewState>(initialMode === 'actual' ? ACTUAL : initialMode === 'open' ? OPEN : FIT);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  // FR-031a — a scrolling frame opens centred: a picture larger than the panel shows its middle.
+  const pendingScroll = useRef<PendingScroll | null>(scrolls ? { kind: 'centre' } : null);
+  const isPicture = svg.hasAttribute('data-throng-picture');
+  // A5 — the panel's zoom chords and Ctrl+wheel zoom THIS diagram while focus is inside it; the wheel names
+  // the pointer, which is used while it is over the viewport (FR-046l).
+  const zoomKey = diagramZoomKey(panelId, sectionId);
+  const viewportElRef = useRef<HTMLDivElement | null>(null);
   // The viewport's size, measured where the viewport IS (inline, or in the maximise layer) — Fit and the
   // centring both read it.
   const [viewportEl, setViewportEl] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  viewportElRef.current = viewportEl;
   const tabId = tabOfMaximisePanel(panelId);
   const fullPane = useSectionMaximised(tabId ?? '', panelId, sectionId);
   const [paneHost, setPaneHost] = useState<HTMLDivElement | null>(null);
@@ -169,27 +220,64 @@ export function DiagramFrame({
   const boxHeight = ownHeight ? size.height : inPlaceHeight;
   // B1 — Fit uses both extents wherever the height is not the drawing's own echo; the width alone otherwise.
   const heightRatio = (ownHeight || height !== null) && boxHeight > 0 ? boxHeight / natural.height : Number.POSITIVE_INFINITY;
-  const fitScale = Math.min(widthRatio, heightRatio, 1);
-  const scale = view.mode === 'fit' ? fitScale : view.scale;
+  // 074 FR-031b (2026-11-19) — a picture's Fit FILLS the panel, enlarging a small one; a diagram's never enlarges.
+  const fitScale = scrolls ? Math.min(widthRatio, heightRatio) : Math.min(widthRatio, heightRatio, 1);
+  // A tiny picture fitted to a large panel may already be past the zoom ceiling: it can still zoom in from Fit.
+  const maxScale = Math.max(DIAGRAM_MAX_SCALE, fitScale * 4);
+  // FR-020a — opening, 100% unless that is larger than the viewport, which Fit then is.
+  const scaleOf = (v: ViewState): number => (v.mode === 'fit' ? fitScale : v.mode === 'open' ? Math.min(1, fitScale) : v.scale);
+  const scale = scaleOf(view);
+  const onScaleRef = useRef(onScale);
+  onScaleRef.current = onScale;
+  // Before the first measurement only a chosen zoom is worth reporting: Fit and the opening view read the viewport.
+  const measuredScale = view.mode === 'zoom' || size.width > 0 ? scale : null;
+  useEffect(() => {
+    if (measuredScale !== null) onScaleRef.current?.(measuredScale);
+  }, [measuredScale]);
   // Centred on both axes; before the first measurement there is nothing to centre in.
   const centreXAt = (s: number): number => (size.width > 0 ? (size.width - natural.width * s) / 2 : 0);
   const centreYAt = (s: number): number => (boxHeight > 0 ? (boxHeight - natural.height * s) / 2 : 0);
-  const centreX = centreXAt(scale);
-  const centreY = centreYAt(scale);
+  // FR-031a — scrolling, the drawing is centred only while it is smaller than the viewport; larger, it starts at the
+  // stage's edge and the scroll position does the rest.
+  const offsetXAt = (s: number): number => Math.max(0, centreXAt(s));
+  const offsetYAt = (s: number): number => Math.max(0, centreYAt(s));
+  // 074 FR-031c (2026-11-19) — on an axis the picture does NOT overflow there is nothing to scroll, so a drag moves the
+  // picture itself: the view's pan applies there, and only there.
+  // A FITTED view (Fit, or the opening view) fits by definition: it never scrolls, and its viewport clips instead of
+  // offering scrollbars (`--fitted`). Measured 2026-11-19: at app zoom 1.33 and 0.9 the fitted stage's rounding
+  // overflowed by under a pixel, both scrollbars appeared, the narrower viewport fitted smaller, the scrollbars went,
+  // and the picture refitted — every 150ms, for as long as the panel stayed open.
+  const fitted = view.mode !== 'zoom';
+  const overflowX = !fitted && size.width > 0 && natural.width * scale > size.width;
+  const overflowY = !fitted && boxHeight > 0 && natural.height * scale > boxHeight;
+  const overflowRef = useRef({ x: overflowX, y: overflowY });
+  overflowRef.current = { x: overflowX, y: overflowY };
+  const centreX = scrolls ? offsetXAt(scale) + (overflowX ? 0 : view.x) : centreXAt(scale) + view.x;
+  const centreY = scrolls ? offsetYAt(scale) + (overflowY ? 0 : view.y) : centreYAt(scale) + view.y;
+  const stageWidth = Math.max(size.width, natural.width * scale);
+  const stageHeight = Math.max(boxHeight, natural.height * scale);
 
   // #486 — every zoom action, Fit included, shows the scale it left in the box's top-right corner. A resize
   // that changes Fit's scale is not a zoom, and shows nothing.
   const [zoomCue, setZoomCue] = useState(0);
   const cueZoom = useCallback((): void => setZoomCue((c) => c + 1), []);
   const onFit = useCallback((): void => {
+    if (scrolls) pendingScroll.current = { kind: 'centre' };
     setView(FIT);
     cueZoom();
-  }, [cueZoom]);
+  }, [cueZoom, scrolls]);
+  // The opening view again (FR-020a): what the zoom reset gives a picture.
+  const onOpenView = useCallback((): void => {
+    if (scrolls) pendingScroll.current = { kind: 'centre' };
+    setView(OPEN);
+    cueZoom();
+  }, [cueZoom, scrolls]);
   // Zoom 100%: the actual size, centred (the pan is cleared, as Fit clears it).
   const onZoomActual = useCallback((): void => {
+    if (scrolls) pendingScroll.current = { kind: 'centre' };
     setView({ mode: 'zoom', scale: 1, x: 0, y: 0 });
     cueZoom();
-  }, [cueZoom]);
+  }, [cueZoom, scrolls]);
 
   /*
    * FR-046l — a zoom step about a point of the viewport, which stays over the same point of the drawing: the
@@ -200,9 +288,27 @@ export function DiagramFrame({
   const zoomAbout = useCallback(
     (factor: number, at?: { x: number; y: number }): void => {
       cueZoom();
+      const viewport = viewportElRef.current;
+      if (scrolls && viewport !== null) {
+        // FR-031a — the same rule, solved for the scroll position: the drawing point under `point` is read through
+        // the current scroll and offset, and the next render scrolls it back under `point` at the new scale.
+        const v = viewRef.current;
+        const from = scaleOf(v);
+        const next = clamp(from * factor, DIAGRAM_MIN_SCALE, maxScale);
+        const point = at ?? { x: size.width / 2, y: boxHeight / 2 };
+        pendingScroll.current = {
+          kind: 'point',
+          drawnX: (viewport.scrollLeft + point.x - offsetXAt(from)) / from,
+          drawnY: (viewport.scrollTop + point.y - offsetYAt(from)) / from,
+          px: point.x,
+          py: point.y,
+        };
+        setView({ mode: 'zoom', scale: next, x: 0, y: 0 });
+        return;
+      }
       setView((v) => {
-        const from = v.mode === 'fit' ? fitScale : v.scale;
-        const next = clamp(from * factor, DIAGRAM_MIN_SCALE, DIAGRAM_MAX_SCALE);
+        const from = scaleOf(v);
+        const next = clamp(from * factor, DIAGRAM_MIN_SCALE, maxScale);
         const point = at ?? { x: size.width / 2, y: boxHeight / 2 };
         const drawnX = (point.x - (centreXAt(from) + v.x)) / from;
         const drawnY = (point.y - (centreYAt(from) + v.y)) / from;
@@ -215,21 +321,33 @@ export function DiagramFrame({
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- centreXAt / centreYAt read only the values listed
-    [cueZoom, fitScale, boxHeight, natural.width, natural.height, size.width],
+    [cueZoom, fitScale, maxScale, boxHeight, natural.width, natural.height, size.width, scrolls],
   );
   const zoomBy = useCallback((factor: number): void => zoomAbout(factor), [zoomAbout]);
 
-  // A5 — the panel's zoom chords and Ctrl+wheel zoom THIS diagram while focus is inside it; the wheel names
-  // the pointer, which is used while it is over the viewport (FR-046l).
-  const zoomKey = diagramZoomKey(panelId, sectionId);
-  const viewportElRef = useRef<HTMLDivElement | null>(null);
-  viewportElRef.current = viewportEl;
+  // FR-031a — the scroll a zoom, Fit, Zoom 100% or the first draw asked for, applied once the stage has its new size.
+  // A pending scroll waits for the first measurement: before it there is no viewport to centre in.
+  useLayoutEffect(() => {
+    const pending = pendingScroll.current;
+    if (!scrolls || pending === null || viewportEl === null || size.width === 0) return;
+    pendingScroll.current = null;
+    if (pending.kind === 'centre') {
+      viewportEl.scrollLeft = Math.max(0, (stageWidth - size.width) / 2);
+      viewportEl.scrollTop = Math.max(0, (stageHeight - boxHeight) / 2);
+    } else {
+      viewportEl.scrollLeft = Math.max(0, pending.drawnX * scale + offsetXAt(scale) - pending.px);
+      viewportEl.scrollTop = Math.max(0, pending.drawnY * scale + offsetYAt(scale) - pending.py);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- offsetXAt / offsetYAt read only the values listed
+  }, [scrolls, viewportEl, scale, size.width, boxHeight, stageWidth, stageHeight]);
   useEffect(
     () =>
       registerDiagramZoom(zoomKey, (action: DiagramZoomAction, at?: DiagramZoomPoint): void => {
-        // The reset is the diagram's default view, Fit; 1:1 is the toolbar's Zoom 100% (2026-10-13).
+        // The reset is the view the frame opened in: a diagram's Fit (2026-10-13); a picture's opening view, 100%
+        // unless that is larger than the panel (074 FR-020a, 2026-11-20).
         if (action === 'reset') {
-          onFit();
+          if (initialMode === 'open') onOpenView();
+          else onFit();
           return;
         }
         // A pointer outside the viewport (focus in the diagram, pointer elsewhere) zooms about the centre.
@@ -245,7 +363,7 @@ export function DiagramFrame({
             : undefined;
         zoomAbout(action === 'in' ? ZOOM_STEP : 1 / ZOOM_STEP, point);
       }),
-    [zoomKey, zoomAbout, onFit],
+    [zoomKey, zoomAbout, onFit, onOpenView, initialMode],
   );
   /*
    * FR-046f — Maximise. The maximise layer draws what the section registers: here, an empty host element,
@@ -265,7 +383,16 @@ export function DiagramFrame({
   }, [tabId, fullPane, panelId, sectionId]);
 
   // FR-046e — the middle button pans; a drag remembers where it started.
-  const drag = useRef<{ pointerId: number; x: number; y: number; fromX: number; fromY: number } | null>(null);
+  const drag = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    fromX: number;
+    fromY: number;
+    /** FR-031c — scrolling, where the scroll stood when the drag began (the pan is `fromX` / `fromY`). */
+    fromLeft: number;
+    fromTop: number;
+  } | null>(null);
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>): void => {
       if (e.button !== 1) return;
@@ -277,20 +404,42 @@ export function DiagramFrame({
         return;
       }
       e.preventDefault();
-      drag.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, fromX: view.x, fromY: view.y };
+      drag.current = {
+        pointerId: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        fromX: view.x,
+        fromY: view.y,
+        fromLeft: e.currentTarget.scrollLeft,
+        fromTop: e.currentTarget.scrollTop,
+      };
       // The move cursor for as long as the pan lasts (manual test change request, 2026-10-12).
       e.currentTarget.classList.add(PANNING_CLASS);
       (e.currentTarget as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
     },
     [view.x, view.y],
   );
-  const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>): void => {
-    const d = drag.current;
-    if (d === null || d.pointerId !== e.pointerId) return;
-    const x = d.fromX + (e.clientX - d.x);
-    const y = d.fromY + (e.clientY - d.y);
-    setView((v) => ({ ...v, x, y }));
-  }, []);
+  const onPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>): void => {
+      const d = drag.current;
+      if (d === null || d.pointerId !== e.pointerId) return;
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (scrolls) {
+        // FR-031a / FR-031c — per axis: where the picture overflows, the scroll moves against the pointer; where it
+        // fits, the picture itself follows the pointer.
+        const overflow = overflowRef.current;
+        if (overflow.x) e.currentTarget.scrollLeft = d.fromLeft - dx;
+        if (overflow.y) e.currentTarget.scrollTop = d.fromTop - dy;
+        if (!overflow.x || !overflow.y) {
+          setView((v) => ({ ...v, x: overflow.x ? v.x : d.fromX + dx, y: overflow.y ? v.y : d.fromY + dy }));
+        }
+        return;
+      }
+      setView((v) => ({ ...v, x: d.fromX + dx, y: d.fromY + dy }));
+    },
+    [scrolls],
+  );
   const onPointerEnd = useCallback((e: ReactPointerEvent<HTMLDivElement>): void => {
     if (drag.current?.pointerId !== e.pointerId) return;
     drag.current = null;
@@ -319,17 +468,30 @@ export function DiagramFrame({
     if (typeof ResizeObserver === 'undefined') return undefined;
     // B5 — a panel drag notifies every frame, and each new width rewrites the layer's transform: a restyle and a
     // repaint of the whole SVG. Coalesced like the document's tables: the diagram re-fits once the drag pauses.
+    // 074 (2026-11-19) — an Image or SVG preview is the panel's one picture, and follows the panel as it moves (as a PDF
+    // or an HTML page does): measured once per frame, never more, rather than after the drag pauses.
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let raf: number | undefined;
     const observer = new ResizeObserver(() => {
+      if (scrolls) {
+        if (raf === undefined) {
+          raf = requestAnimationFrame(() => {
+            raf = undefined;
+            measure();
+          });
+        }
+        return;
+      }
       clearTimeout(timer);
       timer = setTimeout(measure, DIAGRAM_RESIZE_DEBOUNCE_MS);
     });
     observer.observe(viewportEl);
     return () => {
       clearTimeout(timer);
+      if (raf !== undefined) cancelAnimationFrame(raf);
       observer.disconnect();
     };
-  }, [viewportEl, ownHeight]);
+  }, [viewportEl, ownHeight, scrolls]);
 
   // The SVG itself: a clone, sized to its natural drawing size, so the layer's transform alone scales it.
   // A callback ref, so the layer is filled again when Full Pane moves it into the maximise layer and back.
@@ -337,6 +499,10 @@ export function DiagramFrame({
     (layer: HTMLDivElement | null): void => {
       if (layer === null) return;
       const drawn = svg.cloneNode(true) as SVGSVGElement;
+      // 075 FR-066 (the maintainer, 2026-11-20: "SVG Print preview does not show anything") — the clone is what is
+      // shown, so it is what Print… and Copy read: it carries the picture's own bytes, as the wrapper it copies does.
+      const read = rasterSourceOf(svg);
+      if (read !== undefined) registerRasterSource(drawn, read);
       drawn.setAttribute('width', String(natural.width));
       drawn.setAttribute('height', String(natural.height));
       drawn.style.removeProperty('max-width');
@@ -361,6 +527,12 @@ export function DiagramFrame({
    * row maximises the panel instead.
    */
   const keybindings = useKeybindings();
+  // 074 FR-033 — an Image or SVG Preview (the frames that scroll, FR-031a) names a picture, not a diagram.
+  const noun = scrolls ? 'Picture' : 'Diagram';
+  const titles = useMemo(
+    () => zoomTitles(keybindings, `Fit ${noun.toLowerCase()}`, initialMode === 'open' ? 'actual' : 'fit'),
+    [keybindings, initialMode, noun],
+  );
   const onFullPaneRef = useRef(onFullPane);
   onFullPaneRef.current = onFullPane;
   const fullPaneRef = useRef(fullPane);
@@ -379,8 +551,10 @@ export function DiagramFrame({
         },
         inFocus: () => (maximisable ? fullPaneRef.current : tabId !== null && maximisedPanelOf(tabId) === panelId),
         ...(maximisable ? {} : { focusChord: firstBinding(keybindings, 'panel.toggleMaximise') }),
+        // 074 FR-033 — an image or SVG is a picture, not a diagram: its menu row is Copy Image.
+        picture: isPicture,
       }),
-    [zoomKey, svg, maximisable, tabId, panelId, keybindings],
+    [zoomKey, svg, maximisable, tabId, panelId, keybindings, isPicture],
   );
 
   // Entering Focus Mode puts focus in the diagram, so its zoom keys act on it at once. The viewport is a new
@@ -406,6 +580,7 @@ export function DiagramFrame({
     'preview-diagram-frame',
     fullPane ? 'preview-diagram-frame--full-pane' : '',
     fillsPanel ? 'preview-diagram-frame--fills' : '',
+    scrolls ? 'preview-diagram-frame--scrolls' : '',
     dimmed ? 'preview-diagram-frame--dimmed' : '',
   ]
     .filter((c) => c.length > 0)
@@ -413,11 +588,11 @@ export function DiagramFrame({
 
   const inside = (
     <>
-      <div className="preview-diagram-frame__toolbar" role="toolbar" aria-label="Diagram view">
-        <IconButton token="diagramFit" title="Fit diagram" onClick={onFit} />
-        <IconButton token="zoomIn" title="Zoom in" onClick={() => zoomBy(ZOOM_STEP)} />
-        <IconButton token="diagramZoomReset" title="Zoom 100%" onClick={onZoomActual} />
-        <IconButton token="zoomOut" title="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)} />
+      <div className="preview-diagram-frame__toolbar" role="toolbar" aria-label={`${noun} view`}>
+        <IconButton token="diagramFit" title={titles.fit} onClick={onFit} />
+        <IconButton token="zoomIn" title={titles.zoomIn} onClick={() => zoomBy(ZOOM_STEP)} />
+        <IconButton token="diagramZoomReset" title={titles.actual} onClick={onZoomActual} />
+        <IconButton token="zoomOut" title={titles.zoomOut} onClick={() => zoomBy(1 / ZOOM_STEP)} />
         {maximisable ? (
           <IconButton
             token={fullPane ? 'panelRestore' : 'diagramFullPane'}
@@ -430,11 +605,11 @@ export function DiagramFrame({
       </div>
       <div
         ref={setViewportEl}
-        className="preview-diagram-frame__viewport"
+        className={`preview-diagram-frame__viewport${scrolls && fitted ? ' preview-diagram-frame__viewport--fitted' : ''}`}
         // Focusable, so the panel's zoom chords and Ctrl+wheel can zoom just this diagram (A5).
         tabIndex={0}
         role="group"
-        aria-label="Diagram"
+        aria-label={noun}
         // In place, the document's height or the fitted drawing's, at every zoom (FR-046m); maximised or
         // filling its panel, it fills what holds it (B2).
         style={ownHeight ? undefined : { height: `${inPlaceHeight}px` }}
@@ -447,16 +622,45 @@ export function DiagramFrame({
         onAuxClick={swallowMiddle}
         onContextMenu={onViewportContextMenu}
       >
+        {/* FR-031a — scrolling, the stage gives the viewport the scaled drawing's extent: a transform alone has none. */}
         <div
-          ref={layerRef}
-          className="preview-diagram-frame__layer"
-          style={{
-            width: `${natural.width}px`,
-            transform: `translate(${centreX + view.x}px, ${centreY + view.y}px) scale(${scale})`,
-          }}
-        />
+          className="preview-diagram-frame__stage"
+          // The picture's own extent, and never less than the viewport — a CSS minimum, so the browser alone decides
+          // the scrollbars from the picture's size. A stage sized from the MEASURED viewport lagged a scrollbar by a
+          // frame and overflowed the other way: zoomed out from 100%, the scrollbars came and went for good
+          // (2026-11-20). The stage clips, so a centring offset that lags a resize never adds a scrollbar either.
+          style={
+            scrolls
+              ? { width: `${natural.width * scale}px`, height: `${natural.height * scale}px`, minWidth: '100%', minHeight: '100%' }
+              : undefined
+          }
+        >
+          {/* FR-027b — the hatch behind a picture's transparent areas, at screen scale: it is not in the scaled layer. */}
+          {isPicture && hatch ? (
+            <div
+              className="preview-diagram-frame__hatch"
+              data-testid={`diagram-hatch-${panelId}-${sectionId}`}
+              style={{
+                width: `${natural.width * scale}px`,
+                height: `${natural.height * scale}px`,
+                // Whole pixels, so the tile lands on the device grid and every line draws crisp.
+                transform: `translate(${Math.round(centreX)}px, ${Math.round(centreY)}px)`,
+              }}
+            />
+          ) : null}
+          <div
+            ref={layerRef}
+            className="preview-diagram-frame__layer"
+            // 074 FR-034 — enlarged past 100%, a raster picture shows its pixels (diagram.css).
+            {...(scale > 1 ? { 'data-magnified': '' } : {})}
+            style={{
+              width: `${natural.width}px`,
+              transform: `translate(${centreX}px, ${centreY}px) scale(${scale})`,
+            }}
+          />
+        </div>
       </div>
-      <ZoomIndicator percent={scale * 100} cue={zoomCue} testId={`diagram-zoom-indicator-${panelId}-${sectionId}`} />
+      <ZoomIndicator percent={scale * 100} cue={zoomCue} testId={`diagram-zoom-indicator-${panelId}-${sectionId}`} resting />
     </>
   );
 

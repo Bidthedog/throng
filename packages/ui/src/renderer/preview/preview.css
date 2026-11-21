@@ -32,6 +32,12 @@
   overflow: hidden;
 }
 
+/* 074 (2026-11-19) — a middle-button drag scrolling the preview: the move cursor wherever the pointer is. */
+.preview-panel__body--panning,
+.preview-panel__body--panning * {
+  cursor: move;
+}
+
 .preview-panel__body {
   /* 049 FR-029 — the anchor the match-frame layer scrolls with (match-frames.css). */
   position: relative;
@@ -40,7 +46,25 @@
   overflow: auto;
   background: var(--throng-colour-editorBg);
   font-size: calc(var(--throng-font-paneText-size) * var(--throng-zoom-preview, 1));
+  /* Its gutter stays whether or not the scrollbar shows, so hiding the scrollbar for a drag (below) narrows nothing. */
+  scrollbar-gutter: stable;
 }
+
+/* 075 SC-006 — while a drag is held (`resize-freeze.ts`), measured over a drag beside 500 typeset equations:
+   - a themed scrollbar that moves is "changed", and a changed scrollbar lays out everything it scrolls — the whole
+     cost of every frame. Hidden while the drag lasts; the offset is kept.
+   - its own compositor layer: the edge MOVES what it drew rather than drawing it all again (1.1 s of paint without
+     it, 0.2 s with).
+   - contained: its size is the flex layout's, never its content's, so neither a layout nor a pre-paint elsewhere in
+     the window walks into the document (pre-paint 0.8 s uncontained, 0.14 s contained).
+   The layer and the containment are the drag's alone: either makes the body the containing block of a
+   `position: fixed` descendant, and the cell dialog and the Go to dialogs open in it over the whole window. */
+.preview-panel__body--resizing {
+  overflow: hidden;
+  will-change: transform;
+  contain: strict;
+}
+
 
 /* 044 FR-118 (iteration 2026-09-15) — the status bar's one readout: the hovered or focused link's full target.
    The element's text is the whole target; wider than the space the controls group leaves, it is clipped with

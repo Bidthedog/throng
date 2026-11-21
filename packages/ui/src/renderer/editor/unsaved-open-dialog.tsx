@@ -36,7 +36,7 @@ export function UnsavedOpenDialog(): ReactElement | null {
       testIds: { dialog: 'unsaved-open-dialog' },
       choices: [
         { label: 'Cancel', value: 'cancel', testId: 'unsaved-open-cancel' },
-        { label: 'Open in new editor', value: 'new', testId: 'unsaved-open-new' },
+        { label: req.newLabel ?? 'Open in new editor', value: 'new', testId: 'unsaved-open-new' },
         { label: 'Discard & open', value: 'discard', testId: 'unsaved-open-discard' },
         { label: 'Save & open', value: 'save', testId: 'unsaved-open-save' },
       ],

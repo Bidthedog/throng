@@ -945,6 +945,25 @@ contextBridge.exposeInMainWorld('throng', {
     /** What a paste should insert, and how — decided against the LIVE clipboard, never cached. */
     paste: () => ipcRenderer.invoke('throng:clipboard:paste'),
   },
+  // 075 (contracts/print.md §IPC) — Print Preview. `open` comes from a preview's window; the rest from the Print
+  // Preview window itself, naming the job it was opened for. Main owns the job, its files and the printer.
+  print: {
+    open: (request: unknown) => ipcRenderer.invoke('throng:print:open', request),
+    job: (jobId: string) => ipcRenderer.invoke('throng:print:job', jobId),
+    printers: (jobId: string) => ipcRenderer.invoke('throng:print:printers', jobId),
+    render: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:render', jobId, settings),
+    print: (jobId: string, settings: unknown, sheet: unknown) => ipcRenderer.invoke('throng:print:print', jobId, settings, sheet),
+    close: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:close', jobId, settings),
+    remember: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:remember', jobId, settings),
+    // 075 FR-082 — Save as PDF, the notice of where it went, and Open on that notice.
+    savePdf: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:savePdf', jobId, settings),
+    openSaved: (path: string) => ipcRenderer.invoke('throng:print:openSaved', path),
+    onSaved: (cb: (saved: { path: string }) => void) => {
+      const listener = (_e: unknown, saved: { path: string }): void => cb(saved);
+      ipcRenderer.on('throng:print:saved', listener);
+      return () => ipcRenderer.removeListener('throng:print:saved', listener);
+    },
+  },
   // 045 (contracts/settings-and-environment.md §3): file links. Main's FileLinkResolver is the one
   // authority for what a link IS and whether it may be opened, so a renderer sends the link TEXT and
   // never a resolved path — main derives the owning project from `panelId` itself (I1/I2). All three
@@ -973,6 +992,9 @@ contextBridge.exposeInMainWorld('throng', {
     detach: (panelId: string) => ipcRenderer.send('throng:preview:detach', { panelId }),
     /** The panel no longer exists: drops the run and purges its history. Never touches the document. */
     destroyed: (panelId: string) => ipcRenderer.send('throng:preview:destroyed', { panelId }),
+    // 074 FR-072a — the safe sources an HTML Preview frame (`throng-html-<panelId>`) may load from; [] forgets them.
+    setFrameSources: (panelId: string, origins: string[]) =>
+      ipcRenderer.send('throng:preview:setFrameSources', { panelId, origins }),
     navigate: (req: unknown) => ipcRenderer.invoke('throng:preview:navigate', req),
     refresh: (panelId: string) => ipcRenderer.invoke('throng:preview:refresh', { panelId }),
     isOpen: (absPath: string) => ipcRenderer.invoke('throng:preview:isOpen', { absPath }),
@@ -982,8 +1004,16 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.invoke('throng:preview:resolveWikiTargets', { panelId, targets }),
     // 054 — the text of the Mermaid files a preview embeds, confined to its project.
     readEmbeds: (panelId: string, refs: string[]) => ipcRenderer.invoke('throng:preview:readEmbeds', { panelId, refs }),
+    // 073 R7, 074 R4 — a binary provider's source bytes, read by main through the preview protocol's own handler.
+    readSource: (panelId: string, asset?: string) =>
+      ipcRenderer.invoke('throng:preview:readSource', asset === undefined ? { panelId } : { panelId, asset }),
     /** 054 (contracts/preview-ipc-054.md) — toggle a task-list checkbox in the source; main validates. */
     toggleTask: (request: unknown) => ipcRenderer.invoke('throng:preview:toggleTask', request),
+    /** 073 (contracts/preview-ipc-073.md) — the CSV Preview Editor's edits, resolved and applied by main. */
+    gridEdit: (request: unknown) => ipcRenderer.invoke('throng:preview:gridEdit', request),
+    gridUndo: (panelId: string) => ipcRenderer.invoke('throng:preview:gridUndo', { panelId }),
+    gridRedo: (panelId: string) => ipcRenderer.invoke('throng:preview:gridRedo', { panelId }),
+    gridSave: (panelId: string, absPath?: string) => ipcRenderer.invoke('throng:preview:gridSave', { panelId, absPath }),
     publishEditorTitle: (panelId: string, title: string) =>
       ipcRenderer.send('throng:preview:publishEditorTitle', { panelId, title }),
     placeDeclined: (requestId: string) => ipcRenderer.send('throng:preview:placeDeclined', { requestId }),
@@ -994,6 +1024,12 @@ contextBridge.exposeInMainWorld('throng', {
       const handler = (_event: unknown, update: unknown): void => cb(update);
       ipcRenderer.on('throng:preview:update', handler);
       return () => ipcRenderer.removeListener('throng:preview:update', handler);
+    },
+    // 074 R6 — a Ctrl+clicked link in a sandboxed page (an HTML preview), caught by main's window-open guard.
+    onFrameLink: (cb: (link: { panelId: string; href: string }) => void) => {
+      const handler = (_event: unknown, link: { panelId: string; href: string }): void => cb(link);
+      ipcRenderer.on('throng:preview:frameLink', handler);
+      return () => ipcRenderer.removeListener('throng:preview:frameLink', handler);
     },
     onOpenChanged: (cb: (evt: { path: string; open: boolean }) => void) => {
       const handler = (_event: unknown, evt: { path: string; open: boolean }): void => cb(evt);

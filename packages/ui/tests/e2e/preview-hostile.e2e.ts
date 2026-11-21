@@ -100,16 +100,18 @@ async function previewFromEditor(win: Page, editorId: string, file: string, head
   await expect(win.getByTestId(`editor-${editorId}`).locator('.cm-content')).toContainText(heading, { timeout: 8000 });
   const button = win.getByTestId(`editor-preview-${editorId}`);
   await expect(button).toBeEnabled();
-  const before = new Set(
-    await win.locator('[data-testid^="preview-body-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid'))),
-  );
   await button.click();
-  const body = win.locator('[data-testid^="preview-body-"]');
-  await expect.poll(async () => (await body.count()) > before.size).toBe(true);
-  const ids = await body.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''));
-  const added = ids.find((id) => !before.has(id));
-  if (!added) throw new Error(`previewFromEditor(${file}): no new preview panel appeared`);
-  return added.replace('preview-body-', '');
+  // 075 (2026-11-20) — under Last Active the button reuses the preview already open rather than adding one, so
+  // the panel is found by its title (054 FR-005a: the full file name), whether it is new or reused.
+  const title = `${file} - Markdown Preview`; // 054 FR-005a: the full file name; 074 FR-104: its type
+  const titled = win
+    .locator('[data-testid^="panel-title-"]')
+    .filter({ hasText: new RegExp(`^${title.replace(/\./g, '\\.')}$`) })
+    .first();
+  await expect(titled).toBeAttached({ timeout: 8000 });
+  const testId = await titled.getAttribute('data-testid');
+  if (!testId) throw new Error(`previewFromEditor(${file}): no preview panel titled ${title}`);
+  return testId.replace('panel-title-', '');
 }
 
 test('a hostile Markdown file runs and requests nothing, and a remote image is not requested once turned off on disk', { tag: ['@extended', '@editor', '@reserve:runtime'] }, async () => {

@@ -35,7 +35,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, it, expect } from 'vitest';
 import { Text } from '@codemirror/state';
-import { DEFAULT_APP_SETTINGS, NO_MODES, type Match } from '@throng/core';
+import { DEFAULT_APP_SETTINGS, DEFAULT_EXCLUDE_GLOBS, DEFAULT_SEARCH_EXCLUDE_GLOBS, NO_MODES, type Match } from '@throng/core';
+import { skipUnlessLinux } from '@throng/core/testing';
+import { SharedFileWatcher } from '../../src/main/shared-file-watcher.js';
+import { projectWatchExclusion } from '../../src/main/project-watch-exclusion.js';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
 import { ExplorerWatcher } from '../../src/main/explorer-watcher.js';
@@ -593,5 +596,134 @@ describe('no watcher is added (FR-045d)', () => {
     expect(typeof service.noteDirectoryChanged).toBe('function');
     expect((service as unknown as { watch?: unknown }).watch).toBeUndefined();
     expect((service as unknown as { setRoot?: unknown }).setRoot).toBeUndefined();
+  });
+});
+
+/*
+ * 062 FR-051 — the project watch leaves out the folders both the tree and Find in Files ignore, and a run with its
+ * global exclusion list switched off scans exactly those. While such a run is open its folders stay watched, so a
+ * result inside node_modules still goes stale when the file changes; when the run closes they are given up again.
+ * The per-directory watch is Linux's (#585): the only strategy that leaves a folder unwatched rather than unreported.
+ */
+describe.skipIf(skipUnlessLinux('the per-directory watch is the strategy only Linux uses (#585)'))(
+  'a run with its exclusion list off, over an ignored folder (062 FR-051)',
+  () => {
+    it('keeps the folders it scans watched while it is open, and gives them up when it closes', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'throng-fif-ignored-'));
+      roots.push(root);
+      await seed(root, { 'node_modules/pkg/a.js': `const a = ${TERM};\n`, 'src/b.ts': `const b = ${TERM};\n` });
+      const fs = new NodeFileSystem(async () => {});
+      const sent: FileSearchUpdate[] = [];
+      const service = new FileSearchService(
+        fs,
+        () => DEFAULT_SEARCH_EXCLUDE_GLOBS,
+        () => [],
+        () => 10 * 1024 * 1024,
+        (_id, payload) => sent.push(payload),
+      );
+      services.push(service);
+      const heard: string[] = [];
+      // The composition root's chain: the tree's watch, shared, stating what the tree and search both ignore.
+      const watcher = new ExplorerWatcher(
+        new SharedFileWatcher(new NodeFileWatcher(50, { recursiveStrategy: 'per-directory' })),
+        (evt, absRoot, relPaths) => {
+          heard.push(...(relPaths ?? [evt.relDir]));
+          if (relPaths) void service.notePathsChanged(absRoot, relPaths);
+          else void service.noteDirectoryChanged(absRoot, evt.relDir);
+        },
+        undefined,
+        (absRoot) =>
+          projectWatchExclusion(
+            { treeGlobs: DEFAULT_EXCLUDE_GLOBS, hiddenPaths: [], searchGlobs: DEFAULT_SEARCH_EXCLUDE_GLOBS, projectSearchGlobs: [] },
+            (rel) => service.needsWatched(absRoot, rel),
+          ),
+      );
+      watchers.push(watcher);
+      service.onWatchNeedsChanged(() => watcher.rescope());
+      watcher.setRoot(root);
+      // Armed once a write at the root is heard.
+      for (let i = 0; i < 100 && heard.length === 0; i += 1) {
+        await writeFile(join(root, 'armed.probe'), String(i));
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      await rm(join(root, 'armed.probe'), { force: true });
+
+      await service.start(WINDOW, {
+        panelId: PANEL,
+        projectRoot: root,
+        scopeSubPath: null,
+        term: TERM,
+        modes: NO_MODES,
+        useExcludeGlobs: false,
+      });
+      await waitFor('the scan to complete', () =>
+        sent.find((u) => u.panelId === PANEL && u.status === 'complete') ? true : undefined,
+      );
+      const rows = sent.filter((u) => u.panelId === PANEL).flatMap((u) => u.rows ?? []);
+      expect(rows.map((r) => r.relPath), 'the run scanned node_modules').toContain('node_modules/pkg/a.js');
+
+      await writeFile(join(root, 'node_modules/pkg/a.js'), `const a = cattle;\n`);
+      await waitFor('the result inside node_modules to go stale', () =>
+        sent.flatMap((u) => u.staleFiles ?? []).includes('node_modules/pkg/a.js') ? true : undefined,
+        5_000,
+      );
+
+      service.drop(WINDOW, PANEL); // the panel closes: the run is over
+      heard.length = 0;
+      await writeFile(join(root, 'node_modules/pkg/after.js'), 'x');
+      await writeFile(join(root, 'src/sentinel.ts'), 'x');
+      await waitFor('the sentinel to be heard', () => (heard.includes('src/sentinel.ts') ? true : undefined), 5_000);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(heard, 'node_modules stayed watched after the run closed').not.toContain('node_modules/pkg/after.js');
+    }, 40_000);
+  },
+);
+
+/*
+ * 062 FR-051 — what the run tells the watch, on every platform. Events from inside a folder the watch leaves out are
+ * dropped by the same live answer, so a closed run's folders fall silent at once; the re-ask is what lets Linux give
+ * their inotify watches back, and a default run (global list on) must never cost one.
+ */
+describe('a run tells the project watch when its needs change (062 FR-051)', () => {
+  it('re-asks the watch as a run with its exclusion list off opens, is retargeted and closes, and never for a default run', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'throng-fif-needs-'));
+    roots.push(root);
+    await seed(root, { 'node_modules/pkg/a.js': `const a = ${TERM};\n`, 'src/b.ts': `const b = ${TERM};\n` });
+    const sent: FileSearchUpdate[] = [];
+    const service = new FileSearchService(
+      new NodeFileSystem(async () => {}),
+      () => DEFAULT_SEARCH_EXCLUDE_GLOBS,
+      () => [],
+      () => 10 * 1024 * 1024,
+      (_id, payload) => sent.push(payload),
+    );
+    services.push(service);
+    let asked = 0;
+    service.onWatchNeedsChanged(() => {
+      asked += 1;
+    });
+    const start = (panelId: string, useExcludeGlobs: boolean): Promise<void> =>
+      service.start(WINDOW, { panelId, projectRoot: root, scopeSubPath: null, term: TERM, modes: NO_MODES, useExcludeGlobs });
+
+    await start('default', true);
+    expect(asked, 'a default run re-asked the watch').toBe(0);
+    expect(service.needsWatched(root, 'node_modules')).toBe(false);
+
+    await start('all', false);
+    expect(asked).toBe(1);
+    expect(service.needsWatched(root, 'node_modules')).toBe(true);
+    expect(service.needsWatched(join(root, 'elsewhere'), 'node_modules'), 'another project').toBe(false);
+
+    await start('all', true); // the panel's toggle goes back on: the run is retargeted
+    expect(asked).toBe(2);
+    expect(service.needsWatched(root, 'node_modules')).toBe(false);
+
+    await start('all', false);
+    service.drop(WINDOW, 'all'); // the panel closes
+    expect(asked).toBe(4);
+    expect(service.needsWatched(root, 'node_modules')).toBe(false);
+
+    service.drop(WINDOW, 'default');
+    expect(asked, 'closing a default run re-asked the watch').toBe(4);
   });
 });

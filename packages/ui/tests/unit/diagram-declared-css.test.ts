@@ -35,10 +35,31 @@ describe('diagram.css', () => {
   });
 
   // FR-046a (manual test change request, 2026-10-13) — a .mmd preview's diagram fills the panel; no scrollbar.
-  it('never scrolls a Mermaid preview’s body, and gives its diagram the whole height', () => {
-    expect(rule('.preview-panel__body:has(.preview-mermaid)')).toMatch(/overflow:\s*hidden/);
-    expect(rule('.preview-mermaid')).toMatch(/height:\s*100%/);
+  // 074 FR-031 (2026-11-19) — every one-drawing body (Mermaid, Image, SVG), not `.preview-mermaid` alone: named for
+  // Mermaid only, an Image or SVG preview's viewport collapsed to its 36px floor.
+  it('never scrolls a one-drawing preview’s body, and gives its drawing the whole height', () => {
+    expect(rule('.preview-panel__body:has(.preview-drawing-file)')).toMatch(/overflow:\s*hidden/);
+    expect(rule('.preview-drawing-file')).toMatch(/height:\s*100%/);
+    expect(rule('.preview-drawing-file > .preview-diagram-host,\n.preview-drawing-file .preview-diagram')).toMatch(/flex:\s*1 1 auto/);
     expect(rule('.preview-diagram-frame--fills > .preview-diagram-frame__viewport')).toMatch(/flex:\s*1 1 auto/);
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, ''), 'no rule names one drawing type alone').not.toMatch(/\.preview-mermaid\b/);
+  });
+
+  // 074 FR-031a, FR-027a (2026-11-19) — a picture's viewport scrolls, on the theme's picture canvas.
+  it('scrolls a picture’s viewport on both axes, over the picture canvas', () => {
+    expect(rule('.preview-diagram-frame--scrolls .preview-diagram-frame__viewport')).toMatch(/overflow:\s*auto/);
+    expect(rule('.preview-diagram-frame--scrolls')).toMatch(/var\(\s*--throng-colour-pictureCanvas,/);
+  });
+
+  // 074 FR-027b (2026-11-19) — a hatch in the theme's colour, outside the scaled layer and never under the pointer.
+  it('hatches behind a picture in the picture hatch colour', () => {
+    const hatch = rule('.preview-diagram-frame__hatch');
+    // One tile repeated — ten thin lines, ten thick (2026-11-20) — never a repeating gradient's drifting stops.
+    expect(hatch).toMatch(/background-size:\s*160px 160px/);
+    expect(hatch).not.toMatch(/repeating-linear-gradient\(/);
+    expect(hatch).toMatch(/var\(--throng-colour-pictureHatch,/);
+    expect(hatch).toMatch(/pointer-events:\s*none/);
+    expect(css).not.toMatch(/svg\[data-throng-picture\]\s*\{/);
   });
 
   // MT-04 retest (2026-10-13) — a .mmd preview's diagram is selected with its panel; only the panel is bordered.

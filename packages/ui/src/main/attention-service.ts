@@ -588,7 +588,7 @@ export class AttentionService {
     const config: AttentionProducerConfig = {
       enabled: t.enabled,
       signals: { ...t.signals },
-      quietMs: t.quietSeconds * 1000,
+      quietMs: t.quietMs,
       notifyByDefault: terminals.defaultNotifications,
     };
     try {

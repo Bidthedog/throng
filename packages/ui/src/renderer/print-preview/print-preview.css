@@ -1,0 +1,359 @@
+/*
+ * The Print Preview window (075 FR-068, FR-068a, FR-069). Every colour is a theme token; the page itself is a
+ * canvas the app draws in the print palette, centred in `.print-preview__page-view`.
+ */
+.print-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--throng-colour-text);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+  --title-bar-height: var(--pane-header-height, 34px);
+}
+
+.print-preview .title-bar {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.print-preview__main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* FR-069 (2026-11-20) — the settings never scroll: every control fits the pane at the window's minimum size
+   (`print-preview-window.ts`), so the pane offers no scrollbar either way. */
+.print-preview__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 260px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 16px;
+  overflow: hidden;
+  border-right: 1px solid var(--throng-colour-border);
+  background: var(--throng-colour-sidebarBg);
+  /*
+   * FR-069 — every row the same height on every platform. Left at normal, each label, select and box takes its
+   * height from the font's own metrics: Segoe UI on Windows stands taller than Linux's fallback, and the pane that
+   * fits at the window's minimum size there overflowed by 10 px on Windows (pipeline 44762998591).
+   */
+  line-height: 1.25;
+}
+
+/* Form controls take line-height: normal from the browser's own stylesheet, whatever the pane says. */
+.print-preview__controls :is(input, select, button) {
+  line-height: inherit;
+}
+
+.print-preview__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.print-preview__field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A control never sets the pane's width: it shrinks to what is left beside its label. */
+.print-preview__field select,
+.print-preview__field input[type='text'] {
+  min-width: 0;
+}
+
+/*
+ * FR-069 (pipeline 44800348820) — a choice stands one line tall whatever its text. Chromium wraps a select's text that
+ * is wider than the box, so a long printer name stood the Printer row a line taller, by how wide the platform's font
+ * sets it; the name is cut short instead, and the open list shows it whole.
+ */
+.print-preview__controls select {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.print-preview__field--inline input[type='text'] {
+  flex: 1 1 auto;
+  width: 0;
+}
+
+.print-preview__field--inline input[type='number'] {
+  width: 4.5em;
+  min-width: 0;
+}
+
+.print-preview__field select,
+.print-preview__field input[type='number'],
+.print-preview__field input[type='text'] {
+  background: var(--throng-colour-inputSurface);
+  color: var(--throng-colour-text);
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+}
+
+/* 2026-11-20 — a typed number that does not check out is outlined red until it is put right. */
+.print-preview input[aria-invalid='true'] {
+  border-color: var(--throng-colour-danger);
+  outline: 1px solid var(--throng-colour-danger);
+}
+
+.print-preview input[type='text'] {
+  background: var(--throng-colour-inputSurface);
+  color: var(--throng-colour-text);
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+}
+
+.print-preview fieldset {
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  padding: 4px 8px 8px;
+  margin: 0;
+  /* A fieldset is as wide as its widest content by default; here it is the pane's width, no wider. */
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 2026-11-20 — custom margins drawn as the page: a white sheet, a millimetre box at each of its edges. */
+.print-preview__margins-page {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  /*
+   * FR-069 (pipeline 44800348820) — the drawing gives way, nothing else does. It is the one row of the pane allowed to
+   * shrink, so a two-line message under Pages, or a font that sets wider, takes its height from the page drawn here
+   * rather than overflowing the pane. Its middle row keeps at least a side box's height (--print-sheet-min-height).
+   */
+  flex: 0 1 auto;
+  /* Past that least height its contents would spill over the rows beneath it: print-preview.e2e checks they do not. */
+  min-height: 0;
+  grid-template-rows: auto minmax(var(--print-sheet-min-height), auto) auto;
+  grid-template-areas:
+    '. top .'
+    'left sheet right'
+    '. bottom .';
+  align-items: center;
+  justify-items: center;
+  gap: 4px;
+}
+
+.print-preview__margin-edge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--throng-colour-textMuted);
+}
+
+.print-preview__margin-edge--top { grid-area: top; }
+/* FR-068b (the maintainer, 2026-11-20) — a side box carries its "mm" below it, so it takes no width beside the page. */
+.print-preview__margin-edge--left { grid-area: left; justify-self: end; flex-direction: column; gap: 1px; }
+.print-preview__margin-edge--right { grid-area: right; justify-self: start; flex-direction: column; gap: 1px; }
+.print-preview__margin-edge--bottom { grid-area: bottom; }
+
+/*
+ * FR-068b (the maintainer, 2026-11-20 18:00) — the top and bottom boxes are centred on the page by the box alone: their
+ * "mm" hangs just after the box, out of flow, so it neither widens the edge nor pushes the box off-centre.
+ */
+.print-preview__margin-edge--top .print-preview__margin-unit,
+.print-preview__margin-edge--bottom .print-preview__margin-unit {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 3px;
+}
+
+/* 077 FR-020 — a margin's message hangs below its box, so the page drawing keeps its shape. */
+.print-preview__margin-edge {
+  position: relative;
+}
+
+.print-preview__margin-edge .print-preview__field-message {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  white-space: nowrap;
+}
+
+.print-preview__margin-edge input[type='text'] {
+  width: 3em;
+  text-align: center;
+}
+
+/*
+ * The paper: the print palette's page colour, white in every theme. FR-068b — drawn in the paper's shape, turned for
+ * the orientation, and large enough to fill its cell, so the grid's one gap is the space on every side of it.
+ */
+.print-preview__margins-sheet {
+  grid-area: sheet;
+  justify-self: center;
+  align-self: center;
+  /*
+   * 18:10 — the paper's shape, turned for the orientation (set inline by the form): its height, and its width from
+   * that. FR-069 — never taller than its row, which shrinks when the pane runs short; never narrower than its
+   * column, so a squeezed portrait page turns squarer rather than leaving wider gaps at its sides.
+   */
+  width: auto;
+  height: var(--print-sheet-height);
+  max-height: 100%;
+  min-width: 100%;
+  aspect-ratio: var(--print-sheet-ratio);
+  background: var(--print-paper);
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 2px;
+}
+
+/* Scale: the choice and, for Custom, its box, side by side. */
+.print-preview__scale-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.print-preview__scale-row select {
+  flex: 1 1 auto;
+}
+
+.print-preview__field--inline input[type='text'][inputmode] {
+  width: 4.5em;
+  flex: 0 0 auto;
+}
+
+/* 077 FR-020 — what is wrong with a number field, beside it. */
+.print-preview__field-message {
+  color: var(--throng-colour-errorText);
+  font-size: 0.9em;
+}
+
+.print-preview__message {
+  color: var(--throng-colour-textMuted);
+}
+
+/*
+ * FR-069 — the page range's message (FR-068e) takes one line, so it never stands the pane taller than the window's
+ * minimum size allows (pipeline 44800348820: its old wording wrapped onto a second line and the pane overflowed by
+ * 2 px). The wording fits the line; a font that sets it wider cuts it short, and the whole text is its tooltip.
+ */
+.print-preview__pages .print-preview__message {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.print-preview__notice {
+  background: var(--throng-colour-errorSurface);
+  color: var(--throng-colour-errorText);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.print-preview__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.print-preview__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font: inherit;
+  background: var(--throng-colour-cancelButtonBg);
+  color: var(--throng-colour-cancelButtonText);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
+}
+
+.print-preview__actions .print-preview__print {
+  background: var(--throng-colour-confirmButtonBg);
+  color: var(--throng-colour-confirmButtonText);
+  border-color: var(--throng-colour-confirmButtonBorder);
+}
+
+.print-preview__actions button:disabled {
+  opacity: 0.55;
+}
+
+.print-preview__pages-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+/* FR-068a — Back, "Page n of N", Forward, centred above the page. */
+.print-preview__page-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 12px;
+}
+
+.print-preview__page-bar .print-preview__status {
+  min-width: 9em;
+  text-align: center;
+}
+
+.print-preview__status {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  color: var(--throng-colour-textMuted);
+  min-height: 1.4em;
+}
+
+/* FR-068a — one page, fitted whole and centred; the app sizes the canvas, so nothing here rescales it. */
+.print-preview__page-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--throng-colour-appBg);
+}
+
+.print-preview__canvas-host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* A sheet of paper: the drawn page, white in every theme (the print palette's), with its margins outlined. */
+.print-preview__sheet {
+  position: relative;
+  box-shadow: 0 1px 6px var(--throng-colour-border);
+}
+
+.print-preview__page {
+  display: block;
+}
+
+/* 2026-11-20 — where the printed content stops: a dashed cut-out at the margins, drawn over the page, never printed. */
+.print-preview__margin-guide {
+  position: absolute;
+  border: 1px dashed var(--throng-colour-textMuted);
+  pointer-events: none;
+}
+
+.print-preview__spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
