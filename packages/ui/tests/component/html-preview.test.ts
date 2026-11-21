@@ -302,6 +302,23 @@ describe('a link in the page follows on the gesture only, a fragment link includ
   });
 });
 
+// 074 convergence T064 — FR-072: a change on disk to a stylesheet or font the page names is shown at the next update or
+// Refresh. The frame fetches a resource again only when its URL changes, so each update names its assets afresh.
+describe('an update or Refresh fetches the page’s own resources again (FR-072)', () => {
+  it('names the page’s stylesheet by a new URL at each update, even when the page is unchanged', async () => {
+    const PAGE = '<link rel="stylesheet" href="style.css"><p>styled</p>';
+    const m = await mount(PAGE);
+    await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
+    const href = (): string => frameDoc()!.querySelector('link[rel="stylesheet"]')?.getAttribute('href') ?? '';
+    update(m, 2, PAGE.replace('styled', 'styled again'));
+    await waitFor(() => expect(href()).toContain('style.css'));
+    const first = href();
+    update(m, 3, PAGE.replace('styled', 'styled again'));
+    await waitFor(() => expect(href()).not.toBe(first));
+    expect(href()).toContain('style.css');
+  });
+});
+
 // 074 convergence T063 — FR-068a / FR-085a: Ctrl+A in a page body (an HTML page, a PDF's text) selects the page's
 // text and nothing outside it, as the menu's Select All does — never the whole window.
 describe('Ctrl+A in the panel selects the page and nothing else (FR-085a, FR-068a)', () => {

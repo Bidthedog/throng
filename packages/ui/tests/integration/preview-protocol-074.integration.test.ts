@@ -97,6 +97,13 @@ describe('asset types widened for one provider’s runs only (FR-072)', () => {
     expect(res.headers.get('Content-Security-Policy')).toBe('sandbox');
   });
 
+  // 074 convergence T064 — the page names each update's revision on its asset URLs; the route serves the same file.
+  it('serves the stylesheet whatever revision the page names on it', async () => {
+    const res = await handler(new Request(`${asset('page', 'css/site.css').url}?rev=7`));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('text/css');
+  });
+
   it('refuses the same stylesheet to any other provider’s run (415)', async () => {
     expect((await handler(asset('other', 'css/site.css'))).status).toBe(415);
   });

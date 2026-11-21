@@ -70,6 +70,12 @@ export interface HtmlPageContext {
   defaults?: { background: string; text: string };
   /** 074 FR-072a — the panel's Safe HTML preview sources (global ∪ project), canonical. Absent = none. */
   safeSources?: readonly string[];
+  /**
+   * 074 FR-072 — which update of the page this is. Named on every asset URL (`?rev=`), so each update or Refresh
+   * fetches the page's own stylesheets, fonts and images again: the frame re-reads a resource only when its URL
+   * changes. Main routes on the path alone. Absent = no revision named.
+   */
+  revision?: number;
 }
 
 export interface SanitisedHtmlPage {
@@ -126,7 +132,8 @@ function assetUrl(raw: string, ctx: HtmlPageContext): string | null {
     } else segments.push(segment);
   }
   if (segments.length === 0) return null;
-  return `throng-preview://asset/${encodeURIComponent(ctx.panelId)}/${segments.map(encodeURIComponent).join('/')}`;
+  const rev = ctx.revision === undefined ? '' : `?rev=${ctx.revision}`;
+  return `throng-preview://asset/${encodeURIComponent(ctx.panelId)}/${segments.map(encodeURIComponent).join('/')}${rev}`;
 }
 
 /** Whether `raw` names something off the machine: `http:`, `https:` or protocol-relative. */

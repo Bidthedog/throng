@@ -103,9 +103,25 @@ export function HtmlBody({
   const sourcesKey = safeSourceList([...globalSources, ...(projectSources ?? [])]).join(' ');
   const safeSources = useMemo(() => (sourcesKey === '' ? [] : sourcesKey.split(' ')), [sourcesKey]);
 
+  /*
+   * FR-072 — each content the chrome delivers (an update, a Refresh) is a new revision of the page, named on its asset
+   * URLs so the frame fetches the page's own stylesheets and fonts again, though the page's text is unchanged.
+   */
+  const revisionOf = useRef<{ content: unknown; revision: number }>({ content, revision: 0 });
+  if (revisionOf.current.content !== content) revisionOf.current = { content, revision: revisionOf.current.revision + 1 };
+  const revision = revisionOf.current.revision;
+
   const page = useMemo(
-    () => sanitiseHtmlPage(text, { panelId, docPath: filePath, projectRoot, safeSources, ...(defaults ? { defaults } : {}) }),
-    [text, panelId, filePath, projectRoot, defaults, safeSources],
+    () =>
+      sanitiseHtmlPage(text, {
+        panelId,
+        docPath: filePath,
+        projectRoot,
+        safeSources,
+        revision,
+        ...(defaults ? { defaults } : {}),
+      }),
+    [text, panelId, filePath, projectRoot, defaults, safeSources, revision],
   );
 
   /*
