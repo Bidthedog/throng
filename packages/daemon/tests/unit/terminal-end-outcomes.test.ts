@@ -79,14 +79,14 @@ const noopLock = { acquire: async () => ({ path: 'x' }), release: async () => {}
 const launch = { file: 'C:/cmd.exe', args: [], cwd: 'C:/proj' };
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
-function makeService() {
+function makeService(lock: { acquire(path: string): Promise<{ path: string }>; release(handle: { path: string }): Promise<void> } = noopLock) {
   const host = new ScriptedHost();
   const events = new TerminalEvents();
   const exits: Array<{ panelId: string; unexpected: boolean }> = [];
   vi.spyOn(events, 'publishExit').mockImplementation((panelId, _code, _signal, unexpected) => {
     exits.push({ panelId, unexpected: unexpected === true });
   });
-  const service = new TerminalService(host, events, new TerminalLockManager(noopLock), { isElevated: () => false });
+  const service = new TerminalService(host, events, new TerminalLockManager(lock), { isElevated: () => false });
   const router = new RpcRouter();
   service.register(router);
   const call = async (method: string, params: object): Promise<any> =>
@@ -376,6 +376,43 @@ describe('051 FR-015 / FR-015a — shutdown', () => {
     host.fail(b!);
     await done;
     expect(host.forceEnds).toEqual([b]);
+  });
+
+  /*
+   * Pipeline 44889368543 (Windows integration): a test removing its temp folder the moment a daemon's shutdown
+   * resolved met EPERM. The exit released the terminal's folder lock without shutdown waiting for it, and on
+   * Windows the lock is an open handle on the folder, released only once the folder polls free. Shutdown is the
+   * daemon's last act (FR-015): a folder still held after it is held by a process that is about to vanish, and a
+   * restarting daemon, an installer or a test meets it locked.
+   */
+  it('settles only once every ended terminal has released its folder', async () => {
+    let freeFolder: () => void = () => {};
+    const released: string[] = [];
+    const slowLock = {
+      acquire: async (path: string) => ({ path }),
+      release: (handle: { path: string }) =>
+        new Promise<void>((resolve) => {
+          freeFolder = () => {
+            released.push(handle.path);
+            resolve();
+          };
+        }),
+    };
+    const { host, service, attach } = makeService(slowLock);
+    await attach('a');
+    const a = host.started[0]!.pid;
+    let settled = false;
+    const done = service.shutdown().then(() => {
+      settled = true;
+    });
+    await flush();
+    host.succeed(a);
+    await flush();
+    await flush();
+    expect(settled, 'shutdown settled with the folder still locked').toBe(false);
+    freeFolder();
+    await done;
+    expect(released).toEqual(['C:/proj']);
   });
 
   it('escalates an end that was already in flight when shutdown began, if it then fails', async () => {

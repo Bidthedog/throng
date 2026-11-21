@@ -1334,7 +1334,8 @@ export class TerminalService {
     this.lastCwd.delete(session.panelId); // a reused panelId must re-publish its cwd
     this.lastCommand.delete(session.panelId); // 025: and its command
     this.attention.stopActivity(session.panelId); // 057
-    if (!session.rootless) void this.locks.release(session.projectId);
+    // Tracked, as every release is: shutdown settles only once each folder is free (FR-015).
+    if (!session.rootless) void this.track(this.locks.release(session.projectId));
     // The surface that owned it is gone, so a failed end is escalated: nothing could reattach it.
     void this.beginEnd(session, true);
   }
@@ -1374,12 +1375,17 @@ export class TerminalService {
     if (current) this.sessions.delete(session.panelId);
     this.endingSessions.delete(session);
     if (session.superseded) {
-      if (!session.rootless) void this.locks.release(session.projectId);
+      if (!session.rootless) void this.track(this.locks.release(session.projectId));
       return;
     }
     // The exit is reported once the lock has gone (051 R7): the order the UI has always seen —
     // folder released, then told — without the release stopping every other terminal.
-    const released = session.rootless ? Promise.resolve() : this.locks.release(session.projectId);
+    /*
+     * Tracked (pipeline 44889368543): on Windows the lock is an open handle on the folder, released once the folder
+     * polls free. Untracked, shutdown settled with it still held, and whatever came next — a restarting daemon, an
+     * installer, a test removing its folder — met the folder locked (FR-015: shutdown awaits every end).
+     */
+    const released = session.rootless ? Promise.resolve() : this.track(this.locks.release(session.projectId));
     void released
       .catch((error: unknown) => logCaught('terminal-service: release folder lock on exit', error))
       .then(() => {
