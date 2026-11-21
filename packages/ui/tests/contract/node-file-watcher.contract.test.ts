@@ -3,7 +3,7 @@
  * Runs the shared IFileWatcher contract suite against a real temp directory.
  */
 import { describe } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runFileWatcherContract } from '@throng/core/testing';
@@ -28,6 +28,9 @@ describe('NodeFileWatcher', () => {
         dir,
         async touch(file: string) {
           writeFileSync(join(dir, file), `// ${Date.now()}`, 'utf8');
+        },
+        async makeDir(relPath: string) {
+          mkdirSync(join(dir, relPath), { recursive: true });
         },
         async cleanup() {
           rmSync(dir, { recursive: true, force: true });

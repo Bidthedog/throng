@@ -5,15 +5,17 @@
  */
 import { logExpected } from '../diagnostics/caught.js';
 import { describe, it, expect } from 'vitest';
-import type { IFileWatcher } from '../abstractions/file-watcher.js';
+import { rescopeWatch, type IFileWatcher } from '../abstractions/file-watcher.js';
 import { watchStarted } from './watch-started.js';
 
 export interface FileWatcherHarness {
   watcher: IFileWatcher;
   /** A real, watchable directory. */
   dir: string;
-  /** Create/modify a file within `dir`. */
+  /** Create/modify a file within `dir`; `file` may name a folder made by `makeDir` (`a/b.json`). */
   touch(file: string): Promise<void>;
+  /** Create a folder within `dir`, POSIX-separated relative path. */
+  makeDir(relPath: string): Promise<void>;
   /** Tear down the temp directory. */
   cleanup(): Promise<void>;
 }
@@ -175,6 +177,61 @@ export function runFileWatcherContract(
           logExpected('file-watcher-contract: wait for every name', 'an unbatched implementation may never name all three files, so the wait may lapse', error);
         });
         if (batched) expect([...named]).toEqual(expect.arrayContaining(files));
+      } finally {
+        sub.dispose();
+        await h.cleanup();
+      }
+    });
+
+    /**
+     * 062 FR-051 — a reader may say which folders it ignores. Nothing inside such a folder is reported (a watch built
+     * folder by folder does not even look; a native one drops the events), but the folder's own arrival is: it is an
+     * entry of a folder the reader does follow. The answer is live, and `rescopeWatch` makes the watch follow a new one.
+     */
+    const rel = (p: string): string => p.replace(/\\/g, '/');
+    const heardAt = (heard: string[], tail: string): boolean => heard.some((p) => rel(p).endsWith(`/${tail}`));
+
+    it('reports nothing inside a folder its reader excludes, but reports the folder arriving (062 FR-051)', async () => {
+      const h = await makeHarness();
+      const heard: string[] = [];
+      await h.makeDir('ignored');
+      const sub = h.watcher.watch(h.dir, (p, batch) => heard.push(...(batch?.paths ?? [p])), {
+        excluded: (relPath) => relPath === 'ignored' || relPath === 'arrives',
+      });
+      try {
+        await watchStarted();
+        await h.touch('ignored/inside.json');
+        await h.makeDir('arrives');
+        await h.touch('kept.json');
+        await waitFor(() => heardAt(heard, 'kept.json') && heardAt(heard, 'arrives'));
+        await new Promise((r) => setTimeout(r, 300));
+        expect(heardAt(heard, 'ignored/inside.json')).toBe(false);
+      } finally {
+        sub.dispose();
+        await h.cleanup();
+      }
+    });
+
+    it('follows a changed exclusion after rescopeWatch, without a second watch (062 FR-051)', async () => {
+      const h = await makeHarness();
+      const heard: string[] = [];
+      let excluding = true;
+      await h.makeDir('ignored');
+      const sub = h.watcher.watch(h.dir, (p, batch) => heard.push(...(batch?.paths ?? [p])), {
+        excluded: (relPath) => excluding && relPath === 'ignored',
+      });
+      try {
+        await watchStarted();
+        await h.touch('ignored/before.json');
+        await h.touch('kept.json');
+        await waitFor(() => heardAt(heard, 'kept.json'));
+        await new Promise((r) => setTimeout(r, 300));
+        expect(heardAt(heard, 'ignored/before.json')).toBe(false);
+
+        excluding = false; // the user unignores the folder
+        rescopeWatch(sub);
+        await h.touch('ignored/after.json');
+        await waitFor(() => heardAt(heard, 'ignored/after.json'));
       } finally {
         sub.dispose();
         await h.cleanup();
