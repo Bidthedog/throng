@@ -211,6 +211,7 @@ export function PdfBody({
   registerGoTo,
   registerPageLayout,
   registerSelectionHost,
+  registerFragmentReveal,
 }: PreviewBodyProps): ReactElement {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   /** FR-062c — one page under another, two to a row, or as many as fit the panel's width. */
@@ -708,10 +709,24 @@ export function PdfBody({
     return () => registerPageLayout?.(null);
   }, [registerPageLayout, changeLayout]);
 
+  // 074 T083 — the panel's heading follows (Open Link on a page link) go to the page a `page=N` fragment names.
+  const goToPageRef = useRef<(page: number) => void>(() => undefined);
+  useEffect(() => {
+    if (registerFragmentReveal === undefined) return undefined;
+    registerFragmentReveal((fragment) => {
+      const match = /^page[=-](\d+)$/i.exec(fragment.trim());
+      if (match === null) return false;
+      goToPageRef.current(Number(match[1]));
+      return true;
+    });
+    return () => registerFragmentReveal(null);
+  }, [registerFragmentReveal]);
+
   const goToPage = useCallback((page: number): void => {
     pageEls.current.get(page)?.scrollIntoView({ block: 'start' });
     setCurrent(page);
   }, []);
+  goToPageRef.current = goToPage;
 
   // FR-062b — Go to Page: the panel opens it (Ctrl+G, the menus) once there are pages to go to.
   const [goToOpen, setGoToOpen] = useState(false);
@@ -734,16 +749,18 @@ export function PdfBody({
     latest.current.onFollow(previewLinkOf(link.target.url));
   };
   /**
-   * 074 convergence T060 — Constitution 5.5.0: the panel's menu over a link offers Open Link and Copy Link to Clipboard.
-   * A link to an address is reported to the panel, which opens that menu; a link to a page of this PDF has no address
-   * to copy, so its right-click is left to the body menu.
+   * 074 convergence T060, T083 — Constitution VI: the panel's menu over a link offers Open Link and Copy Link to
+   * Clipboard. A link to an address is reported as that address; a link to a page of this PDF as the fragment
+   * `#page=N` (the PDF open parameter), whose Open Link the panel follows through the reveal registered below.
    */
   const onLinkContextMenu = (link: PdfLink) => (e: MouseEvent<HTMLAnchorElement>): void => {
     const report = latest.current.onLinkMenu;
-    if (link.target.kind !== 'url' || !report) return;
+    if (!report) return;
     e.preventDefault();
     e.stopPropagation();
-    report(previewLinkOf(link.target.url), { x: e.clientX, y: e.clientY });
+    const point = { x: e.clientX, y: e.clientY };
+    if (link.target.kind === 'url') report(previewLinkOf(link.target.url), point);
+    else report({ kind: 'heading', fragment: `page=${link.target.page}` }, point);
   };
   /** 074 convergence T067 — FR-066 / 044 FR-094: the hover in every preview's words, with the platform's modifier. */
   const linkTitle = (link: PdfLink): string =>

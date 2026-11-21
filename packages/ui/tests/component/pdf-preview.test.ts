@@ -461,6 +461,25 @@ describe('links (FR-066)', () => {
     );
   });
 
+  // 074 convergence T083 — Constitution VI, FR-066: a link to another page of the PDF opens the link menu too, and its
+  // Open Link (the panel's heading follow, through the reveal the body registers) goes to that page.
+  it('reports a right-click on a page link to the panel, and Open Link goes to that page', async () => {
+    const onLinkMenu = vi.fn();
+    let reveal: ((fragment: string) => boolean) | null = null;
+    const p = props({ onLinkMenu, registerFragmentReveal: (r: ((fragment: string) => boolean) | null) => (reveal = r) });
+    const [, internal] = await drawnWithLinks(p);
+    fireEvent.contextMenu(internal!, { clientX: 30, clientY: 40 });
+    expect(onLinkMenu).toHaveBeenCalledWith({ kind: 'heading', fragment: 'page=3' }, { x: 30, y: 40 });
+    expect(reveal, 'the body registered no fragment reveal').not.toBeNull();
+    let answered = false;
+    act(() => {
+      answered = reveal!('page=3');
+    });
+    expect(answered).toBe(true);
+    const scrolled = vi.mocked(Element.prototype.scrollIntoView).mock.contexts.at(-1) as HTMLElement;
+    expect(scrolled.getAttribute('data-pdf-page')).toBe('3');
+  });
+
   it('scrolls an internal link to its page, and asks the chrome nothing', async () => {
     const p = props();
     const [, internal] = await drawnWithLinks(p);

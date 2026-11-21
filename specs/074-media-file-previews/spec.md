@@ -193,7 +193,8 @@ to go back. When a build step rewrites the image, the panel shows the new one.
 means leaving throng. It is also the simplest binary provider, so it proves the seam for PDF.
 
 **Independent Test**: In a project holding a PNG, a JPEG, an animated GIF and a WebP, open each from
-Files & Folders; each shows in an Image Preview, fitted; overwrite one on disk and see it update.
+Files & Folders; each shows in an Image Preview, fitted; overwrite one on disk and see it update. *(2026-11-21,
+convergence T084: each opens at 100%, fitted only when larger than the panel (FR-020a).)*
 
 **Acceptance Scenarios**:
 
@@ -239,7 +240,8 @@ from an editor; the second draws its static shapes, and no script runs and no re
 
 1. **Given** `logo.svg`, **When** it is opened from Files & Folders (it ships **Open SVG files in:
    Throng Preview**), Open In → Preview, or the editor status-bar preview button, **Then** an SVG
-   Preview panel draws it, fitted. *(FR-001, FR-016, FR-040, FR-041)*
+   Preview panel draws it, fitted. *(FR-001, FR-016, FR-040, FR-041)* *(2026-11-21, convergence T084: it opens at 100%
+   of its size, fitted only when larger than the panel (FR-020a).)*
 2. **Given** an editor and its parented SVG Preview, **When** the user edits the source without saving,
    **Then** the preview redraws within the preview update delay; with no editor open, saving the file
    from outside throng redraws it. *(FR-042)*
@@ -300,7 +302,8 @@ hostile PDF (JavaScript, a URI action, a form) and an encrypted one.
 
 1. **Given** a `.pdf` in Files & Folders, **When** it is opened by Open In → Preview, the open gesture,
    Enter or Quick Open, **Then** a read-only PDF Preview titled `datasheet.pdf - Preview` shows its
-   pages. *(FR-001, FR-060, FR-061)*
+   pages. *(FR-001, FR-060, FR-061)* *(2026-11-21, convergence T084: the title is `datasheet.pdf - PDF Preview`
+   (FR-104).)*
 2. **Given** an open PDF Preview, **When** the user scrolls and uses the panel's Zoom In / Zoom Out /
    Reset Zoom, **Then** the pages scroll and render at the new scale, sharp rather than stretched.
    *(FR-062, FR-063)*
@@ -333,7 +336,8 @@ happens.
 
 1. **Given** an `.html` or `.htm` file, **When** it is opened from Files & Folders (it ships **Open
    HTML files in: Throng Preview**), Open In → Preview or the editor status-bar preview button,
-   **Then** an HTML Preview titled `page.html - Preview` renders it. *(FR-001, FR-016, FR-070)*
+   **Then** an HTML Preview titled `page.html - Preview` renders it. *(FR-001, FR-016, FR-070)* *(2026-11-21,
+   convergence T084: the title is `page.html - HTML Preview` (FR-104).)*
 2. **Given** a parented HTML Preview, **When** the user edits the source without saving, **Then** the
    preview follows the unsaved buffer within the update delay. *(FR-071)*
 3. **Given** a relative stylesheet, image and font beside the file, **When** it is previewed, **Then**
@@ -721,6 +725,9 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
   than the panel; in Two Pages, two pages fill it — FR-062c; 2026-11-20: however narrow the panel, below the zoom steps' 10% floor too, and a step out from there never makes the page larger)*, and is the view a PDF opens in. The panel's zoom chords and Ctrl+wheel drive
   this view (the reset is Fit), as they drive a drawing that fills its panel; a step keeps the point under
   the pointer, or at the centre, where it is. Pages are re-rendered sharp at every scale (FR-062).
+  *(2026-11-21, convergence T084: a PDF opens as every picture preview does (FR-020a) — at 100%, or at Fit when its
+  pages are wider than the panel — and the zoom reset returns to that opening view, not to Fit. "Is the view a PDF
+  opens in" and "the reset is Fit" above are superseded.)*
 - **FR-062b**: *(2026-11-19.)* In a PDF Preview, the preview's Go to command (`preview.goToHeading`,
   `Ctrl+G`; labelled **Go to Heading or Page…** in the key-bindings editor) and a **Go to Page…** row in the
   body and panel menus MUST open a **Go to Page** modal naming the current page and the page count ("Page 3

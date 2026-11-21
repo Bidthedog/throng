@@ -173,5 +173,5 @@ last.
 
 ## Phase 14: Convergence
 
-- [ ] T083 CRITICAL: Open the link menu (Open Link, Copy Link to Clipboard) over a PDF link to another of its pages, Open Link going to that page as Ctrl+click does, per Constitution VI (One gesture follows a link) and FR-066 (partial)
-- [ ] T084 Amend US1's Independent Test, US2/AC1, US4/AC1, US5/AC1 and FR-062a to the opening view and titles FR-020a and FR-104 set, as T074 did for US1/AC1, per FR-020a and FR-104 (contradicts)
+- [x] T083 CRITICAL: Open the link menu (Open Link, Copy Link to Clipboard) over a PDF link to another of its pages, Open Link going to that page as Ctrl+click does, per Constitution VI (One gesture follows a link) and FR-066 (partial)
+- [x] T084 Amend US1's Independent Test, US2/AC1, US4/AC1, US5/AC1 and FR-062a to the opening view and titles FR-020a and FR-104 set, as T074 did for US1/AC1, per FR-020a and FR-104 (contradicts)
