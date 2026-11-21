@@ -2767,7 +2767,7 @@ export function PreviewPanel({
             onToggleTask={onToggleTask}
             // 073 — the grid lays out in JS, so it takes the factor itself; its notice and menu offer the editor route.
             zoom={zoomFactor(panelZoomLevel(panel))}
-            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute } : {})}
+            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute, editorRouteParented: parented } : {})}
             // 075 FR-075b — a grid's own menus carry Print…, the same command as the header's.
             {...(state && canPrint(registry.get(state.providerId)) ? { onPrint: () => void printPanel() } : {})}
           />
