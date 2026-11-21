@@ -173,16 +173,34 @@ test('a parented SVG preview shows an edit within the update delay plus 250 ms (
         await expect(image).toHaveAttribute('href', /.+/, { timeout: 10_000 });
         const before = (await image.getAttribute('href')) ?? '';
 
+        // Timed IN the page: \`expect\` polls at 100, 250 and 500 ms steps, which would make the reading the next poll after
+        // the redraw rather than the redraw. The observer stamps the first moment the picture names another drawing.
+        await win.evaluate((was) => {
+          const g = window as unknown as { __svgRedrawnAt?: number };
+          g.__svgRedrawnAt = 0;
+          const pictures = (): string[] =>
+            [...document.querySelectorAll('[data-testid^="diagram-frame-"] svg[data-throng-picture] image')].map((el) => el.getAttribute('href') ?? '');
+          new MutationObserver((_records, observer) => {
+            if (pictures().some((href) => href !== '' && href !== was)) {
+              g.__svgRedrawnAt = Date.now();
+              observer.disconnect();
+            }
+          }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['href'] });
+        }, before);
+
         await focusEditor(win, editorId);
         await win.keyboard.press('ControlOrMeta+End');
         await win.keyboard.type(' ', { delay: 0 });
         const lastKey = Date.now();
-        await expect(image).not.toHaveAttribute('href', before, { timeout: 10_000 });
+        await expect.poll(() => win.evaluate(() => (window as unknown as { __svgRedrawnAt?: number }).__svgRedrawnAt ?? 0), { timeout: 10_000 }).toBeGreaterThan(0);
+        const redrawnAt = await win.evaluate(() => (window as unknown as { __svgRedrawnAt?: number }).__svgRedrawnAt ?? 0);
+        // The reading, on every run: a pass records no number otherwise.
+        console.log(`[SC-003] parented SVG preview: ${redrawnAt - lastKey} ms from the last keystroke`);
         const delay = 300; // the shipped Preview update delay (044 FR-060)
         expectWithinSla(test.info(), {
           what: 'last keystroke to the parented SVG preview showing it',
           requirement: '074 SC-003',
-          elapsedMs: Date.now() - lastKey,
+          elapsedMs: redrawnAt - lastKey,
           budgetMs: delay + 250,
         });
       },
