@@ -50,6 +50,47 @@ describe('useGridColumnWidths', () => {
     expect(setGridColumnWidths).toHaveBeenLastCalledWith('proj', 'data.csv', { 2: 300 });
   });
 
+  /*
+   * FR-040 (convergence T091) — a width is shared by every panel showing the file, a sub-workspace window's too. The
+   * cache is per window, so a grid mounting for the file reads the stored widths again rather than trusting what this
+   * window read before; a width this window has yet to write wins over the read.
+   */
+  it('a grid mounting for the file reads widths another window stored since', async () => {
+    const getState = vi.fn(async () => ({ gridColumnWidths: { 0: 100 } }));
+    const services = { documents: { getState, setGridColumnWidths } } as unknown as Services;
+    const wrap = ({ children }: { children: ReactNode }) => createElement(ServicesProvider, { services, children });
+    const first = renderHook(() => useGridColumnWidths('D:/proj', FILE), { wrapper: wrap });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(first.result.current.widths).toEqual({ 0: 100 });
+    first.unmount();
+
+    // Another window widened column A and stored it.
+    getState.mockResolvedValue({ gridColumnWidths: { 0: 250 } });
+    const second = renderHook(() => useGridColumnWidths('D:/proj', FILE), { wrapper: wrap });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(second.result.current.widths).toEqual({ 0: 250 });
+  });
+
+  it('a width this window has yet to write is kept over a stored one read meanwhile', async () => {
+    const getState = vi.fn(async () => ({ gridColumnWidths: { 0: 100 } }));
+    const services = { documents: { getState, setGridColumnWidths } } as unknown as Services;
+    const wrap = ({ children }: { children: ReactNode }) => createElement(ServicesProvider, { services, children });
+    const first = renderHook(() => useGridColumnWidths('D:/proj', FILE), { wrapper: wrap });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => first.result.current.setWidth(0, 300));
+    const second = renderHook(() => useGridColumnWidths('D:/proj', FILE), { wrapper: wrap });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(second.result.current.widths).toEqual({ 0: 300 });
+  });
+
   it('resetting the last stored width clears the file\'s map (null), not an empty one', async () => {
     const { result } = renderHook(() => useGridColumnWidths('D:/proj', FILE), { wrapper });
     act(() => {

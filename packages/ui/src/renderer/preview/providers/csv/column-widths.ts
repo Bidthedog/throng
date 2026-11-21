@@ -73,13 +73,18 @@ export function useGridColumnWidths(
     };
   }, [key]);
 
+  /*
+   * FR-040 (T091) — read the stored widths every time a grid mounts for the file, not once per window: the cache is
+   * this window's, and another window (a sub-workspace) may have stored a width since. A width this window has yet to
+   * write (a pending debounce) is newer than anything stored, so it wins.
+   */
   useEffect(() => {
-    if (cache.has(key) || documents === undefined || projectId === undefined || relPath === null) return;
+    if (documents === undefined || projectId === undefined || relPath === null) return;
     let live = true;
     documents
       .getState(projectId, relPath)
       .then((state) => {
-        if (live && !cache.has(key)) publish(key, sanitiseWidths(state?.gridColumnWidths));
+        if (live && !pendingWrites.has(key)) publish(key, sanitiseWidths(state?.gridColumnWidths));
       })
       .catch((error: unknown) => logCaught('column-widths: read the file’s widths', error));
     return () => {
