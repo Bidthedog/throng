@@ -82,6 +82,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-115 | [General] View Whitespace never changes line height (#683) | untested | | | |
 | MT-116 | [General] Project rows use full width until hovered, with one popover (#695) | untested | | | |
 | MT-117 | [General] Code stays readable on the editor selection in every theme (#105) | untested | | | |
+| MT-118 | [Markdown] Converge fixes: callout jumps, copy, and printing details | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1268,3 +1269,15 @@ Paths: `packages/core/src/config/theme-quality.ts`, `packages/core/src/config/th
 
 ### Negative cases
 - A theme you have customised keeps your own selection colour after the upgrade.
+
+## MT-118: [Markdown] Converge fixes: callout jumps, copy, and printing details
+
+Covers: 075 FR-010, 075 FR-063, 075 FR-070, 075 FR-076, 075 FR-080
+Paths: `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/preview/providers/markdown/sanitise.ts`, `packages/ui/src/renderer/preview/print/printable.ts`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-body.tsx`, `packages/ui/src/renderer/print-preview/print-preview-app.tsx`, `packages/ui/src/main/print-controller.ts`, `packages/ui/src/main/print-ipc.ts`
+
+### Steps
+1. In a Markdown file, put a link `[x](#inside)` above a collapsed callout `> [!note]- T` that contains `## Inside`. In its preview, Ctrl+click the link. The callout opens and scrolls to Inside.
+2. Open Find in a Markdown preview with a match showing, then choose Print…. Print Preview shows no match outlines.
+3. Right-click a cell in an .xlsx preview. Print… shows Ctrl+P beside it.
+4. In Print Preview, change Orientation to Landscape and close it at once with the title-bar ×. Choose Print… again: Landscape is kept.
+5. In a Markdown preview, select across a callout, copy, and paste into a rich editor (LibreOffice Writer, or a mail draft). It pastes as a quote with the title in bold, and no marker or fold icon.

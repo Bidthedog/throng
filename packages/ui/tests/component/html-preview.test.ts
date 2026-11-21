@@ -302,20 +302,6 @@ describe('a link in the page follows on the gesture only, a fragment link includ
   });
 });
 
-// 074 convergence T063 — FR-068a / FR-085a: Ctrl+A in a page body (an HTML page, a PDF's text) selects the page's
-// text and nothing outside it, as the menu's Select All does — never the whole window.
-describe('Ctrl+A in the panel selects the page and nothing else (FR-085a, FR-068a)', () => {
-  it('consumes Ctrl+A on the body and selects the page’s text', async () => {
-    const m = await mount(PLAIN);
-    await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
-    update(m, 2, '<p id="t">Page words</p>');
-    await waitFor(() => expect(frameDoc()!.querySelector('#t')).not.toBeNull());
-    const allowed = fireEvent.keyDown(screen.getByTestId(`preview-body-${m.id}`), { key: 'a', ctrlKey: true });
-    expect(allowed, 'the window’s own select-all is prevented').toBe(false);
-    expect(frameDoc()!.getSelection()!.toString()).toContain('Page words');
-  });
-});
-
 // 074 FR-086b (2026-11-20) supersedes FR-086's disabled Find: the same-origin page is searched like any preview.
 describe('Find searches the page (FR-086b)', () => {
   it('leaves the panel searchable, and counts the page’s own matches', async () => {

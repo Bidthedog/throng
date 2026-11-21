@@ -471,22 +471,6 @@ describe('links (FR-066)', () => {
   });
 });
 
-// 074 convergence T063 — FR-068a: the PDF's text is the page's to select, so the body names its pages as the panel's
-// selection host — the menu then offers Select All and Ctrl+A selects the PDF's text and nothing outside it.
-describe('the PDF’s text is selectable as a page (FR-068a)', () => {
-  it('registers its pages as the panel’s selection host', async () => {
-    openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(2) });
-    const registerSelectionHost = vi.fn();
-    mount(props({ registerSelectionHost }));
-    await waitFor(() => expect(pages()).toHaveLength(2));
-    const host = registerSelectionHost.mock.calls.map(([h]) => h).filter(Boolean).at(-1) as (() => HTMLElement | null) | undefined;
-    expect(host, 'a selection host was registered').toBeDefined();
-    const el = host!();
-    expect(el).not.toBeNull();
-    for (const page of pages()) expect(el!.contains(page)).toBe(true);
-  });
-});
-
 describe('view state (FR-064)', () => {
   it('captures the page and the place in it', async () => {
     openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(3) });

@@ -51,6 +51,7 @@ import {
   type CsvModel,
 } from '@throng/core/csv';
 import type { PreviewBodyProps } from '../../provider-view.js';
+import { previewPanelTypeLabel, SHIPPED_PREVIEW_PROVIDERS } from '@throng/core';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
 import { useCsvScrollSync } from './use-csv-scroll-sync.js';
@@ -125,8 +126,11 @@ function useCsvModel(text: string): Parsed | null {
 
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
+/** 074 FR-104 — the CSV provider's panel type label, as the panel title shows it ("CSV Preview"). */
+const CSV_PREVIEW_LABEL = previewPanelTypeLabel(SHIPPED_PREVIEW_PROVIDERS.get('csv') ?? { displayName: 'CSV' });
+
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, onPrint, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, editorRouteParented, onPrint, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -339,7 +343,13 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   textNow.current = text;
   useEffect(() => {
     const mark = cutMark.current;
-    if (mark !== null && mark.after === null && text !== mark.before) mark.after = text;
+    if (mark === null) return;
+    if (mark.after === null) {
+      if (text !== mark.before) mark.after = text;
+      return;
+    }
+    // T087 — any change after the cut's own disarms it, even an undo and a redo that bring the cut's text back.
+    if (text !== mark.after) cutMark.current = null;
   }, [text]);
   const escapeCut = useCallback((): boolean => {
     const mark = cutMark.current;
@@ -425,7 +435,8 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     setEditorState(panelId, {
       panelId,
       filePath,
-      displayName: `${name} - Preview`,
+      // FR-033 (T090) — named as the panel title names it (074 FR-104), so the unsaved-changes prompt matches the tab.
+      displayName: `${name} - ${CSV_PREVIEW_LABEL}`,
       ownerRoot: projectRoot,
       ownerKind: 'project',
       dirty,
@@ -499,7 +510,11 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       const width: MenuAction = {
         label: 'Column Width…',
         section: 'viewState',
-        onClick: () => setWidthPrompt({ col: at.col, value: String(widths[at.col] ?? GRID_DEFAULT_COLUMN_WIDTH) }),
+        // FR-006 (T086) — the column right-clicked; a row header's menu never offers it, so a cell's own column otherwise.
+        onClick: () => {
+          const col = target.kind === 'row' ? at.col : target.col;
+          setWidthPrompt({ col, value: String(widths[col] ?? GRID_DEFAULT_COLUMN_WIDTH) });
+        },
       };
       // FR-037e — every menu offers the clipboard for the selection the right-click leaves.
       const clipboard = (rows: boolean): MenuAction[] => [
@@ -545,8 +560,8 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           { label: 'Redo', icon: 'redo', section: 'content', group: 'history', onClick: () => history('redo') },
           { label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', onClick: () => cut(sel, range) },
           { label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range) },
-          { label: 'Copy as Rich Text', section: 'content', group: 'clipboard', onClick: () => copy(range, 'rich') },
-          { label: 'Copy as Plain Text', section: 'content', group: 'clipboard', onClick: () => copy(range, 'plain') },
+          { label: 'Copy as Rich Text', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range, 'rich') },
+          { label: 'Copy as Plain Text', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range, 'plain') },
           { label: 'Paste', icon: 'paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
           { label: 'Clear Cells', section: 'content', group: 'clipboard', onClick: () => clearRange(range) },
           ...(cellDialogAvailable
@@ -571,11 +586,13 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           width,
         );
       }
-      if (onOpenInEditor !== undefined) items.push({ label: 'Open in Editor', section: 'navigate', onClick: onOpenInEditor });
+      if (onOpenInEditor !== undefined) {
+        items.push({ label: editorRouteParented === true ? 'Go to Editor' : 'Open in Editor', icon: 'editorPanel', section: 'navigate', onClick: onOpenInEditor });
+      }
       items.push(gridPrintRow(chord('preview.print'), onPrint));
       openMenu(point.x, point.y, items);
     },
-    [cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, history, insertColumn, insertRows, keybindings, onOpenInEditor, onPrint, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
+    [cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, editorRouteParented, history, insertColumn, insertRows, keybindings, onOpenInEditor, onPrint, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard

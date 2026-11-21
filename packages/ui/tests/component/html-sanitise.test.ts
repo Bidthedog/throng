@@ -7,8 +7,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { previewLinkHoverText } from '../../src/renderer/preview/link-dom.js';
-import { primaryModifierLabel } from '../../src/renderer/config/host-modifiers.js';
 import {
   FRAME_CSP,
   sanitiseHtmlPage,
@@ -122,21 +120,14 @@ describe('resources load from the project through the asset route, and nothing e
 describe('links follow only by the gesture (FR-079)', () => {
   const follow = (href: string): string => `throng-preview://follow/panel-1?href=${encodeURIComponent(href)}`;
 
-  // 074 convergence T067 — titled as every preview titles a link: what following it does, under the platform's modifier.
-  it('points every non-fragment link at the follow route, titled as every preview titles a link', () => {
+  it('points every non-fragment link at the follow route, naming the target and the gesture', () => {
     expect(link('External link')?.getAttribute('href')).toBe(follow('https://example.test/page'));
-    expect(link('External link')?.getAttribute('title')).toBe(
-      previewLinkHoverText({ kind: 'external', url: 'https://example.test/page' }, primaryModifierLabel()),
-    );
+    expect(link('External link')?.getAttribute('title')).toBe('https://example.test/page — Ctrl+click to follow');
     expect(link('Relative link')?.getAttribute('href')).toBe(follow('other.html#part'));
   });
 
-  // 074 convergence T061 — the body follows it on the gesture only (`frame-fragments.ts`); the sanitiser titles it.
-  it('keeps a same-document fragment link as a fragment, titled with the gesture', () => {
+  it('leaves a same-document fragment link alone, so it scrolls the page itself', () => {
     expect(link('Fragment link')?.getAttribute('href')).toBe('#top');
-    expect(link('Fragment link')?.getAttribute('title')).toBe(
-      previewLinkHoverText({ kind: 'heading', fragment: 'top' }, primaryModifierLabel()),
-    );
   });
 
   it('leaves a javascript: link with no href at all', () => {

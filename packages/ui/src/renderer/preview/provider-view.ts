@@ -249,6 +249,11 @@ export interface PreviewBodyProps {
    */
   onOpenInEditor?(): void;
   /**
+   * 044 FR-015 (073 T089) — whether that route goes to an editor this preview is linked to: a body's own menu then
+   * names it **Go to Editor**, as the preview content menu does, else **Open in Editor**.
+   */
+  editorRouteParented?: boolean;
+  /**
    * 075 FR-075b — the chrome's Print…, for a body that builds its own menus (the grids). Absent when the preview's
    * provider cannot print.
    */

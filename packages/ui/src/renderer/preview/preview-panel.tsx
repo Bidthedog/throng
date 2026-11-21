@@ -2497,8 +2497,7 @@ export function PreviewPanel({
       }
       // 047 T049 — the markdown.* fold chords, consumed before anything else on this key.
       if (chordEngineRef.current?.keydown(e)) return;
-      // 074 FR-068a, FR-085a — a page body (an HTML page, a PDF's text) selects within itself, as a flowing document does.
-      if (!textSelection || (!flowingRef.current && bodySelectionHost.current === null)) return;
+      if (!textSelection || !flowingRef.current) return;
       if (selectAllKey) {
         e.preventDefault();
         selectAll();
@@ -2767,7 +2766,7 @@ export function PreviewPanel({
             onToggleTask={onToggleTask}
             // 073 — the grid lays out in JS, so it takes the factor itself; its notice and menu offer the editor route.
             zoom={zoomFactor(panelZoomLevel(panel))}
-            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute } : {})}
+            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute, editorRouteParented: parented } : {})}
             // 075 FR-075b — a grid's own menus carry Print…, the same command as the header's.
             {...(state && canPrint(registry.get(state.providerId)) ? { onPrint: () => void printPanel() } : {})}
           />

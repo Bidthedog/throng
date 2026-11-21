@@ -388,6 +388,34 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     });
   });
 
+  it('names the editor route Go to Editor while the preview is linked to an editor, Open in Editor otherwise (T089)', () => {
+    const h = mount('a,b\n1,2\n', { onOpenInEditor: () => {}, editorRouteParented: true });
+    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
+    expect(screen.getByTestId('menu-item-Go to Editor')).toBeTruthy();
+    expect(screen.queryByTestId('menu-item-Open in Editor')).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    h.unmount();
+    mount('a,b\n1,2\n', { onOpenInEditor: () => {}, editorRouteParented: false });
+    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
+    expect(screen.getByTestId('menu-item-Open in Editor')).toBeTruthy();
+  });
+
+  it('Column Width… on a column header sizes the column right-clicked, not the active one (FR-006, T086)', () => {
+    mount('a,b,c,d\n1,2,3,4\n');
+    // Select B to D: D is the active column. Right-clicking C keeps that selection.
+    fireEvent.mouseDown(colHead(1), { button: 0 });
+    fireEvent.mouseUp(window);
+    fireEvent.mouseDown(colHead(3), { button: 0, shiftKey: true });
+    fireEvent.mouseUp(window);
+    fireEvent.contextMenu(colHead(2), { clientX: 5, clientY: 5 });
+    fireEvent.click(screen.getByTestId('menu-item-Column Width…'));
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '250' } });
+    fireEvent.submit(input.closest('form')!);
+    expect(colWidth(2)).toBe(250);
+    expect(colWidth(3)).toBe(120);
+  });
+
   it('Reset Column Width on a column header puts the column back to the default width', () => {
     mount('a,b\n1,2\n');
     fireEvent.mouseDown(document.querySelector('[data-grid-resize][data-col="1"]')!, { button: 0, clientX: 100 });
@@ -555,6 +583,16 @@ describe('CsvBody Esc after a Cut (FR-037i)', () => {
 
   it('does nothing with no cut before it', () => {
     mount('a,b\n1,2\n');
+    fireEvent.keyDown(grid(), { key: 'Escape' });
+    expect(bridge.gridUndo).not.toHaveBeenCalled();
+  });
+
+  // T087 — a later undo or redo disarms it, even when the redo puts the cut's text back.
+  it('does nothing after an undo and a redo that return the document to the cut\'s text', async () => {
+    await cutThen((h) => {
+      showText(h, 'a,b\n1,2\n3,4\n'); // undo
+      showText(h, 'a,b\n,2\n3,4\n'); // redo: the cut's text again
+    });
     fireEvent.keyDown(grid(), { key: 'Escape' });
     expect(bridge.gridUndo).not.toHaveBeenCalled();
   });
@@ -841,6 +879,12 @@ describe('CsvBody menu icons (FR-037g)', () => {
     expect(screen.queryByTestId('menu-item-Select Column')).toBeNull();
   });
 
+  it('draws the copy picture on both Copy as items, and the editor picture on Open in Editor (T088)', () => {
+    mount('a,b\n1,2\n', { onOpenInEditor: () => {} });
+    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
+    expectIcons({ 'Copy as Rich Text': 'copy', 'Copy as Plain Text': 'copy', 'Open in Editor': 'editorPanel' });
+  });
+
   it('draws them on the row-header menu', () => {
     mount('a,b\n1,2\n');
     fireEvent.contextMenu(head('rowheader', 1), { clientX: 5, clientY: 5 });
@@ -1124,6 +1168,12 @@ describe('CsvBody is an editor of its document (FR-033, 044 FR-044)', () => {
     act(() => update(true, true));
     expect(getEditorActions('p1')?.isDirty()).toBe(true);
     expect(getEditorState('p1')).toMatchObject({ dirty: true, filePath: FILE });
+  });
+
+  it('names its unsaved document as the panel title does, "<name> - CSV Preview" (FR-033, T090)', () => {
+    mount('a\n');
+    act(() => update(true, true));
+    expect(getEditorState('p1')).toMatchObject({ displayName: 'data.csv - CSV Preview' });
   });
 
   it('saves through the document from the editor actions Ctrl+S reaches', async () => {
