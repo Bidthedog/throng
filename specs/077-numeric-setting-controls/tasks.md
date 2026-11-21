@@ -160,3 +160,11 @@ Each was implemented before it had a task; the commit named is the one that did 
 - [x] T044 Give a project row its full width, one popover after **Project popover delay**, and the
   `projects.popoverEnabled` switch, per FR-027 — `be83ae1f` feat(077): Give a project row its full width, and one
   popover
+
+## Phase 12: Convergence
+
+- [ ] T045 Quote the file's size and the current **Max open file size** (MB with its bytes, through `formatSetting`) in the editor's too-large refusal (`packages/ui/src/renderer/editor/editor-missing-notice.ts`), as the preview and drop refusals do, per FR-014, SC-005 and Constitution X (partial)
+- [ ] T046 Give `tabs.popoverDelayMs`, `explorer.popoverDelayMs` and `notifications.hoverDelayMs` the hover-dwell hard bounds 0 – 10,000 ms their siblings declare, and say so in docs/preferences.md, per FR-012 (research R6, Hover dwells) (partial)
+- [ ] T047 Amend FR-012's CSV long-cell threshold to the shipped 10 – 1,000 characters (research R6), per FR-012 (contradicts)
+- [ ] T048 Bring data-model.md's number-box transitions and message column, and the `numeric-units.ts` comment, to FR-009 and FR-024: a confirmed non-number keeps the entry and the reason is in the toast, per FR-009, FR-024 (contradicts)
+- [ ] T049 Drop the fixed violations from the Principle X known-gaps list in `.claude/skills/throng-config-preferences/references/constitution-configuration.md`, leaving only what still stands, per Constitution X (partial)
