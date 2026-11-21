@@ -25,7 +25,7 @@
  */
 import DOMPurify, { type WindowLike } from 'dompurify';
 import { classifyPreviewLink, logExpected, matchesSafeSource, relPathUnderRoot, sourceOf } from '@throng/core';
-import { previewLinkHoverText } from '../../link-dom.js';
+import { previewLinkHoverText, type PreviewLinkWording } from '../../link-dom.js';
 import { primaryModifierLabel } from '../../../config/host-modifiers.js';
 
 /**
@@ -76,6 +76,11 @@ export interface HtmlPageContext {
    * changes. Main routes on the path alone. Absent = no revision named.
    */
   revision?: number;
+  /**
+   * 074 FR-018a, FR-079 (045 FR-168) — what this window's settings make a file link's Ctrl+click do, as the chrome hands
+   * every body (`PreviewBodyProps.linkWording`), so the hover names the preview, editor or OS program it opens in.
+   */
+  linkWording?: PreviewLinkWording;
 }
 
 export interface SanitisedHtmlPage {
@@ -295,7 +300,7 @@ export function sanitiseHtmlPage(source: string, ctx: HtmlPageContext, win: Pars
     }
     anchor.setAttribute('href', `throng-preview://follow/${encodeURIComponent(ctx.panelId)}?href=${encodeURIComponent(href)}`);
     // 074 convergence T067 — the hover in every preview's words: what following it does, under the platform's modifier.
-    const hover = previewLinkHoverText(classifyPreviewLink(href, { docPath: ctx.docPath, projectRoot: ctx.projectRoot }), primaryModifierLabel());
+    const hover = previewLinkHoverText(classifyPreviewLink(href, { docPath: ctx.docPath, projectRoot: ctx.projectRoot }), primaryModifierLabel(), ctx.linkWording);
     if (hover !== '') anchor.setAttribute('title', hover);
   }
 

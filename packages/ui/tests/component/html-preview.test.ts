@@ -9,6 +9,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { COLD, PROJECT, ROOT, mountMarkdownPreview, previewUpdate, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 import { ProjectsClient } from '../../src/renderer/state/projects-client.js';
+import { classifyPreviewLink } from '@throng/core';
 import { isPanelUnsearchable } from '../../src/renderer/preview/unsearchable-panels.js';
 import { getFindSession, openFind, setTerm } from '../../src/renderer/search/search-store.js';
 import { previewLinkHoverText } from '../../src/renderer/preview/link-dom.js';
@@ -300,6 +301,20 @@ describe('a link in the page follows on the gesture only, a fragment link includ
     expect(doc.querySelector('#web')!.getAttribute('title')).toBe(
       previewLinkHoverText({ kind: 'external', url: 'https://example.test/x' }, primaryModifierLabel()),
     );
+  });
+});
+
+// 074 convergence T078 — FR-018a, FR-079 (045 FR-168): a file link's hover says what its Ctrl+click does to that file.
+describe('a file link’s hover names where it opens (FR-018a, FR-079)', () => {
+  it('words a link to a file no preview claims for the editor it opens in', async () => {
+    const m = await mount(PLAIN);
+    await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
+    update(m, 2, '<p><a href="notes.txt">Notes</a></p>');
+    await waitFor(() => expect(frameDoc()!.querySelector('a')).not.toBeNull());
+    const link = classifyPreviewLink('notes.txt', { docPath: FILE, projectRoot: ROOT });
+    const asEditor = previewLinkHoverText(link, primaryModifierLabel(), { previewable: () => false, openTarget: 'lastActive' });
+    expect(asEditor).not.toBe(previewLinkHoverText(link, primaryModifierLabel()));
+    expect(frameDoc()!.querySelector('a')!.getAttribute('title')).toBe(asEditor);
   });
 });
 

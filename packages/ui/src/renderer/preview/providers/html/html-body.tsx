@@ -78,6 +78,7 @@ export function HtmlBody({
   navigationSeq,
   onDrawn,
   onLinkMenu,
+  linkWording,
   onViewStateCapture,
   registerSelectionHost,
 }: PreviewBodyProps): ReactElement {
@@ -120,9 +121,10 @@ export function HtmlBody({
         projectRoot,
         safeSources,
         revision,
+        ...(linkWording ? { linkWording } : {}),
         ...(defaults ? { defaults } : {}),
       }),
-    [text, panelId, filePath, projectRoot, defaults, safeSources, revision],
+    [text, panelId, filePath, projectRoot, defaults, safeSources, revision, linkWording],
   );
 
   /*
