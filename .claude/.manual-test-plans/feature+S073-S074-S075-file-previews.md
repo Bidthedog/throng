@@ -80,6 +80,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-113 | [General] The other-checkout daemon notice goes once the daemon is replaced (#685) | untested | | | |
 | MT-114 | [General] Attention marks survive a restart (#692) | untested | | | |
 | MT-115 | [General] View Whitespace never changes line height (#683) | untested | | | |
+| MT-116 | [General] Project rows use full width until hovered, with one popover (#695) | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1240,3 +1241,16 @@ Paths: `packages/ui/src/renderer/editor/editor.css`
 ### Steps
 1. Open a multi-line text file with LF line endings in an editor panel, scrolled so the panel is full.
 2. In each of the throng, Light and Matrix themes, toggle View Whitespace from the editor's context menu. The text does not move down, and the same number of lines fit with it on and off.
+
+## MT-116: [General] Project rows use full width until hovered, with one popover (#695)
+
+Covers: #695, 077 FR-027, 068 FR-064
+Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/renderer/sidebar/project-row-popover.tsx`
+
+### Steps
+1. Have two projects with long names and paths. With the pointer off the sidebar, names and paths run to the row's right edge and end in an ellipsis; there are no tab/panel counts and no buttons.
+2. Hover a row. Edit and Remove appear on the right and the labels shorten with an ellipsis. Rest on the long name: it scrolls.
+3. Keep resting about 0.3 s. One popover shows the full name, the ID, the full path, the tab and panel counts and "Double-click to rename". Move to another row: only that row's popover shows.
+4. Hover the move handle, Edit and Remove. Each shows its own tooltip and no row popover.
+5. Double-click the row. The rename box opens and the popover goes.
+6. Preferences › General › Projects: set Project popover delay to 0, and the popover is instant. Turn Project popover off, and none appears.
