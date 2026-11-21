@@ -163,6 +163,19 @@ describe('custom flavours: an ordered table of records (#67)', () => {
     expect(screen.queryByTestId('flavour-row-error-nu')).toBeNull();
   });
 
+  // 077 convergence T059 — FR-024: one condition, one notice, until it is put right — another row coming and going
+  // does not take a broken row's problem out of the toast.
+  it('keeps an edited row’s problem in the toast when a draft is added and removed', async () => {
+    const { user } = mountControl(FLAVOURS, [nu]);
+    await user.click(screen.getByTestId(`list-edit-${FLAVOURS}`));
+    await user.clear(screen.getByTestId('flavour-cell-nu-file'));
+    await user.type(screen.getByTestId(`flavour-new-id`), 'elvish');
+    await user.click(screen.getByTestId(`flavour-add`));
+    await user.click(screen.getByTitle('Remove elvish'));
+    expect(screen.queryByTestId('flavour-row-elvish')).toBeNull();
+    expect(screen.queryByTestId('flavour-error')?.textContent ?? '', 'nu’s problem left the toast').toMatch(/executable/i);
+  });
+
   // 077 convergence T053 — FR-024: the toast never names a row that is gone.
   it('takes a removed draft row’s problem out of the toast', async () => {
     const { user } = mountControl(FLAVOURS, [nu]);

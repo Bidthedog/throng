@@ -300,12 +300,10 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
   const noun = descriptor.itemNoun ?? 'record';
 
   const [newId, setNewId] = useState('');
+  /** A refused id from the last add (FR-024's entry in the new-id box); a ROW's problem is derived below, not kept. */
   const [error, setError] = useState<string | null>(null);
   // 077 FR-024 — what the add or a commit found is said in the Preferences toast, not in a strip under the table.
   const fieldNotice = useFieldNotice(`${noun}-error`);
-  useEffect(() => {
-    fieldNotice(error === null ? null : `${descriptor.label}: ${error}`);
-  }, [fieldNotice, error, descriptor.label]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   /**
    * Was the id typed into the new-id box REFUSED? `error` alone cannot say: after a successful add it
@@ -360,6 +358,20 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     checkFlavourRecord(rows[index], rows.slice(0, index).map((r) => String(r[idKey] ?? '')))
       ?.message ?? null;
 
+  /**
+   * 077 FR-024 (T059) — one condition, one notice, until it is put right: the toast says the first row the user has
+   * entered (a draft, or a committed row they edited) that still has a problem, derived from the rows every render, so
+   * another row coming or going never takes it away. A refused id, the box's own entry, is said first.
+   */
+  const rowProblem =
+    rows
+      .map((row, i) => (i >= records.length || edited.has(String(row[idKey] ?? '')) ? problemOf(i) : null))
+      .find((p) => p !== null) ?? null;
+  const toast = error ?? rowProblem;
+  useEffect(() => {
+    fieldNotice(toast === null ? null : `${descriptor.label}: ${toast}`);
+  }, [fieldNotice, toast, descriptor.label]);
+
   const addRow = (): void => {
     const draft: Draft = { [idKey]: newId.trim(), label: '', file: '', args: [], defaultShellArguments: '' };
     const problem = checkFlavourRecord(draft, rows.map((r) => String(r[idKey] ?? '')));
@@ -375,26 +387,17 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     setIdRefused(false);
     setDrafts([...pending, draft]);
     setNewId('');
-    setError(problem?.message ?? null);
+    setError(null);
   };
 
   const removeRow = (index: number): void => {
     if (index < records.length) {
-      // 077 FR-024 — an edited row's problem leaves the toast with the row.
-      if (edited.has(String(records[index]?.[idKey] ?? '')) && problemOf(index) !== null) setError(null);
+      // 077 FR-024 — an edited row's problem leaves the toast with the row (`rowProblem` is derived from the rows).
       commitRows(records.filter((_, i) => i !== index));
       return;
     }
-    const left = pending.filter((_, i) => i !== index - records.length);
-    setDrafts(left);
-    // 077 FR-024 — the toast never names a row that is gone: it says what the last draft left still needs, or goes.
-    const kept = [...records, ...left];
-    const last = kept.length - 1;
-    const remaining =
-      left.length === 0
-        ? null
-        : (checkFlavourRecord(kept[last], kept.slice(0, last).map((r) => String(r[idKey] ?? '')))?.message ?? null);
-    setError(remaining);
+    // 077 FR-024 — the toast never names a row that is gone (`rowProblem` is derived from the rows left).
+    setDrafts(pending.filter((_, i) => i !== index - records.length));
   };
 
   /** Commit `[...records]` — an ARRAY, never an object. Feeding a map back would destroy the file. */
@@ -411,8 +414,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
       // stops drawing it inline; a correction takes it out of the toast.
       const id = String(next[idKey] ?? '');
       if (!edited.has(id)) setEdited(new Set(edited).add(id));
-      const problem = checkFlavourRecord(next, list.slice(0, index).map((r) => String(r[idKey] ?? '')));
-      setError(problem?.message ?? null);
+      setError(null);
       return;
     }
     const draftIndex = index - records.length;
@@ -434,14 +436,9 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     //   • a write that FAILS takes the row with it. The row never reaches `records`, and the draft
     //     is already gone: the user's typing is destroyed by the one event that most needs them to
     //     be able to retry. The failure itself is reported by the tab's write path (FR-006a).
-    // A draft that is still not a flavour keeps the toast current: it is the draft's only voice (FR-024).
-    const draftProblem = checkFlavourRecord(next, committedIds);
-    if (draftProblem === null) {
-      commitRows([...records, next]);
-      setError(null);
-    } else {
-      setError(draftProblem.message);
-    }
+    // A draft that is still not a flavour is said in the toast (`rowProblem`): it is the draft's only voice (FR-024).
+    setError(null);
+    if (checkFlavourRecord(next, committedIds) === null) commitRows([...records, next]);
   };
 
   return (
