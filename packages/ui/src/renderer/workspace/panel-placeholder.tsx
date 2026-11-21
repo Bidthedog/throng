@@ -97,6 +97,7 @@ import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
 import { PanelHeaderSaveIcons } from './panel-header-save-icons.js';
+import { headerControlsFit, useHeaderWidth } from './panel-header-fit.js';
 import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
 import { useReportSubjectFailure } from './panel-failure-notice.js';
 import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
@@ -369,6 +370,9 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     panel.kind === 'editor' ? editorUi?.filePath : null,
     editorProjectRoot,
   );
+  // 067 FR-069b — a narrow header keeps its title: the controls give way, a whole one at a time (panel-header-fit.ts).
+  const headerFitAnchor = useRef<HTMLSpanElement>(null);
+  const headerFit = headerControlsFit(useHeaderWidth(headerFitAnchor));
   const fullTitle = panelDisplayTitle(panel, titleSources);
   // 054 FR-005a — a preview's title names its file; hovering it shows the file's full path.
   const previewPath = isPreview
@@ -1069,7 +1073,9 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           : null}
         {/* 044 FR-104 — Back / Forward, on editors and previews only (FR-100). 069 FR-065: after the type icon,
             which leads the header, and before the title. */}
-        {hasHistory ? (
+        {/* A zero-size anchor, so the header's width can be read from inside it (FR-069b). */}
+        <span ref={headerFitAnchor} hidden aria-hidden="true" />
+        {hasHistory && headerFit.history ? (
           <BackForwardButtons
             panelId={panel.id}
             onBack={() => void navigatePanelHistory(wsRef.current, panel.id, 'back')}
@@ -1182,6 +1188,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             054 FR-071 — Maximise / Restore, before the +. The same toggle as the title-menu row and the
             `panel.toggleMaximise` chord; on the maximised panel it is the Restore control (FR-071).
           */}
+          {/* 067 FR-069b — Split, then Focus Mode, then Destroy give way to the title; each stays on the header menu. */}
+          {headerFit.focus ? (
           <IconButton
             token={isMaximisedPanel ? 'panelRestore' : 'panelMaximise'}
             // The live chord in the tooltip, as the Back / Forward buttons show theirs.
@@ -1192,6 +1200,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             // The box's own pointer-down has already made this panel the active one.
             onClick={() => toggleMaximisePanel(tabId, panel.id)}
           />
+          ) : null}
+          {headerFit.split ? (
           <IconButton
             token="add"
             // 054 FR-074 — drawn disabled, not hidden, while the tab is maximised, and saying why.
@@ -1224,6 +1234,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               );
             }}
           />
+          ) : null}
+          {headerFit.destroy ? (
           <IconButton
             token="windowClose"
             className=""
@@ -1234,6 +1246,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             testId={`panel-close-${panel.id}`}
             onClick={() => void destroyPanel()}
           />
+          ) : null}
         </span>
       </div>
       {showsZoomIndicator ? (

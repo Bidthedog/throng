@@ -219,3 +219,50 @@ describe('a narrow title bar (FR-069a)', () => {
     expect(screen.getByTestId('menu-item-Save As…')).toBeTruthy();
   });
 });
+
+/*
+ * 067 FR-069b — the maintainer's ruling of 2026-11-21: a narrow panel keeps its title. At about 150 px the header's
+ * controls took the whole width and the title was drawn 0 px wide. The rest of the header now gives way, a whole
+ * control at a time — after Save As and Save, Back / Forward, then Split, then Focus Mode, then Destroy — and every one
+ * stays on the header's menu. (The width the title is drawn at is `panel-header-narrow.e2e.ts`'s: jsdom has no layout.)
+ */
+describe('a narrow header gives way to the title (FR-069b)', () => {
+  const present = (id: string): boolean => screen.queryByTestId(`${id}-${PANEL}`) !== null;
+  const drawn = (): Record<string, boolean> => ({
+    history: present('panel-history'),
+    split: present('panel-add'),
+    focus: present('panel-maximise'),
+    destroy: present('panel-close'),
+  });
+
+  it('hides Back / Forward, then Split, then Focus Mode, then Destroy, and widening restores them', async () => {
+    await mountWithHeader();
+    resizeHeader(1000);
+    expect(drawn()).toEqual({ history: true, split: true, focus: true, destroy: true });
+
+    resizeHeader(200);
+    await waitFor(() => expect(drawn()).toEqual({ history: false, split: true, focus: true, destroy: true }));
+    resizeHeader(150);
+    await waitFor(() => expect(drawn()).toEqual({ history: false, split: false, focus: true, destroy: true }));
+    resizeHeader(120);
+    await waitFor(() => expect(drawn()).toEqual({ history: false, split: false, focus: false, destroy: true }));
+    resizeHeader(60);
+    await waitFor(() => expect(drawn()).toEqual({ history: false, split: false, focus: false, destroy: false }));
+
+    resizeHeader(1000);
+    await waitFor(() => expect(drawn()).toEqual({ history: true, split: true, focus: true, destroy: true }));
+  });
+
+  it('keeps every hidden control on the header menu, and the title in the header', async () => {
+    await mountWithHeader();
+    resizeHeader(60);
+    await waitFor(() => expect(present('panel-close')).toBe(false));
+    expect(screen.getByTestId(`panel-title-${PANEL}`)).toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByTestId(`panel-handle-${PANEL}`));
+    for (const row of ['Save', 'Save As…', 'Back', 'Forward', 'Split', 'Enter Focus Mode']) {
+      expect(await screen.findByTestId(`menu-item-${row}`), row).toBeTruthy();
+    }
+    expect(screen.getByTestId(/^menu-item-(Destroy|Close) Panel$/)).toBeTruthy();
+  });
+});
+

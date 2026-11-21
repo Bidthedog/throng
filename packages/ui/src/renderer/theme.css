@@ -1345,16 +1345,23 @@ textarea,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 067 FR-069b — a minimum share of the header, at any panel width: never drawn 0 px wide. The header's controls
+   * give way instead (panel-header-fit.ts); half the header at the narrowest still shows a letter and its ellipsis. */
+  min-width: min(4em, 50%);
 }
 
 /* Per-Panel origin-project label, shown only inside a sub-workspace window. Sits
    right-aligned before the header actions, coloured by the project (or the
    sub-workspace, for a project-less Panel). */
 .panel-box__project {
-  /* Owner (project / sub-workspace) text: right-aligned and ALWAYS visible — it
-   * never shrinks, so the editor file pill's folder-brackets truncate first
-   * (FR-085). */
-  flex: 0 0 auto;
+  /* Owner (project / sub-workspace) text: right-aligned, and the last thing in the
+   * header to give way — the editor file pill's folder-brackets truncate first
+   * (FR-085). 067 FR-069b: it gives way only once the title is at its floor,
+   * ellipsised, so it never pushes the title out. */
+  flex: 0 0.001 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-left: auto;
   padding: 0 8px;
   font-size: 10px;

@@ -126,6 +126,7 @@
     "theme-sizes-and-notices.e2e.ts": "FOCUS",
     "titlebar-chrome.e2e.ts": "FOCUS",
     "transient-overlays.e2e.ts": "UNATTRIBUTED",
+    "panel-header-narrow.e2e.ts": "FOCUS",
     "ux-refinements.e2e.ts": "FOCUS",
     "window-chord-resolution.e2e.ts": "UNATTRIBUTED",
     "linux-files.e2e.ts": "FOCUS",
