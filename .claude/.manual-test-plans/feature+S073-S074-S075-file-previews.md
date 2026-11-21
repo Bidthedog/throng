@@ -74,6 +74,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-107 | [General] × on the last panel returns it to the blank form | untested | | | |
 | MT-108 | [General] A quit from the system closes throng without asking (#699) | untested | | | |
 | MT-109 | [Settings] Clear delay, Kill processes and the pane widths in their new groups | untested | | | |
+| MT-110 | [Settings] An invalid entry in Preferences shows a toast, not text under the box | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1150,3 +1151,20 @@ Paths: `packages/core/src/config/settings-metadata.ts`, `docs/preferences.md`
 4. Change each of the four settings and close Preferences; reopen it. Each keeps its new value, and throng behaves as before (a mark clears after the delay, ending a process asks or not as set, the panes stop at their widths).
 5. Search Preferences for "clear delay", "kill" and "pane". Each finds its row in the new place.
 6. In Preferences → Settings, General starts at Window, with no Appearance heading, and searching "theme" finds no Theme row. In the Themes tab, choose another theme: the app switches to it.
+
+## MT-110: [Settings] An invalid entry in Preferences shows a toast, not text under the box
+
+Covers: 077 FR-024, 077 FR-008, 053 FR-008, 074 FR-072c
+Paths: `packages/ui/src/renderer/preferences/field-notice.ts`, `packages/ui/src/renderer/preferences/form-controls.tsx`, `packages/ui/src/renderer/preferences/map-control.tsx`, `packages/core/src/config/numeric-units.ts`
+
+### Steps
+1. Preferences › Settings › Tabs › Tab hover-activate delay: type 999999. The box turns red, nothing below it moves, and a toast reads "Tab hover-activate delay must be between <min> and <max> ms".
+2. Press Enter. The maximum is stored and the toast goes.
+3. Type abc and press Enter twice. One toast reads "Tab hover-activate delay must be a whole number" and flashes on the second Enter; no second toast appears, and the box still reads abc in red.
+4. Press Escape. The stored value returns, and the red outline and the toast go.
+5. Terminals › Terminal title template: type `({shell}` and press Enter. A toast reads "Terminal title template: Unclosed bracket at 0", and the box keeps its text in red.
+6. Editor › Languages › Language by file extension: type foo as a new key and click Add. A toast reads "Language by file extension: …" saying it needs a dot; edit the box and the toast goes.
+7. Repeat step 1, then switch to the Key Bindings tab. The toast goes with the box.
+
+### Negative cases
+- No setting shows error text beneath or beside its box, and no row changes height when an entry is refused.
