@@ -39,20 +39,10 @@ reads the setting.
 - It MUST NOT state the shipped default, a constant copied from the code, or an estimate.
 - Documentation that lists defaults names them as defaults.
 - This is an **end-state requirement** under the Incremental Delivery rule, binding on new work
-  immediately. Known violations, audited 2026-11-20 and being fixed by the numeric-settings work on
-  the branch that adopts this rule:
-  - `packages/ui/src/renderer/preview/preview-notice.tsx` — the too-large notice states the limit
-    in bytes, where the spreadsheet preview's *Preview size limit* is displayed in MB.
-  - `packages/ui/src/renderer/editor/editor-missing-notice.ts` — "too large to open in an editor"
-    names `editor.maxOpenFileBytes`'s limit without stating it.
-  - `packages/core/src/editor/drop.ts` — the drop refusal states the size and the limit
-    ungrouped.
-  - `packages/core/src/config/settings-metadata.ts` — `resourceMonitor.captureIntervalMs`'s (077
-    FR-001's name for `captureIntervalSeconds`) description copies the minimum-interval bands from
-    `packages/core/src/resources/settings-resolution.ts`, and `editor.maxOpenFileBytes`'s
-    hard-codes "the slider moves in 5 MB steps".
-  - `packages/core/src/preview/providers/media-settings.ts` — every media preview's *Maximum file
-    size* description hard-codes the same "5 MB steps".
+  immediately. Known violations: **none open.** The five audited on 2026-11-20 (the preview and
+  editor too-large notices, the drop refusal, the capture-interval and maximum-file-size
+  descriptions, the media previews' "5 MB steps") were fixed by spec 077; re-checked 2026-11-21.
+  A newly found one is listed here, with its file, until it is fixed.
 
 ## Quality gate — configuration editors stay in sync with all configurable options
 
