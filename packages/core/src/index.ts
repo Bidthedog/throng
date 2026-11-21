@@ -1225,6 +1225,7 @@ export {
   nearestStop,
   toDisplay,
   typedProblem,
+  unitNote,
   type TypedCheck,
 } from './config/numeric-units.js';
 

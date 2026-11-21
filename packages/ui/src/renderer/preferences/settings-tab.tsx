@@ -11,6 +11,7 @@ import {
   LANGUAGES,
   raisedIntervalFor,
   settingDiffersFromEntry,
+  unitNote,
   type FieldDescriptor,
 } from '@throng/core';
 import type { DetectedFlavourDto } from '../global.js';
@@ -758,7 +759,11 @@ export function SettingsTab({
             <div className="settings-row" key={d.key} data-testid={`setting-${d.key}`}>
               <div className="settings-row__meta">
                 <label className="settings-row__label">{d.label}</label>
-                <p className="settings-row__desc">{d.description}</p>
+                <p className="settings-row__desc">
+                  {d.description}
+                  {/* 077 FR-003 — a size row says what its MB means, once, with its description. */}
+                  {unitNote(d) !== null ? ` ${unitNote(d)}` : null}
+                </p>
                 {/* 055 R11 — a rule between fields that changes what is in force says so beside the field. */}
                 <FieldNote descriptor={d} settings={settings} />
                 {/* 039 FR-008a — DISABLED WITH A REASON, never hidden. A control that vanishes

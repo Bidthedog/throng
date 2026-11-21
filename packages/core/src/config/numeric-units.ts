@@ -54,6 +54,14 @@ function withUnit(n: number, unit: string, singular?: string): string {
   return `${text} ${n === 1 && singular !== undefined ? singular : unit}`;
 }
 
+/**
+ * FR-003 — what the display unit means, where a reader could take it two ways: a size row says once, beside its
+ * description, that 1 MB is 1,048,576 bytes. `null` for every other setting.
+ */
+export function unitNote(d: FieldDescriptor): string | null {
+  return displayOf(d) === 'MB' ? `1 MB is ${formatGrouped(BYTES_PER_MB)} bytes.` : null;
+}
+
 /** The value in the unit the slider is shown in: `25 MB`, `1.5 s`, `40 characters`, `80%`. */
 export function toDisplay(value: number, d: FieldDescriptor): string {
   const unit = displayOf(d);
