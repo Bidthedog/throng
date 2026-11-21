@@ -46,6 +46,19 @@ describe('the printable clone', () => {
     expect(root.textContent).not.toContain('Link not found');
   });
 
+  it('leaves out find\'s match frames: Print… while find is open prints no outlines (FR-076)', () => {
+    // Print… hands over the panel body, and find draws its frames in a layer inside it, beside the content.
+    const host = document.createElement('div');
+    host.className = 'preview-panel__body';
+    host.innerHTML =
+      '<div class="preview-markdown"><p>needle here</p></div><div class="preview-match-frames" aria-hidden="true"><div class="preview-match-frame preview-match-frame--current"></div></div>';
+    document.body.append(host);
+    mounted.push(host);
+    const { root } = printableClone(host, 'width');
+    expect(root.querySelector('.preview-match-frames, .preview-match-frame')).toBeNull();
+    expect(root.textContent).toContain('needle here');
+  });
+
   it('leaves out the scroll-sync mark: a gutter bar on screen, never on paper (073 FR-033d)', () => {
     const live = body(`<p class="${SYNC_MARK_CLASS} ${SYNC_MARK_ON_CLASS}" data-source-line="3">synced</p>`);
     live.classList.add('preview-markdown--gutter');

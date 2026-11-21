@@ -30,6 +30,8 @@ const FURNITURE = [
   '.preview-diagram-frame__toolbar',
   `.${PREVIEW_LOADING_CLASS}`,
   '.preview-link-hint',
+  // FR-076 — find's match outlines: a layer beside the content inside the panel body Print… hands over.
+  '.preview-match-frames',
   '[data-print-omit]',
 ].join(', ');
 
