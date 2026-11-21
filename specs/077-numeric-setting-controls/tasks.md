@@ -185,3 +185,8 @@ Each was implemented before it had a task; the commit named is the one that did 
 - [x] T055 Quote the file's size and **Max open file size** in a text preview's too-large notice (Markdown, CSV, Mermaid: `preview-service.ts`, the editor loader's refusal), and correct the known-gaps list, per FR-014, FR-015, SC-005 and Constitution X (partial)
 - [x] T056 Read an HTML or SVG preview's source under its own **Maximum file size**, not also under the editor's limit, so the setting's value decides alone, per FR-016, FR-018 and US5/AC1 (contradicts)
 - [x] T057 Say a problem the user just made on a committed table row (a custom terminal flavour's cleared executable) in the Preferences toast, keeping the inline row message for a row broken in the file, per FR-024 and FR-025 (partial)
+
+## Phase 16: Convergence
+
+- [ ] T058 CRITICAL: Quote the file's size and **Max open file size** in an embedded diagram's too-large refusal (`![[big.mmd]]`), as every other too-large surface does, per Constitution X, FR-014 and SC-005 (partial)
+- [ ] T059 Keep a broken table row's problem in the Preferences toast until it is put right, whatever happens to another row: say the first row still with a problem, edited or draft, per FR-024 and FR-025 (partial)
