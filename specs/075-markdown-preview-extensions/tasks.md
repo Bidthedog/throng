@@ -129,3 +129,17 @@
 ## Implementation strategy
 
 MVP = US1 + US2 (callouts usable). Then US3, US4, US6, US5 in that order, each a coherent commit.
+
+## Phase 10: Convergence
+
+- [ ] T068 Open a collapsed callout, and every collapsed callout around it, when a heading inside it is the target of a `#fragment` link, a wikilink, Go to Heading or an outline jump: `scrollToHeading` in `packages/ui/src/renderer/preview/preview-panel.tsx` reveals only a hidden heading or a collapsed section; component test first, per FR-010 (partial)
+- [ ] T069 Leave the find match frames (`.preview-match-frames`) out of the printable copy in `packages/ui/src/renderer/preview/print/printable.ts`, with a case in `print-printable.test.ts`, per FR-076, US5 (partial)
+- [ ] T070 Raise one notice in the requesting panel or editor, and log it, when Print… cannot build its printable or main refuses the request (over the size cap, malformed): today `print-command.ts` and `text-printable.ts` only log and `print-ipc.ts` answers `{opened:false}` silently, per FR-080 (partial)
+- [ ] T071 Prove or fix the ready-made-pages print route: a `pages` printable is loaded as a PDF into a plugin-less window in `packages/ui/src/main/electron-print-engine.ts`, and the contract test stops at the IPC boundary; an integration test that a `pages` output reaches Print Preview with its pages, then whatever fix it needs, per FR-060, FR-061, US6/AS2, SC-011 (partial)
+- [ ] T072 Show the Print… chord on the Spreadsheet grid menu's Print… row (`gridPrintRow(undefined, …)` in `spreadsheet-body.tsx`), as the CSV grid does, per FR-075b, FR-063 (partial)
+- [ ] T073 Save Print Preview's current settings when the window is closed from its title bar, including a change made inside the 300 ms layout debounce or while the page range is invalid, per FR-070 (partial)
+- [ ] T074 Print a diagram that is still drawing as something other than a blank gap (wait for it, or print its source), per FR-043a edge case (partial)
+- [ ] T075 Amend the 2026-11-20 clarification and T063's note additively: Print Preview's minimum height is 680 px (T066 raised it so every control fits), superseding 600 px, per Clarifications/FR-069 (partial)
+- [ ] T076 Decide what a rich copy of a callout keeps (today `EXPORT_PROFILE` strips its type and role, leaving bare nested `div`s) and either emit it or amend the Copy edge case to the structure and text that survive, per edge case "Copy" (partial)
+- [ ] T077 Add the component test T011 claims: Collapse All and Expand All leave callouts' own fold state alone, per FR-009, T011 (partial)
+- [ ] T078 Add a pipeline test of a Mermaid block and a display equation inside a callout, per US2/AS4 (partial)
