@@ -130,7 +130,7 @@ type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Win
 const CSV_PREVIEW_LABEL = previewPanelTypeLabel(SHIPPED_PREVIEW_PROVIDERS.get('csv') ?? { displayName: 'CSV' });
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, editorRouteParented, onPrint, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, editorRouteParented, onCopyCapped, onPrint, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -326,11 +326,11 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   const copy = useCallback(
     (range: GridRange, format: PreviewCopyFormat = copyFormat) => {
       const sel = gridRef.current?.getSelection();
-      void copyGridRange(range, getCell, format).then((ok) => {
+      void copyGridRange(range, getCell, format, (copied, selected) => onCopyCapped?.(copied, selected, GRID_MAX_CELLS, 'copy')).then((ok) => {
         if (ok && sel !== undefined) recordCopy(sel, range, rowCount, getCell);
       });
     },
-    [copyFormat, getCell, rowCount],
+    [copyFormat, getCell, onCopyCapped, rowCount],
   );
 
   /*
@@ -361,8 +361,13 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
 
   const cut = useCallback(
     (sel: GridSelection, range: GridRange) => {
-      void copyGridRange(range, getCell, copyFormat).then((ok) => {
-        if (!ok) return;
+      // FR-024 (T082) — a cut past the cell bound copies what it can and removes nothing: never cells the clipboard lacks.
+      let capped = false;
+      void copyGridRange(range, getCell, copyFormat, (copied, selected) => {
+        capped = true;
+        onCopyCapped?.(copied, selected, GRID_MAX_CELLS, 'cut');
+      }).then((ok) => {
+        if (!ok || capped) return;
         cutMark.current = { before: textNow.current, after: null };
         // Recorded before the rows go: the record holds the values the cut took.
         recordCopy(sel, range, rowCount, getCell);
@@ -370,7 +375,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         else clearRange(range);
       });
     },
-    [clearRange, copyFormat, getCell, rowCount, send],
+    [clearRange, copyFormat, getCell, onCopyCapped, rowCount, send],
   );
 
   const history = useCallback(

@@ -254,6 +254,12 @@ export interface PreviewBodyProps {
    */
   editorRouteParented?: boolean;
   /**
+   * 073 FR-024 (T082) — a grid's Copy or Cut stopped at the cell bound: `copied` of `selected` cells went to the
+   * clipboard, and `bound` is the most one copy holds. A cut capped so removes nothing. The chrome says so, naming the
+   * panel. Absent, the body says nothing.
+   */
+  onCopyCapped?(copied: number, selected: number, bound: number, verb: 'copy' | 'cut'): void;
+  /**
    * 075 FR-075b — the chrome's Print…, for a body that builds its own menus (the grids). Absent when the preview's
    * provider cannot print.
    */

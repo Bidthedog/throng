@@ -267,7 +267,7 @@ import {
 import { revealNodeAt } from './node-reveal.js';
 import './preview.css';
 import './match-frames.css';
-import { logCaught, logExpected, pathForms, relPathUnderRoot } from '@throng/core';
+import { formatGrouped, logCaught, logExpected, pathForms, relPathUnderRoot } from '@throng/core';
 
 /** The refusals that mean the preview must not be restored here (FR-067). Everything else is kept. */
 const CLEARING_REFUSALS: ReadonlySet<string> = new Set(['no-provider', 'disabled', 'outside-project']);
@@ -435,6 +435,14 @@ export interface PreviewPanelProps {
    * against exactly the same facts (main's `resolveDrop`, unchanged, FR-022).
    */
   dropCtx: DropContext;
+}
+
+/** 073 FR-024 (T082) — what a grid copy or cut stopped at the cell bound says; quantities digit-grouped (5.4.0). */
+export function copyCappedMessage(copied: number, selected: number, bound: number, verb: 'copy' | 'cut'): string {
+  const limit = `A copy holds at most ${formatGrouped(bound)} cells`;
+  return verb === 'cut'
+    ? `${limit}, so only ${formatGrouped(copied)} of the ${formatGrouped(selected)} selected cells were copied, and nothing was cut. Select fewer cells to cut them.`
+    : `${limit}, so only the first ${formatGrouped(copied)} of the ${formatGrouped(selected)} selected cells were copied.`;
 }
 
 export function PreviewPanel({
@@ -866,6 +874,23 @@ export function PreviewPanel({
       });
     },
     [notify, clear, linkNoticeTestId],
+  );
+  /*
+   * 073 FR-024 (T082) — a grid copy or cut stopped at the cell bound. One warning naming the panel, replaced by the
+   * next (one condition, one notice); it carries no action, so a toast.
+   */
+  const copyCappedTestId = `preview-copy-capped-${panelId}`;
+  const onCopyCapped = useCallback(
+    (copied: number, selected: number, bound: number, verb: 'copy' | 'cut'): void => {
+      clear(copyCappedTestId);
+      notify({
+        severity: 'warning',
+        subject: panelSubject(placeRef.current),
+        message: copyCappedMessage(copied, selected, bound, verb),
+        testId: copyCappedTestId,
+      });
+    },
+    [notify, clear, copyCappedTestId],
   );
   const clearLinkNotice = useCallback((): void => {
     if (lastLinkNotice.current === null) return;
@@ -2772,6 +2797,7 @@ export function PreviewPanel({
             // 073 — the grid lays out in JS, so it takes the factor itself; its notice and menu offer the editor route.
             zoom={zoomFactor(panelZoomLevel(panel))}
             {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute, editorRouteParented: parented } : {})}
+            onCopyCapped={onCopyCapped}
             // 075 FR-075b — a grid's own menus carry Print…, the same command as the header's.
             {...(state && canPrint(registry.get(state.providerId)) ? { onPrint: () => void printPanel() } : {})}
           />

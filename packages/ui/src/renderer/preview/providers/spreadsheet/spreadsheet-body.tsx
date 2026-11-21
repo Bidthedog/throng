@@ -21,6 +21,7 @@ import { copyGridRange } from '../../../grid/grid-copy.js';
 import { gridPrintRow } from '../../../grid/grid-print-row.js';
 import { registerGridPrintSource, type GridPrintSource } from '../../../grid/grid-print.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
+import { GRID_MAX_CELLS } from '@throng/core/csv';
 import { useAppSettings, useKeybindings } from '../../../config/config-store.js';
 import { useContextMenu } from '../../../context-menu-provider.js';
 import type { MenuAction } from '../../../workspace/context-menu.js';
@@ -86,7 +87,7 @@ function parseOffThread(bytes: ArrayBuffer, id: number): Promise<WorkbookRead> {
 }
 
 export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, providerSettings, registerGoTo, navigationSeq, onDrawn, onBodyFailure, onViewStateCapture, readSource, onPrint, zoom = 1 } = props;
+  const { panelId, content, filePath, providerSettings, registerGoTo, navigationSeq, onDrawn, onBodyFailure, onViewStateCapture, readSource, onCopyCapped, onPrint, zoom = 1 } = props;
   const source = content.kind === 'resource' ? content.url : '';
   const firstRowHeader = providerSettings.firstRowHeader === true;
   const settings = useAppSettings();
@@ -223,8 +224,9 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
 
   const copyFormat = settings.editor.previews.copyFormat;
   const copy = useCallback(
-    (range: GridRange, format: PreviewCopyFormat = copyFormat) => void copyGridRange(range, getCell, format),
-    [copyFormat, getCell],
+    (range: GridRange, format: PreviewCopyFormat = copyFormat) =>
+      void copyGridRange(range, getCell, format, (copied, selected) => onCopyCapped?.(copied, selected, GRID_MAX_CELLS, 'copy')),
+    [copyFormat, getCell, onCopyCapped],
   );
   const colCount = sheet?.width ?? 0;
   // FR-043a — Ctrl+G and the menus' Go to Row… open the shared Go to dialog for rows.

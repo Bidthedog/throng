@@ -22,15 +22,26 @@ export function cellsOf(range: GridRange, getCell: (row: number, col: number) =>
   return out;
 }
 
-/** Put `range` on the clipboard in `format`. Resolves `false` when nothing could be written. */
+/**
+ * Put `range` on the clipboard in `format`. Resolves `false` when nothing could be written.
+ *
+ * FR-024 (T082) — a copy holds at most `GRID_MAX_CELLS` cells, what a paste can take back. A range past it is copied
+ * up to the bound, whole rows only, and `onCapped` is told how many cells went of how many were selected, so the
+ * caller can say so rather than leave the reader to find the clipboard short.
+ */
 export async function copyGridRange(
   range: GridRange,
   getCell: (row: number, col: number) => string,
   format: PreviewCopyFormat,
+  onCapped?: (copied: number, selected: number) => void,
 ): Promise<boolean> {
   const clipboard = window.throng?.clipboard;
   if (clipboard === undefined) return false;
   const cells = cellsOf(range, getCell);
+  const width = range.right - range.left + 1;
+  const selected = (range.bottom - range.top + 1) * width;
+  const copied = cells.length * width;
+  if (copied < selected) onCapped?.(copied, selected);
   const text = gridToTsv(cells);
   try {
     if (format === 'rich') await clipboard.writeRich({ text, html: gridToHtmlTable(cells) });

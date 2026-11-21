@@ -654,6 +654,10 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-024**: In a grid, the selection is a range of cells. **Copy** MUST put the selected cells on the
   clipboard as tab-separated rows in Plain text format, and additionally as a text-only table in Rich
   text format (044 FR-035a, as this feature refines it); **Select All** MUST select every cell.
+  *Refined (convergence T082, 2026-11-21): one copy holds at most 1,000,000 cells (`GRID_MAX_CELLS`, what one paste
+  takes back), whole rows only. A Copy past it copies the first rows up to the bound and a warning names the bound
+  and both counts; a Cut past it copies the same and removes nothing, and its warning says so. Principle XII: copying
+  every cell of a larger selection would hold the window for as long as the copy took.*
 - **FR-025**: A grid MUST keep its scroll position and its selection across a content update, clamped to
   the data that remains.
 
