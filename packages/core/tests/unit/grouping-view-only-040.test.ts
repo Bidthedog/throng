@@ -169,12 +169,16 @@ describe('the readouts are display-only and never parsed back (FR-028)', () => {
       'packages/core/src/config/numeric-units.ts',
     ]);
     // The helper loophole the exhaustive set is there to close: `numeric-units.ts` parses only through
-    // `checkTyped`, and only the preferences numeric control calls that.
+    // `checkTyped`, and only the preferences number inputs call that. There are two, both a number the user
+    // TYPED into Preferences — never a readout (040 FR-028):
+    // - form-controls.tsx — the numeric setting's own box (077 FR-008);
+    // - map-control.tsx — a number cell of a table setting, such as the per-language indent widths, which 077
+    //   FR-008, FR-009 and FR-012 hold to the same typed-value check, step and clamp as the box (077 T030).
     const typedCallers = callersOf('checkTyped', sources).filter((f) => !f.endsWith('config/numeric-units.ts'));
     expect(
       typedCallers,
-      'checkTyped parses what a user typed into the preferences numeric control, and nothing else',
-    ).toEqual(['packages/ui/src/renderer/preferences/form-controls.tsx']);
+      'checkTyped parses what a user typed into a preferences number input, and nothing else',
+    ).toEqual(['packages/ui/src/renderer/preferences/form-controls.tsx', 'packages/ui/src/renderer/preferences/map-control.tsx']);
   });
 
   it('no editor module parses a displayed figure back', () => {
