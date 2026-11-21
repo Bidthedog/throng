@@ -66,6 +66,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-84 | [Settings] Too-large notices quote the limit as Preferences shows it | untested | | | |
 | MT-85 | [Settings] The Resource Monitor interval menu matches Preferences | untested | | | |
 | MT-86 | [Settings] Print dialog numbers name their limits | untested | | | |
+| MT-87 | [Settings] Converge fixes: size refusals, table rows report through the toast, hover maximum | untested | | | |
 | MT-100 | [General] One Last Active preview across preview types | untested | | | |
 | MT-101 | [General] Preview titles and icons for all eight types | untested | | | |
 | MT-102 | [General] One Go to dialog for lines, rows, pages and headings | untested | | | |
@@ -1303,8 +1304,20 @@ Covers: 074 FR-068a, 074 FR-085a
 Paths: `packages/ui/src/renderer/preview/preview-panel.tsx`, `packages/ui/src/renderer/preview/providers/html/`, `packages/ui/src/renderer/preview/providers/pdf/`
 
 ### Steps
-1. In an HTML preview of a page with `<a href="#sec">Jump</a>` above `<h2 id="sec">`, right-click the link and choose Open Link. The page scrolls to the heading, with no "heading not found" notice. Ctrl+click on the link does the same.
-2. Right-click a link inside a PDF preview. A link menu appears with Open Link and Copy Link.
-3. Right-click any preview's body. Copy Path is offered and copies the file's path.
-4. In a PDF preview, scroll to the middle of a page, change the PDF on disk (or re-save it), and let it reload. The view returns to the same point on the page.
-5. Select All (Ctrl+A) in a PDF preview selects the PDF's text and nothing outside it.
+1. In a PDF with links, right-click an external link, then a link to another page. Both offer Open Link and Copy Link; Open Link on the page link goes to that page.
+2. In an HTML preview of a page with `<a href="#sec">Jump</a>` above `<h2 id="sec">`: a plain click does nothing; Ctrl+click scrolls to the heading; right-click → Open Link scrolls there too, with no "heading not found" notice.
+3. In an HTML page, middle-drag scrolls it. Hovering a link to a `.txt` file says it opens in the editor.
+4. In an HTML page with a linked stylesheet, edit the CSS on disk and press Refresh: the style updates. Typing in the linked editor causes no restyle flash.
+5. In an Image or PDF preview, right-click the body → Copy Path → Absolute (POSIX). The file's path is copied.
+6. In a PDF preview, Ctrl+A (or the menu's Select All) selects the PDF's text and nothing outside it. Scroll to the middle of a page, re-save the PDF, and let it reload: it returns to the same point.
+7. In an Image or SVG preview, the Fit button reads "Fit picture". In Focus Mode the zoom percentage shows at full strength.
+
+## MT-87: [Settings] Converge fixes: size refusals, table rows report through the toast, hover maximum
+
+Covers: 077 FR-005, 077 FR-012, 077 FR-024, 077 FR-025
+Paths: `packages/ui/src/renderer/preferences/records-control.tsx`, `packages/ui/src/renderer/preferences/map-control.tsx`, `packages/ui/src/renderer/preferences/form-controls.tsx`, `packages/core/src/config/settings-metadata.ts`
+
+### Steps
+1. Set Preferences' Max open file size below a Markdown file's size. Open its preview, then embed it as `![[name.md]]` from another note. Both notices quote the file's size and the limit.
+2. Preferences › Terminal › Custom terminal flavours: clear an existing flavour's executable. A toast names that flavour. Add a new draft row and remove it again: the toast still names the first flavour until you fix it.
+3. Preferences › Tabs: type 4000 into Tab popover delay. The value is kept and the slider sits greyed at its maximum.
