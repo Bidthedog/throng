@@ -210,6 +210,7 @@ export function PdfBody({
   readSource,
   registerGoTo,
   registerPageLayout,
+  registerSelectionHost,
 }: PreviewBodyProps): ReactElement {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   /** FR-062c — one page under another, two to a row, or as many as fit the panel's width. */
@@ -226,6 +227,13 @@ export function PdfBody({
   const [links, setLinks] = useState<Record<number, readonly PdfLink[]>>({});
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  // 074 FR-068a — the PDF's text layers are the page's text: the panel's Select All and Ctrl+A select within the
+  // pages, as an HTML page's do (FR-085a), never the whole window.
+  useEffect(() => {
+    if (registerSelectionHost === undefined) return undefined;
+    registerSelectionHost(() => scrollerRef.current);
+    return () => registerSelectionHost(null);
+  }, [registerSelectionHost]);
   const pageEls = useRef(new Map<number, HTMLDivElement>());
   const visible = useRef(new Set<number>());
   const painted = useRef(new Map<number, number>());

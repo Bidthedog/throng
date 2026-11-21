@@ -2497,7 +2497,8 @@ export function PreviewPanel({
       }
       // 047 T049 — the markdown.* fold chords, consumed before anything else on this key.
       if (chordEngineRef.current?.keydown(e)) return;
-      if (!textSelection || !flowingRef.current) return;
+      // 074 FR-068a, FR-085a — a page body (an HTML page, a PDF's text) selects within itself, as a flowing document does.
+      if (!textSelection || (!flowingRef.current && bodySelectionHost.current === null)) return;
       if (selectAllKey) {
         e.preventDefault();
         selectAll();
