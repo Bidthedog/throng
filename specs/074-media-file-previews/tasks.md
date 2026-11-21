@@ -178,4 +178,4 @@ last.
 
 ## Phase 15: Convergence
 
-- [ ] T085 Note in plan.md's Constitution Check that FR-068a, FR-081a and FR-086b/d supersede its "no PDF text layer", "Find disabled on HTML" and "FR-081 once per preview", per FR-068a, FR-081a, FR-086b and FR-086d (contradicts)
+- [x] T085 Note in plan.md's Constitution Check that FR-068a, FR-081a and FR-086b/d supersede its "no PDF text layer", "Find disabled on HTML" and "FR-081 once per preview", per FR-068a, FR-081a, FR-086b and FR-086d (contradicts)

@@ -64,7 +64,7 @@ providers, diagram frame, main protocol / service / window-open guard / IPC, pre
 | **V. Test-First (NON-NEGOTIABLE)** | **Engaged.** Every task test-first at the lowest layer (R10). Tests changing by supersession: those asserting a binary provider has no default-open-action row (044 FR-051), the label "Default open action" (044 FR-050) and option labels "Editor"/"Preview" — `settings-descriptors-054.test.ts`, `preview-settings-054.test.ts` and kin. |
 | **VI. Simple, Modern, Discoverable UX** | **Engaged; see the rules table.** |
 | **VII. Change Review & Approval** | Not engaged — previews are read-only. |
-| **VIII. SOLID, DRY & YAGNI** | **Engaged.** DRY: one frame for every picture; one confinement path (`readSource` reuses the handler); one OS-open route. YAGNI: no image library, no PDF text layer, no script opt-in. |
+| **VIII. SOLID, DRY & YAGNI** | **Engaged.** DRY: one frame for every picture; one confinement path (`readSource` reuses the handler); one OS-open route. YAGNI: no image library, no PDF text layer, no script opt-in. *(2026-11-21, convergence T085: FR-068a gives a PDF a selectable text layer; "no PDF text layer" is superseded.)* |
 | **IX. DI & Composition Root** | **Engaged.** `readSource` and the follow route are wired in `main.ts` from the existing protocol handler and window-open guard. |
 | **X. Externalised Configuration** | **Engaged.** Each new setting has a generated descriptor. `MAX_IMAGE_PIXELS`, `SVG_DRAW_TIMEOUT_MS` and the PDF render margin are limits, recorded below. |
 | **XI. Dockable Workspace** | **Engaged.** Four panel types on the one `preview` kind (054 R2); no layout change; Focus Mode as every panel. |
@@ -76,9 +76,9 @@ providers, diagram frame, main protocol / service / window-open guard / IPC, pre
 | Rule | Assessment |
 |---|---|
 | **Every panel action has a menu item** | Frame controls mirror the body menu (Copy Image, Focus Mode) as Mermaid's do; Copy Path on every body menu. |
-| **Disabled when unavailable, absent when meaningless** | Select All / Go to Heading / Outlining absent on picture and PDF types; Synchronise Scrolling absent for SVG and HTML; Find disabled on HTML (FR-086). |
+| **Disabled when unavailable, absent when meaningless** | Select All / Go to Heading / Outlining absent on picture and PDF types; Synchronise Scrolling absent for SVG and HTML; Find disabled on HTML (FR-086). *(2026-11-21, convergence T085: FR-086b searches an HTML page like any preview, and FR-086d gives a provider without the exact Find none, never a disabled one; Select All is offered on a PDF and an HTML page, FR-068a and FR-085a.)* |
 | **Themeable icon controls (NON-NEGOTIABLE)** | No new controls: the frame's existing tokens. |
-| **One condition, one notice** | Each failure one inline notice; FR-081 once per preview. |
+| **One condition, one notice** | Each failure one inline notice; FR-081 once per preview. *(2026-11-21, convergence T085: FR-081a shows the scripts notice once per PAGE: dismissed for a page, back for the next page loaded with script.)* |
 | **Displayed quantities digit-grouped** | Engaged: size notices, image dimensions and size, PDF page numbers through `formatGrouped`. |
 
 ### Development Workflow & Quality Gates
