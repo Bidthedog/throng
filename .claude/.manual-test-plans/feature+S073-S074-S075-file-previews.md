@@ -72,6 +72,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-105 | [General] Open files in and Open previews in, both ways | untested | | | |
 | MT-106 | [General] The Preferences JSON editors are themed like an editor | untested | | | |
 | MT-107 | [General] × on the last panel returns it to the blank form | untested | | | |
+| MT-108 | [General] A quit from the system closes throng without asking (#699) | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1121,3 +1122,17 @@ Paths: `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/
 ### Negative cases
 - No last panel keeps a type's title or body after its ×, and none is left showing a closed editor or a dead terminal.
 - A panel created with + still opens with nothing chosen.
+
+## MT-108: [General] A quit from the system closes throng without asking (#699)
+
+Covers: #699, 005 FR-015
+Paths: `packages/ui/src/main/main.ts`
+
+### Steps
+1. Open throng from this worktree with a project and one terminal running a shell. In a terminal outside throng, run `pkill -TERM -f "S073-S074-S075-file-previews/node_modules/electron/dist/electron packages/ui/dist/main/main.js"`. throng shows "Closing throng…" briefly and closes within a few seconds, with no running-terminals warning.
+2. Start throng again. The layout is as you left it, and the terminal reattaches (it kept running in the daemon).
+3. Press the window's × with a terminal running. The running-terminals warning appears as before; choose Cancel.
+4. With that warning still open, run the same `pkill` command. The warning goes away and throng closes without asking.
+
+### Negative cases
+- Closing the window yourself with a terminal running always asks first.
