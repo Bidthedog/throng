@@ -36,7 +36,9 @@ export async function printEditorPanel(
 ): Promise<boolean> {
   const view = getEditorView(panelId);
   if (view === undefined) return false;
-  const title = getEditorState(panelId)?.displayName ?? 'Untitled';
+  const state = getEditorState(panelId);
+  const title = state?.displayName ?? 'Untitled';
   const fontFamily = view.contentDOM.ownerDocument.defaultView?.getComputedStyle(view.contentDOM).fontFamily;
-  return printTextDocument(editorPrintSource(view.state, title, fontFamily), open, onFailed);
+  const filePath = state?.filePath ?? undefined;
+  return printTextDocument({ ...editorPrintSource(view.state, title, fontFamily), ...(filePath ? { filePath } : {}) }, open, onFailed);
 }

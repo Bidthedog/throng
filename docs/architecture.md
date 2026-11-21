@@ -736,6 +736,9 @@ the window draws one page at a time with PDF.js (`renderer/print-preview/print-p
 pages lays nothing out again. **Print** sends what the window shows: it draws every page at 300 dpi
 (`print-pages.ts` `sheet()`), and the controller prints those images from a second host
 (`printSheetHtml`) silently, with no margin, scale or page range of its own, so the paper is the preview.
+**Save as PDF…** writes the very `printToPDF` the window drew its pages from, through the OS's Save dialog, then
+tells the window that asked (`throng:print:saved`), whose `renderer/print/print-saved-notice.tsx` offers Open or a
+reveal in the tree; Open goes back through main, which opens only a PDF it saved.
 Settings persist in `print-settings.json`; the window re-reads the OS's printers every few seconds.
 
 ```mermaid

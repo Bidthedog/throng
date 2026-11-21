@@ -26,6 +26,25 @@ export type PrintableOutput =
 export interface PrintJobRequest {
   readonly title: string;
   readonly output: PrintableOutput;
+  /** FR-082 — the printed file's absolute path, where it has one: Save as PDF starts beside it. */
+  readonly filePath?: string;
+}
+
+/** FR-082 — Save as PDF's answer: saved at `path`, failed with a cause naming the file, or cancelled in the dialog. */
+export type PrintSaveResult = { readonly ok: true; readonly path: string } | { readonly ok: false; readonly cause: string } | { readonly cancelled: true };
+
+/**
+ * 075 FR-082 — where Save as PDF's dialog starts: the printed file's name with `.pdf`, in its folder. A file that is a
+ * PDF already gets ` (printed)`, so the default never names the source. With no path, the title, and no folder.
+ */
+export function defaultPdfSave(filePath: string | undefined, title: string): { dir?: string; name: string } {
+  const cut = filePath === undefined ? -1 : Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  const base = filePath === undefined ? title : filePath.slice(cut + 1);
+  const dot = base.lastIndexOf('.');
+  const ext = dot > 0 ? base.slice(dot).toLowerCase() : '';
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const name = ext === '.pdf' ? `${stem} (printed).pdf` : `${stem}.pdf`;
+  return filePath === undefined || cut < 0 ? { name } : { dir: filePath.slice(0, cut), name };
 }
 
 /** What the Print Preview window reads about its job (`throng.print.job`). */

@@ -225,11 +225,13 @@ can keep browsing or press **F2** to rename the file.
   menus) opens **Print Preview**: pick the printer, paper (each size shown in mm for the orientation),
   orientation, margins, scale, **Centre on page**, pages and copies, see each page as it will print, stepping
   through them with **Back** and **Forward**, the mouse wheel or the arrow keys (**Home** and **End** for the
-  first and last), then **Print**. What prints is exactly the pages shown, on white paper in any theme, with the
-  margins outlined in dashes on screen. A number that is out of range is outlined red, and Print waits until it
+  first and last), then **Print**, or **Save as PDF…** to write those pages to a PDF file (no printer needed; a
+  notice then opens it, or reveals it in the File Explorer when it is in the project). What prints is exactly the
+  pages shown, on white paper in any theme, with the margins outlined in dashes on screen. A number that is out of range is outlined red, and Print waits until it
   is put right.
   Folded sections and callouts print open, in fixed print colours whatever the theme. A picture prints fitted to
-  the page and never larger than its own size; a PDF prints its own pages, one per sheet; a CSV or a workbook's
+  the page and never larger than its own size; a PDF prints its own pages, one per sheet, and starts on its own
+  paper size (**Custom** when it is none of the listed ones); a CSV or a workbook's
   sheet prints as a table of every row, its header row repeated on each page. An HTML preview shows
   **Print…** greyed: it does not print yet.
 - In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and

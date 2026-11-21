@@ -753,6 +753,12 @@ declare global {
         close: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<void>;
         /** 075 FR-070 — the settings as they stand, so a close main is not told about still saves them. */
         remember: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<void>;
+        /** 075 FR-082 — save the pages shown as a PDF, through the OS's Save dialog. */
+        savePdf: (jobId: string, settings: import('@throng/core').PrintSettings) => Promise<import('@throng/core').PrintSaveResult>;
+        /** 075 FR-082 — open a PDF saved from Print Preview in the OS's default program. */
+        openSaved: (path: string) => Promise<{ ok: true } | { ok: false; osReason: string }>;
+        /** 075 FR-082 — told where a PDF this window asked for was saved. */
+        onSaved: (cb: (saved: { path: string }) => void) => () => void;
       };
       // 045 — file links (#394). Every call carries the link TEXT and the panel it was seen in, and
       // never a resolved path: main re-resolves, derives the owning project from `panelId`, and

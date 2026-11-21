@@ -76,7 +76,8 @@ describe('the command body (FR-061, FR-064)', () => {
     const view = { id: 'x', textSelection: true, load: vi.fn(), printable } as unknown as PreviewProviderView;
     expect(await printPreviewPanel({ view, body: host, filePath: '/proj/docs/a.md' }, open)).toBe(true);
     expect(printable).toHaveBeenCalledWith(host, { title: 'a.md' });
-    expect(open).toHaveBeenCalledExactlyOnceWith({ title: 'a.md', output });
+    // FR-082 — the file's path goes with it, for Save as PDF's starting folder.
+    expect(open).toHaveBeenCalledExactlyOnceWith({ title: 'a.md', output, filePath: '/proj/docs/a.md' });
   });
 
   it('does nothing for a view without printable, or before the body has drawn', async () => {

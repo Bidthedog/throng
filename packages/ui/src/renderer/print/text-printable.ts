@@ -41,6 +41,8 @@ export interface TextPrintableSource {
   readonly tree?: Tree | null;
   /** The panel's font family (a CSS `font-family` value); monospace is always the last fallback. */
   readonly fontFamily?: string;
+  /** FR-082 — the document's absolute path, where it has one: Save as PDF starts beside it. */
+  readonly filePath?: string;
 }
 
 const escapeHtml = (s: string): string =>
@@ -143,7 +145,7 @@ export async function printTextDocument(
 ): Promise<boolean> {
   if (open === undefined) return false;
   try {
-    const result = await open({ title: source.title, output: buildTextPrintable(source) });
+    const result = await open({ title: source.title, output: buildTextPrintable(source), ...(source.filePath ? { filePath: source.filePath } : {}) });
     if (result.cause !== undefined) {
       onFailed?.(source.title, result.cause); // FR-080 — main refused it, and said why
       return false;

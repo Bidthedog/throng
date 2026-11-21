@@ -147,3 +147,4 @@ MVP = US1 + US2 (callouts usable). Then US3, US4, US6, US5 in that order, each a
 ## Phase 11: Maintainer rulings, 2026-11-21
 
 - [x] T079 Start Print Preview's paper at a PDF's own page size (first page, its orientation; a listed size within 1 mm, else Custom), without persisting it, per FR-068g
+- [x] T080 Add Save as PDF… to Print Preview: the shown PDF through the OS's Save dialog, then a notice in the requesting window with Open or Reveal in File Explorer, per FR-082

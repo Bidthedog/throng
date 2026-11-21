@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { join, dirname } from 'node:path';
+import { join, dirname, extname } from 'node:path';
 import * as fsPromises from 'node:fs/promises';
 import { readFile, stat as statAsync } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
@@ -2409,8 +2409,19 @@ if (isPrimaryInstance)
           backgroundColor: themeBackground,
           chrome: () => secondaryWindowChrome(platform.windowChrome(), hostTraits().os, { maximise: true }),
         }),
+      // 075 FR-082 — Save as PDF: the OS's Save dialog over Print Preview, and the window that asked told where it went.
+      chooseSavePath: async (window, defaultPath) => {
+        const owner = window instanceof BrowserWindow && !window.isDestroyed() ? window : undefined;
+        const options = { defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] };
+        const answer = owner !== undefined ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+        if (answer.canceled || !answer.filePath) return null;
+        return extname(answer.filePath) === '' ? `${answer.filePath}.pdf` : answer.filePath;
+      },
+      onSaved: (parent, path) => {
+        if (parent instanceof BrowserWindow && !parent.isDestroyed()) parent.webContents.send('throng:print:saved', { path });
+      },
     });
-    registerPrintIpc(printController);
+    registerPrintIpc(printController, shellIntegration);
   }
   // Deleting a file that is open in an editor marks that editor dirty (FR-099): the
   // buffer survives so the user can save it back (re-creating the file) or discard.

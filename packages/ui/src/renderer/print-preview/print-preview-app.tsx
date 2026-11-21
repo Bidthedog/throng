@@ -158,6 +158,7 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
   const [pastEnd, setPastEnd] = useState<{ range: string; pageCount: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
+  const [saving, setSaving] = useState(false);
   // 2026-11-20 — each typed number's state; Print waits until every one is checked and valid.
   const [fields, setFields] = useState<Readonly<Record<string, FieldState>>>({});
   const [scaleCustom, setScaleCustom] = useState(false);
@@ -433,6 +434,24 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
       );
   };
 
+  // 075 FR-082 — Save as PDF writes the pages shown, so it waits for them as Print does; it needs no printer.
+  const canSave = upToDate && !laying && !printing && !saving && !anyInvalid && !anyPending;
+  const savePdf = (): void => {
+    if (settings === null || bridge === undefined || !canSave) return;
+    setSaving(true);
+    setNotice(null);
+    bridge.savePdf(jobId, settings).then(
+      (result) => {
+        setSaving(false);
+        if ('ok' in result && !result.ok) setNotice(`Saving as PDF failed: ${result.cause}`);
+      },
+      (error: unknown) => {
+        setSaving(false);
+        setNotice(`Saving as PDF failed: ${error instanceof Error ? error.message : String(error)}`);
+      },
+    );
+  };
+
   const disabledReason = noPrinter
     ? 'No printer is available.'
     : anyInvalid
@@ -624,6 +643,15 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
                 <button type="button" className="print-preview__print" onClick={print} disabled={!canPrint} title={disabledReason} data-testid="print-print">
                   <Icon token="print" />
                   <span>Print</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={savePdf}
+                  disabled={!canSave}
+                  title={anyInvalid ? 'Correct the settings outlined in red.' : !canSave ? 'The pages are still being laid out.' : undefined}
+                  data-testid="print-save-pdf"
+                >
+                  Save as PDF…
                 </button>
                 <button type="button" onClick={close} data-testid="print-close">
                   Cancel

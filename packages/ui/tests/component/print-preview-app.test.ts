@@ -57,6 +57,7 @@ function bridge(job: PrintJobView = JOB) {
     render: vi.fn(async (_id: string, _s: PrintSettings): Promise<RenderAnswer> => ({ pageCount: 2, pdf: pdfOf(2) })),
     print: vi.fn(async (_id: string, _s: PrintSettings, _sheet?: unknown) => ({ ok: true }) as { ok: true } | { ok: false; cause: string }),
     close: vi.fn(async () => undefined),
+    savePdf: vi.fn(async (_id: string, _s: PrintSettings) => ({ ok: true, path: '/p/a.pdf' }) as { ok: true; path: string } | { ok: false; cause: string } | { cancelled: true }),
     remember: vi.fn(async (_id: string, _s: PrintSettings) => undefined),
     printers: vi.fn(async (_id: string) => job.printers),
   };
@@ -141,6 +142,38 @@ describe('Print Preview', () => {
     await mount(bridge({ ...JOB, printers: [], settings: { ...JOB.settings, printer: null } }));
     expect(screen.getByTestId('print-no-printer').textContent).toBe('No printer is available.');
     expect((screen.getByTestId('print-print') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('saves the pages shown as a PDF, with the settings they were laid out with, with no printer needed (FR-082)', async () => {
+    const b = await mount(bridge({ ...JOB, printers: [], settings: { ...JOB.settings, printer: null } }));
+    const save = screen.getByTestId('print-save-pdf') as HTMLButtonElement;
+    expect(save.textContent).toBe('Save as PDF…');
+    expect(save.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(b.savePdf).toHaveBeenCalledWith('job-1', b.render.mock.calls[0]![1]);
+  });
+
+  it('waits for the pages to be laid out before it saves (FR-082)', async () => {
+    await mount();
+    fireEvent.change(screen.getByTestId('print-orientation'), { target: { value: 'landscape' } });
+    expect((screen.getByTestId('print-save-pdf') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows the failed save as one inline notice naming the file, and a cancelled one as nothing (FR-082)', async () => {
+    const b = bridge();
+    b.savePdf.mockResolvedValueOnce({ cancelled: true }).mockResolvedValueOnce({ ok: false, cause: 'a.pdf could not be saved: EACCES' });
+    await mount(b);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('print-save-pdf'));
+    });
+    expect(screen.queryByTestId('print-notice')).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('print-save-pdf'));
+    });
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByTestId('print-notice').textContent).toBe('Saving as PDF failed: a.pdf could not be saved: EACCES');
   });
 
   it('shows one inline notice when printing fails, and Print retries (FR-080)', async () => {

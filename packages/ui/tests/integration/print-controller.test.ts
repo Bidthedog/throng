@@ -1,6 +1,6 @@
 // Layer: integration — the settings file on disk is what this proves; the engine and the window are doubles, since
 // printing itself is the OS's.
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -226,6 +226,73 @@ describe('laying out and printing (FR-068, SC-012)', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('print: send job'));
     expect(await controller.print('job-1', settings, SHEET(3))).toEqual({ ok: true });
     warn.mockRestore();
+  });
+});
+
+describe('saving as a PDF (FR-082)', () => {
+  const PARENT = { id: 'the requesting window' };
+  let asked: string[];
+  let told: { parent: unknown; path: string }[];
+  /** A controller whose Save dialog answers `answer(defaultPath)`. */
+  const saving = (answer: (defaultPath: string) => string | null): void => {
+    asked = [];
+    told = [];
+    controller = new PrintController({
+      engine,
+      store,
+      openWindow: () => {
+        const w = new FakeWindow();
+        windows.push(w);
+        return w;
+      },
+      newId: () => 'job-1',
+      chooseSavePath: async (_window, defaultPath) => {
+        asked.push(defaultPath);
+        return answer(defaultPath);
+      },
+      onSaved: (parent, path) => told.push({ parent, path }),
+    });
+  };
+  const NOTES: PrintJobRequest = { ...REQUEST, title: 'notes.md', filePath: join('/proj', 'docs', 'notes.md') };
+
+  async function show(request: PrintJobRequest): Promise<PrintSettings> {
+    await controller.open(PARENT, request);
+    const view = await controller.describe('job-1');
+    await controller.render('job-1', view!.settings);
+    return view!.settings;
+  }
+
+  it('writes the PDF the preview shows where the user chose, closes, and tells the window that asked', async () => {
+    const target = join(dir, 'out.pdf');
+    saving(() => target);
+    const settings = await show(NOTES);
+    const result = await controller.savePdf('job-1', { ...settings, copies: 3 });
+    expect(result).toEqual({ ok: false, cause: 'The pages are still being laid out. Try again when they are shown.' });
+    expect(await controller.savePdf('job-1', settings)).toEqual({ ok: true, path: target });
+    expect(asked).toEqual([join('/proj', 'docs', 'notes.pdf')]);
+    // The very PDF the window was drawn from: the same layout, paper, margins, centring and range.
+    const shown = engine.of('pdf');
+    expect(new Uint8Array(readFileSync(target))).toEqual(await engine.pdf({ id: 'x' }, shown[shown.length - 1]!.options));
+    expect(told).toEqual([{ parent: PARENT, path: target }]);
+    expect(windows[0]!.closed).toBe(true);
+  });
+
+  it('writes nothing and stays open when the dialog is cancelled', async () => {
+    saving(() => null);
+    const settings = await show(NOTES);
+    expect(await controller.savePdf('job-1', settings)).toEqual({ cancelled: true });
+    expect(told).toEqual([]);
+    expect(windows[0]!.closed).toBe(false);
+  });
+
+  it('names the file and the cause when the write fails, and stays open to try again', async () => {
+    saving(() => join(dir, 'no-such-folder', 'notes.pdf'));
+    const settings = await show(NOTES);
+    const result = await controller.savePdf('job-1', settings);
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { cause: string }).cause).toMatch(/^notes\.pdf could not be saved: .*ENOENT/);
+    expect(told).toEqual([]);
+    expect(windows[0]!.closed).toBe(false);
   });
 });
 

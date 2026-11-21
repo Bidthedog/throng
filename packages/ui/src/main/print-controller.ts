@@ -28,7 +28,11 @@ import {
   type PrintSettings,
   type PrintSheet,
   paperForPage,
+  defaultPdfSave,
+  type PrintSaveResult,
 } from '@throng/core';
+import { writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 
 /** What the controller needs of the Print Preview window (`print-preview-window.ts`). */
 export interface PrintPreviewWindowLike {
@@ -49,11 +53,21 @@ export interface PrintControllerDeps {
   /** Open the Print Preview window for `jobId`, modal to `parent`. */
   readonly openWindow: (parent: unknown, jobId: string) => PrintPreviewWindowLike;
   readonly newId?: () => string;
+  /** FR-082 — the OS's Save dialog, over the Print Preview window, starting at `defaultPath`; `null` when cancelled. */
+  readonly chooseSavePath?: (window: PrintPreviewWindowLike, defaultPath: string) => Promise<string | null>;
+  /** FR-082 — write a saved PDF; `fs.writeFile` unless a test says otherwise. */
+  readonly writeFile?: (path: string, bytes: Uint8Array) => Promise<void>;
+  /** FR-082 — tell the window that asked for the print where its PDF went. */
+  readonly onSaved?: (parent: unknown, path: string) => void;
 }
 
 interface Job {
   readonly id: string;
   readonly request: PrintJobRequest;
+  /** The window that asked for the print (FR-082: told where a saved PDF went). */
+  readonly parent: unknown;
+  /** The PDF the window's pages were drawn from: what Save as PDF writes (FR-082). */
+  shownPdf: Uint8Array | null;
   readonly window: PrintPreviewWindowLike;
   host: PrintHostHandle | null;
   /** The host being loaded, shared by every render that needs it, so one job never loads two. */
@@ -115,7 +129,7 @@ export class PrintController {
     // Claimed before anything else: a second request arriving while this one opens must find it (FR-071).
     const id = this.newId();
     const window = this.deps.openWindow(parent, id);
-    const job: Job = { id, request, window, host: null, hostLoad: null, printers: [], settings: null, stored: null, shown: null, shownPages: 0, renders: 0, state: 'open' };
+    const job: Job = { id, request, parent, shownPdf: null, window, host: null, hostLoad: null, printers: [], settings: null, stored: null, shown: null, shownPages: 0, renders: 0, state: 'open' };
     this.job = job;
     window.onClosed(() => void this.finish(job));
     return Promise.resolve({ opened: true });
@@ -171,12 +185,16 @@ export class PrintController {
       const pdf = await this.pagesOf(host, settings, job.request.output.kind === 'document' ? job.request.output.fit : 'page');
       if (!(pdf instanceof Uint8Array)) {
         // Nothing the range names exists: nothing is shown, so nothing can print (SC-012).
-        if (job.state !== 'closed' && render === job.renders) job.shown = null;
+        if (job.state !== 'closed' && render === job.renders) {
+          job.shown = null;
+          job.shownPdf = null;
+        }
         return pdf;
       }
       const pageCount = countPdfPages(pdf);
       if (job.state !== 'closed' && render === job.renders) {
         job.shown = settings;
+        job.shownPdf = pdf;
         job.shownPages = pageCount;
         if (job.state === 'open') job.state = 'previewing';
       }
@@ -208,6 +226,45 @@ export class PrintController {
     if (kept.length === 0) return { outOfRange: true, pageCount: total };
     if (kept.length === 1 && kept[0]!.from === 1 && kept[0]!.to === total) return whole;
     return this.deps.engine.pdf(host, toPdfOptions(settings, total, fit));
+  }
+
+  /** FR-082 — the PDFs this controller saved: the only paths a window may ask to have opened. */
+  private readonly saved = new Set<string>();
+
+  /** Whether `path` is a PDF this controller saved (FR-082: Open acts on nothing else). */
+  wasSaved(path: string): boolean {
+    return this.saved.has(path);
+  }
+
+  /**
+   * 075 FR-082 (the maintainer, 2026-11-21: "Can we offer a 'Save as PDF' print option from throng?") — write the PDF
+   * the window's pages were drawn from, so the file is what the preview shows: the same layout, paper, orientation,
+   * margins, scale, centring and page range. Refused unless those pages were laid out with exactly `settings`, as a
+   * print is (SC-012). The OS's Save dialog starts at the file's name as a PDF, in its folder. Saved, the window closes
+   * and the one that asked is told where the file went; a failed write names the file and keeps the window open.
+   */
+  async savePdf(jobId: string, settings: PrintSettings): Promise<PrintSaveResult> {
+    const job = this.live(jobId);
+    if (job === null) return { ok: false, cause: 'This print job has closed.' };
+    const pdf = job.shownPdf;
+    if (job.state !== 'previewing' || pdf === null || !sameSettings(job.shown, settings)) {
+      return { ok: false, cause: 'The pages are still being laid out. Try again when they are shown.' };
+    }
+    const start = defaultPdfSave(job.request.filePath, job.request.title);
+    const target = await this.deps.chooseSavePath?.(job.window, start.dir === undefined ? start.name : join(start.dir, start.name));
+    if (target === undefined || target === null) return { cancelled: true };
+    if (this.live(jobId) !== job) return { ok: false, cause: 'This print job has closed.' };
+    try {
+      await (this.deps.writeFile ?? writeFile)(target, pdf);
+    } catch (error) {
+      logCaught('print: save as PDF', error);
+      return { ok: false, cause: `${basename(target)} could not be saved: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    this.saved.add(target);
+    job.settings = settings;
+    this.deps.onSaved?.(job.parent, target);
+    job.window.close();
+    return { ok: true, path: target };
   }
 
   /**

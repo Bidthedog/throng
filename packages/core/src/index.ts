@@ -1527,6 +1527,7 @@ export {
   paperSizeMm,
   paperOf,
   paperForPage,
+  defaultPdfSave,
   PRINT_CENTRE_CSS,
   PRINT_FIELDS,
   PRINT_PAGE_SIZES,
@@ -1562,6 +1563,7 @@ export type {
   PrintOrientation,
   PrintPageSize,
   PrintPaperSize,
+  PrintSaveResult,
   PaperMm,
   PrintSettings,
 } from './preview/print.js';

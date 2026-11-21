@@ -66,7 +66,7 @@ export async function printPreviewPanel(
   try {
     const printable = await view.printable(body, { title, ...(target.readSource !== undefined ? { readSource: target.readSource } : {}) });
     const output = await asDocument(printable, title, drawPages);
-    const result = await open({ title, output });
+    const result = await open({ title, output, filePath: target.filePath });
     if (result.cause !== undefined) {
       onFailed?.(title, result.cause); // FR-080 — main refused it, and said why
       return false;

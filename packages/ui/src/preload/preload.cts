@@ -955,6 +955,14 @@ contextBridge.exposeInMainWorld('throng', {
     print: (jobId: string, settings: unknown, sheet: unknown) => ipcRenderer.invoke('throng:print:print', jobId, settings, sheet),
     close: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:close', jobId, settings),
     remember: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:remember', jobId, settings),
+    // 075 FR-082 — Save as PDF, the notice of where it went, and Open on that notice.
+    savePdf: (jobId: string, settings: unknown) => ipcRenderer.invoke('throng:print:savePdf', jobId, settings),
+    openSaved: (path: string) => ipcRenderer.invoke('throng:print:openSaved', path),
+    onSaved: (cb: (saved: { path: string }) => void) => {
+      const listener = (_e: unknown, saved: { path: string }): void => cb(saved);
+      ipcRenderer.on('throng:print:saved', listener);
+      return () => ipcRenderer.removeListener('throng:print:saved', listener);
+    },
   },
   // 045 (contracts/settings-and-environment.md §3): file links. Main's FileLinkResolver is the one
   // authority for what a link IS and whether it may be opened, so a renderer sends the link TEXT and

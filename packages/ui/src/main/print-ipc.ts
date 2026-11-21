@@ -26,7 +26,10 @@ export function asPrintRequest(raw: unknown): PrintJobRequest | null {
   } else if (o.kind === 'pages' && o.pdf instanceof Uint8Array && o.pdf.byteLength <= MAX_PRINTABLE_LENGTH) {
     output = { kind: 'pages', pdf: o.pdf };
   }
-  return output === null ? null : { title: raw.title.slice(0, 260), output };
+  if (output === null) return null;
+  // FR-082 — the printed file's path, where Save as PDF starts. Only ever a dialog's starting point.
+  const filePath = typeof raw.filePath === 'string' && raw.filePath.length > 0 && raw.filePath.length <= 4096 ? raw.filePath : undefined;
+  return { title: raw.title.slice(0, 260), output, ...(filePath !== undefined ? { filePath } : {}) };
 }
 
 /** Why {@link asPrintRequest} refused `raw`, for the notice the requesting window raises (075 FR-080). */
@@ -51,7 +54,10 @@ export function asPrintSheet(raw: unknown): PrintSheet | null {
   return pages.length === raw.pages.length ? { widthMm, heightMm, pages } : null;
 }
 
-export function registerPrintIpc(controller: PrintController): void {
+export function registerPrintIpc(
+  controller: PrintController,
+  shell?: { openWithDefaultProgram(path: string): Promise<{ ok: true } | { ok: false; osReason: string }> },
+): void {
   /** Settings from the Print Preview window, validated against the printers its job last listed (no OS call). */
   const settingsOf = async (jobId: string, raw: unknown): Promise<PrintSettings | null> => {
     const printers = await controller.knownPrinters(jobId);
@@ -80,6 +86,16 @@ export function registerPrintIpc(controller: PrintController): void {
     if (sheet === null) return { ok: false, cause: 'The pages to print were not readable.' };
     const settings = await settingsOf(jobId, raw);
     return settings === null ? { ok: false, cause: 'This print job has closed.' } : controller.print(jobId, settings, sheet);
+  });
+  ipcMain.handle('throng:print:savePdf', async (_event, jobId: unknown, raw: unknown) => {
+    if (typeof jobId !== 'string') return { ok: false, cause: 'No print job.' };
+    const settings = await settingsOf(jobId, raw);
+    return settings === null ? { ok: false, cause: 'This print job has closed.' } : controller.savePdf(jobId, settings);
+  });
+  // FR-082 — Open on the saved notice: a PDF this controller wrote, and nothing else a renderer could name.
+  ipcMain.handle('throng:print:openSaved', async (_event, path: unknown) => {
+    if (typeof path !== 'string' || !controller.wasSaved(path) || shell === undefined) return { ok: false, osReason: 'That file was not saved from Print Preview.' };
+    return shell.openWithDefaultProgram(path);
   });
   ipcMain.handle('throng:print:remember', async (_event, jobId: unknown, raw: unknown) => {
     if (typeof jobId !== 'string') return;

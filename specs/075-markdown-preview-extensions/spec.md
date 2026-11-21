@@ -750,6 +750,16 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   MUST be written to the diagnostic log (Principle XIII; 030). A print cancelled by the user MUST raise nothing.
 - **FR-081**: A print preview with no printer to print to MUST say so in place of the printer list, and its
   Print button MUST be disabled.
+- **FR-082**: *(2026-11-21 11:24, the maintainer: "Can we offer a 'Save as PDF' print option from throng? That would
+  be cool.")* Print Preview MUST offer **Save as PDF…** beside Print. It writes the pages shown — the same layout,
+  paper, orientation, margins, scale, centring and page range, the very PDF the preview draws — and so, like Print,
+  waits until those pages are laid out with the settings on screen (SC-012); it needs no printer (FR-081 disables Print
+  only). The OS's Save dialog starts at the printed file's name with `.pdf`, in its folder (`<name> (printed).pdf`
+  for a file that is a PDF already, so the default never names the source). Saved, Print Preview closes, saving its
+  settings (FR-070), and the window that asked shows one success notice naming the file and its folder, with **Reveal
+  in File Explorer** when the folder is inside the open project and **Open** (the OS's default program) otherwise;
+  Open acts only on a PDF Print Preview saved. A cancelled dialog changes nothing. A failed write is one inline
+  notice in Print Preview naming the file and the cause (FR-080), and Save as PDF tries again.
 
 #### Configuration, documentation and licences
 
