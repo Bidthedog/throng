@@ -169,4 +169,4 @@ last.
 ## Phase 13: Convergence
 
 - [ ] T081 Make the link menu's Open Link on an HTML page's `#fragment` link (and on a link to the shown page with a fragment) scroll the page's frame, as Ctrl+click does, per FR-079, FR-085a and Constitution VI (partial)
-- [ ] T082 Add a hostile ```svg fence and a Markdown-embedded hostile SVG to the end-to-end hostile-content check, per FR-090, SC-002 and US3/AC3 (partial)
+- [x] T082 Add a hostile ```svg fence and a Markdown-embedded hostile SVG to the end-to-end hostile-content check, per FR-090, SC-002 and US3/AC3 (partial)

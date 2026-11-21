@@ -20,7 +20,7 @@
  * errors. Each absence has a fence: the hostile HTML page's relative stylesheet is requested through the protocol,
  * which proves the recorder sees this frame's loads at all.
  */
-import { cpSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -61,6 +61,9 @@ test.beforeAll(async () => {
     cpSync(join(FIXTURES, name), join(root, name));
   }
   writeFileSync(join(root, 'pages-40.pdf'), longPdf(40));
+  // 074 convergence T082 — FR-090: the hostile SVG as a ```svg fence and as an embedded picture in a Markdown document.
+  const hostileSvg = readFileSync(join(FIXTURES, 'hostile.svg'), 'utf8');
+  writeFileSync(join(root, 'hostile-fence.md'), `# Fence\n\n\`\`\`svg\n${hostileSvg}\n\`\`\`\n\n![embedded](hostile.svg)\n`);
   shared = await openApp();
   await createProject(shared.win, 'PreviewMedia', root);
   await installRecorder(shared.app);
@@ -422,7 +425,7 @@ test('a zoomed SVG holds still at every step zoomed out from 100%, and the zoom 
 
 
 
-test('the hostile image, SVG, PDF and HTML fixtures run nothing, fetch nothing off the machine and navigate nowhere', { tag: ['@extended', '@failure', '@reserve:runtime'] }, async () => {
+test('the hostile image, SVG (as a file, a fence and an embed), PDF and HTML fixtures run nothing, fetch nothing off the machine and navigate nowhere', { tag: ['@extended', '@failure', '@reserve:runtime'] }, async () => {
   const { app, win } = shared!;
   const pageErrors: string[] = [];
   const dialogs: string[] = [];
@@ -439,6 +442,14 @@ test('the hostile image, SVG, PDF and HTML fixtures run nothing, fetch nothing o
   await expect(win.getByTestId(`preview-pdf-${pdf}`)).toBeVisible({ timeout: 20_000 });
   const html = await previewFromTree(win, 'hostile.html');
   await expect(win.getByTestId(`preview-html-scripts-${html}`)).toBeVisible({ timeout: 15_000 });
+  // FR-090 — the same SVG drawn from a ```svg fence and from a Markdown image embed: both drawn as pictures.
+  // A Markdown file opens in an editor: its preview comes from the editor's Preview button.
+  await win.getByTestId('file-explorer-tree').getByText('hostile-fence.md', { exact: true }).click();
+  await win.locator('[data-testid^="editor-preview-"]').last().click();
+  const mdTitle = win.locator('[data-testid^="panel-title-"]').filter({ hasText: /^hostile-fence\.md - Markdown Preview$/ }).first();
+  await expect(mdTitle).toBeAttached({ timeout: 10_000 });
+  const md = ((await mdTitle.getAttribute('data-testid')) ?? '').replace('panel-title-', '');
+  await expect(win.getByTestId(`preview-body-${md}`).locator('svg[data-throng-picture]')).toHaveCount(2, { timeout: 15_000 });
 
   // The fence: the page's own relative stylesheet was requested through the protocol.
   await expect
