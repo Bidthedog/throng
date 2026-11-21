@@ -1884,16 +1884,17 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'attention.clearDelayMs',
     label: 'Clear delay',
     description:
-      'How long, in milliseconds, you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
+      'How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
     group: 'Notifications',
     subgroup: 'Attention',
     control: 'slider',
-    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    // 077 FR-001, FR-005 — stored in ms, shown in s, in half seconds (the shipped 1 s is a stop); any value from 0 to
+    // 10,000 ms can still be typed.
     storedUnit: 'ms',
     display: 's',
     min: 0,
     max: 10000,
-    step: 100,
+    step: 500,
   },
 
   {

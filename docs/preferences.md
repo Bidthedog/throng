@@ -233,7 +233,7 @@ The settings in this table apply to every preview type.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Preview update delay | `editor.previews.updateDelayMs` | 300 ms | 0 – 2,000 ms, step 25 ms; 0 – 10,000 ms in the box | How long a preview beside an editor waits after you stop typing before it shows your changes. Zero updates on every change. |
-| Preview maximum wait | `editor.previews.maxWaitMs` | 1 s (1,000 ms) | 0 – 10 s, step 0.1 s | The longest a preview goes without catching up while you keep typing. A value below the update delay behaves as the update delay. |
+| Preview maximum wait | `editor.previews.maxWaitMs` | 1 s (1,000 ms) | 0 – 10 s, step 0.5 s | The longest a preview goes without catching up while you keep typing. A value below the update delay behaves as the update delay. |
 | Preview copy format | `editor.previews.copyFormat` | `rich` | `rich` (Rich text) · `plain` (Plain text) | What Copy from a preview puts on the clipboard: formatted text that keeps headings, lists and links, or plain text. |
 | Synchronise preview and editor scrolling | `editor.previews.syncScroll` | on | on · off | Keep a preview and its editor at the same place, both ways: scrolling either scrolls the other, block by block. Also switched from either panel's right-click menu, the **Synchronise Scrolling** status-bar button, or the [`preview.toggleSyncScroll`](key-bindings.md#editor) command. |
 | Scroll-sync highlight duration | `editor.previews.syncHighlightMs` | 1.5 s (1,500 ms) | 0 – 10 s, step 0.5 s; 0 – 60,000 ms in the box | How long the soft highlight stays on the place a preview and its editor are in step at after Synchronise Scrolling moves one with the other, in both views, before it fades out. `0` shows no highlight at all. A visual guide only: scrolling is kept in step either way. |
@@ -560,7 +560,7 @@ must stay in a marked panel before its mark clears.
 | Attention: Toast | `notifications.attention.toast` | on | on · off | Whether a mark is announced by a toast. The mark itself is raised whatever you choose. |
 | Attention: Panel | `notifications.attention.panel` | on | on · off | Whether a mark is kept in the Notifications panel until it clears or you dismiss it. |
 | Attention: OS Notify | `notifications.attention.os` | on | on · off | Raise an OS notification for a mark, whatever Toast and Panel say, while throng is not focused; clicking it goes to the panel. |
-| Attention: Clear delay | `attention.clearDelayMs` | 1 s (1,000 ms) | 0 – 10 s, step 0.1 s | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
+| Attention: Clear delay | `attention.clearDelayMs` | 1 s (1,000 ms) | 0 – 10 s, step 0.5 s | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
 
 ## Logging
 

@@ -125,6 +125,55 @@ describe('077 — every numeric setting is consistent', () => {
     }
   });
 
+  /**
+   * FR-005's step table, and the exceptions spec.md records beside it — each a setting whose range or shipped default
+   * sits off every step the table allows, where re-stepping would shrink the range (clamping stored values) or move
+   * the default. An exception names the step it keeps, so a change to it is a change to the spec as well.
+   */
+  const FR005_EXCEPTIONS: Record<string, number> = {
+    'editor.autoSaveDebounceMs': 100,
+    'editor.links.existenceCheckTimeoutMs': 250,
+    'terminals.commandPollMs': 250,
+    'diagnostics.maxFileBytes': 262_144,
+    'editor.previews.providers.spreadsheet.maxPreviewBytes': 5_242_880,
+  };
+  const MB = 1_048_576;
+  const allowedSteps = (d: FieldDescriptor): readonly number[] | null => {
+    switch (d.display) {
+      case 'MB':
+        return [d.max! <= 32 * MB ? MB : d.max! <= 250 * MB ? 5 * MB : 50 * MB];
+      case 'ms':
+        return [10, 25, 50, 100];
+      case 's':
+        return [500, 1000, 5000, 10_000];
+      case 'min':
+        return [60_000];
+      default:
+        return null; // counts, lengths, pixels and percentages keep their own unit and step
+    }
+  };
+
+  it('steps by FR-005’s table for its display unit, or by the exception the spec records', () => {
+    for (const d of NUMERIC) {
+      const exception = FR005_EXCEPTIONS[d.key];
+      if (exception !== undefined) {
+        expect(d.step, `${d.key} is a recorded FR-005 exception at step ${exception}`).toBe(exception);
+        continue;
+      }
+      const allowed = allowedSteps(d);
+      if (allowed === null) continue;
+      expect(allowed, `${d.key}: step ${d.step} in ${d.display} (slider to ${d.max})`).toContain(d.step);
+    }
+  });
+
+  it('lists only exceptions the table would refuse', () => {
+    for (const [key, step] of Object.entries(FR005_EXCEPTIONS)) {
+      const d = NUMERIC.find((x) => x.key === key);
+      expect(d, `${key} is not a numeric setting`).toBeDefined();
+      expect(allowedSteps(d!), `${key} no longer needs its exception`).not.toContain(step);
+    }
+  });
+
   it('reaches its maximum: the range is a whole number of steps', () => {
     for (const d of NUMERIC) {
       const k = (d.max! - d.min!) / d.step!;

@@ -78,10 +78,11 @@ const PREFIX = 'editor.previews';
  *
  * `maxWaitMs`: the contract wrote step 50 here too, but 50 across 0–10000 is 0.5% — two hundred
  * indistinguishable positions, and the rule fails it (the auto-save delay was widened for the same
- * reason in 018). 100 is the smallest legal step, and the shipped 1000 still lands on 0 + 100×10.
+ * reason in 018). 077 FR-005 shows it in seconds, whose steps are 0.5 s or more: 500, and the shipped 1000 lands on
+ * 0 + 500×2. The range is unchanged, so any value from 0 to 10,000 ms can still be typed.
  */
 const UPDATE_DELAY = { shipped: 300, min: 0, max: 2000, step: 25, hardMax: 10_000 } as const;
-const MAX_WAIT = { shipped: 1000, min: 0, max: 10000, step: 100 } as const;
+const MAX_WAIT = { shipped: 1000, min: 0, max: 10000, step: 500 } as const;
 const COPY_FORMAT_SHIPPED: PreviewCopyFormat = 'rich';
 /** 073 FR-033f — how long the in-step highlight shows after the last sync scroll: 1.5 s, 0 – 10 s in half seconds (up to
  * 60 s typed), 0 = none. Stored in ms (077 FR-001). */

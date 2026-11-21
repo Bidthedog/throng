@@ -242,6 +242,18 @@ effective value after upgrading, now stored in ms or bytes.
   1 MB up to 32 MB, 5 MB up to 250 MB, 50 MB beyond — a setting uses one step across its slider); durations in ms when
   the slider maximum is 2 s or less (steps of 10, 25, 50 or 100 ms), in s up to 10 minutes (steps of 0.5, 1, 5 or 10 s),
   in minutes beyond (steps of 1 minute). Counts, lengths, pixels and percentages keep their own unit.
+  - *(Amended 2026-11-21, convergence T031 — additive.)* **Recorded exceptions.** Five settings keep a step off the
+    table, because the table's step would either shrink the range — clamping values users have stored — or move the
+    shipped default off the slider (FR-011). Each keeps its range and its hard bounds; any value within them can be
+    typed. `editor.previews.maxWaitMs` and `attention.clearDelayMs` were re-stepped to 0.5 s instead (their 0–10 s
+    range and 1 s default allow it). `slider-descriptors.test.ts` enforces the table and names these five.
+    - `editor.autoSaveDebounceMs` — 0–10 s in **0.1 s**: its shipped 300 ms is no 0.5 s stop.
+    - `editor.links.existenceCheckTimeoutMs` (0.25–25 s) and `terminals.commandPollMs` (0.25–5 s) — in **0.25 s**: a
+      0.25 s floor sits on no 0.5 s grid that still ends at the maximum.
+    - `diagnostics.maxFileBytes` — 0.25–4 MB in **0.25 MB** (research R6, FR-012): 1 MB steps would raise the floor to
+      1 MB and leave three stops.
+    - `editor.previews.providers.spreadsheet.maxPreviewBytes` — 5–500 MB in **5 MB** (research R6, FR-012): 50 MB steps
+      would raise the floor to 50 MB and put the shipped 25 MB off the slider.
 - **FR-006**: Every numeric setting MUST have the override box (Clarifications: the box stays on counts, lengths, pixels
   and percentages too).
 - **FR-007**: A stored value that is not a slider stop (typed in the box, or found in the file) MUST grey the slider
