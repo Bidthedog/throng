@@ -42,7 +42,8 @@ const EXPECTED = [
   // US7 / FR-058. A finer step than its two neighbours because the popover delay is the one a user
   // tunes in small amounts — 25 across 0–1500 is 1.67%, still clear of the aimable-slider floor,
   // and 500 lands exactly on 0 + 25×20.
-  { key: 'tabs.popoverDelayMs', min: 0, max: 1500, step: 25, value: 500 },
+  // 077 R6 — a hover dwell, so up to 10 s typed in the box.
+  { key: 'tabs.popoverDelayMs', min: 0, max: 1500, step: 25, value: 500, hardMax: 10_000 },
 ] as const;
 
 describe('the Tabs settings group (FR-030, FR-034, FR-044h, FR-047, FR-050, FR-054a, FR-058)', () => {
@@ -158,7 +159,7 @@ describe('the Tabs settings are bounded by their DECLARATION alone (FR-041)', ()
       maxWidth: 128,
       newTabPosition: 'afterActive',
       chevronRepeatDelayMs: 10_000, // its hardMax (077), above the 1500 slider maximum
-      popoverDelayMs: 1500,
+      popoverDelayMs: 10_000, // its hardMax (077 R6, a hover dwell), above the 1500 slider maximum
     });
     expect(corrected).toBe(true);
   });

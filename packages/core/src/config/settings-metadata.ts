@@ -376,6 +376,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
     storedUnit: 'ms',
     display: 'ms',
+    // 077 FR-012, R6 — a hover dwell: up to 10 s typed in the box, past the slider's 1.5 s.
+    hardMax: 10000,
     min: 0,
     max: 1500,
     step: 25,
@@ -549,6 +551,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
     storedUnit: 'ms',
     display: 'ms',
+    // 077 FR-012, R6 — a hover dwell: up to 10 s typed in the box, past the slider's 1.5 s.
+    hardMax: 10000,
     min: 0,
     max: 1500,
     step: 25,
@@ -700,6 +704,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
     storedUnit: 'ms',
     display: 'ms',
+    // 077 FR-012, R6 — a hover dwell: up to 10 s typed in the box, past the slider's 1.5 s.
+    hardMax: 10000,
     min: 0,
     max: EXPLORER_POPOVER_DELAY_MAX_MS,
     step: 25,
@@ -1827,6 +1833,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
     storedUnit: 'ms',
     display: 'ms',
+    // 077 FR-012, R6 — a hover dwell: up to 10 s typed in the box, past the slider's 1.5 s.
+    hardMax: 10000,
     min: NOTICE_HOVER_DELAY_MIN_MS,
     max: NOTICE_HOVER_DELAY_MAX_MS,
     step: 25,

@@ -110,7 +110,7 @@ Each project remembers for itself which side panes are expanded.
 |---|---|---|---|---|
 | Folder opened from outside throng | `projects.openFromOutside` | `switch` | `switch` · `load` | What happens when a folder arrives from the file manager or the command line: switch to its project, or only load it. |
 | Project popover | `projects.popoverEnabled` | on | on · off | Show a popover when the pointer rests on a project in the Projects pane: its full name, its ID, its full path, its tab and panel counts, and how to rename it. |
-| Project popover delay | `projects.popoverDelayMs` | 300 ms | 0 – 1,500 ms, step 25 ms | How long the pointer must rest on a project before its popover appears. Zero shows it as soon as the pointer arrives. |
+| Project popover delay | `projects.popoverDelayMs` | 300 ms | 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box | How long the pointer must rest on a project before its popover appears. Zero shows it as soon as the pointer arrives. |
 
 ### Behaviour
 
@@ -158,7 +158,7 @@ on Windows and for a portable or archive copy.
 | Widest tab | `tabs.maxWidth` | 32 characters | 10 – 128 characters, step 2 characters | The widest a tab is drawn. A longer title is ellipsised in the strip and shown in full on hover; the name itself is not shortened. |
 | New tabs open | `tabs.newTabPosition` | `afterActive` | `afterActive` · `end` | Where a tab created with **+** goes: right of the active tab, or at the end of the strip. |
 | Chevron repeat delay | `tabs.chevronRepeatDelayMs` | 350 ms | 100 – 1,500 ms, step 50 ms; 100 – 10,000 ms in the box | How long a press-and-hold on a scroll chevron waits before the strip scrolls continuously. |
-| Tab popover delay | `tabs.popoverDelayMs` | 500 ms | 0 – 1,500 ms, step 25 ms | How long the pointer must rest on a tab before its information popover appears. |
+| Tab popover delay | `tabs.popoverDelayMs` | 500 ms | 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box | How long the pointer must rest on a tab before its information popover appears. |
 | Tab hover-activate delay | `behaviour.tabHoverActivateMs` | 600 ms | 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box | While **dragging** a panel or tab, how long it must dwell over another tab before that tab comes to the front so you can drop inside it. An ordinary mouse-over does nothing. |
 
 ## File Explorer
@@ -166,7 +166,7 @@ on Windows and for a portable or archive copy.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Show Open in OS Default Program | `explorer.showOpenInOsDefaultProgram` | on | on · off | Offer Open in OS Default Program on the File Explorer menu and on the panel title menu. |
-| File Explorer popover delay | `explorer.popoverDelayMs` | 500 ms | 0 – 1,500 ms, step 25 ms | How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path. |
+| File Explorer popover delay | `explorer.popoverDelayMs` | 500 ms | 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box | How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path. |
 | Open files with | `editor.openOnClick` | `single` | `single` · `double` · `none` | Which file-tree click opens a file into the last active editor. |
 | Open files in | `editor.openTarget` | `lastActive` | `lastActive` · `new` | Where an opened file lands: the last active editor, reused, or a new editor panel. A preview's **Open in Editor** follows it too. |
 | Delete files to | `explorer.deleteMode` | `recycle` | `recycle` · `permanent` | Send deleted files to the Recycle Bin, or delete them permanently. |
@@ -542,7 +542,7 @@ must stay in a marked panel before its mark clears.
 | Operating system notifications | `notifications.os` | on | on · off | Allow throng to send OS notifications at all. Off, nothing reaches the OS and every OS Notify is unavailable, though each keeps its setting. |
 | Toast duration | `notifications.toastDurationMs` | 3 s (3,000 ms) | 1 – 30 s, step 0.5 s | How long every toast stays on screen. A toast stays while the pointer is over it or focus is inside it. |
 | Toast width | `notifications.toastWidthPx` | 520 px | 300 – 800 px, step 10 px | How wide every toast is, and never wider than half the window. A toast shows at most three lines of text and cuts the rest with an ellipsis; hovering a cut-off toast shows all of it in a popover. The Notifications panel always shows a notification whole, with the date and time it was first raised. |
-| Notification hover delay | `notifications.hoverDelayMs` | 250 ms | 0 – 1,500 ms, step 25 ms | How long the pointer must rest on a notification before it shows more: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. At 0 it shows at once. Keyboard focus never waits. |
+| Notification hover delay | `notifications.hoverDelayMs` | 250 ms | 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box | How long the pointer must rest on a notification before it shows more: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. At 0 it shows at once. Keyboard focus never waits. |
 | Confirm before dismissing all notifications | `notifications.confirmDismissAll` | on | on · off | Ask before **Dismiss all** clears the Notifications panel. |
 | Notifications panel limit | `notifications.panelLimit` | 100 notifications | 20 – 500 notifications, step 10 notifications | The most entries the panel keeps. Past it the oldest are dropped, and a warning — once, until you dismiss it — suggests turning notifications down, with a link to this section. |
 | Error: Toast | `notifications.error.toast` | on | on · off | Show error notices as a toast. |

@@ -205,3 +205,28 @@ describe('077 — every numeric setting is consistent', () => {
     }
   });
 });
+
+/**
+ * 077 FR-012, research R6 (Hover dwells) — every hover dwell is one band: 0–1,500 ms on the slider in 25 ms steps, and
+ * up to 10,000 ms typed in the box. Three of them declared no hard maximum, so a typed 4,000 ms was pulled back to
+ * 1,500 while the submenu and Resource Monitor dwells kept it (T046).
+ */
+describe('the hover dwells (077 FR-012, R6)', () => {
+  const HOVER_DWELLS = [
+    'behaviour.submenuHoverMs',
+    'behaviour.tabHoverActivateMs',
+    'tabs.popoverDelayMs',
+    'explorer.popoverDelayMs',
+    'projects.popoverDelayMs',
+    'notifications.hoverDelayMs',
+    'resourceMonitor.popoverDelayMs',
+  ];
+
+  it('declares 0 – 1,500 ms in 25 ms steps on the slider and 10,000 ms in the box', () => {
+    for (const key of HOVER_DWELLS) {
+      const d = SETTINGS_METADATA.find((x) => x.key === key);
+      expect(d, `no descriptor for ${key}`).toBeDefined();
+      expect([d!.min, d!.max, d!.step, d!.hardMax], key).toEqual([0, 1500, 25, 10_000]);
+    }
+  });
+});

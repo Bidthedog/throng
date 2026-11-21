@@ -19,7 +19,10 @@ describe('no second clamp (077 FR-016)', () => {
   it('the explorer popover delay: the parser keeps it, the guard bounds it', () => {
     expect(parseAppSettings({ explorer: { popoverDelayMs: 4000 } }).explorer.popoverDelayMs).toBe(4000);
     const d = declared('explorer.popoverDelayMs');
-    expect(parseSettingsGuarded({ explorer: { popoverDelayMs: 4000 } }).value.explorer.popoverDelayMs).toBe(d.hardMax ?? d.max);
+    // 077 R6 — a hover dwell keeps a typed value up to its 10,000 ms hard maximum, and is bounded there.
+    expect(parseSettingsGuarded({ explorer: { popoverDelayMs: 4000 } }).value.explorer.popoverDelayMs).toBe(4000);
+    expect(parseAppSettings({ explorer: { popoverDelayMs: 40_000 } }).explorer.popoverDelayMs).toBe(40_000);
+    expect(parseSettingsGuarded({ explorer: { popoverDelayMs: 40_000 } }).value.explorer.popoverDelayMs).toBe(d.hardMax ?? d.max);
     expect(parseSettingsGuarded({ explorer: { popoverDelayMs: -5 } }).value.explorer.popoverDelayMs).toBe(0);
   });
 
