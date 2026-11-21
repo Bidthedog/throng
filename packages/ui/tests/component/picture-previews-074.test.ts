@@ -16,6 +16,7 @@ let pv: MountedPreviewWindow | undefined;
 
 beforeEach(() => {
   vi.spyOn(browserPictureLoader, 'load').mockResolvedValue({ width: 64, height: 32 });
+  vi.spyOn(browserPictureLoader, 'measure').mockResolvedValue({ width: 64, height: 32 });
   let n = 0;
   URL.createObjectURL = vi.fn(() => `blob:test/${++n}`);
   URL.revokeObjectURL = vi.fn();

@@ -111,6 +111,23 @@ describe('imageUrlEntry (FR-020 – FR-025)', () => {
     await expect(renderer.render('u', { theme: {} as never })).rejects.toThrow(/30,000 × 30,000 pixels/);
   });
 
+  // 074 convergence T066 — FR-025, "huge dimensions, small file": the bound is applied from the measured size, before
+  // the bitmap is decoded — a 30,000 × 30,000 picture is never decoded at all.
+  it('refuses a picture over the pixel bound without decoding it (FR-025)', async () => {
+    const decode = vi.fn(() => Promise.resolve({ width: 30_000, height: 30_000 }));
+    const huge: PictureLoader = { measure: () => Promise.resolve({ width: 30_000, height: 30_000 }), load: decode };
+    const renderer = await imageUrlEntry({ loader: huge }).load();
+    await expect(renderer.render('u', { theme: {} as never })).rejects.toThrow(/30,000 × 30,000 pixels/);
+    expect(decode, 'the bitmap was decoded').not.toHaveBeenCalled();
+  });
+
+  it('decodes a picture inside the bound once it is measured (FR-020)', async () => {
+    const decode = vi.fn(() => Promise.resolve({ width: 64, height: 32 }));
+    const renderer = await imageUrlEntry({ loader: { measure: () => Promise.resolve({ width: 64, height: 32 }), load: decode } }).load();
+    await renderer.render('u', { theme: {} as never });
+    expect(decode).toHaveBeenCalledWith('u');
+  });
+
   it('names an undecodable file plainly, never with the raw error (FR-024)', async () => {
     const renderer = await imageUrlEntry({ loader: { load: () => Promise.reject(new Error('EncodingError: xyz')) } }).load();
     await expect(renderer.render('u', { theme: {} as never })).rejects.toThrow('This file is not an image throng can show.');

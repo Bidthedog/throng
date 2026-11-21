@@ -147,7 +147,7 @@ last.
 - [x] T063 Offer **Select All** in a PDF Preview's body menu and keep Ctrl+A to the PDF's text layers rather than the whole window, per FR-068a (partial)
 - [ ] T064 Make Refresh and an update re-read an HTML page's relative stylesheets and fonts, so a change to one on disk is shown, per FR-072 (partial)
 - [x] T065 Amend FR-085a additively: an HTML Preview's plain **Copy** runs `editor.previews.copyFormat` like every preview, per Constitution 5.5.0 (a preference picks the default; the menu offers every variant), which the code already follows, per FR-085a (contradicts)
-- [ ] T066 Reject an image over the pixel limit from its dimensions before decoding the bitmap, per FR-025 and the "huge dimensions, small file" edge case (partial)
+- [x] T066 Reject an image over the pixel limit from its dimensions before decoding the bitmap, per FR-025 and the "huge dimensions, small file" edge case (partial)
 - [x] T067 Build a PDF link's and an HTML link's hover text with `previewLinkHoverText` and the platform's modifier, naming the target and what following it does, per FR-066, FR-079 and 044 FR-094 (partial)
 - [ ] T068 Measure a parented SVG preview showing an edit within the update delay + 250 ms, beside the parented HTML reading in `preview-media-performance.e2e.ts`, per SC-003 (partial)
 - [x] T069 Word an Image or SVG Preview's Fit tooltip and the toolbar's and viewport's accessible names for a picture, not a diagram, per FR-033 (partial)

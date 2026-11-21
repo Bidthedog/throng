@@ -31,6 +31,7 @@ const baseProps = (text: string, extra: Partial<PreviewBodyProps> = {}): Preview
 
 beforeEach(() => {
   vi.spyOn(browserPictureLoader, 'load').mockResolvedValue({ width: 64, height: 32 });
+  vi.spyOn(browserPictureLoader, 'measure').mockResolvedValue({ width: 64, height: 32 });
 });
 
 afterEach(() => {

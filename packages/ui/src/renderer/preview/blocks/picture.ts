@@ -33,6 +33,11 @@ export const DEFAULT_SVG_SIZE = { width: 300, height: 150 } as const;
 export interface PictureLoader {
   /** Resolve once `url` has decoded, with its natural size; reject when it cannot be decoded. */
   load(url: string): Promise<{ width: number; height: number }>;
+  /**
+   * 074 FR-025 — resolve with `url`'s natural size as soon as its header is read, WITHOUT decoding the bitmap; reject
+   * when it cannot be read. A raster picture is measured first, so one over the pixel bound is never decoded.
+   */
+  measure?(url: string): Promise<{ width: number; height: number }>;
 }
 
 export const browserPictureLoader: PictureLoader = {
@@ -42,6 +47,16 @@ export const browserPictureLoader: PictureLoader = {
     image.src = url;
     await image.decode();
     return { width: image.naturalWidth, height: image.naturalHeight };
+  },
+  // The load event gives the natural size; Chromium decodes the bitmap only when it is painted or `decode()` asks.
+  measure(url) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => reject(new Error('The picture could not be read.'));
+      image.src = url;
+    });
   },
 };
 
@@ -236,14 +251,23 @@ export function imageUrlEntry(options: ImageEntryOptions = {}): BlockRendererEnt
   const loader = options.loader ?? browserPictureLoader;
   const renderer: BlockRenderer = {
     async render(url) {
+      const unshowable = 'This file is not an image throng can show.';
       let size: { width: number; height: number };
       try {
-        size = await loader.load(url);
+        // FR-025 — measured before it is decoded, so a picture over the bound is refused without decoding it.
+        size = await (loader.measure ?? loader.load).call(loader, url);
       } catch {
-        throw new Error('This file is not an image throng can show.');
+        throw new Error(unshowable);
       }
-      if (!(size.width > 0 && size.height > 0)) throw new Error('This file is not an image throng can show.');
+      if (!(size.width > 0 && size.height > 0)) throw new Error(unshowable);
       if (size.width * size.height > MAX_IMAGE_PIXELS) throw new Error(tooManyPixelsMessage(size.width, size.height));
+      if (loader.measure !== undefined) {
+        try {
+          await loader.load(url);
+        } catch {
+          throw new Error(unshowable);
+        }
+      }
       options.onMeasured?.(size);
       const readBytes = options.readBytes;
       let href = url;
