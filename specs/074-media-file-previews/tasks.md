@@ -165,3 +165,8 @@ last.
 - [x] T078 Word an HTML page's file-link hover for what Ctrl+click does to that file (preview, editor or the OS's default program), as a Markdown preview does, per FR-018a and FR-079 (partial)
 - [x] T079 Measure an over-limit Image or PDF open showing its size notice within 200 ms, per SC-005 (partial)
 - [x] T080 Reword the remaining comments that describe the opaque HTML frame, and remove the Find-disabled path no provider uses, per FR-074a and FR-086d (partial)
+
+## Phase 13: Convergence
+
+- [ ] T081 Make the link menu's Open Link on an HTML page's `#fragment` link (and on a link to the shown page with a fragment) scroll the page's frame, as Ctrl+click does, per FR-079, FR-085a and Constitution VI (partial)
+- [ ] T082 Add a hostile ```svg fence and a Markdown-embedded hostile SVG to the end-to-end hostile-content check, per FR-090, SC-002 and US3/AC3 (partial)
