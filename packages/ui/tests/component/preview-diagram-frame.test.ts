@@ -232,7 +232,7 @@ describe('a picture that scrolls (074 FR-031a, 2026-11-19)', () => {
   // FR-020a (2026-11-20) — the zoom reset returns a picture to the view it opened in, not to Fit.
   it('the zoom reset returns a small picture to 100% and a large one to Fit: its opening view', () => {
     const small = mountScrolling(100, 100, { initialMode: 'open' });
-    fireEvent.click(small.button('Fit diagram'));
+    fireEvent.click(small.button('Fit picture'));
     expect(Number(small.frame().getAttribute('data-scale'))).toBe(2);
     small.viewport().focus();
     expect(zoomFocusedDiagram('reset')).toBe(true);
@@ -249,7 +249,7 @@ describe('a picture that scrolls (074 FR-031a, 2026-11-19)', () => {
   it('names the zoom reset chord on Zoom 100% for a picture, on Fit for a diagram', () => {
     const { frame } = mountScrolling(100, 100, { initialMode: 'open' });
     expect(within(frame()).getByTitle(/^Zoom 100% \(/)).toBeInTheDocument();
-    expect(within(frame()).getByTitle('Fit diagram')).toBeInTheDocument();
+    expect(within(frame()).getByTitle('Fit picture')).toBeInTheDocument();
   });
 
   it('a fitted view clips rather than scrolls, so rounding never raises a scrollbar; a chosen zoom scrolls', () => {
@@ -257,7 +257,7 @@ describe('a picture that scrolls (074 FR-031a, 2026-11-19)', () => {
     expect(viewport()).toHaveClass('preview-diagram-frame__viewport--fitted');
     fireEvent.click(button('Zoom in'));
     expect(viewport()).not.toHaveClass('preview-diagram-frame__viewport--fitted');
-    fireEvent.click(button('Fit diagram'));
+    fireEvent.click(button('Fit picture'));
     expect(viewport()).toHaveClass('preview-diagram-frame__viewport--fitted');
   });
 
@@ -295,7 +295,7 @@ describe('a picture that scrolls (074 FR-031a, 2026-11-19)', () => {
 
   it('Fit after the opening view fills the panel, enlarging a small picture (FR-031b)', () => {
     const { frame, button } = mountScrolling(100, 100, { initialMode: 'open' });
-    fireEvent.click(button('Fit diagram'));
+    fireEvent.click(button('Fit picture'));
     expect(Number(frame().getAttribute('data-scale'))).toBe(2);
   });
 
@@ -322,7 +322,7 @@ describe('a picture that scrolls (074 FR-031a, 2026-11-19)', () => {
     expect(layer().style.transform).toBe('translate(110px, 80px) scale(1)');
     expect(viewport().scrollLeft).toBe(0);
     // Fit puts it back in the middle.
-    fireEvent.click(button('Fit diagram'));
+    fireEvent.click(button('Fit picture'));
     expect(layer().style.transform).toBe('translate(100px, 0px) scale(2)');
   });
 
@@ -381,7 +381,7 @@ describe('a picture that scrolls (074 FR-031a, 2026-11-19)', () => {
     fireEvent.click(button('Zoom in'));
     fireEvent.click(button('Zoom in'));
     fireEvent.click(button('Zoom in'));
-    fireEvent.click(button('Fit diagram'));
+    fireEvent.click(button('Fit picture'));
     expect(layer().style.transform).toBe('translate(100px, 0px) scale(2)');
     expect(viewport().scrollLeft).toBe(0);
     expect(viewport().scrollTop).toBe(0);

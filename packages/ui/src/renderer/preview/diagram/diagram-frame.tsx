@@ -527,7 +527,12 @@ export function DiagramFrame({
    * row maximises the panel instead.
    */
   const keybindings = useKeybindings();
-  const titles = useMemo(() => zoomTitles(keybindings, 'Fit diagram', initialMode === 'open' ? 'actual' : 'fit'), [keybindings, initialMode]);
+  // 074 FR-033 — an Image or SVG Preview (the frames that scroll, FR-031a) names a picture, not a diagram.
+  const noun = scrolls ? 'Picture' : 'Diagram';
+  const titles = useMemo(
+    () => zoomTitles(keybindings, `Fit ${noun.toLowerCase()}`, initialMode === 'open' ? 'actual' : 'fit'),
+    [keybindings, initialMode, noun],
+  );
   const onFullPaneRef = useRef(onFullPane);
   onFullPaneRef.current = onFullPane;
   const fullPaneRef = useRef(fullPane);
@@ -583,7 +588,7 @@ export function DiagramFrame({
 
   const inside = (
     <>
-      <div className="preview-diagram-frame__toolbar" role="toolbar" aria-label="Diagram view">
+      <div className="preview-diagram-frame__toolbar" role="toolbar" aria-label={`${noun} view`}>
         <IconButton token="diagramFit" title={titles.fit} onClick={onFit} />
         <IconButton token="zoomIn" title={titles.zoomIn} onClick={() => zoomBy(ZOOM_STEP)} />
         <IconButton token="diagramZoomReset" title={titles.actual} onClick={onZoomActual} />
@@ -604,7 +609,7 @@ export function DiagramFrame({
         // Focusable, so the panel's zoom chords and Ctrl+wheel can zoom just this diagram (A5).
         tabIndex={0}
         role="group"
-        aria-label="Diagram"
+        aria-label={noun}
         // In place, the document's height or the fitted drawing's, at every zoom (FR-046m); maximised or
         // filling its panel, it fills what holds it (B2).
         style={ownHeight ? undefined : { height: `${inPlaceHeight}px` }}

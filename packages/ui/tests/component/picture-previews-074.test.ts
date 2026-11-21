@@ -38,7 +38,7 @@ describe('an SVG Preview (FR-030, FR-031, FR-040)', () => {
     await waitFor(() => expect(frame()?.querySelector('image')).toBeTruthy(), COLD);
     expect(frame()!.querySelector('image')!.getAttribute('href')).toMatch(/^blob:/);
     expect(frame()!.querySelector('script')).toBeNull();
-    expect(within(frame()!).getByTitle('Fit diagram')).toBeInTheDocument();
+    expect(within(frame()!).getByTitle('Fit picture')).toBeInTheDocument();
     // FR-031 — no inline Maximise: the panel header's Focus Mode maximises the one picture.
     expect(within(frame()!).queryByTitle('Enter Focus Mode')).toBeNull();
   });
@@ -99,6 +99,16 @@ describe('an Image Preview (FR-020, FR-022, FR-030)', () => {
     expect(frame()).toHaveClass('preview-diagram-frame--fills');
     expect(frame()).toHaveClass('preview-diagram-frame--scrolls');
     expect(screen.getByTestId(`diagram-hatch-${pv.id}-diagram-0`)).toBeInTheDocument();
+  });
+
+  // 074 convergence T069 — FR-033: a picture's controls name a picture, not a diagram.
+  it('names its view controls for a picture (FR-033)', async () => {
+    pv = await mountMarkdownPreview('', `${ROOT}/shot.png`, { providerId: 'image', attach: { content: resource } });
+    await waitFor(() => expect(frame()?.querySelector('image')).toBeTruthy(), COLD);
+    expect(screen.getByRole('toolbar', { name: 'Picture view' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Picture' })).toBeInTheDocument();
+    const fit = screen.getByRole('toolbar', { name: 'Picture view' }).querySelector('button')!;
+    expect(fit.getAttribute('title') ?? '').toMatch(/^Fit picture/);
   });
 
   // 074 convergence T062 — FR-028 (and FR-068a for a PDF): the body menu offers Copy Path, in the four forms the File
