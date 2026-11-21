@@ -169,7 +169,7 @@ import { registerLinkIpc } from './link-ipc.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { SharedFileWatcher } from './shared-file-watcher.js';
-import { projectWatchLeavesOut } from './project-watch-exclusion.js';
+import { projectWatchLeavesOut, withSearchNeeds } from './project-watch-exclusion.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
 import { reconnectWatcher } from './reconnect-watcher.js';
 import { createAppShellIntegration } from './electron-shell-integration.js';
@@ -1721,6 +1721,8 @@ if (isPrimaryInstance)
    * point the watch is re-asked in place. `projectsByRoot` is read at call time, once a window has asked for a root.
    */
   const watchExclusions = new Map<string, (relPath: string) => boolean>();
+  /** Find in Files' open runs' needs, wired once the service exists below; until then no run is open. */
+  let searchNeedsWatched: (absRoot: string, relPath: string) => boolean = () => false;
   const projectWatchExclusion = (absRoot: string): ((relPath: string) => boolean) => {
     const key = normaliseForCompare(absRoot);
     let compiled = watchExclusions.get(key);
@@ -1734,7 +1736,7 @@ if (isPrimaryInstance)
       });
       watchExclusions.set(key, compiled);
     }
-    return compiled;
+    return withSearchNeeds(compiled, (rel) => searchNeedsWatched(absRoot, rel));
   };
   const explorerWatcher = new ExplorerWatcher(
     projectWatcher,
@@ -2012,6 +2014,9 @@ if (isPrimaryInstance)
     pushFileSearchUpdate,
     () => currentSettings.editor.fallbackEncoding,
   );
+  // 062 FR-051 — an open run with its global exclusion list off keeps the folders it scans watched.
+  searchNeedsWatched = (absRoot, relPath) => fileSearch.needsWatched(absRoot, relPath);
+  fileSearch.onWatchNeedsChanged(() => explorerWatcher.rescope());
   /*
    * The commit half is registered LOWER DOWN, once the editor coordinator exists (043 T094).
    *

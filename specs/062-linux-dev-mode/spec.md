@@ -423,8 +423,9 @@ with the system's own tools, and any figure Linux cannot supply shows as unavail
     bulk delete costs the size of what was deleted — is unchanged.
   - *Not yet*: `.gitignore` is not an ignore source. Whether it should be is with the maintainer; the exclusion is a
     predicate a reader supplies, so a gitignore source joins it as one more input.
-  - *Known gap*: a Find in Files run with its global exclusion list switched off scans folders the default lists ignore,
-    and is not told about changes inside them while it is open.
+  - A Find in Files run with its global exclusion list switched off scans folders the default lists ignore. While it
+    is open those folders MUST stay watched, so its results there still go stale when their files change (043
+    FR-045a); when it closes, or its list is switched back on, they MUST be given up again.
 
 ### Out of Scope
 

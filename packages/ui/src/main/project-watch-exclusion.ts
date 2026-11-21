@@ -7,8 +7,8 @@
  * left out only when BOTH ignore it, so neither is ever told less than it reads: `dist` is hidden from search but
  * drawn by the tree, and a hidden folder is still searched.
  *
- * Find in Files is taken at its default — its global list on. A run that turns the global list off scans folders it
- * names, and is not told about changes inside them while it is open; recorded in 062's plan.
+ * Find in Files is taken at its default — its global list on. A run that turns the global list off scans folders
+ * those lists ignore; while it is open it says so through `searchNeeds`, and they stay watched until it closes.
  *
  * Both answers are compiled once per input, by the same `compileExcluder` every other walk uses, so this adds no
  * second rule set (033 FR-069c).
@@ -24,6 +24,25 @@ export interface ProjectWatchInputs {
   searchGlobs: readonly string[];
   /** The project's own "Exclude from Find in Files" list. */
   projectSearchGlobs: readonly string[];
+}
+
+/**
+ * The project watch's whole answer: what both ignore, less any folder an OPEN Find in Files run still scans —
+ * `searchNeeds`, asked live (a run with its global list off, `FileSearchService.needsWatched`).
+ */
+export function projectWatchExclusion(
+  inputs: ProjectWatchInputs,
+  searchNeeds: (relPath: string) => boolean,
+): (relPath: string) => boolean {
+  return withSearchNeeds(projectWatchLeavesOut(inputs), searchNeeds);
+}
+
+/** `leavesOut`, compiled once by the caller, less what an open run needs. */
+export function withSearchNeeds(
+  leavesOut: (relPath: string) => boolean,
+  searchNeeds: (relPath: string) => boolean,
+): (relPath: string) => boolean {
+  return (relPath) => leavesOut(relPath) && !searchNeeds(relPath);
 }
 
 /** The folders the project watch may leave out: those the tree AND Find in Files both ignore, root-relative POSIX. */
