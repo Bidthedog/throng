@@ -36,6 +36,7 @@ import { sanitiseHtmlPage, type BlockedResource } from './html-sanitise.js';
 import { readFrameScroll, updateFrameInPlace, writeFrameScroll, type FrameScroll } from './html-frame-update.js';
 import { listenToFrameInput } from './frame-input.js';
 import { listenToFrameFragments, listenToFrameLinkMenu } from './frame-fragments.js';
+import { previewRefreshCount } from '../../refresh-preview.js';
 import { BlockedResourcesNotice, blockedFromViolation } from './blocked-notice.js';
 import './html.css';
 
@@ -105,12 +106,11 @@ export function HtmlBody({
   const safeSources = useMemo(() => (sourcesKey === '' ? [] : sourcesKey.split(' ')), [sourcesKey]);
 
   /*
-   * FR-072 — each content the chrome delivers (an update, a Refresh) is a new revision of the page, named on its asset
-   * URLs so the frame fetches the page's own stylesheets and fonts again, though the page's text is unchanged.
+   * FR-072 — a Refresh names a new revision on the page's asset URLs, so the frame fetches its own stylesheets, fonts
+   * and images again though the page's text is unchanged. A live edit names the same one (FR-071b): the page updates in
+   * place and fetches nothing. Read as the Refresh's re-read is drawn: it is counted before the re-read is asked for.
    */
-  const revisionOf = useRef<{ content: unknown; revision: number }>({ content, revision: 0 });
-  if (revisionOf.current.content !== content) revisionOf.current = { content, revision: revisionOf.current.revision + 1 };
-  const revision = revisionOf.current.revision;
+  const revision = previewRefreshCount(panelId);
 
   const page = useMemo(
     () =>

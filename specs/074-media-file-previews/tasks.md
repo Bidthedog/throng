@@ -160,7 +160,7 @@ last.
 ## Phase 12: Convergence
 
 - [x] T075 CRITICAL: Open the shared link menu (Open Link, Copy Link to Clipboard) when a link in an HTML page is right-clicked, as the PDF body does, per Constitution VI (One gesture follows a link), FR-079 and FR-085a (missing)
-- [ ] T076 Keep a live edit of an HTML page from re-fetching its stylesheets, fonts and images: name a new asset revision on Refresh, not on every update, so the page still updates in place in one task, per FR-071b against FR-072 (contradicts)
+- [x] T076 Keep a live edit of an HTML page from re-fetching its stylesheets, fonts and images: name a new asset revision on Refresh, not on every update, so the page still updates in place in one task, per FR-071b against FR-072 (contradicts)
 - [ ] T077 Scroll an HTML page with a plain middle-button drag, as every other preview body scrolls, per FR-063a (partial)
 - [ ] T078 Word an HTML page's file-link hover for what Ctrl+click does to that file (preview, editor or the OS's default program), as a Markdown preview does, per FR-018a and FR-079 (partial)
 - [ ] T079 Measure an over-limit Image or PDF open showing its size notice within 200 ms, per SC-005 (partial)

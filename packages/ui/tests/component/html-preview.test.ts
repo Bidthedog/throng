@@ -13,6 +13,7 @@ import { isPanelUnsearchable } from '../../src/renderer/preview/unsearchable-pan
 import { getFindSession, openFind, setTerm } from '../../src/renderer/search/search-store.js';
 import { previewLinkHoverText } from '../../src/renderer/preview/link-dom.js';
 import { primaryModifierLabel } from '../../src/renderer/config/host-modifiers.js';
+import { refreshPreviewPanel } from '../../src/renderer/preview/refresh-preview.js';
 
 const FILE = `${ROOT}/site/page.html`;
 const SCRIPTED = '<html><body><h1>Hi</h1><script>alert(1)</script></body></html>';
@@ -321,16 +322,34 @@ describe('the menu over a link in the page is the link menu (FR-079, FR-085a)', 
 
 // 074 convergence T064 — FR-072: a change on disk to a stylesheet or font the page names is shown at the next update or
 // Refresh. The frame fetches a resource again only when its URL changes, so each update names its assets afresh.
-describe('an update or Refresh fetches the page’s own resources again (FR-072)', () => {
-  it('names the page’s stylesheet by a new URL at each update, even when the page is unchanged', async () => {
-    const PAGE = '<link rel="stylesheet" href="style.css"><p>styled</p>';
+// 074 convergence T076 — FR-071b: a live edit updates the page in place, so it names the same asset URLs and nothing is
+// fetched again; only Refresh names a new revision.
+describe('Refresh, not every edit, fetches the page’s own resources again (FR-072, FR-071b)', () => {
+  const PAGE = '<link rel="stylesheet" href="style.css"><p>styled</p>';
+  const href = (): string => frameDoc()!.querySelector('link[rel="stylesheet"]')?.getAttribute('href') ?? '';
+
+  it('keeps the stylesheet’s URL through live edits', async () => {
     const m = await mount(PAGE);
     await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
-    const href = (): string => frameDoc()!.querySelector('link[rel="stylesheet"]')?.getAttribute('href') ?? '';
     update(m, 2, PAGE.replace('styled', 'styled again'));
     await waitFor(() => expect(href()).toContain('style.css'));
     const first = href();
-    update(m, 3, PAGE.replace('styled', 'styled again'));
+    update(m, 3, PAGE.replace('styled', 'styled once more'));
+    await waitFor(() => expect(frameDoc()!.body.textContent).toContain('once more'));
+    expect(href()).toBe(first);
+  });
+
+  it('names the stylesheet by a new URL after a Refresh, though the page is unchanged', async () => {
+    const m = await mount(PAGE);
+    await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
+    update(m, 2, PAGE.replace('styled', 'styled again'));
+    await waitFor(() => expect(href()).toContain('style.css'));
+    const first = href();
+    const same = previewUpdate({ panelId: m.id, filePath: FILE, providerId: 'html', revision: 3, content: { kind: 'text', text: PAGE.replace('styled', 'styled again') } });
+    vi.mocked(window.throng!.preview!.refresh).mockResolvedValueOnce({ update: same } as never);
+    await act(async () => {
+      await refreshPreviewPanel(m.id);
+    });
     await waitFor(() => expect(href()).not.toBe(first));
     expect(href()).toContain('style.css');
   });

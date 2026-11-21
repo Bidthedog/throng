@@ -71,7 +71,7 @@ export interface HtmlPageContext {
   /** 074 FR-072a — the panel's Safe HTML preview sources (global ∪ project), canonical. Absent = none. */
   safeSources?: readonly string[];
   /**
-   * 074 FR-072 — which update of the page this is. Named on every asset URL (`?rev=`), so each update or Refresh
+   * 074 FR-072 — how many times the panel has been refreshed. Named on every asset URL (`?rev=`), so a Refresh
    * fetches the page's own stylesheets, fonts and images again: the frame re-reads a resource only when its URL
    * changes. Main routes on the path alone. Absent = no revision named.
    */

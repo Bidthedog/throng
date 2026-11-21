@@ -798,7 +798,10 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
   scroll position on both axes MUST be kept, clamped where the new page is shorter or narrower. The page
   still runs no script of its own (FR-074, FR-088): the mechanism is the plan's, and it may not depend on
   the page.
-- **FR-072**: *(Font deferral ended 2026-11-20: the same-origin frame (FR-074a) loads a relative `@font-face` from the asset route, and FR-072a a safe remote one.)* Relative resources the page names — stylesheets (including `@import` of a relative
+- **FR-072**: *(2026-11-21, convergence T076: "a change to one of them on disk MUST be shown at the next update or
+  Refresh" now reads **at the next Refresh**. Re-fetching every resource at each live update re-styled the page on every
+  keystroke, against FR-071b's in-place update with nothing blank or flashing; an update re-reads the page, and Refresh
+  re-reads the page and everything it names.)* *(Font deferral ended 2026-11-20: the same-origin frame (FR-074a) loads a relative `@font-face` from the asset route, and FR-072a a safe remote one.)* Relative resources the page names — stylesheets (including `@import` of a relative
   stylesheet), images, `srcset` candidates and CSS `url()` — MUST resolve against the file's own
   folder and load from disk through the preview protocol, and MUST apply to the page (2026-11-19: the
   `srcdoc` frame inherits the renderer's content policy, whose `style-src` refused the asset route, so
