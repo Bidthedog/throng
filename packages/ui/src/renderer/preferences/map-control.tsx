@@ -315,6 +315,11 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
    * (077 FR-024).
    */
   const [idRefused, setIdRefused] = useState(false);
+  /**
+   * 077 FR-024 (T057) — the ids of committed rows the user has edited in this editor. What is wrong with one of them
+   * is an entry's problem, said in the toast; only a row as it arrived from the file draws its problem inline (C17).
+   */
+  const [edited, setEdited] = useState<ReadonlySet<string>>(() => new Set());
 
   const committedIds = records.map((r) => String(r[idKey] ?? ''));
   // A draft whose id has arrived in the settings document is no longer a draft — it is the row.
@@ -375,6 +380,8 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
 
   const removeRow = (index: number): void => {
     if (index < records.length) {
+      // 077 FR-024 — an edited row's problem leaves the toast with the row.
+      if (edited.has(String(records[index]?.[idKey] ?? '')) && problemOf(index) !== null) setError(null);
       commitRows(records.filter((_, i) => i !== index));
       return;
     }
@@ -400,6 +407,12 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
       const list = [...records];
       list[index] = next;
       commitRows(list);
+      // 077 FR-024 (T057) — an edit is an entry: what it left wrong with the row is said in the toast, and the row
+      // stops drawing it inline; a correction takes it out of the toast.
+      const id = String(next[idKey] ?? '');
+      if (!edited.has(id)) setEdited(new Set(edited).add(id));
+      const problem = checkFlavourRecord(next, list.slice(0, index).map((r) => String(r[idKey] ?? '')));
+      setError(problem?.message ?? null);
       return;
     }
     const draftIndex = index - records.length;
@@ -446,9 +459,11 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
         <tbody>
           {rows.map((row, index) => {
             const rowKey = rowKeys[index];
-            // 077 FR-024 — only a COMMITTED row draws its problem inline (C17). A draft's problem is an
-            // entry's, and the toast already says it: one condition, one notice.
-            const problem = index < records.length ? problemOf(index) : null;
+            // 077 FR-024 — only a COMMITTED row the user has not edited here draws its problem inline (C17): it
+            // reports the file. A draft's or an edited row's problem is an entry's, and the toast already says it:
+            // one condition, one notice.
+            const problem =
+              index < records.length && !edited.has(String(row[idKey] ?? '')) ? problemOf(index) : null;
             return (
               <Fragment key={rowKey}>
                 <tr data-testid={`${noun}-row-${rowKey}`}>

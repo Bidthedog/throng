@@ -146,6 +146,23 @@ describe('custom flavours: an ordered table of records (#67)', () => {
     expect(screen.getByTestId('flavour-row-error-broken')).toBeInTheDocument();
   });
 
+  // 077 convergence T057 — FR-024: a problem the user just made on a committed row is an entry's too, said in the
+  // toast alone; the row broken in the file keeps its inline message (C17).
+  it('says a problem just made on a committed row in the toast alone, and clears it once corrected', async () => {
+    const { user } = mountControl(FLAVOURS, [nu, { id: 'broken' }]);
+    await user.click(screen.getByTestId(`list-edit-${FLAVOURS}`));
+    const file = screen.getByTestId('flavour-cell-nu-file');
+    await user.clear(file);
+
+    expect(screen.getByTestId('flavour-error').textContent).toMatch(/executable/i);
+    expect(screen.queryByTestId('flavour-row-error-nu'), 'the edit’s problem is drawn inline').toBeNull();
+    expect(screen.getByTestId('flavour-row-error-broken')).toBeInTheDocument();
+
+    await user.type(file, 'nu');
+    expect(screen.queryByTestId('flavour-error'), 'the toast outlives the correction').toBeNull();
+    expect(screen.queryByTestId('flavour-row-error-nu')).toBeNull();
+  });
+
   // 077 convergence T053 — FR-024: the toast never names a row that is gone.
   it('takes a removed draft row’s problem out of the toast', async () => {
     const { user } = mountControl(FLAVOURS, [nu]);
