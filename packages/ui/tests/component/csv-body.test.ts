@@ -146,6 +146,13 @@ describe('CsvBody draws the document as a grid', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open in Editor' }));
     expect(onOpenInEditor).toHaveBeenCalled();
   });
+
+  it('leaves a diagnostic record when it refuses the grid (FR-072, T083)', () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    mount('a,b\n1,"open\n2,3\n');
+    expect(debug.mock.calls.flat().join('\n')).toMatch(/csv-body: show the grid: expected — refused, the CSV cannot be parsed without loss from line 2/);
+    debug.mockRestore();
+  });
 });
 
 describe('CsvBody edits through main (FR-035 – FR-037)', () => {

@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHIPPED_PREVIEW_PROVIDERS, type PreviewUpdate } from '@throng/core';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { EditorService } from '../../src/main/editor-service.js';
@@ -126,7 +126,12 @@ describe.each([
     const big = `${small}${' '.repeat(LIMIT)}`;
     editDocument(coord, m, big);
 
-    expect(await attach('v1', path)).toMatchObject({
+    // 073 FR-072 (T083) — the refusal leaves a diagnostic record.
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const update = await attach('v1', path);
+    expect(debug.mock.calls.flat().join('\n')).toMatch(/over the preview size limit/);
+    debug.mockRestore();
+    expect(update).toMatchObject({
       notice: { kind: 'too-large', size: Buffer.byteLength(big, 'utf8'), limit: LIMIT, limitKey: `editor.previews.providers.${name.endsWith('.svg') ? 'svg' : 'html'}.maxFileBytes` },
       content: { kind: 'text', text: '' },
     });

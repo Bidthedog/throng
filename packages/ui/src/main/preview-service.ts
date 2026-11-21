@@ -1802,6 +1802,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private documentContent(run: PreviewRun, text: string): PreviewContent {
     const over = this.bufferOverLimit(run.providerId, text);
     if (over !== null) {
+      // 073 FR-072 (T083) — once, as the run crosses the limit, not on every keystroke past it.
+      if (run.notice?.kind !== 'too-large') {
+        logExpected('preview-service: show the document', `over the preview size limit (${over.kind === 'too-large' ? `${over.size} > ${over.limit} bytes` : ''}), ${run.filePath}`);
+      }
       run.notice = over;
       return CLEARED_CONTENT;
     }
@@ -1975,7 +1979,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private async readPath(run: PreviewRun, path: string, providerId: string): Promise<DiskRead> {
     const provider = this.deps.registry.get(providerId);
     const tooLarge = await this.overProviderLimit(path, providerId);
-    if (tooLarge !== null) return { ok: false, notice: tooLarge };
+    if (tooLarge !== null) {
+      // 073 FR-072 (T083) — a refused preview leaves a record of why.
+      logExpected('preview-service: read the file', `over the preview size limit (${tooLarge.kind === 'too-large' ? `${tooLarge.size} > ${tooLarge.limit} bytes` : ''}), ${path}`);
+      return { ok: false, notice: tooLarge };
+    }
     if (provider?.kind === 'binary') {
       if (!(await this.isFile(path))) return { ok: false, notice: { kind: 'deleted' } };
       const url = `throng-preview://source/${encodeURIComponent(run.panelId)}?rev=${++this.sourceSeq}`;

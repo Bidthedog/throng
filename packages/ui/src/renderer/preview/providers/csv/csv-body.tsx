@@ -145,6 +145,11 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   const model = parsed?.model ?? null;
   const modelText = parsed?.text ?? '';
   const malformedLine = model?.fault?.line ?? fault;
+  // 073 FR-072 (T083) — the grid refused over a document it cannot parse without loss (FR-046) leaves a record, once
+  // per file and line.
+  useEffect(() => {
+    if (malformedLine !== null) logExpected('csv-body: show the grid', `refused, the CSV cannot be parsed without loss from line ${malformedLine}: ${filePath}`);
+  }, [malformedLine, filePath]);
   const rowCount = model?.records ?? 0;
   const colCount = model?.width ?? 0;
 
