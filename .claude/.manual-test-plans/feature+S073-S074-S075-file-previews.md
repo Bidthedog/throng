@@ -76,6 +76,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-109 | [Settings] Clear delay, Kill processes and the pane widths in their new groups | untested | | | |
 | MT-110 | [Settings] An invalid entry in Preferences shows a toast, not text under the box | untested | | | |
 | MT-111 | [Settings] Lists and tables in Preferences open in their own window | untested | | | |
+| MT-112 | [Settings] Terminal flavours and shell arguments are editable in Preferences (#67) | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1188,3 +1189,15 @@ Paths: `packages/ui/src/renderer/preferences/list-editor.tsx`, `packages/ui/src/
 ### Negative cases
 - No list or table setting is edited inline in the Settings tab any more.
 - Saving without a change writes nothing (the setting does not show as changed).
+
+## MT-112: [Settings] Terminal flavours and shell arguments are editable in Preferences (#67)
+
+Covers: #67, 077 FR-025
+Paths: `packages/core/src/config/settings-metadata.ts`, `packages/ui/src/renderer/preferences/records-control.tsx`, `packages/ui/src/renderer/preferences/settings-tab.tsx`
+
+### Steps
+1. Preferences → Settings → Terminal: **Custom terminal flavours** reads "No entries". Edit it, add id `nu2` with executable `bash` and label `Bash 2`, and Save. The row reads "1 entry: …", and a new terminal's Flavour dropdown offers Bash 2.
+2. Edit it again and try to add a second row with the same id, then one with no id. Each is refused with a toast, and Save keeps only the valid rows.
+3. **Hidden built-in flavours** lists every built-in shell this machine has. Tick one: it leaves the Flavour dropdown. Untick it: it comes back.
+4. **Default shell arguments**: add `bash` → `--norc` and Save. A new Bash terminal starts without your .bashrc prompt.
+5. Remove what you added in steps 1 and 4 and Save; the rows read "No entries" again.
