@@ -107,6 +107,19 @@ describe('callout folding and nesting (FR-005, FR-006)', () => {
     expect(squash(out)).toMatch(/data-callout="example"[^]*data-callout-body>[^]*data-callout="warning"[^]*data-callout-body>[^]*data-callout="bug"/);
   });
 
+  it('renders a Mermaid diagram and a display equation in a callout as it does outside one (US2/AS4)', () => {
+    // Maths on, as the provider's Typeset math setting ships (075 FR-042); otherwise $$ stays literal and proves nothing.
+    const env = { panelId: 'p', docPath: '/proj/a.md', projectRoot: '/proj', remoteImages: false, typesetMath: true };
+    const out = (text: string): string =>
+      squash(createMarkdownPipeline((h: string) => h).render(text, env).fragment).replace(/ data-source-line="\d+"/g, '');
+    for (const block of ['```mermaid\ngraph TD; A-->B\n```', '$$\nx^2 + y^2\n$$']) {
+      const plain = out(`${block}\n`).trim();
+      expect(plain, `${block} was not recognised on its own`).not.toMatch(/^<p>/);
+      const quoted = block.split('\n').map((l) => `> ${l}`).join('\n');
+      expect(out(`> [!note] T\n${quoted}\n`), `${block} inside a callout`).toContain(plain);
+    }
+  });
+
   it('renders the body as ordinary Markdown: list, task, code, link (FR-004)', () => {
     const out = html('> [!note]\n> - [ ] task\n> - item\n>\n> ```js\n> x()\n> ```\n>\n> [link](a.md)\n');
     expect(out).toMatch(/<input type="checkbox" data-task-line="1"/);
