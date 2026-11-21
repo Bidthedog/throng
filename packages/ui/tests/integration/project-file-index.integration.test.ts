@@ -852,6 +852,56 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
     }
   }, 40_000);
 
+  it('refresh after an edited glob list widens and narrows the one watch (062 FR-051)', async () => {
+    const heard: string[] = [];
+    let opened = 0;
+    const inner = new NodeFileWatcher(150);
+    const listening: IFileWatcher = {
+      watch: (dir, onChange, options) => {
+        opened += 1;
+        return inner.watch(dir, (p, batch) => {
+          heard.push(...(batch?.paths ?? [p]));
+          onChange(p, batch);
+        }, options);
+      },
+    };
+    const h = await Harness.create({ globs: ['**/node_modules'], watcher: listening });
+    try {
+      await seedProject(h.root);
+      h.service.subscribe(1, h.root, false);
+      await waitForReadyAt(h, 1, false);
+      await armWatch(h, 1);
+
+      h.globs = []; // node_modules taken off the list
+      h.service.refresh();
+      await waitFor('the reconcile to add what was ignored', () =>
+        h.to(1, 0).find((p) => (p.added ?? []).includes('node_modules/junk.js')),
+      );
+      const mark = h.sent.length;
+      await writeFile(join(h.root, 'node_modules', 'widened.js'), 'x');
+      await waitFor('a new file inside node_modules to reach the index', () =>
+        h.to(1, mark).find((p) => (p.added ?? []).includes('node_modules/widened.js')),
+      );
+
+      h.globs = ['**/node_modules']; // and put back
+      h.service.refresh();
+      await waitFor('the reconcile to drop it again', () =>
+        h.to(1, mark).find((p) => (p.removed ?? []).includes('node_modules/widened.js')),
+      );
+      const narrowed = join(h.root, 'node_modules', 'narrowed.js');
+      await writeFile(narrowed, 'x');
+      const after = h.sent.length;
+      await writeFile(join(h.root, 'src', 'sentinel.ts'), 'x');
+      await waitFor('the sentinel to reach the index', () =>
+        h.to(1, after).find((p) => (p.added ?? []).includes('src/sentinel.ts')),
+      );
+      expect(heard, 'the narrowed watch still reported inside node_modules').not.toContain(narrowed);
+      expect(opened, 'an edited list opened a second watch').toBe(1);
+    } finally {
+      await h.destroy();
+    }
+  }, 40_000);
+
   it('the delta protocol is unchanged for each index (I2, S7, S8)', async () => {
     const h = await Harness.create({ globs: ['**/node_modules'] });
     try {
