@@ -177,5 +177,5 @@ Each was implemented before it had a task; the commit named is the one that did 
 
 ## Phase 14: Convergence
 
-- [ ] T053 Take a removed draft table row's problem out of the Preferences toast, so the toast never names a row that is gone, per FR-024 (partial)
-- [ ] T054 Say in `ValidatedArrayItem`'s comment that a refused entry's reason goes to the Preferences toast, per FR-024 (contradicts)
+- [x] T053 Take a removed draft table row's problem out of the Preferences toast, so the toast never names a row that is gone, per FR-024 (partial)
+- [x] T054 Say in `ValidatedArrayItem`'s comment that a refused entry's reason goes to the Preferences toast, per FR-024 (contradicts)

@@ -145,6 +145,18 @@ describe('custom flavours: an ordered table of records (#67)', () => {
     expect(screen.queryByTestId('flavour-row-error-elvish'), 'the draft’s problem is drawn twice').toBeNull();
     expect(screen.getByTestId('flavour-row-error-broken')).toBeInTheDocument();
   });
+
+  // 077 convergence T053 — FR-024: the toast never names a row that is gone.
+  it('takes a removed draft row’s problem out of the toast', async () => {
+    const { user } = mountControl(FLAVOURS, [nu]);
+    await user.click(screen.getByTestId(`list-edit-${FLAVOURS}`));
+    await user.type(screen.getByTestId(`flavour-new-id`), 'elvish');
+    await user.click(screen.getByTestId(`flavour-add`));
+    expect(screen.getByTestId('flavour-error')).toBeInTheDocument();
+    await user.click(screen.getByTitle('Remove elvish'));
+    expect(screen.queryByTestId('flavour-row-elvish')).toBeNull();
+    expect(screen.queryByTestId('flavour-error'), 'the toast still names the removed draft').toBeNull();
+  });
 });
 
 describe('default shell arguments: a keyed table of text (#67)', () => {

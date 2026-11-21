@@ -378,7 +378,16 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
       commitRows(records.filter((_, i) => i !== index));
       return;
     }
-    setDrafts(pending.filter((_, i) => i !== index - records.length));
+    const left = pending.filter((_, i) => i !== index - records.length);
+    setDrafts(left);
+    // 077 FR-024 — the toast never names a row that is gone: it says what the last draft left still needs, or goes.
+    const kept = [...records, ...left];
+    const last = kept.length - 1;
+    const remaining =
+      left.length === 0
+        ? null
+        : (checkFlavourRecord(kept[last], kept.slice(0, last).map((r) => String(r[idKey] ?? '')))?.message ?? null);
+    setError(remaining);
   };
 
   /** Commit `[...records]` — an ARRAY, never an object. Feeding a map back would destroy the file. */

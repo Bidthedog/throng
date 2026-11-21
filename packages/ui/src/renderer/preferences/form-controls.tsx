@@ -659,8 +659,8 @@ function ArrayControl(props: SettingControlProps): ReactElement {
 
 /**
  * One entry of a list whose descriptor declares `validateItem` (074 FR-072c). It holds its own draft and writes only
- * on Enter or blur, and only an entry the rule accepts: a refused entry keeps its text and focus, and says why beside
- * it. `onCommit` is told whether the entry was written. An entry still empty when let go of calls `onEmpty` instead —
+ * on Enter or blur, and only an entry the rule accepts: a refused entry keeps its text and focus, and says why in
+ * the Preferences toast (077 FR-024). `onCommit` is told whether the entry was written. An entry still empty when let go of calls `onEmpty` instead —
  * an added row nobody typed into is dropped, not complained about.
  */
 function ValidatedArrayItem({
