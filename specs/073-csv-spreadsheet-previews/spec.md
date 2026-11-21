@@ -911,6 +911,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-062**: A workbook above the preview size limit MUST show one inline notice naming the file's size
   and the limit, with Refresh retrying under the current limit. This **supersedes 044 FR-026**'s "the size
   limit the editor applies" for the Spreadsheet provider only.
+  *Refined (convergence T093, 2026-11-21): where the file grows past the limit between main's size check and the
+  read, the body's own notice names the limit and says Refresh checks it again; main's notice on that Refresh names
+  the size as well. Only main measures the file.*
 - **FR-063**: Disabling the CSV provider MUST close every CSV Preview Editor as 044 FR-063 closes
   previews, except that a panel whose document is dirty and shown nowhere else MUST ask first through the
   editor's dirty-close prompt; the text editor stays available.

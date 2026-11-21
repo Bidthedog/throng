@@ -184,6 +184,28 @@ describe('SpreadsheetBody', () => {
     await waitFor(() => expect(cell(0, 0)).toBe('b-data2'));
   });
 
+  // FR-062 (convergence T093) — the file grew past the limit between main's check and the read: the body names the
+  // limit, as main's notice does, and says Refresh checks it again (main's notice then names the size too).
+  it('names the preview size limit when the read is refused as too large', async () => {
+    readSource = vi.fn(async () => ({ ok: false, status: 413 }));
+    mount('throng-preview://source/s1?rev=1');
+    const notice = await screen.findByTestId('spreadsheet-notice-s1');
+    expect(notice.textContent).toMatch(/25 MB/);
+    expect(notice.textContent).toMatch(/Refresh/);
+  });
+
+  // FR-056 (convergence T092) — a reader that cannot start or stops is throng's failure, not the file's: the notice
+  // must not call the file damaged.
+  it('says the reader failed, not that the file is damaged, when the worker cannot start or stops', async () => {
+    setGridWorkerFactory(() => {
+      throw new Error('no worker');
+    });
+    mount('throng-preview://source/s1?rev=1');
+    const notice = await screen.findByTestId('spreadsheet-notice-s1');
+    expect(notice.textContent).not.toMatch(/damaged|not a spreadsheet/);
+    expect(notice.textContent).toMatch(/spreadsheet reader/i);
+  });
+
   it('says in one inline notice when the file is not a workbook it can read (FR-056)', async () => {
     bytes = new TextEncoder().encode('PK\u0003\u0004 not a zip').buffer;
     mount('throng-preview://source/s1?rev=1');

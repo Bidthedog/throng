@@ -26,7 +26,8 @@ export interface WorkbookSheet {
   width: number;
 }
 
-export type WorkbookRefusal = 'password' | 'malformed' | 'unsupported';
+/** `reader` (073 FR-056, T092): the reader itself could not start or stopped, which says nothing about the file. */
+export type WorkbookRefusal = 'password' | 'malformed' | 'unsupported' | 'reader';
 
 export type WorkbookRead =
   | { ok: true; sheets: WorkbookSheet[] }

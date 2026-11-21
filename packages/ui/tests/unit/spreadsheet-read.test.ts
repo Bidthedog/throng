@@ -60,6 +60,17 @@ describe('readWorkbook refusals', () => {
     expect(result).toEqual({ ok: false, reason: 'malformed', detail: expect.any(String) });
   });
 
+  // FR-056 (convergence T092) — an encrypted Office file is a compound file holding EncryptionInfo and an
+  // EncryptedPackage in place of the workbook's parts. Built here rather than shipped as a binary fixture.
+  it('names a password-protected workbook as such, not as damaged', () => {
+    const cfb = XLSX.CFB.utils.cfb_new();
+    XLSX.CFB.utils.cfb_add(cfb, '/EncryptionInfo', new Uint8Array([4, 0, 4, 0, 0x40, 0, 0, 0, ...new Array<number>(64).fill(0)]));
+    XLSX.CFB.utils.cfb_add(cfb, '/EncryptedPackage', new Uint8Array(512));
+    const bytes = (XLSX.CFB.write(cfb, { type: 'array' }) as Uint8Array | number[]);
+    const buffer = Uint8Array.from(bytes).buffer;
+    expect(readWorkbook(buffer)).toEqual({ ok: false, reason: 'password', detail: expect.any(String) });
+  });
+
   it('shows the display text a file records, and a date with none as an ISO 8601 date', () => {
     expect(cellDisplay({ t: 'n', v: 0.5, w: '50%' })).toBe('50%');
     expect(cellDisplay({ t: 'd', v: new Date(Date.UTC(2026, 10, 18)) })).toBe('2026-11-18');

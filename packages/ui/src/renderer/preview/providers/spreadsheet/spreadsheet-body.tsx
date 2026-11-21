@@ -11,7 +11,7 @@
  * clear or insert.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react';
-import { columnLabel, firstBinding, logCaught, logExpected, type PreviewCopyFormat } from '@throng/core';
+import { columnLabel, firstBinding, formatSetting, logCaught, logExpected, SETTINGS_METADATA, type FieldDescriptor, type PreviewCopyFormat } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange } from '../../../grid/grid-selection.js';
@@ -37,7 +37,29 @@ const REFUSAL_TEXT: Readonly<Record<WorkbookRefusal, string>> = {
   password: 'This workbook is protected by a password, so it cannot be previewed.',
   malformed: 'This file could not be read as a workbook. It may be damaged, or not a spreadsheet at all.',
   unsupported: 'This workbook is in a format the preview cannot read.',
+  reader: 'The spreadsheet reader stopped before it could read this workbook. Refresh to try again.',
 };
+
+/** The Spreadsheet provider's size limit's descriptor, so the limit reads as Preferences shows it (MB). */
+const LIMIT_DESCRIPTOR: FieldDescriptor = SETTINGS_METADATA.find((d) => d.key === 'editor.previews.providers.spreadsheet.maxPreviewBytes') ?? {
+  key: '',
+  label: '',
+  description: '',
+  group: '',
+  control: 'slider',
+  storedUnit: 'bytes',
+  display: 'MB',
+};
+
+/**
+ * FR-062 (T093) — the file grew past the limit between main's size check and this read. Main named the size and the
+ * limit on its own notice; here only the limit is known, and Refresh re-runs main's check, which names both.
+ */
+function overLimitText(limit: unknown): string {
+  return typeof limit === 'number'
+    ? `This workbook is over the ${formatSetting(limit, LIMIT_DESCRIPTOR)} preview size limit set in Preferences. Refresh to check it again.`
+    : 'This workbook is over the preview size limit set in Preferences. Refresh to check it again.';
+}
 
 function parseOffThread(bytes: ArrayBuffer, id: number): Promise<WorkbookRead> {
   return new Promise((resolve) => {
@@ -46,7 +68,7 @@ function parseOffThread(bytes: ArrayBuffer, id: number): Promise<WorkbookRead> {
       worker = createGridWorker('spreadsheet');
     } catch (error) {
       logCaught('spreadsheet-body: start the worker', error);
-      resolve({ ok: false, reason: 'malformed', detail: 'The spreadsheet reader could not start.' });
+      resolve({ ok: false, reason: 'reader', detail: 'The spreadsheet reader could not start.' });
       return;
     }
     worker.onmessage = (event: MessageEvent<WorkbookParseReply>) => {
@@ -57,7 +79,7 @@ function parseOffThread(bytes: ArrayBuffer, id: number): Promise<WorkbookRead> {
     worker.onerror = (event) => {
       logCaught('spreadsheet-body: the worker failed', event);
       worker.terminate();
-      resolve({ ok: false, reason: 'malformed', detail: 'The spreadsheet reader stopped.' });
+      resolve({ ok: false, reason: 'reader', detail: 'The spreadsheet reader stopped.' });
     };
     worker.postMessage({ id, bytes }, [bytes]);
   });
@@ -295,7 +317,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
       read !== null && !read.ok
         ? REFUSAL_TEXT[read.reason]
         : loaded.state === 'unreadable' && loaded.status === 413
-          ? 'This workbook is over the preview size limit.'
+          ? overLimitText(providerSettings.maxPreviewBytes)
           : 'This workbook could not be read.';
     return (
       <div className="preview-grid-notice" role="alert" data-testid={`spreadsheet-notice-${panelId}`}>
