@@ -510,6 +510,32 @@ describe('view state (FR-064)', () => {
   });
 });
 
+// 074 convergence T071 — FR-064, US4/AC3: a reload keeps the reader's place within the page, not only the page.
+describe('a reload keeps the place within the page (FR-064)', () => {
+  it('returns to the same point of the page it captured', async () => {
+    const page = 1000;
+    const proto = HTMLElement.prototype;
+    const before = {
+      top: Object.getOwnPropertyDescriptor(proto, 'offsetTop'),
+      height: Object.getOwnPropertyDescriptor(proto, 'offsetHeight'),
+    };
+    const nOf = (el: HTMLElement): number => Number(el.getAttribute('data-pdf-page') ?? 0);
+    Object.defineProperty(proto, 'offsetTop', { configurable: true, get(this: HTMLElement) { return Math.max(0, nOf(this) - 1) * page; } });
+    Object.defineProperty(proto, 'offsetHeight', { configurable: true, get(this: HTMLElement) { return nOf(this) > 0 ? page : 0; } });
+    try {
+      openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(3) });
+      mount(props({ initialViewState: { page: 2, offset: 0.5 } }));
+      await waitFor(() => expect(pages()).toHaveLength(3));
+      await waitFor(() => expect(screen.getByTestId('preview-pdf-p1').scrollTop).toBe(page + 0.5 * page));
+    } finally {
+      for (const [name, d] of [['offsetTop', before.top], ['offsetHeight', before.height]] as const) {
+        if (d) Object.defineProperty(proto, name, d);
+        else delete (proto as unknown as Record<string, unknown>)[name];
+      }
+    }
+  });
+});
+
 describe('Go to Page (FR-062b)', () => {
   /** Mount a laid-out PDF and open Go to Page the way the panel does (Ctrl+G, the menus): through what it registered. */
   async function openGoTo(pageCount: number): Promise<HTMLInputElement> {

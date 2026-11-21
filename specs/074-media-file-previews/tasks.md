@@ -152,7 +152,7 @@ last.
 - [ ] T068 Measure a parented SVG preview showing an edit within the update delay + 250 ms, beside the parented HTML reading in `preview-media-performance.e2e.ts`, per SC-003 (partial)
 - [ ] T069 Word an Image or SVG Preview's Fit tooltip and the toolbar's and viewport's accessible names for a picture, not a diagram, per FR-033 (partial)
 - [ ] T070 Show the resting zoom indicator at full opacity while its panel is in Focus Mode, per FR-031g (partial)
-- [ ] T071 Restore a PDF's position within the page after a reload, not only the page, per FR-064 and US4/AC3 (partial)
+- [x] T071 Restore a PDF's position within the page after a reload, not only the page, per FR-064 and US4/AC3 (partial)
 - [x] T072 Resolve an HTML page's legacy `background` attribute as an image resource, so a relative one loads and a remote one is refused and listed, per FR-072 and FR-093a (partial)
 - [x] T073 Update the code comments that still describe the superseded opaque-origin HTML frame, per FR-074a, FR-085a and FR-072a (partial)
 - [x] T074 Amend the spec text that FR-104, FR-020a and 068 FR-056 superseded: US1/AC1's panel title, the SVG viewBox edge case, and FR-035's `|300` for an image, per FR-104, FR-020a and FR-035 (contradicts)

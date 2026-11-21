@@ -438,7 +438,15 @@ export function PdfBody({
       restoreTo.current = null;
       const page = target === null ? 1 : Math.min(Math.max(1, Math.round(target.page)), loaded.doc.pageCount);
       setCurrent(page);
-      if (target !== null) pageEls.current.get(page)?.scrollIntoView({ block: 'start' });
+      if (target !== null) {
+        // FR-064 — back to the same point of the page, not only its top: `offset` is the fraction of the page above
+        // the scroller's top edge, as `capture` measured it.
+        const el = pageEls.current.get(page);
+        const scroller = scrollerRef.current;
+        if (el !== undefined && scroller !== null && el.offsetHeight > 0) {
+          scroller.scrollTop = el.offsetTop + Math.min(1, Math.max(0, target.offset)) * el.offsetHeight;
+        } else el?.scrollIntoView({ block: 'start' });
+      }
     }
     latest.current.onDrawn(filePath);
   }, [loaded, filePath]);
