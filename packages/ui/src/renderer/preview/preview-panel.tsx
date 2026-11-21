@@ -1871,11 +1871,15 @@ export function PreviewPanel({
               // `throng:editor:resolveDrop` produced (contract §2) — reuse the same link-notice path.
               if (isLinkNotice(res.notice)) raiseLinkNotice(res.notice);
               return;
-            case 'reroute':
+            case 'reroute': {
               // 054 FR-008 — a file of another provider dropped here opens as its own type's preview.
               clearLinkNotice();
-              void requestPreviewOpen({ absPath, projectId: panel.originProjectId });
+              // 073 FR-033b (T096) — one of THIS panel's type was refused only because its grid holds unsaved edits:
+              // the open names this panel whatever "Open previews in" says, so its unsaved-changes prompt comes.
+              const sameType = registry.forPath(absPath)?.id === stateRef.current?.providerId;
+              void requestPreviewOpen({ absPath, projectId: panel.originProjectId, ...(sameType ? { target: { mode: 'lastActive' as const } } : {}) });
               return;
+            }
             default:
               // `focusedOther` (FR-023, 044 FR-090c) — main focused the preview already showing it.
               clearLinkNotice();
@@ -1893,7 +1897,7 @@ export function PreviewPanel({
           );
         });
     },
-    [panelId, placeLeft, clearLinkNotice, raiseLinkNotice, panel.originProjectId, ws],
+    [panelId, placeLeft, clearLinkNotice, raiseLinkNotice, panel.originProjectId, registry, ws],
   );
 
   /*
