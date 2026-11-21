@@ -372,6 +372,37 @@ describe('the menu over a link in the page is the link menu (FR-079, FR-085a)', 
   });
 });
 
+// 074 convergence T081 — FR-079, Constitution VI: the link menu's Open Link does what Ctrl+click does — on a
+// `#fragment` link, scroll the page in its frame to the target.
+describe('Open Link on a fragment link scrolls the page (FR-079)', () => {
+  it('scrolls the frame to the fragment’s target', async () => {
+    const m = await mount(PLAIN);
+    await waitFor(() => expect(frameDoc()).not.toBeNull(), COLD);
+    update(m, 2, '<p><a href="#sec">Jump</a></p><h2 id="sec">Section</h2>');
+    await waitFor(() => expect(frameDoc()!.querySelector('#sec')).not.toBeNull());
+    const doc = frameDoc()!;
+    const W = doc.defaultView as Window & typeof globalThis;
+    const scrolled: string[] = [];
+    const restores: Array<() => void> = [];
+    for (const proto of new Set([W.Element.prototype, Element.prototype])) {
+      const before = proto.scrollIntoView;
+      proto.scrollIntoView = function (this: Element) {
+        scrolled.push(this.id);
+      };
+      restores.push(() => {
+        proto.scrollIntoView = before;
+      });
+    }
+    try {
+      fireEvent.contextMenu(doc.querySelector('a')!, { clientX: 4, clientY: 4 });
+      fireEvent.click(await screen.findByRole('menuitem', { name: /^Open Link/ }));
+      await waitFor(() => expect(scrolled).toContain('sec'));
+    } finally {
+      for (const restore of restores) restore();
+    }
+  });
+});
+
 // 074 convergence T064 — FR-072: a change on disk to a stylesheet or font the page names is shown at the next update or
 // Refresh. The frame fetches a resource again only when its URL changes, so each update names its assets afresh.
 // 074 convergence T076 — FR-071b: a live edit updates the page in place, so it names the same asset URLs and nothing is

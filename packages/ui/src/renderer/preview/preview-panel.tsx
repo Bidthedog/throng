@@ -1036,8 +1036,20 @@ export function PreviewPanel({
     heldDocument.current = null;
   }, []);
   useEffect(() => endHeadingHold, [endHeadingHold]);
+  /** 074 FR-079 — the body's own fragment reveal, when its page lives outside the body host (an HTML frame). */
+  const bodyFragmentReveal = useRef<((fragment: string) => boolean) | null>(null);
   const scrollToHeading = useCallback(
     (fragment: string, animateMs?: number, expandTarget = false): boolean => {
+      // 074 FR-079 — a body that draws its page in a frame scrolls the frame itself (`registerFragmentReveal`).
+      const ownReveal = bodyFragmentReveal.current;
+      if (ownReveal !== null) {
+        if (ownReveal(fragment)) {
+          clearLinkNotice();
+          return true;
+        }
+        raiseLinkNotice({ kind: 'link-missing-heading', target: fragment });
+        return false;
+      }
       const host = bodyHostRef.current;
       const heading = host ? findHeading(host, fragment) : null;
       if (host && heading) {
@@ -1186,6 +1198,9 @@ export function PreviewPanel({
   }, []);
   // 074 FR-085a — a framed page's own document holds its selection.
   const bodySelectionHost = useRef<(() => HTMLElement | null) | null>(null);
+  const registerFragmentReveal = useCallback((reveal: ((fragment: string) => boolean) | null): void => {
+    bodyFragmentReveal.current = reveal;
+  }, []);
   const registerSelectionHost = useCallback((host: (() => HTMLElement | null) | null): void => {
     bodySelectionHost.current = host;
   }, []);
@@ -2770,6 +2785,7 @@ export function PreviewPanel({
             // 074 R4 — a pure passthrough, as readEmbeds is.
             registerPageLayout={registerPageLayout}
             registerSelectionHost={registerSelectionHost}
+            registerFragmentReveal={registerFragmentReveal}
             readSource={(asset) =>
               window.throng?.preview?.readSource?.(panelId, asset) ?? Promise.resolve({ ok: false as const, status: 404 })
             }

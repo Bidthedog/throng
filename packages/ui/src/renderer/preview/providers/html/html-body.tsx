@@ -35,7 +35,7 @@ import { IconButton } from '../../../common/icon-button.js';
 import { sanitiseHtmlPage, type BlockedResource } from './html-sanitise.js';
 import { readFrameScroll, updateFrameInPlace, writeFrameScroll, type FrameScroll } from './html-frame-update.js';
 import { listenToFrameInput } from './frame-input.js';
-import { listenToFrameFragments, listenToFrameLinkMenu } from './frame-fragments.js';
+import { listenToFrameFragments, listenToFrameLinkMenu, scrollToFragment } from './frame-fragments.js';
 import { listenToFrameMiddleDrag } from './frame-middle-drag.js';
 import { previewRefreshCount } from '../../refresh-preview.js';
 import { BlockedResourcesNotice, blockedFromViolation } from './blocked-notice.js';
@@ -82,6 +82,7 @@ export function HtmlBody({
   linkWording,
   onViewStateCapture,
   registerSelectionHost,
+  registerFragmentReveal,
 }: PreviewBodyProps): ReactElement {
   const text = content.kind === 'text' ? content.text : '';
   const theme = useActiveTheme();
@@ -283,6 +284,16 @@ export function HtmlBody({
     registerSelectionHost(() => docRef.current?.body ?? null);
     return () => registerSelectionHost(null);
   }, [registerSelectionHost]);
+
+  // FR-079 — the panel's heading follows (Open Link on a `#fragment`, a link to this page with one) scroll the frame.
+  useEffect(() => {
+    if (registerFragmentReveal === undefined) return undefined;
+    registerFragmentReveal((fragment) => {
+      const doc = docRef.current;
+      return doc !== null && scrollToFragment(doc, `#${fragment}`);
+    });
+    return () => registerFragmentReveal(null);
+  }, [registerFragmentReveal]);
 
   useEffect(() => {
     onDrawnRef.current(filePath);

@@ -289,6 +289,13 @@ export interface PreviewBodyProps {
    * Select All, the copy gesture and the body menu read the selection there instead of in its own body host.
    */
   registerSelectionHost?(host: (() => HTMLElement | null) | null): void;
+  /**
+   * 074 FR-079, Constitution VI — a body whose headings and anchors live outside the panel's body host (an HTML page's
+   * frame) hands the panel how to scroll to a `#fragment` in what it shows, and `null` when it goes. The panel's
+   * heading follows (Open Link, a link to the shown file with a fragment) use it instead of looking in its own body
+   * host; it answers whether the fragment named anything.
+   */
+  registerFragmentReveal?(reveal: ((fragment: string) => boolean) | null): void;
 }
 
 /** 074 FR-062c — how a paged body lays its pages out: one under another, two to a row, or as many as fit. */

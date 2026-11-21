@@ -23,8 +23,11 @@ function fragmentLinkOf(target: EventTarget | null): HTMLAnchorElement | HTMLAre
   return (link.getAttribute('href') ?? '').trim().startsWith('#') ? (link as HTMLAnchorElement | HTMLAreaElement) : null;
 }
 
-/** The element a fragment names: an id first, then a named anchor; the top of the page for `#` and `#top`. */
-function scrollToFragment(doc: Document, href: string): void {
+/**
+ * The element a fragment names: an id first, then a named anchor; the top of the page for `#` and `#top`. `true`
+ * when it named something to scroll to.
+ */
+export function scrollToFragment(doc: Document, href: string): boolean {
   let name = href.trim().slice(1);
   try {
     name = decodeURIComponent(name);
@@ -34,9 +37,13 @@ function scrollToFragment(doc: Document, href: string): void {
   const target = name === '' ? null : (doc.getElementById(name) ?? doc.getElementsByName(name)[0] ?? null);
   if (target !== null) {
     target.scrollIntoView({ block: 'start' });
-    return;
+    return true;
   }
-  if (name === '' || name.toLowerCase() === 'top') doc.defaultView?.scrollTo(0, 0);
+  if (name === '' || name.toLowerCase() === 'top') {
+    doc.defaultView?.scrollTo(0, 0);
+    return true;
+  }
+  return false;
 }
 
 /** Listen in the frame's current document; the returned function removes the listeners. */
