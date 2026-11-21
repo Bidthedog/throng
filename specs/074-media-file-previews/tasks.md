@@ -164,4 +164,4 @@ last.
 - [x] T077 Scroll an HTML page with a plain middle-button drag, as every other preview body scrolls, per FR-063a (partial)
 - [x] T078 Word an HTML page's file-link hover for what Ctrl+click does to that file (preview, editor or the OS's default program), as a Markdown preview does, per FR-018a and FR-079 (partial)
 - [ ] T079 Measure an over-limit Image or PDF open showing its size notice within 200 ms, per SC-005 (partial)
-- [ ] T080 Reword the remaining comments that describe the opaque HTML frame, and remove the Find-disabled path no provider uses, per FR-074a and FR-086d (partial)
+- [x] T080 Reword the remaining comments that describe the opaque HTML frame, and remove the Find-disabled path no provider uses, per FR-074a and FR-086d (partial)

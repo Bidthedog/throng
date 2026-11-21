@@ -1,8 +1,9 @@
 /**
  * 074 FR-086 — the preview panels whose body the find bar cannot search, and how Find shows on each:
  *
- * - `disabled` — a body drawn inside an opaque, sandboxed frame (an HTML Preview, whose view says `searchable: false`)
- *   has text the panel cannot read: Find is shown DISABLED in its body menu and header menu, never offered and broken.
+ * - `disabled` — a body whose text the panel cannot read (a view saying `searchable: false`): Find is shown DISABLED in
+ *   its body menu and header menu, never offered and broken. No shipped provider says so: the HTML page it was for is
+ *   same-origin and searched (FR-074a, FR-086b).
  * - `absent` (FR-086a, 2026-11-19) — a body with no text at all (an Image or SVG Preview, `findable: false`): Find
  *   is not offered at all.
  *

@@ -316,8 +316,10 @@ export interface PreviewProviderView {
   /** The body menu offers Copy and Select All only when true (FR-035). */
   textSelection: boolean;
   /**
-   * 074 FR-086 — whether the find bar can search the drawn body. Absent reads `true`. `false` (a page in an
-   * opaque, sandboxed frame) shows Find DISABLED on the panel's body menu, header menu and chord.
+   * 074 FR-086 — whether the find bar can search the drawn body. Absent reads `true`. `false` shows Find DISABLED on
+   * the panel's body menu, header menu and chord. No shipped provider sets it: the HTML page it was for shares the
+   * app's origin and is searched like any preview (FR-074a, FR-086b), and FR-086d gives a provider without the exact
+   * Find none at all (`findable: false`), never a lesser one.
    */
   searchable?: boolean;
   /**
