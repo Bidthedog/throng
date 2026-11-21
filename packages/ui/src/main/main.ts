@@ -2209,9 +2209,11 @@ if (isPrimaryInstance)
        */
       const ownerUnknown = (ownership?.ownerKind ?? 'project') === 'project' && !ownership?.ownerRoot;
       if (result.reason === 'out-of-tree' && ownerUnknown) return undefined;
-      return result.reason === 'not-decodable'
-        ? { reason: result.reason, encoding: result.encoding }
-        : { reason: result.reason };
+      // 059 FR-053 names the encoding a not-decodable file was read as; 077 FR-014 quotes a too-large file's
+      // size and the limit it is over.
+      if (result.reason === 'not-decodable') return { reason: result.reason, encoding: result.encoding };
+      if (result.reason === 'too-large') return { reason: result.reason, size: result.size, limit: result.limit };
+      return { reason: result.reason };
     },
     // Raise the window that already owns an open file and focus its Panel (FR-011a).
     focusEditor: (windowId, panelId) => {

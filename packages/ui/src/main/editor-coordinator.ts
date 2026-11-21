@@ -449,7 +449,7 @@ export interface CoordinatorDeps {
   refusalFor?: (
     absPath: string,
     ownership?: OpenOwnership,
-  ) => Promise<{ reason: string; encoding?: EncodingId } | undefined>;
+  ) => Promise<{ reason: string; encoding?: EncodingId; size?: number; limit?: number } | undefined>;
   /**
    * 044 u4/u7 — `PreviewService`'s observer. Optional (a suite that does not exercise it omits it).
    * `main.ts` always passes one: a relay built before the coordinator and pointed at `PreviewService` the

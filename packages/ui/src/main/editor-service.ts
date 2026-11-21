@@ -93,9 +93,11 @@ export type LoadResult =
       // `not-found` is a genuinely absent file (a dangling symlink, a file deleted mid-drag). It stays
       // DISTINCT from `out-of-tree`, which is a file that exists and is refused — the two used to be the
       // same reason, which is how a refusal came to be reported as an absence.
-      reason: 'binary' | 'too-large' | 'io' | 'out-of-tree' | 'folder' | 'not-found';
+      reason: 'binary' | 'io' | 'out-of-tree' | 'folder' | 'not-found';
       error: string;
-    };
+    }
+  // 077 FR-014 — over `editor.maxOpenFileBytes`: the file's bytes and the limit, so the notice quotes both.
+  | { ok: false; reason: 'too-large'; error: string; size: number; limit: number };
 
 export type SaveReason = 'out-of-tree' | 'no-location' | 'io' | 'unrepresentable';
 export type SaveResult =

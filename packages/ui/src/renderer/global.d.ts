@@ -1016,7 +1016,14 @@ declare global {
         }) => Promise<
           | { action: 'focus'; panelId: string; windowId: string }
           | { action: 'open' }
-          | { action: 'refuse'; reason: string; encoding?: import('@throng/core').EncodingId }
+          | {
+              action: 'refuse';
+              reason: string;
+              encoding?: import('@throng/core').EncodingId;
+              /** 077 FR-014 — a too-large file's bytes and the limit it is over. */
+              size?: number;
+              limit?: number;
+            }
         >;
         isOpen: (absPath: string) => Promise<boolean>;
         list: () => Promise<
@@ -1149,9 +1156,11 @@ export type EditorLoadResult =
   // files — a rejection that says nothing at all (FR-061).
   | {
       ok: false;
-      reason: 'binary' | 'too-large' | 'io' | 'out-of-tree' | 'folder' | 'not-found' | 'utf32';
+      reason: 'binary' | 'io' | 'out-of-tree' | 'folder' | 'not-found' | 'utf32';
       error: string;
     }
+  // 077 FR-014 — over `editor.maxOpenFileBytes`: the file's bytes and the limit, so the notice quotes both.
+  | { ok: false; reason: 'too-large'; error: string; size: number; limit: number }
   // 059 FR-014 — not lossless in the encoding it claims or was reopened in.
   | { ok: false; reason: 'not-decodable'; encoding: import('@throng/core').EncodingId; error: string };
 

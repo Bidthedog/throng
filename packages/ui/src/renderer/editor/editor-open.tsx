@@ -16,7 +16,7 @@ import { useProjects } from '../state/projects-store.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { missingFileMessage } from './editor-missing-notice.js';
-import { drainRefusedOpens, publishRefusedOpen, useRefusedOpens } from './refusal-store.js';
+import { drainRefusedOpens, publishRefusedOpen, refusedOpenOf, useRefusedOpens } from './refusal-store.js';
 import { getEditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
 import { getLastActiveEditor, setLastActiveEditor } from './last-active-editor.js';
@@ -71,11 +71,11 @@ export function EditorOpenListener(): null {
   const projectRoot = projects.find((p) => p.id === projectId)?.rootFolder;
   useEffect(() => {
     if (refused.length === 0) return;
-    for (const { absPath, reason, encoding } of drainRefusedOpens()) {
+    for (const { absPath, reason, encoding, size, limit } of drainRefusedOpens()) {
       reportSubject({
         subject: absPath,
         reason,
-        message: missingFileMessage(reason, encoding),
+        message: missingFileMessage(reason, encoding, size !== undefined && limit !== undefined ? { size, limit } : undefined),
         // FR-018 — the row renders the path RELATIVE to the project root, because the notice's
         // heading already names the project. The absolute form stays in `detail` (FR-018c).
         displayPath: relativeToRoot(absPath, projectRoot),
@@ -340,11 +340,7 @@ export async function openFileInTab(
   // FR-013a binds every entry point, and a reason each caller must remember to forward is a rule the
   // next entry point will forget — which is how `openFileInNewEditor` came to bypass this check.
   if (decision?.action === 'refuse') {
-    publishRefusedOpen({
-      absPath,
-      reason: decision.reason,
-      ...(decision.encoding ? { encoding: decision.encoding } : {}),
-    });
+    publishRefusedOpen(refusedOpenOf(absPath, decision));
     return false;
   }
 

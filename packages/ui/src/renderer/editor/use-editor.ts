@@ -1366,7 +1366,11 @@ export function useEditor(params: UseEditorParams): void {
       if (isMissingReason(entry.reason) && !metaRef.current.settings.warnOnMissingFile) continue;
       reportPanelFailureRef.current({
         panelId,
-        message: missingFileMessage(entry.reason, entry.encoding),
+        message: missingFileMessage(
+          entry.reason,
+          entry.encoding,
+          entry.size !== undefined && entry.limit !== undefined ? { size: entry.size, limit: entry.limit } : undefined,
+        ),
         detail: missingFileDetail(entry, os),
       });
     }
@@ -1762,6 +1766,8 @@ export function useEditor(params: UseEditorParams): void {
           filePath: absPath,
           reason: loaded.reason,
           ...('encoding' in loaded && loaded.encoding ? { encoding: loaded.encoding } : {}),
+          // 077 FR-014 — a too-large refusal quotes the file's size and the limit.
+          ...(loaded.reason === 'too-large' ? { size: loaded.size, limit: loaded.limit } : {}),
         },
       ]);
       publishState();

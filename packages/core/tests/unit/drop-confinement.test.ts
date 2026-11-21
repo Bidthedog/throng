@@ -120,6 +120,11 @@ describe('resolveDrop — what is not a text file', () => {
     }
   });
 
+  it('carries the size and the limit on a too-large refusal, so a later notice can quote them (077 T045)', () => {
+    const d = resolveDrop(file('C:\\code\\demo\\huge.log', 2_000_000), doc, roots, LIMITS);
+    expect(d).toMatchObject({ ok: false, reason: 'too-large', size: 2_000_000, limit: LIMITS.maxOpenFileBytes });
+  });
+
   it('checks confinement BEFORE size — an out-of-tree file is refused for the reason that matters', () => {
     // A 2 GB file from another project is not "too large", it is not yours. Reporting the size would
     // send the user off to change a limit that was never the obstacle.

@@ -32,6 +32,25 @@ export interface RefusedOpen {
   reason: string;
   /** 059 review R2 — the encoding a `not-decodable` file was read as, so the notice can name it. */
   encoding?: EncodingId;
+  /** 077 FR-014 — a too-large file's bytes and the `editor.maxOpenFileBytes` it is over, so the notice quotes both. */
+  size?: number;
+  limit?: number;
+}
+
+/**
+ * The refusal an open decision carries, for {@link publishRefusedOpen}: everything the notice needs to say WHY,
+ * taken from the decision in one place so no entry point forwards the reason and forgets the detail (077 T045).
+ */
+export function refusedOpenOf(
+  absPath: string,
+  decision: { reason: string; encoding?: EncodingId; size?: number; limit?: number },
+): RefusedOpen {
+  return {
+    absPath,
+    reason: decision.reason,
+    ...(decision.encoding ? { encoding: decision.encoding } : {}),
+    ...(decision.size !== undefined && decision.limit !== undefined ? { size: decision.size, limit: decision.limit } : {}),
+  };
 }
 
 let queue: readonly RefusedOpen[] = [];
