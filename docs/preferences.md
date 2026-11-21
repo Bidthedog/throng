@@ -112,13 +112,12 @@ The window, the app-wide behaviour and the attention marks, each under a heading
 ### Attention
 
 
-An attention mark flags a panel that needs you; these settings decide how a mark clears and whether
-the taskbar counts it, whatever raised it. How it is announced is the Attention row under
-[Notifications](#notifications); which terminal events raise one is under [Terminal](#terminal).
+An attention mark flags a panel that needs you; this setting decides whether the taskbar counts it,
+whatever raised it. How a mark is announced, and how it clears, are under [Notifications](#notifications);
+which terminal events raise one is under [Terminal](#terminal).
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Clear delay | `attention.clearDelayMs` | 1 s (1,000 ms) | 0 – 10 s, step 0.1 s | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
 | Taskbar badge (Windows only) | `attention.taskbarBadge` | on | on · off | Show the number of marked panels, across every project, on throng's taskbar button, whether or not throng is focused. It is not affected by the notification settings. |
 
 ### File Manager
@@ -532,7 +531,8 @@ Reset and Revert act on all three of its settings.
 
 The Attention row announces [attention marks](#attention), Attention and Failed alike; a Failed mark keeps
 the error colour and icon. A mark is announced once: a later signal on a panel still marked updates its
-toast, if one is showing, and raises nothing new.
+toast, if one is showing, and raises nothing new. Under the rows, **Attention › Clear delay** sets how long you
+must stay in a marked panel before its mark clears.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
@@ -557,6 +557,7 @@ toast, if one is showing, and raises nothing new.
 | Attention: Toast | `notifications.attention.toast` | on | on · off | Whether a mark is announced by a toast. The mark itself is raised whatever you choose. |
 | Attention: Panel | `notifications.attention.panel` | on | on · off | Whether a mark is kept in the Notifications panel until it clears or you dismiss it. |
 | Attention: OS Notify | `notifications.attention.os` | on | on · off | Raise an OS notification for a mark, whatever Toast and Panel say, while throng is not focused; clicking it goes to the panel. |
+| Attention: Clear delay | `attention.clearDelayMs` | 1 s (1,000 ms) | 0 – 10 s, step 0.1 s | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
 
 ## Logging
 

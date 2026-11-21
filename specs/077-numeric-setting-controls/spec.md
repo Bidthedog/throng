@@ -53,6 +53,12 @@ maintainer may still overrule any:
   its message until corrected; Escape restores the stored value (FR-009). An entry is never discarded (040 FR-007,
   018 FR-017), which the first wording of FR-009 would have broken.
 
+### Session 2026-11-21
+
+- Q (maintainer, 08:12): "Move the 'Attention -> Clear Delay' preferences setting under the 'Notifications'
+  preferences header." → FR-021. The key is unchanged; the setting keeps its Attention subsection, now under
+  Notifications beside the Attention row that announces a mark. The taskbar badge stays under General › Attention.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Set a size in MB, or exactly in bytes (Priority: P1)
@@ -270,6 +276,14 @@ effective value after upgrading, now stored in ms or bytes.
   "As typed" keeps 075 FR-066's timing: the check runs once typing pauses (or the field is left), and a pause never
   clamps; leaving the field or Enter confirms. ArrowUp and ArrowDown move by the declared step (margins 1 mm, scale 5%,
   copies 1), within the bounds.
+
+**Placement**
+
+- **FR-021**: *(2026-11-21.)* **Clear delay** (`attention.clearDelayMs`) MUST sit in Preferences under
+  **Notifications › Attention**, and `docs/preferences.md` MUST document it in the Notifications section. Its key,
+  default, bounds and control are unchanged. *(Supersedes 057 FR-108's and round 4's "taskbar badge and clear delay
+  stay under Attention" and 069 FR-068's General › Attention for the clear delay alone; the taskbar badge stays
+  under General › Attention.)*
 
 **Documentation**
 

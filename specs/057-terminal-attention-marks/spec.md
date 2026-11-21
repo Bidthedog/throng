@@ -215,7 +215,7 @@ box and clipped by it, against FR-092 — the glyph takes the dot's place and bo
 - Q: Where do the notification preferences live? → A: **All under Notifications, one row per type** —
   Error, Warning, Info, Success and Attention — each row holding the display mode, its duration and
   whether it is also announced in the OS, with one global switch for the OS. Taskbar badge and clear
-  delay stay under Attention. (FR-108, FR-109)
+  delay stay under Attention. (FR-108, FR-109) *(The clear delay moved to Notifications › Attention: 077 FR-021.)*
 - Q: Should ordinary notices reach the OS too? → A: **Yes, per type, in this branch.** (FR-110,
   superseding 030's "Out of Scope: operating-system-level or background notifications")
 - Q: When? → A: **Only while no throng window is focused**, the rule attention already used. (FR-110)
@@ -418,7 +418,8 @@ within a second of the bell. Switch to A, click into the terminal, and check tha
 20. *(2026-10-19, round 4)* **Given** Preferences → Notifications, **Then** it shows one row each for
     Error, Warning, Info, Success and Attention, each with its display mode, its duration (usable only
     under Display for) and an "Also in the OS" switch, and above them one switch for OS notifications.
-    Preferences → Attention keeps the clear delay and the taskbar badge only. (FR-108, FR-109)
+    Preferences → Attention keeps the clear delay and the taskbar badge only. (FR-108, FR-109) *(The clear delay
+    is now under Notifications › Attention: 077 FR-021.)*
 21. *(2026-10-19, round 4)* **Given** Error's "Also in the OS" is on and throng is in the background,
     **When** a file fails to save, **Then** a Windows notification names the failure; clicking it brings
     throng forward. With throng focused, only the toast shows. With the global switch off, nothing

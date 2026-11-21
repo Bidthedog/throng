@@ -1361,23 +1361,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     enabledWhen: { key: 'terminals.attention.enabled', is: true },
   },
 
-  // Attention (057, FR-095/FR-039): how a raised mark clears, and the taskbar badge. How it is announced is
-  // the Attention row under Notifications (FR-111).
-  {
-    key: 'attention.clearDelayMs',
-    label: 'Clear delay',
-    description:
-      'How long, in milliseconds, you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
-    group: 'General',
-    subgroup: 'Attention',
-    control: 'slider',
-    // 077 FR-001, FR-005 — stored in ms, shown in s.
-    storedUnit: 'ms',
-    display: 's',
-    min: 0,
-    max: 10000,
-    step: 100,
-  },
+  // Attention (057, FR-039): the taskbar badge. How a mark clears is Notifications › Attention (077 FR-021); how it is
+  // announced is the Attention row under Notifications (FR-111).
   {
     // 062 FR-008: the badge is an overlay icon, which Electron offers on Windows alone.
     onlyOn: 'windows',
@@ -1823,6 +1808,23 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     'Attention',
     'These announce a terminal that needs you, Attention and Failed marks alike. The mark itself is raised whatever you choose.',
   ),
+  {
+    // 057 FR-095 — how a raised mark clears. 077 FR-021 (maintainer, 2026-11-21): under Notifications, beside the
+    // Attention row that announces the mark, superseding 057 FR-108's and 069 FR-068's place for it under General.
+    key: 'attention.clearDelayMs',
+    label: 'Clear delay',
+    description:
+      'How long, in milliseconds, you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
+    group: 'Notifications',
+    subgroup: 'Attention',
+    control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
+    min: 0,
+    max: 10000,
+    step: 100,
+  },
 
   {
     // #123 — the one diagnostics knob a user needs, and the reason it is a setting at all: the

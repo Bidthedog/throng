@@ -59,7 +59,10 @@ describe('Attention settings, as drawn (057 US4)', () => {
   it('draws the Attention group and Terminal › Attention with every setting and description, and the notification choices live elsewhere (FR-108)', async () => {
     await mount({});
 
-    expect(ATTENTION_GROUP, 'the General › Attention rows are registered').toHaveLength(2);
+    expect(ATTENTION_GROUP, 'the General › Attention rows are registered').toHaveLength(1);
+    // 077 FR-021 — the clear delay is drawn under Notifications › Attention, beside the row that announces a mark.
+    const clearDelay = within(screen.getByTestId('settings-subgroup-Notifications-Attention')).getByTestId('setting-attention.clearDelayMs');
+    expect(clearDelay).toHaveTextContent('Clear delay');
     const group = screen.getByTestId('settings-subgroup-General-Attention');
     for (const d of ATTENTION_GROUP) {
       const el = within(group).getByTestId(`setting-${d.key}`);

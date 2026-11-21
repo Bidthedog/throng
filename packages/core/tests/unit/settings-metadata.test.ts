@@ -587,8 +587,13 @@ describe('the Attention settings in the registry (057 US4)', () => {
   const attentionGroup = SETTINGS_METADATA.filter((d) => d.group === 'General' && d.subgroup === 'Attention');
   const terminalAttention = SETTINGS_METADATA.filter((d) => d.group === 'Terminal' && d.subgroup === 'Attention');
 
-  it('keeps the clear delay and the taskbar badge in Attention (FR-108/FR-111: the notification choices moved to Notifications)', () => {
-    expect(attentionGroup.map((d) => d.key).sort()).toEqual(['attention.clearDelayMs', 'attention.taskbarBadge']);
+  it('keeps the taskbar badge in General › Attention (FR-108/FR-111: the notification choices moved to Notifications)', () => {
+    expect(attentionGroup.map((d) => d.key)).toEqual(['attention.taskbarBadge']);
+  });
+
+  it('puts the clear delay under Notifications › Attention, beside the row that announces a mark (077 FR-021)', () => {
+    const clearDelay = SETTINGS_METADATA.find((d) => d.key === 'attention.clearDelayMs');
+    expect(clearDelay).toMatchObject({ group: 'Notifications', subgroup: 'Attention', label: 'Clear delay' });
   });
 
   it('holds the master switch, seven signals and the quiet time under Terminal › Attention', () => {

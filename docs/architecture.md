@@ -476,7 +476,7 @@ boundary so no layer knows more than it has to.
 - *Deciding what a mark is* is main's. `main/attention-service.ts` owns the mark model from
   `core/attention/`: at most one mark per panel, merged and sticky when Failed, cleared once the panel
   has held keyboard focus, in a focused window, for the
-  [clear delay](preferences.md#attention). Main also sends the daemon the set of attended panels
+  [clear delay](preferences.md#notifications). Main also sends the daemon the set of attended panels
   (`terminal.attentionFocus`), and the daemon writes `CSI I` / `CSI O` to every program that turned on
   focus reporting (DEC 1004) as its panel enters or leaves that set — the view cannot, because a tab or
   project switch unmounts it. Windows report which panels they host and which has focus; main
