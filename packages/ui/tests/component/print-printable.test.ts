@@ -59,6 +59,16 @@ describe('the printable clone', () => {
     expect(root.textContent).toContain('needle here');
   });
 
+  it('prints a diagram still drawing as its source, not as a blank gap (FR-043a)', () => {
+    const live = body(
+      '<p>before</p><div class="preview-diagram-host" data-diagram-source="graph TD; A--&gt;B" data-diagram-lang="mermaid"><div class="preview-loading">Drawing…</div></div><p>after</p>',
+    );
+    const { root } = printableClone(live, 'width');
+    const host = root.querySelector('.preview-diagram-host');
+    expect(host?.querySelector('pre')?.textContent).toBe('graph TD; A-->B');
+    expect(root.textContent).not.toContain('Drawing…');
+  });
+
   it('leaves out the scroll-sync mark: a gutter bar on screen, never on paper (073 FR-033d)', () => {
     const live = body(`<p class="${SYNC_MARK_CLASS} ${SYNC_MARK_ON_CLASS}" data-source-line="3">synced</p>`);
     live.classList.add('preview-markdown--gutter');

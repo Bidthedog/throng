@@ -16,7 +16,7 @@
  */
 import { PRINT_PALETTE, logExpected, type PrintableOutput } from '@throng/core';
 import { PRINT_STYLESHEET } from './print-stylesheet.js';
-import { DIAGRAM_HOST_CLASS } from '../diagram/diagram-host.js';
+import { DIAGRAM_HOST_CLASS, DIAGRAM_SOURCE_ATTRIBUTE } from '../diagram/diagram-host.js';
 import { rasterSourceOf } from '../diagram/rasterise.js';
 import { IMAGE_PENDING_ATTRIBUTE, PREVIEW_LOADING_CLASS } from '../loading-placeholder.js';
 import { MATH_PENDING_ATTRIBUTE, mathLiteralOf } from '../math-host.js';
@@ -88,7 +88,16 @@ function flattenDiagrams(live: HTMLElement, clone: HTMLElement, fit: 'width' | '
     const svg = liveHosts[i]?.querySelector<SVGSVGElement>('.preview-diagram-frame__layer > svg') ?? null;
     if (svg === null) {
       const notice = host.querySelector('.preview-diagram__notice');
-      host.replaceChildren(...(notice !== null ? [notice] : []));
+      // FR-043a — a diagram still drawing prints as itself, as an equation still typesetting does: its source as
+      // written, rather than the blank gap its stripped placeholder would leave.
+      const source = notice === null ? host.getAttribute(DIAGRAM_SOURCE_ATTRIBUTE) : null;
+      if (source !== null) {
+        const pre = host.ownerDocument.createElement('pre');
+        pre.textContent = source;
+        host.replaceChildren(pre);
+      } else {
+        host.replaceChildren(...(notice !== null ? [notice] : []));
+      }
       host.classList.add('throng-print__diagram');
       return;
     }
