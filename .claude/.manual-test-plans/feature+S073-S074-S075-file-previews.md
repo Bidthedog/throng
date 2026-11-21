@@ -81,6 +81,7 @@ One plan for the merged branch. Each area owns a block of IDs and picks its numb
 | MT-114 | [General] Attention marks survive a restart (#692) | untested | | | |
 | MT-115 | [General] View Whitespace never changes line height (#683) | untested | | | |
 | MT-116 | [General] Project rows use full width until hovered, with one popover (#695) | untested | | | |
+| MT-117 | [General] Code stays readable on the editor selection in every theme (#105) | untested | | | |
 
 ## MT-01: [CSV] A CSV opens as a grid
 
@@ -1254,3 +1255,16 @@ Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/r
 4. Hover the move handle, Edit and Remove. Each shows its own tooltip and no row popover.
 5. Double-click the row. The rename box opens and the popover goes.
 6. Preferences › General › Projects: set Project popover delay to 0, and the popover is instant. Turn Project popover off, and none appears.
+
+## MT-117: [General] Code stays readable on the editor selection in every theme (#105)
+
+Covers: #105
+Paths: `packages/core/src/config/theme-quality.ts`, `packages/core/src/config/themes.ts`, `packages/ui/src/renderer/editor/editor.css`
+
+### Steps
+1. Set the theme to Windows Terminal. Open a source file and select a few lines holding comments, strings and keywords. Every token stays readable on the selection, and the selection still stands out from the background.
+2. Repeat in the Bash, VSCode and throng themes.
+3. Click into another panel. The unfocused selection is quieter but still visible.
+
+### Negative cases
+- A theme you have customised keeps your own selection colour after the upgrade.
