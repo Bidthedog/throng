@@ -161,7 +161,9 @@ image when it ships.
   (FR-071); its settings pane needs and offers no scrollbars (FR-069). Measured at the window's former minimum
   (640 × 480) with every control shown, the pane overflowed by 15 px across (a fieldset is as wide as its
   content by default) and 192 px down. The controls now shrink to the pane, custom margins sit two to a row, and
-  the window's minimum height is 600 px.
+  the window's minimum height is 600 px. *(Superseded 2026-11-21, converge T075: the minimum height is **680 px**.
+  T066 raised it when FR-068b's margins page, scale choices and printer list joined the pane, so every control fits
+  without a scrollbar.)*
 
 ## User Scenarios & Testing *(mandatory)*
 
