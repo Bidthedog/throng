@@ -715,7 +715,8 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       await armWatch(h, 1);
 
       // Leaving the flipped index must not take the standing one down with it.
-      expect(spy.live, 'each index holds a watch of its own').toBe(2);
+      // #274 — the two indices hold the root's ONE watch; leaving the flipped one keeps it for the standing one.
+      expect(spy.live, 'both indices share the root’s one watch').toBe(1);
       h.service.unsubscribe(1, h.root, true);
       expect(spy.live).toBe(1);
       const mark = h.sent.length;
@@ -761,6 +762,50 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       await h.destroy();
     }
   }, 30_000);
+
+  /*
+   * #274, at the service's OWN seam — "flipping the exclusion toggle creates no additional IFileWatcher.watch on the
+   * root". The test above holds only because main hands the service a SharedFileWatcher; given a plain watcher, each
+   * exclusion state asked for a recursive watch of its own. The service now keeps one watch per root, shared by both
+   * of its candidate sets, whatever watcher it is given.
+   */
+  it('a flip of the exclusion toggle, and back, asks the watcher for no second watch of the root (#274)', async () => {
+    const spy = new SpyWatcher();
+    const calls: string[] = [];
+    const counting: IFileWatcher = {
+      watch: (dir, onChange, options) => {
+        calls.push(dir);
+        return spy.watch(dir, onChange, options);
+      },
+    };
+    const h = await Harness.create({ globs: ['**/node_modules'], watcher: counting });
+    try {
+      await seedProject(h.root);
+      h.service.subscribe(1, h.root, false);
+      const standing = await waitForReadyAt(h, 1, false);
+      expect(calls).toHaveLength(1);
+
+      h.service.subscribe(1, h.root, true); // the toggle flipped
+      await waitForReadyAt(h, 1, true);
+      h.service.unsubscribe(1, h.root, true); // and flipped back
+      h.service.subscribe(1, h.root, true); // and again
+      await waitForReadyAt(h, 1, true);
+      h.service.unsubscribe(1, h.root, true);
+
+      expect(calls, 'a flip asked for a watch of its own').toHaveLength(1);
+      expect(spy.live).toBe(1);
+      // FR-013 — the standing index outlived both flips: a re-subscribe answers ready at once, with no re-walk.
+      const again = h.service.subscribe(2, h.root, false);
+      expect(again.status).toBe('ready');
+      expect(again.paths).toEqual(standing);
+
+      h.service.unsubscribe(1, h.root, false);
+      h.service.unsubscribe(2, h.root, false);
+      expect(spy.live, 'the last view of the root released the watch').toBe(0);
+    } finally {
+      await h.destroy();
+    }
+  }, 40_000);
 
   it('the delta protocol is unchanged for each index (I2, S7, S8)', async () => {
     const h = await Harness.create({ globs: ['**/node_modules'] });

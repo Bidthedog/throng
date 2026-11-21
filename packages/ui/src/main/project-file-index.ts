@@ -96,6 +96,18 @@ interface Subscriber {
   sent: readonly string[] | null;
 }
 
+/**
+ * #274 — the ONE watch of a root, shared by both of its candidate sets (033 FR-069, plan D2).
+ *
+ * Each exclusion state keeps its own index (its own set, refcount, delta protocol and lifetime, as D2 requires), but
+ * the root they describe is one directory tree: two recursive watches of it would report every change twice. So the
+ * watch is the root's, held while any index of the root holds it; a signal or a failure goes to every index on it.
+ */
+interface RootWatch {
+  watch: Disposable | null;
+  indices: Set<RootIndex>;
+}
+
 interface RootIndex {
   /** The comparable form PLUS the exclusion flag — this index's key in `roots` (FR-069, D2). */
   key: string;
@@ -132,6 +144,9 @@ interface RootIndex {
 
 export class ProjectFileIndexService {
   private readonly roots = new Map<string, RootIndex>();
+
+  /** #274 — one watch per root (its comparable form), whichever of its indices are live. */
+  private readonly watches = new Map<string, RootWatch>();
 
   private readonly quietMs: number;
 
@@ -269,6 +284,7 @@ export class ProjectFileIndexService {
     this.disposed = true;
     for (const index of this.roots.values()) this.teardown(index);
     this.roots.clear();
+    this.watches.clear();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -292,12 +308,49 @@ export class ProjectFileIndexService {
     index.subscribers.clear();
   }
 
+  /**
+   * Join the root's one watch, arming it if this is the root's first live index (#274). `index.watch` becomes this
+   * index's HOLD on it: disposing the hold leaves the watch, and the last hold to leave disposes it.
+   */
   private arm(index: RootIndex): void {
-    index.watch = this.watcher.watch(
-      index.root,
-      (changedPath, batch) => this.onSignal(index, changedPath, batch),
-      { onFailed: (reason) => this.onWatchFailed(index, reason) },
-    );
+    const key = normaliseForCompare(index.root);
+    let shared = this.watches.get(key);
+    if (!shared) {
+      const created: RootWatch = { watch: null, indices: new Set() };
+      shared = created;
+      this.watches.set(key, created);
+      created.watch = this.watcher.watch(
+        index.root,
+        (changedPath, batch) => {
+          for (const each of [...created.indices]) this.onSignal(each, changedPath, batch);
+        },
+        {
+          onFailed: (reason) => {
+            // The watch is gone for every index of the root: each goes back to building (S11), and the next
+            // subscribe arms a fresh one.
+            if (this.watches.get(key) === created) this.watches.delete(key);
+            const holders = [...created.indices];
+            created.indices.clear();
+            created.watch?.dispose();
+            created.watch = null;
+            for (const each of holders) {
+              each.watch = null;
+              this.onWatchFailed(each, reason);
+            }
+          },
+        },
+      );
+    }
+    const root = shared;
+    root.indices.add(index);
+    index.watch = {
+      dispose: () => {
+        if (!root.indices.delete(index) || root.indices.size > 0) return;
+        if (this.watches.get(key) === root) this.watches.delete(key);
+        root.watch?.dispose();
+        root.watch = null;
+      },
+    };
   }
 
   /** Run `task` after everything already queued for this root, and never reject the chain. */
