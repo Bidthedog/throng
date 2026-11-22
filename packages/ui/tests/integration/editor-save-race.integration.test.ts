@@ -103,3 +103,23 @@ describe('an edit made while a save is writing', () => {
     expect(synced.some((msg) => 'dirty' in msg && msg.dirty === false)).toBe(false);
   });
 });
+
+describe('a panel closed while its save is writing', () => {
+  it('leaves no claim on the file, so opening it again opens it', async () => {
+    const path = join(root, 'a.txt');
+    await writeFile(path, 'one\n');
+    const m = meta('p1', path);
+    await coord.load(m);
+    editDocument(coord, m, 'two\n');
+
+    fs.hold();
+    const saving = coord.save({ panelId: 'p1' });
+    await fs.writing;
+    coord.destroy('p1');
+    fs.release();
+    await saving;
+
+    expect(await readFile(path, 'utf8')).toBe('two\n');
+    expect(coord.isOpen(path)).toBe(false);
+  });
+});
