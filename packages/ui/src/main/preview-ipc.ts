@@ -98,6 +98,8 @@ function asOpen(payload: unknown): PreviewOpenRequest | null {
   if (target !== undefined) req.target = target;
   // 047 FR-081 — only a literal `true` counts; anything else is the ordinary open that takes the keyboard.
   if (p.keepFocus === true) req.keepFocus = true;
+  // 073 FR-033b — the reader's answer to the unsaved-on-open prompt; anything else is no answer (the first request).
+  if (p.unsavedChoice === 'save' || p.unsavedChoice === 'discard' || p.unsavedChoice === 'new') req.unsavedChoice = p.unsavedChoice;
   return req;
 }
 
@@ -205,11 +207,86 @@ function asTaskToggle(payload: unknown): TaskToggleRequest | null {
   return req;
 }
 
+/** 073 — the CSV Preview Editor's channels; `CsvGridService` satisfies it (contracts/preview-ipc-073.md). */
+export interface PreviewGridIpc {
+  edit(req: { panelId: string; filePath: string; operation: unknown }): Promise<unknown>;
+  undo(panelId: string): { ok: boolean };
+  redo(panelId: string): { ok: boolean };
+  save(panelId: string, absPath?: string): Promise<unknown>;
+}
+
+/** 073 R7, 074 R4 — a binary provider's source bytes, or with `asset` that asset of the run, through the protocol handler. */
+export type PreviewReadSource = (
+  panelId: string,
+  asset?: string,
+) => Promise<{ ok: true; bytes: Uint8Array; mime: string } | { ok: false; status: number }>;
+
+const GRID_UNAVAILABLE = { ok: false, reason: 'unavailable' } as const;
+
+function panelIdOf(payload: unknown): string | null {
+  const p = record(payload);
+  return typeof p.panelId === 'string' && p.panelId.length > 0 ? p.panelId : null;
+}
+
 export function registerPreviewIpc(
   ipc: PreviewIpcMain,
   service: PreviewIpcService,
   taskToggle?: PreviewTaskToggle,
+  extras: { grid?: PreviewGridIpc; readSource?: PreviewReadSource } = {},
 ): void {
+  const { grid, readSource } = extras;
+  // 073 — grid edits, undo, redo and save. The operation's shape is validated by the service (core's
+  // `validateGridOperation`); a throw is an answer, never a rejection across the bridge.
+  ipc.handle('throng:preview:gridEdit', async (_event, payload) => {
+    const p = record(payload);
+    const panelId = panelIdOf(payload);
+    if (grid === undefined || panelId === null || typeof p.filePath !== 'string') return GRID_UNAVAILABLE;
+    try {
+      return await grid.edit({ panelId, filePath: p.filePath, operation: p.operation });
+    } catch (error) {
+      logCaught('preview-ipc: gridEdit', error);
+      return GRID_UNAVAILABLE;
+    }
+  });
+  for (const step of ['undo', 'redo'] as const) {
+    ipc.handle(step === 'undo' ? 'throng:preview:gridUndo' : 'throng:preview:gridRedo', (_event, payload) => {
+      const panelId = panelIdOf(payload);
+      if (grid === undefined || panelId === null) return { ok: false };
+      try {
+        return grid[step](panelId);
+      } catch (error) {
+        logCaught(`preview-ipc: grid ${step}`, error);
+        return { ok: false };
+      }
+    });
+  }
+  ipc.handle('throng:preview:gridSave', async (_event, payload) => {
+    const panelId = panelIdOf(payload);
+    if (grid === undefined || panelId === null) return { ok: false, reason: 'io', error: 'No preview to save.' };
+    try {
+      // FR-035a — Save As: an optional absolute path the renderer's own dialog chose; main's save path confines it.
+      const target = record(payload).absPath;
+      return await grid.save(panelId, typeof target === 'string' && target.length > 0 ? target : undefined);
+    } catch (error) {
+      logCaught('preview-ipc: gridSave', error);
+      return { ok: false, reason: 'io', error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipc.handle('throng:preview:readSource', async (_event, payload) => {
+    const panelId = panelIdOf(payload);
+    const asset = record(payload).asset;
+    if (readSource === undefined || panelId === null) return { ok: false, status: 404 };
+    if (asset !== undefined && (typeof asset !== 'string' || asset.length === 0 || asset.length > 4096)) {
+      return { ok: false, status: 404 };
+    }
+    try {
+      return await (asset === undefined ? readSource(panelId) : readSource(panelId, asset));
+    } catch (error) {
+      logCaught('preview-ipc: readSource', error);
+      return { ok: false, status: 404 };
+    }
+  });
+
   // 054 FR-022 – FR-029 — the one input in a preview that changes the source. A malformed request never
   // reaches the service, and a throw is an answer rather than a rejection across the bridge.
   ipc.handle('throng:preview:toggleTask', async (_event, payload) => {

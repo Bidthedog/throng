@@ -30,8 +30,8 @@
  * outside this feature's scope and unaffected. Removing the store to remove the batch would have
  * been a change to two behaviours in order to change one.
  */
-import { refusalMessage, toDisplayPath } from '@throng/core';
-import type { EncodingId, OsName } from '@throng/core';
+import { SETTINGS_METADATA, formatSetting, refusalMessage, toDisplayPath } from '@throng/core';
+import type { EncodingId, FieldDescriptor, OsName } from '@throng/core';
 
 /**
  * One file that could not be opened. It carries no panel name: the row naming the panel is built by
@@ -44,7 +44,13 @@ export interface LoadErrorEntry {
   reason: string;
   /** 059 — the encoding a `not-decodable` file was read as, so the sentence can name it. */
   encoding?: EncodingId;
+  /** 077 FR-014 — a `too-large` file's bytes and the `editor.maxOpenFileBytes` it is over. */
+  size?: number;
+  limit?: number;
 }
+
+/** How Preferences shows `editor.maxOpenFileBytes` (MB with its bytes), so the refusal quotes it the same way. */
+const MAX_OPEN_FILE_BYTES: FieldDescriptor | undefined = SETTINGS_METADATA.find((d) => d.key === 'editor.maxOpenFileBytes');
 
 /**
  * Reasons a file could not be opened that are NOT "the file isn't there" (018 / US9, FR-061).
@@ -67,14 +73,23 @@ export { NOT_A_MISSING_FILE, isMissingReason } from '@throng/core';
  * The path is deliberately absent: FR-034 keeps raw paths out of a notice, and the panel's own
  * banner already shows the one it could not read (FR-040a). What this adds is why.
  */
-export function missingFileMessage(reason: string, encoding?: EncodingId): string {
+export function missingFileMessage(
+  reason: string,
+  encoding?: EncodingId,
+  tooLarge?: { size: number; limit: number },
+): string {
   // 059 FR-053 — a file that is not text, is UTF-32, or does not decode: core's one wording, which the
   // preview, the replace report and the task toggle say too. A file that does not decode is named in the
   // encoding it was read as, which the refusal carries (review R2).
   if (reason === 'binary' || reason === 'utf32' || reason === 'not-decodable') {
     return refusalMessage(reason, encoding);
   }
-  if (reason === 'too-large') return 'That file is too large to open in an editor.';
+  if (reason === 'too-large') {
+    // 077 FR-014 — the file's size and the limit it is over, as Preferences shows the setting, quoting its
+    // current value (Constitution X, 7.3.0). Main measured both; without them there is nothing true to quote.
+    if (!tooLarge || !MAX_OPEN_FILE_BYTES) return 'That file is too large to open in an editor.';
+    return `That file is too large to open in an editor: ${formatSetting(tooLarge.size, MAX_OPEN_FILE_BYTES)}, over the ${formatSetting(tooLarge.limit, MAX_OPEN_FILE_BYTES)} limit set in Preferences.`;
+  }
   // The file EXISTS. Saying "missing" here would send the user looking for a file that is sitting
   // exactly where they left it.
   if (reason === 'out-of-tree') return 'That file is outside this project, so it cannot be opened here.';

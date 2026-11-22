@@ -9,6 +9,7 @@ import {
 import {
   applyHiddenPaths,
   applySearchExcludeGlobs,
+  applyHtmlSafeSources,
   applyProjectUpdate,
   assertFolderExclusive,
   assertOrderedIds,
@@ -125,6 +126,15 @@ export class ProjectService {
     const owner = this.owner;
     const existing = this.requireProject(owner, id);
     const updated = applySearchExcludeGlobs(existing, globs, this.deps.now());
+    this.deps.store.update(updated);
+    return updated;
+  }
+
+  /** Replace a project's own safe HTML preview sources (074 FR-072a). */
+  setHtmlSafeSources(id: string, sources: readonly string[]): Project {
+    const owner = this.owner;
+    const existing = this.requireProject(owner, id);
+    const updated = applyHtmlSafeSources(existing, sources, this.deps.now());
     this.deps.store.update(updated);
     return updated;
   }

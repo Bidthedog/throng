@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { useWorkspaceOptional } from '../state/workspace-store.js';
+import { BusyGlyph } from '../common/busy-glyph.js';
 import { AttentionMark } from './attention-mark.js';
 import { AttentionPopover } from './attention-popover.js';
 import { categoryCycleKey, goToNextMarkedOf, projectCycleKey } from './mark-cycle.js';
@@ -32,9 +33,25 @@ export function PanelHeaderMark({ panelId }: { panelId: string }): ReactElement 
  * row's fill beside the name. Active, loaded or unloaded alike — the mark is main's, not the layout's
  * (FR-012).
  */
-export function ProjectRowLead({ projectId, colour }: { projectId: string; colour: string }): ReactElement {
+export function ProjectRowLead({
+  projectId,
+  colour,
+  opening = false,
+}: {
+  projectId: string;
+  colour: string;
+  /** #702 — the project is still opening: the busy glyph takes the dot's place, in the dot's box. */
+  opening?: boolean;
+}): ReactElement {
   const mark = useProjectMarkKey(projectId);
   const projectIds = useMemo(() => [projectId], [projectId]);
+  if (opening) {
+    return (
+      <span className="project-item__opening" data-testid={`project-opening-${projectId}`}>
+        <BusyGlyph />
+      </span>
+    );
+  }
   return mark === null ? (
     <span className="project-item__dot" style={{ background: colour }} aria-hidden />
   ) : (

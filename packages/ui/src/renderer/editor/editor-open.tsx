@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
+  PREVIEW_KIND,
   collectPanels,
   defaultOpenActionFor,
   effectiveActivePanelId,
@@ -15,7 +16,7 @@ import { useProjects } from '../state/projects-store.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { missingFileMessage } from './editor-missing-notice.js';
-import { drainRefusedOpens, publishRefusedOpen, useRefusedOpens } from './refusal-store.js';
+import { drainRefusedOpens, publishRefusedOpen, refusedOpenOf, useRefusedOpens } from './refusal-store.js';
 import { getEditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
 import { getLastActiveEditor, setLastActiveEditor } from './last-active-editor.js';
@@ -27,6 +28,7 @@ import {
   replaceInEditorPanel,
 } from './open-into-panel.js';
 import { headingRevealTarget, revealRangeInEditor, type RevealTarget } from './reveal-range.js';
+import type { PreviewEditorOpen } from '../preview/open-in-editor.js';
 import { openFromTree } from './open-router.js';
 import type { TreeOpenGesture } from '../explorer/explorer-context.js';
 import { requestPanelFlash } from '../workspace/panel-flash.js';
@@ -34,6 +36,7 @@ import { maximisedPanelOf } from '../workspace/maximise-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
 import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
+import { OPEN_IN_OS_EVENT, useOpenInOs, type OpenInOsDetail } from '../links/use-open-in-os.js';
 
 /**
  * Open-from-tree orchestration (006 Phase B, US2/US9, FR-010/011a). Listens for
@@ -68,11 +71,11 @@ export function EditorOpenListener(): null {
   const projectRoot = projects.find((p) => p.id === projectId)?.rootFolder;
   useEffect(() => {
     if (refused.length === 0) return;
-    for (const { absPath, reason, encoding } of drainRefusedOpens()) {
+    for (const { absPath, reason, encoding, size, limit } of drainRefusedOpens()) {
       reportSubject({
         subject: absPath,
         reason,
-        message: missingFileMessage(reason, encoding),
+        message: missingFileMessage(reason, encoding, size !== undefined && limit !== undefined ? { size, limit } : undefined),
         // FR-018 — the row renders the path RELATIVE to the project root, because the notice's
         // heading already names the project. The absolute form stays in `detail` (FR-018c).
         displayPath: relativeToRoot(absPath, projectRoot),
@@ -90,8 +93,18 @@ export function EditorOpenListener(): null {
   const previews = useAppSettings().editor.previews;
   const { registry } = usePreviewProviders();
   const openUnsupportedInOs = useAppSettings().explorer.openUnsupportedInOs;
-  const routeRef = useRef({ previews, registry, openUnsupportedInOs });
-  routeRef.current = { previews, registry, openUnsupportedInOs };
+  // 074 FR-018 — Open <files> in: Default OS Program, from the tree or a followed link.
+  const openInOs = useOpenInOs();
+  const routeRef = useRef({ previews, registry, openUnsupportedInOs, openInOs });
+  routeRef.current = { previews, registry, openUnsupportedInOs, openInOs };
+  useEffect(() => {
+    const onOpenInOs = (e: Event): void => {
+      const detail = (e as CustomEvent<OpenInOsDetail>).detail;
+      if (detail?.absPath) void routeRef.current.openInOs(detail.absPath, detail.projectId);
+    };
+    window.addEventListener(OPEN_IN_OS_EVENT, onOpenInOs);
+    return () => window.removeEventListener(OPEN_IN_OS_EVENT, onOpenInOs);
+  }, []);
   // 067 FR-131 — the one notice for the OS refusing a link's file, shaped as the other link surfaces shape it.
   const reportOsFailureRef = useRef<(outcome: Parameters<typeof linkFailureReport>[0], projectId: string | undefined) => void>(() => undefined);
   reportOsFailureRef.current = (outcome, ownerProjectId) =>
@@ -193,6 +206,7 @@ export function EditorOpenListener(): null {
           // no project to ask a preview for, and a layout's id is not one in a sub-workspace window.
           projectId,
           openInEditor: openFileInTab,
+          openInOs: (path) => routeRef.current.openInOs(path, projectId),
         },
         headingRevealTarget(absPath, headingFragment),
       );
@@ -213,7 +227,9 @@ type Ws = ReturnType<typeof useWorkspace>;
 /** Editor panelIds present in the given tab (in document order). */
 function editorPanelsInTab(root: LayoutNode): string[] {
   return collectPanels(root)
-    .filter((p) => getEditorState(p.id) !== undefined || (isPanel(p) && p.kind === 'editor'))
+    // 073 — a CSV Preview Editor publishes editor state while it holds its document, but it is a preview: an
+    // editor open never reuses or replaces it.
+    .filter((p) => (isPanel(p) && p.kind === 'editor') || (getEditorState(p.id) !== undefined && !(isPanel(p) && p.kind === PREVIEW_KIND)))
     .map((p) => p.id);
 }
 
@@ -324,11 +340,7 @@ export async function openFileInTab(
   // FR-013a binds every entry point, and a reason each caller must remember to forward is a rule the
   // next entry point will forget — which is how `openFileInNewEditor` came to bypass this check.
   if (decision?.action === 'refuse') {
-    publishRefusedOpen({
-      absPath,
-      reason: decision.reason,
-      ...(decision.encoding ? { encoding: decision.encoding } : {}),
-    });
+    publishRefusedOpen(refusedOpenOf(absPath, decision));
     return false;
   }
 
@@ -472,4 +484,25 @@ export async function openFileInPanel(
  */
 export function openFileInNewEditor(ws: Ws, tabId: string, absPath: string, ownerProjectId?: string): string {
   return createDedicatedEditor(ws, tabId, absPath, ownerProjectId);
+}
+
+/**
+ * 075 FR-093b (the maintainer, 2026-11-20) — "Open files in" = Last Active Editor, for an open that would otherwise
+ * place a new editor of its own (a preview's Open in Editor): open `absPath` through {@link openFileInTab}, which
+ * reuses the tab's last active editor as every other open does — one-buffer focus, a refusal, a maximised editor
+ * and the unsaved-changes prompt included. `null` when the tab holds no editor that open could reuse: the caller
+ * then places its own, rather than `openFileInTab`'s dedicated editor wherever it lands.
+ */
+export function reuseLastActiveEditor(ws: Ws, tabId: string, absPath: string, ownerProjectId?: string): Promise<boolean> | null {
+  const tab = ws.layout?.tabs.find((t) => t.id === tabId);
+  if (tab === undefined) return null;
+  const owner = openOwner(ws, tabId, ownerProjectId);
+  const reusable = editorPanelsInTab(tab.root).some((id) => owner === undefined || originOf(tab.root, id) === owner);
+  if (!reusable) return null;
+  return openFileInTab(ws, tabId, absPath, 'lastActive', undefined, ownerProjectId !== undefined ? { ownerProjectId } : {});
+}
+
+/** What a preview's Open in Editor needs of the editor side: the setting, and the resolver above over `ws`. */
+export function previewEditorOpen(ws: () => Ws, openTarget: EditorOpenTarget): PreviewEditorOpen {
+  return { openTarget, reuse: (tabId, absPath, ownerProjectId) => reuseLastActiveEditor(ws(), tabId, absPath, ownerProjectId) };
 }

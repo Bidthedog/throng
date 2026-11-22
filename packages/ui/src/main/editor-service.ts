@@ -93,9 +93,11 @@ export type LoadResult =
       // `not-found` is a genuinely absent file (a dangling symlink, a file deleted mid-drag). It stays
       // DISTINCT from `out-of-tree`, which is a file that exists and is refused — the two used to be the
       // same reason, which is how a refusal came to be reported as an absence.
-      reason: 'binary' | 'too-large' | 'io' | 'out-of-tree' | 'folder' | 'not-found';
+      reason: 'binary' | 'io' | 'out-of-tree' | 'folder' | 'not-found';
       error: string;
-    };
+    }
+  // 077 FR-014 — over `editor.maxOpenFileBytes`: the file's bytes and the limit, so the notice quotes both.
+  | { ok: false; reason: 'too-large'; error: string; size: number; limit: number };
 
 export type SaveReason = 'out-of-tree' | 'no-location' | 'io' | 'unrepresentable';
 export type SaveResult =
@@ -119,6 +121,12 @@ export interface LoadRequest {
   /** Read in this encoding instead of detecting one — Reopen with Encoding, or a chosen encoding being
    *  restored (059 FR-024, FR-028). A read that is not lossless in it is refused, never patched. */
   forcedEncoding?: EncodingId;
+  /**
+   * 077 FR-016, FR-018 — the byte cap in place of `editor.maxOpenFileBytes`, for a main-process reader with a limit of
+   * its own (a preview whose provider declares a Maximum file size). Never set from an IPC request: the editor's own
+   * open path is always capped by Max open file size.
+   */
+  maxBytes?: number;
 }
 
 export interface SaveRequest {
@@ -213,7 +221,7 @@ export class EditorService {
       { realPath, isDirectory: stat.kind === 'folder', size },
       { ownerKind: req.ownerKind },
       await realRoots(this.fs, { ownerRoot: req.ownerRoot, allProjectRoots: req.allProjectRoots }),
-      { maxOpenFileBytes: this.settings().editor.maxOpenFileBytes },
+      { maxOpenFileBytes: req.maxBytes ?? this.settings().editor.maxOpenFileBytes },
     );
   }
 

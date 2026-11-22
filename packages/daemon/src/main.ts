@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { shouldExitForRemovedInstall } from './removed-install-watch.js';
-import { isPackagedEntry, logExpected, logFatal, parseLogLevel, type Anonymiser } from '@throng/core';
+import { type Anonymiser, isPackagedEntry, logExpected, logFatal, parseLogLevel, retentionFromEnv } from '@throng/core';
 import {
   createFileLog,
   createProcessAnonymiser,
@@ -48,11 +48,8 @@ function startDaemonDiagnostics(anonymiser: Anonymiser | undefined): DiagnosticL
     level: parseLogLevel(process.env.THRONG_LOG_LEVEL),
     // Roll-over and retention arrive with the level, from the same settings the UI is using — one
     // "Logging" section governs both halves of one application (Principle X, 066 FR-019).
-    retention: {
-      maxFileBytes: Number(process.env.THRONG_LOG_MAX_KB) * 1024 || undefined,
-      keepDays: Number(process.env.THRONG_LOG_KEEP_DAYS) || undefined,
-      maxTotalBytes: Number(process.env.THRONG_LOG_MAX_TOTAL_MB) * 1024 * 1024 || undefined,
-    },
+    // 077 FR-001 — in bytes; the KB/MB names v1.0.0-beta1 shipped are still read where these are unset.
+    retention: retentionFromEnv(process.env),
   });
   // Everything the daemon already prints becomes durable, without rewriting a single call site —
   // which is what the issue asks for: make existing diagnostics reachable, do not redesign them.

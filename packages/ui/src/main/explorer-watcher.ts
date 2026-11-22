@@ -5,7 +5,7 @@
  * The renderer is sandboxed, so the watch + push live in UI main.
  */
 import { dirname, relative, sep } from 'node:path';
-import type { Disposable, IFileWatcher, WatchBatch } from '@throng/core';
+import { rescopeWatch, type Disposable, type IFileWatcher, type WatchBatch } from '@throng/core';
 
 /**
  * What `throng:files:changed` carries.
@@ -53,7 +53,17 @@ export class ExplorerWatcher {
      * production must supply it.
      */
     private readonly onFailed?: (root: string, reason: string) => void,
+    /**
+     * 062 FR-051 — the folders this watch may leave out under `absRoot`, asked live; absent, it states nothing. A
+     * changed answer reaches the watch through `rescope()`.
+     */
+    private readonly leavesOut?: (absRoot: string) => (relPath: string) => boolean,
   ) {}
+
+  /** The answer to "which folders may this watch leave out?" changed: follow it without reopening the watch. */
+  rescope(): void {
+    rescopeWatch(this.current);
+  }
 
   /** Watch `absRoot` (or stop watching when null). Replaces any prior watch. */
   setRoot(absRoot: string | null): void {
@@ -75,7 +85,10 @@ export class ExplorerWatcher {
       // Bound to THIS root by the closure. A failure arriving after `setRoot` moved on is
       // impossible: disposing the old handle latches it, so a stale root can never raise a notice
       // about a project the user has already left.
-      { onFailed: (reason) => this.onFailed?.(absRoot, reason) },
+      {
+        onFailed: (reason) => this.onFailed?.(absRoot, reason),
+        excluded: this.leavesOut ? (rel) => this.leavesOut!(absRoot)(rel) : undefined,
+      },
     );
   }
 

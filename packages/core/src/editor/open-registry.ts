@@ -55,8 +55,12 @@ export type RefusalReason = string;
 export type OpenDecision =
   | { action: 'focus'; panelId: string; windowId: string }
   | { action: 'open' }
-  /** `encoding` — the encoding a `not-decodable` file claims, so the notice can name it (059 FR-053). */
-  | { action: 'refuse'; reason: RefusalReason; encoding?: EncodingId };
+  /**
+   * `encoding` — the encoding a `not-decodable` file claims, so the notice can name it (059 FR-053).
+   * `size` / `limit` — a `too-large` file's bytes and the `editor.maxOpenFileBytes` it is over, so the notice
+   * can quote both (077 FR-014).
+   */
+  | { action: 'refuse'; reason: RefusalReason; encoding?: EncodingId; size?: number; limit?: number };
 
 /** Decide whether to focus the existing editor for `absPath` or open a new one. */
 export function openOrFocus(reg: OpenDocRegistry, absPath: string): OpenDecision {

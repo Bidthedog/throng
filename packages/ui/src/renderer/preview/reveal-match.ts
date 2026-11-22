@@ -13,7 +13,7 @@
  * source line is taken to be the k-th in its rendered text. Provider-agnostic: a body that marks its blocks
  * with `data-source-line` is all it needs.
  */
-import { buildPreviewTextModel, findPreviewMatches, locate } from './preview-search-model.js';
+import { buildPreviewTextModel, findPreviewMatches, locate, locateEnd } from './preview-search-model.js';
 import { DIAGRAM_HOST_CLASS, DIAGRAM_PENDING_ATTRIBUTE } from './diagram/diagram-host.js';
 
 export interface MatchToReveal {
@@ -89,7 +89,7 @@ export function locateRevealRange(host: HTMLElement, source: string, match: Matc
   for (let at = before.indexOf(match.text); at >= 0; at = before.indexOf(match.text, at + match.text.length)) k += 1;
   const chosen = matches[Math.min(k, matches.length - 1)]!;
   const start = locate(model, chosen.from);
-  const end = locate(model, chosen.to);
+  const end = locateEnd(model, chosen.to);
   if (start === null || end === null) return null;
   const range = host.ownerDocument.createRange();
   range.setStart(start.node as Node, start.offset);

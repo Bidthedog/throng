@@ -202,6 +202,8 @@ export function roleSizeMax(key: string): number {
 export const THEME_AREA_GROUPS: readonly string[] = [
   'General',
   'Editor',
+  // 075 FR-021 — the Markdown preview's own colours (its callouts), after the Editor whose colours it otherwise reads.
+  'Markdown preview',
   'Main panel / workspace',
   'Sub-workspace',
   'Terminal',
@@ -241,6 +243,9 @@ const COLOUR_AREA: Record<string, string> = {
   sidebarBg: 'Projects / sidebar',
   // 046 iterate round 1 (FR-072) — the Projects pane's category header strip.
   categoryHeaderBackground: 'Projects / sidebar',
+  // 074 FR-027a, FR-027b — a picture preview's canvas and transparency hatch: drawn inside a panel.
+  pictureCanvas: 'Main panel / workspace',
+  pictureHatch: 'Main panel / workspace',
 };
 
 /**
@@ -297,6 +302,8 @@ export function areaForToken(key: string): string | undefined {
     }
     if (name.startsWith('syntax')) return 'Editor · Syntax';
     if (name.startsWith('editor')) return 'Editor';
+    // 075 FR-021 — the seven callout colour roles.
+    if (name.startsWith('callout')) return 'Markdown preview · Callouts';
     if (name.startsWith('terminal')) return 'Terminal';
     if (name.startsWith('searchMatch')) return 'Search';
     if (name in COLOUR_AREA) return COLOUR_AREA[name];

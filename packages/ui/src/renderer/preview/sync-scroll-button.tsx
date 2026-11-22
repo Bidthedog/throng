@@ -11,15 +11,15 @@
  * switched-off provider or an already-open preview leaves this enabled beside a disabled or pressed preview
  * button. Where the bar draws it at all is the bar's decision.
  *
- * It borrows the preview button's class, which already styles an icon toggle in the strip's own colours —
- * pressed holds the hover surface — so it needs no stylesheet and no colour of its own.
+ * It is a setting toggle (073 FR-007a): the shared `setting-toggle` look, full-contrast when on and muted with a struck
+ * line when off, titled "Synchronise Scrolling: enabled|disabled". It borrows the preview button's class for layout only.
  *
  * Principle VI: an accelerator over the four Synchronise Scrolling menu items, which stay reachable with the
  * bar hidden.
  */
 import type { ReactElement } from 'react';
 import { firstBinding } from '@throng/core';
-import { IconButton } from '../common/icon-button.js';
+import { SettingToggleButton } from '../common/setting-toggle-button.js';
 import { useKeybindings } from '../config/config-store.js';
 
 const LABEL = 'Synchronise Scrolling';
@@ -34,14 +34,14 @@ export interface SyncScrollButtonProps {
 export function SyncScrollButton({ testId, on, onToggle }: SyncScrollButtonProps): ReactElement {
   const chord = firstBinding(useKeybindings(), 'preview.toggleSyncScroll');
   return (
-    <IconButton
+    <SettingToggleButton
       token="syncScroll"
-      className="editor-status-strip__preview"
+      label={LABEL}
+      on={on}
+      chord={chord}
+      onToggle={onToggle}
       testId={testId}
-      title={chord !== undefined ? `${LABEL} (${chord})` : LABEL}
-      ariaLabel={LABEL}
-      ariaPressed={on}
-      onClick={onToggle}
+      className="editor-status-strip__preview"
     />
   );
 }

@@ -247,8 +247,17 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * Re-measured by 069 FR-064, which added `fileIconOther`, the unknown file's grey: 5.88067402240191 →
  * 5.848699684485654. One more token that is grey in every theme, so the mean moves down by construction; no
  * existing colour changed, and the closest pair still clears the untouched 4.3.
+ *
+ * Re-measured by 075 FR-022, which added the seven callout colour roles to every theme: 5.848699684485654 →
+ * 5.53090129134425. Like the file icon colours, each role keeps one hue in every theme and only its lightness
+ * follows the theme's editor background, so seven near-alike tokens pull the mean down by construction; no
+ * existing colour changed. The threshold is untouched at 4.3, with 1.23 of headroom.
+ *
+ * Re-measured by #105, which walked seven bundled themes' editor selection (and with it their inactive selection)
+ * toward the editor body until the code on it reads: 5.53090129134425 → 5.570747641805847. The closest pair moves
+ * apart; the threshold is untouched at 4.3.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.848699684485654;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.570747641805847;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A
@@ -537,6 +546,31 @@ const syntaxOnBodyPairing = (fg: string): ContrastPairing => ({
 });
 
 /**
+ * The floor for a syntax hue on the editor SELECTION (#105): WCAG AA body text.
+ *
+ * Not the body's 6:1. That headroom pays for the search tint drawn over the body; nothing is drawn over a
+ * selection, so it is measured as the search-match surfaces are (`SYNTAX_ON_MATCH`), the other backgrounds code is
+ * painted on. `makeTheme` derives each bundled theme's selection to clear it (`readableSelection`).
+ */
+export const SYNTAX_SELECTION_MIN = WCAG_AA_BODY;
+
+/** A syntax hue measured on the editor selection — the background selected code is painted on (#105). */
+const syntaxOnSelectionPairing = (fg: string): ContrastPairing => ({
+  fg,
+  bg: 'editorSelection',
+  min: SYNTAX_SELECTION_MIN,
+  label: `${fg} on the editor selection`,
+});
+
+/**
+ * Every syntax colour, measured on the EDITOR SELECTION (#105).
+ *
+ * 019 derived the body pairings and stopped there, yet a selected line paints every token in it on the selection.
+ * DERIVED from `SYNTAX_TOKENS` as the body pairings are, so a token added later is measured on both backgrounds.
+ */
+const SYNTAX_ON_SELECTION: readonly ContrastPairing[] = SYNTAX_TOKENS.map(syntaxOnSelectionPairing);
+
+/**
  * Every syntax colour, measured on the EDITOR BODY (019, FR-025/#83).
  *
  * The existing pairings measure the syntax hues against the two SEARCH-MATCH surfaces only — the
@@ -567,6 +601,7 @@ export const CONTRAST_PAIRINGS: readonly ContrastPairing[] = [
   },
   ...SYNTAX_ON_MATCH,
   ...SYNTAX_ON_BODY,
+  ...SYNTAX_ON_SELECTION,
 ];
 
 /**
@@ -582,7 +617,7 @@ export function contrastPairingsFor(theme: Theme): readonly ContrastPairing[] {
   const extra = [
     ...syntaxTokensOf(theme)
       .filter((token) => !SYNTAX_TOKENS.includes(token))
-      .map(syntaxOnBodyPairing),
+      .flatMap((token) => [syntaxOnBodyPairing(token), syntaxOnSelectionPairing(token)]),
     ...fileIconPairingsFor(theme),
   ];
   return extra.length === 0 ? CONTRAST_PAIRINGS : [...CONTRAST_PAIRINGS, ...extra];
@@ -677,6 +712,25 @@ export function assertSyntaxBodyContrast(themes: readonly Theme[]): void {
     throw new Error(
       `syntax colours illegible on the editor body (< ${SYNTAX_BODY_MIN}:1): ${problems.join('; ')}`,
     );
+  }
+}
+
+/**
+ * Hard gate for the syntax-on-selection pairings (#105), with the body gate's scope: every bundled theme bar the
+ * by-design carve-out. Throws naming theme, token and measured ratio, for the body gate's reason — a report nobody
+ * reads is the defect.
+ */
+export function assertSyntaxSelectionContrast(themes: readonly Theme[]): void {
+  const problems: string[] = [];
+  for (const theme of themes) {
+    if (BY_DESIGN_LOW_CONTRAST_THEMES.includes(theme.name)) continue;
+    for (const r of measureContrast(theme)) {
+      if (r.bg !== 'editorSelection' || !r.fg.startsWith('syntax') || r.pass) continue;
+      problems.push(`${theme.name}: ${r.fg} on editorSelection = ${r.ratio.toFixed(2)}:1 (needs ${r.min}:1)`);
+    }
+  }
+  if (problems.length) {
+    throw new Error(`syntax colours illegible on the editor selection (< ${SYNTAX_SELECTION_MIN}:1): ${problems.join('; ')}`);
   }
 }
 

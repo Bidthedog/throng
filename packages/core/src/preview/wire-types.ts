@@ -22,7 +22,13 @@ export type PreviewContent =
  */
 export type PreviewNotice = (
   // `utf32` — 059 FR-006: named, rather than called not text.
-  | { kind: 'unreadable' | 'deleted' | 'too-large' | 'not-text' | 'utf32' }
+  | { kind: 'unreadable' | 'deleted' | 'not-text' | 'utf32' }
+  /**
+   * 073 FR-062, 074 FR-012 — `size` and `limit` in bytes, when the provider's own Maximum file size decided it (absent
+   * for the editor's); 077 FR-015 — `limitKey` names the setting that set `limit`, so the notice quotes it as
+   * Preferences shows it.
+   */
+  | { kind: 'too-large'; size?: number; limit?: number; limitKey?: string }
   // 059 FR-014, FR-053 — the editor's wording, which names the encoding the file claims.
   | { kind: 'not-decodable'; encoding: EncodingId }
   | { kind: 'no-provider' }
@@ -60,6 +66,11 @@ export interface PreviewUpdate {
    * something older than this field) means every file change is read as a navigation, as it was.
    */
   navigationSeq?: number;
+  /**
+   * 073 data-model §3 — the run follows a document the preview itself opened (a CSV Preview Editor's grid
+   * document): `parent` is `null` because no editor holds it, and `dirty` is that document's. Absent = false.
+   */
+  ownsDocument?: boolean;
 }
 
 export interface PreviewOpenRequest {
@@ -79,6 +90,12 @@ export interface PreviewOpenRequest {
    * the window acts on those as well as on this answer. Absent means the preview takes the keyboard.
    */
   keepFocus?: true;
+  /**
+   * 073 FR-033b — the reader's answer to the unsaved-on-open prompt, sent on the SECOND request after main answered
+   * `unsavedGrid`: `save` saves the panel's grid document and reuses the panel, `discard` drops it and reuses the panel,
+   * `new` keeps it where it is and places a new panel. (Cancel sends nothing.) Absent on the first request.
+   */
+  unsavedChoice?: 'save' | 'discard' | 'new';
 }
 
 export type PreviewOpenResponse =
@@ -91,11 +108,18 @@ export type PreviewOpenResponse =
   | { kind: 'placeLocally'; reservation: string; besidePanelId: string | null }
   | { kind: 'placedElsewhere' }
   /**
-   * 047 (contracts/preview-ipc-047.md §1, FR-015) — `target.mode === 'lastActive'` found a live
-   * standalone run in `reusePanelId`: main moved it to `absPath` instead of placing a new panel. The
-   * renderer focuses that panel (it is already in the visible tab, so no tab-to-front is needed).
+   * 047 (contracts/preview-ipc-047.md §1, FR-015) — `target.mode === 'lastActive'` found a live run in
+   * `reusePanelId`: main moved it to `absPath` instead of placing a new panel. It may be parented: under 075 FR-093a
+   * a file open in an editor reuses it too, and the move pairs it with that editor (044 FR-013). The renderer focuses
+   * that panel (it is already in the visible tab, so no tab-to-front is needed).
    */
   | { kind: 'navigated'; panelId: string }
+  /**
+   * 073 FR-033b — the panel `reusePanelId` names holds unsaved grid edits that only it shows, so reusing it would hide
+   * them. Nothing was moved: the renderer asks the reader (the unsaved-on-open prompt) and requests again with
+   * `unsavedChoice`.
+   */
+  | { kind: 'unsavedGrid'; panelId: string }
   | { kind: 'refused'; reason: 'no-provider' | 'disabled' | 'outside-project' | 'no-file' };
 
 export interface PreviewAttachRequest {

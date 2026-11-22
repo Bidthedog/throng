@@ -370,6 +370,13 @@ interface NotifyContextValue {
   dismiss(id: string): void;
   /** Clear every notice carrying this test id — how a migrated surface says "the error is over". */
   clear(testId: string): void;
+  /**
+   * #685 — the CONDITION is over: clear the toast as {@link clear} does, and take down the Notifications-panel entry
+   * this window kept for it too. A notice lasts as long as its condition (CLAUDE.md, "One condition, one notice"):
+   * left in the panel, it goes on saying something that is no longer true. `clear` alone keeps the entry, for a
+   * surface whose error is merely over and whose record the user may still want.
+   */
+  withdraw(testId: string): void;
 }
 
 const NotifyContext = createContext<NotifyContextValue | null>(null);
@@ -659,6 +666,9 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
    * crosses is data: the closures a toast carries cannot be stored, so its actions are the notice's
    * `panelActions` descriptors, and the copy text is the very string the toast's Copy writes.
    */
+  /** #685 — the panel entry each kept notice became, by its test id, so {@link withdraw} can take it down. */
+  const panelEntries = useRef(new Map<string, Promise<string | undefined>[]>());
+
   const routeToPanel = useCallback((notice: NoticeInput, subjectText: string): void => {
     const api = window.throng?.notifications;
     if (!api) return;
@@ -685,17 +695,22 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
       }),
       actions: [...(notice.panelActions ?? [])],
     };
-    void api.add(entry).catch((error: unknown) => {
-      // Principle XIII: the toast is still on screen, but the entry that should outlive it is not.
-      window.throng?.notices?.log?.(
-        noticeLogRecord({
-          severity: 'warning',
-          message: 'A notification could not be kept in the Notifications panel.',
-          subject: { kind: 'none' },
-          detail: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    });
+    const added = api.add(entry).then(
+      (result) => result?.id,
+      (error: unknown) => {
+        // Principle XIII: the toast is still on screen, but the entry that should outlive it is not.
+        window.throng?.notices?.log?.(
+          noticeLogRecord({
+            severity: 'warning',
+            message: 'A notification could not be kept in the Notifications panel.',
+            subject: { kind: 'none' },
+            detail: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        return undefined;
+      },
+    );
+    if (notice.testId) panelEntries.current.set(notice.testId, [...(panelEntries.current.get(notice.testId) ?? []), added]);
   }, []);
 
   /**
@@ -1354,6 +1369,25 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
     [publish],
   );
 
+  const withdraw = useCallback(
+    (testId: string) => {
+      clear(testId);
+      const entries = panelEntries.current.get(testId);
+      if (!entries) return;
+      panelEntries.current.delete(testId);
+      // Awaited per entry: a withdrawal that arrives while the entry is still being added takes it down once it exists.
+      for (const added of entries) {
+        void added.then((id) => {
+          if (id === undefined) return;
+          window.throng?.notifications?.dismiss(id).catch((error: unknown) => {
+            logExpected('notice: withdraw a Notifications-panel entry', 'the entry may already have been dismissed by the user', error);
+          });
+        });
+      }
+    },
+    [clear],
+  );
+
   useEffect(() => {
     const pending = timers.current;
     return () => {
@@ -1382,8 +1416,8 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
   }, [notices, announced]);
 
   const value = useMemo<NotifyContextValue>(
-    () => ({ notify, update, dismiss, clear }),
-    [notify, update, dismiss, clear],
+    () => ({ notify, update, dismiss, clear, withdraw }),
+    [notify, update, dismiss, clear, withdraw],
   );
 
   return (

@@ -7,9 +7,10 @@ import {
   firstBinding,
   formatGrouped,
   isCodePageId,
-  isFlowingDocument,
+  supportsScrollSync,
   languageName,
   lineEndingLabel,
+  previewIconOf,
 } from '@throng/core';
 import { usePanelCaret, type PanelCaret } from './caret-store.js';
 import { useEditorHoveredLink } from './editor-hovered-link-store.js';
@@ -308,8 +309,8 @@ function PreviewButton({
     <>
       {/* 044 FR-122c — the scroll-sync toggle, immediately before this button and present exactly when it
           is; never disabled, whatever the preview button's state (FR-122a). */}
-      {/* 054 — none for a source whose preview is one picture (`isFlowingDocument`): nothing to keep in step. */}
-      {isFlowingDocument(affordance.provider) ? (
+      {/* 054 — none for a source whose preview is one picture (`supportsScrollSync`): nothing to keep in step. */}
+      {supportsScrollSync(affordance.provider) ? (
         <SyncScrollButton
           testId={`editor-sync-scroll-${panelId}`}
           on={syncScroll}
@@ -317,7 +318,8 @@ function PreviewButton({
         />
       ) : null}
       <IconButton
-        token="preview"
+        // 074 FR-103 — the provider's own preview icon, else the generic one.
+        token={previewIconOf(affordance.provider)}
         className="editor-status-strip__preview"
         testId={`editor-preview-${panelId}`}
         title={

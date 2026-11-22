@@ -142,11 +142,13 @@ export function MouseZoomHandler(): null {
       event.preventDefault();
     };
     window.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('mousedown', onMouseDown);
+    // Capture phase, as the release is: a terminal stops every middle-button event before xterm sees it (073 FR-008g,
+    // 2026-11-21), and the zoom reset must still hear Ctrl+MiddleClick there.
+    window.addEventListener('mousedown', onMouseDown, true);
     window.addEventListener('mouseup', onMouseUp, true);
     return () => {
       window.removeEventListener('wheel', onWheel);
-      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousedown', onMouseDown, true);
       window.removeEventListener('mouseup', onMouseUp, true);
     };
   }, []);

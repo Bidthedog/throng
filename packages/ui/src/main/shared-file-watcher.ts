@@ -23,13 +23,21 @@
  *
  * A failure is the watch's, not a reader's: every reader is told, and the dead watch is forgotten
  * so the next reader to ask opens a fresh one rather than joining a corpse.
+ *
+ * **A folder is left out only when every reader can do without it (062 FR-051).** Each reader may say which folders it
+ * ignores; the shared watch leaves out a folder only when all of them ignore it, and never a folder on the way to a
+ * reader's own, or inside it. A reader joining or leaving re-asks the watch in place (`rescopeWatch`) rather than
+ * opening a second one — so Quick Open's "show hidden" widens the project's one watch and narrowing it again costs
+ * nothing (033 FR-069, #274), and an editor on a file inside `node_modules` is told when its file changes.
  */
 import { statSync } from 'node:fs';
 import {
   logExpected,
   normaliseForCompare,
+  rescopeWatch,
   type Disposable,
   type IFileWatcher,
+  type RescopableWatch,
   type WatchBatch,
   type WatchOptions,
 } from '@throng/core';
@@ -64,11 +72,40 @@ interface Reader {
   below: string | null;
   /** That folder as the reader spelled it, for asking the disk whether it is there. */
   dir: string;
+  /** `below` relative to the watched folder, comparable form; `''` for the watched folder itself. */
+  belowRel: string;
+  /** The folders this reader ignores, relative to ITS folder (062 FR-051); absent when it states nothing. */
+  excluded?: (relPath: string) => boolean;
 }
 
 interface SharedWatch {
+  key: string;
   handle: Disposable | null;
   readers: Set<Reader>;
+}
+
+/** True when `relPath` or a folder above it is one `excluded` names: a folder left out takes its subtree with it. */
+function excludedOrUnder(relPath: string, excluded: (relPath: string) => boolean): boolean {
+  const segments = relPath.split('/');
+  for (let i = 1; i <= segments.length; i += 1) {
+    if (excluded(segments.slice(0, i).join('/'))) return true;
+  }
+  return false;
+}
+
+/**
+ * Can `reader` do without the folder `rel` (relative to the watched folder; `relKey` its comparable form)?
+ *
+ * Never a folder on the way to the reader's own, nor one inside it unless the reader says it ignores it. A folder
+ * elsewhere is none of the reader's business — a reader that states nothing still hears about its own folder's
+ * entries, which is what an editor or a preview watches a folder for.
+ */
+function canDoWithout(reader: Reader, rel: string, relKey: string): boolean {
+  const own = reader.belowRel;
+  if (own !== '' && within(own, relKey)) return false; // on the way to the reader's folder, or the folder itself
+  if (own !== '' && !within(relKey, own)) return true; // elsewhere
+  if (!reader.excluded) return own === ''; // a reader of the whole folder that states nothing needs only its entries
+  return excludedOrUnder(own === '' ? rel : rel.slice(own.length + 1), reader.excluded);
 }
 
 /** Is `key` the folder `under`, or inside it? Both in comparable form. */
@@ -133,36 +170,80 @@ export class SharedFileWatcher implements IFileWatcher {
     return best?.watch;
   }
 
+  /**
+   * Does the shared watch leave the folder `rel` out (062 FR-051)? Only when some reader says what it ignores, and
+   * every reader can do without the folder. A watch nobody has said anything about leaves nothing out, as before.
+   */
+  private leavesOut(shared: SharedWatch, rel: string): boolean {
+    const relKey = normaliseForCompare(rel);
+    let stated = false;
+    for (const reader of shared.readers) {
+      if (!canDoWithout(reader, rel, relKey)) return false;
+      if (reader.excluded) stated = true;
+    }
+    return stated;
+  }
+
+  /**
+   * Re-ask the watch, when `reader` joining or leaving can change what it leaves out: a reader that says what it
+   * ignores, or one whose folder is (or was) left out. A reader of the whole folder that states nothing changes
+   * nothing, so opening an editor costs no re-ask.
+   */
+  private rescopeFor(shared: SharedWatch, reader: Reader): void {
+    if (!shared.handle) return;
+    if (!reader.excluded && reader.belowRel === '') return;
+    if (!reader.excluded) {
+      // A reader below that states nothing matters only if its folder is cut off without it.
+      const present = shared.readers.delete(reader);
+      const segments = reader.belowRel.split("/");
+      let cut = false;
+      for (let i = 1; i <= segments.length && !cut; i += 1) cut = this.leavesOut(shared, segments.slice(0, i).join("/"));
+      if (present) shared.readers.add(reader);
+      if (!cut) return;
+    }
+    rescopeWatch(shared.handle);
+  }
+
   watch(
     dir: string,
     onChange: (path: string, batch?: WatchBatch) => void,
     options?: WatchOptions,
-  ): Disposable {
+  ): RescopableWatch {
     const key = normaliseForCompare(dir);
     let shared = this.watches.get(key);
     let reader: Reader;
+    const excluded = options?.excluded;
     if (shared) {
-      reader = { onChange, onFailed: options?.onFailed, below: null, dir };
+      reader = { onChange, onFailed: options?.onFailed, below: null, dir, belowRel: '', excluded };
       shared.readers.add(reader);
+      this.rescopeFor(shared, reader);
     } else {
       const covering = this.coveringWatch(key);
       if (covering) {
         shared = covering;
-        reader = { onChange, onFailed: options?.onFailed, below: key, dir };
+        reader = { onChange, onFailed: options?.onFailed, below: key, dir, belowRel: key.slice(covering.key.length + 1), excluded };
         covering.readers.add(reader);
+        this.rescopeFor(covering, reader);
       } else {
-        reader = { onChange, onFailed: options?.onFailed, below: null, dir };
+        reader = { onChange, onFailed: options?.onFailed, below: null, dir, belowRel: '', excluded };
         shared = this.open(dir, key, reader);
       }
     }
     const owner = shared;
     let disposed = false;
     return {
+      rescope: () => {
+        // The reader's own answer changed (a setting, a hidden set): the watch re-asks every reader.
+        if (!disposed && owner.readers.has(reader)) rescopeWatch(owner.handle);
+      },
       dispose: () => {
         if (disposed) return;
         disposed = true;
-        owner.readers.delete(reader);
-        if (owner.readers.size > 0) return;
+        if (!owner.readers.delete(reader)) return;
+        if (owner.readers.size > 0) {
+          this.rescopeFor(owner, reader);
+          return;
+        }
         owner.handle?.dispose();
         owner.handle = null;
         for (const [k, w] of this.watches) if (w === owner) this.watches.delete(k);
@@ -171,7 +252,7 @@ export class SharedFileWatcher implements IFileWatcher {
   }
 
   private open(dir: string, key: string, first: Reader): SharedWatch {
-    const created: SharedWatch = { handle: null, readers: new Set([first]) };
+    const created: SharedWatch = { key, handle: null, readers: new Set([first]) };
     this.watches.set(key, created);
     created.handle = this.inner.watch(
       dir,
@@ -193,6 +274,7 @@ export class SharedFileWatcher implements IFileWatcher {
           for (const r of [...created.readers]) r.onFailed?.(reason);
           created.readers.clear();
         },
+        excluded: (rel) => this.leavesOut(created, rel),
       },
     );
     return created;

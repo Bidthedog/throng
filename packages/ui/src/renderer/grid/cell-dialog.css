@@ -1,0 +1,40 @@
+/* The cell dialog (073 FR-036a). Theme tokens only; the frame is the shared `.modal` / `.modal-overlay` chrome. */
+
+.cell-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 92vw);
+  max-width: 92vw;
+}
+
+.cell-dialog__editor {
+  flex: 1 1 auto;
+  height: min(50vh, 420px);
+  min-height: 8em;
+  border: 1px solid var(--throng-colour-border);
+  /* A column, as an editor panel's wrap is: the `.editor-panel` inside fills it (`editor.css`), and its colours are
+     that panel's own (FR-036f). */
+  display: flex;
+  flex-direction: column;
+}
+
+/* The theme scope is a column too, so the editor fills the box and scrolls within it. */
+.cell-dialog__editor > .editor-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.cell-dialog__editor .standalone-editor {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  /* The preferences JSON tab's frame (`preferences.css`) belongs to that tab; here the dialog's box is the frame. */
+  border: none;
+  border-radius: 0;
+}
+
+.cell-dialog__hint {
+  margin: 6px 0 0;
+  color: var(--throng-colour-textMuted);
+  font-size: 0.9em;
+}

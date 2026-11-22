@@ -1,12 +1,15 @@
-import { Fragment, useEffect, useRef, useState, type ReactElement } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   LANGUAGES,
   checkFlavourRecord,
+  checkTyped,
   languageName,
+  typedProblem,
   type FieldDescriptor,
   type MapColumn,
 } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
+import { useFieldNotice } from './field-notice.js';
 
 /**
  * The keyed-table control (016, F5/FR-022) — a settings value that is a MAP.
@@ -108,6 +111,11 @@ function KeyedMapControl({
 
   const [newKey, setNewKey] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // 077 FR-024 — a refused key is named in the Preferences toast; the box keeps its outline, and nothing moves.
+  const fieldNotice = useFieldNotice(`map-error-${descriptor.key}`);
+  useEffect(() => {
+    fieldNotice(error === null ? null : `${descriptor.label}: ${error}`);
+  }, [fieldNotice, error, descriptor.label]);
 
   const commit = (next: MapValue): void => onCommit(next);
 
@@ -115,6 +123,8 @@ function KeyedMapControl({
     const problem = validateKey(newKey, keys, descriptor);
     if (problem) {
       setError(problem);
+      // The same refused key added again flashes its toast (one condition, one notice).
+      fieldNotice(`${descriptor.label}: ${problem}`, true);
       return;
     }
     const key = newKey.trim();
@@ -170,6 +180,7 @@ function KeyedMapControl({
                     value={column.key ? (map[key] as Row)?.[column.key] : map[key]}
                     onCommit={(cell) => setCell(key, column, cell)}
                     testId={`map-cell-${descriptor.key}-${key}-${column.key ?? 'value'}`}
+                    label={`${descriptor.label}: ${column.label}`}
                   />
                 </td>
               ))}
@@ -219,7 +230,7 @@ function KeyedMapControl({
         ) : (
           <input
             type="text"
-            className="ctl__input map-control-text"
+            className={error !== null ? 'ctl__input ctl__input--invalid map-control-text' : 'ctl__input map-control-text'}
             value={newKey}
             placeholder=".foo"
             onChange={(e) => {
@@ -242,11 +253,6 @@ function KeyedMapControl({
           testId={`map-add-${descriptor.key}`}
         />
       </div>
-      {error ? (
-        <div className="map-control-error" role="alert" data-testid={`map-error-${descriptor.key}`}>
-          {error}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -294,15 +300,24 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
   const noun = descriptor.itemNoun ?? 'record';
 
   const [newId, setNewId] = useState('');
+  /** A refused id from the last add (FR-024's entry in the new-id box); a ROW's problem is derived below, not kept. */
   const [error, setError] = useState<string | null>(null);
+  // 077 FR-024 — what the add or a commit found is said in the Preferences toast, not in a strip under the table.
+  const fieldNotice = useFieldNotice(`${noun}-error`);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   /**
    * Was the id typed into the new-id box REFUSED? `error` alone cannot say: after a successful add it
    * still holds guidance about the DRAFT row ("needs an executable"), which is not a fault in the box,
    * and marking the box `aria-invalid` for it would flag a field the user has just emptied and been
-   * right to. Only a refused id marks the box (056 FR-007); a draft's problem marks its own row.
+   * right to. Only a refused id marks the box (056 FR-007); a draft's problem is said in the toast alone
+   * (077 FR-024).
    */
   const [idRefused, setIdRefused] = useState(false);
+  /**
+   * 077 FR-024 (T057) — the ids of committed rows the user has edited in this editor. What is wrong with one of them
+   * is an entry's problem, said in the toast; only a row as it arrived from the file draws its problem inline (C17).
+   */
+  const [edited, setEdited] = useState<ReadonlySet<string>>(() => new Set());
 
   const committedIds = records.map((r) => String(r[idKey] ?? ''));
   // A draft whose id has arrived in the settings document is no longer a draft — it is the row.
@@ -343,6 +358,20 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     checkFlavourRecord(rows[index], rows.slice(0, index).map((r) => String(r[idKey] ?? '')))
       ?.message ?? null;
 
+  /**
+   * 077 FR-024 (T059) — one condition, one notice, until it is put right: the toast says the first row the user has
+   * entered (a draft, or a committed row they edited) that still has a problem, derived from the rows every render, so
+   * another row coming or going never takes it away. A refused id, the box's own entry, is said first.
+   */
+  const rowProblem =
+    rows
+      .map((row, i) => (i >= records.length || edited.has(String(row[idKey] ?? '')) ? problemOf(i) : null))
+      .find((p) => p !== null) ?? null;
+  const toast = error ?? rowProblem;
+  useEffect(() => {
+    fieldNotice(toast === null ? null : `${descriptor.label}: ${toast}`);
+  }, [fieldNotice, toast, descriptor.label]);
+
   const addRow = (): void => {
     const draft: Draft = { [idKey]: newId.trim(), label: '', file: '', args: [], defaultShellArguments: '' };
     const problem = checkFlavourRecord(draft, rows.map((r) => String(r[idKey] ?? '')));
@@ -352,19 +381,22 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     if (problem?.field === 'id') {
       setError(problem.message);
       setIdRefused(true);
+      fieldNotice(`${descriptor.label}: ${problem.message}`, true);
       return;
     }
     setIdRefused(false);
     setDrafts([...pending, draft]);
     setNewId('');
-    setError(problem?.message ?? null);
+    setError(null);
   };
 
   const removeRow = (index: number): void => {
     if (index < records.length) {
+      // 077 FR-024 — an edited row's problem leaves the toast with the row (`rowProblem` is derived from the rows).
       commitRows(records.filter((_, i) => i !== index));
       return;
     }
+    // 077 FR-024 — the toast never names a row that is gone (`rowProblem` is derived from the rows left).
     setDrafts(pending.filter((_, i) => i !== index - records.length));
   };
 
@@ -378,6 +410,11 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
       const list = [...records];
       list[index] = next;
       commitRows(list);
+      // 077 FR-024 (T057) — an edit is an entry: what it left wrong with the row is said in the toast, and the row
+      // stops drawing it inline; a correction takes it out of the toast.
+      const id = String(next[idKey] ?? '');
+      if (!edited.has(id)) setEdited(new Set(edited).add(id));
+      setError(null);
       return;
     }
     const draftIndex = index - records.length;
@@ -399,10 +436,9 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     //   • a write that FAILS takes the row with it. The row never reaches `records`, and the draft
     //     is already gone: the user's typing is destroyed by the one event that most needs them to
     //     be able to retry. The failure itself is reported by the tab's write path (FR-006a).
-    if (checkFlavourRecord(next, committedIds) === null) {
-      commitRows([...records, next]);
-      setError(null);
-    }
+    // A draft that is still not a flavour is said in the toast (`rowProblem`): it is the draft's only voice (FR-024).
+    setError(null);
+    if (checkFlavourRecord(next, committedIds) === null) commitRows([...records, next]);
   };
 
   return (
@@ -420,7 +456,11 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
         <tbody>
           {rows.map((row, index) => {
             const rowKey = rowKeys[index];
-            const problem = problemOf(index);
+            // 077 FR-024 — only a COMMITTED row the user has not edited here draws its problem inline (C17): it
+            // reports the file. A draft's or an edited row's problem is an entry's, and the toast already says it:
+            // one condition, one notice.
+            const problem =
+              index < records.length && !edited.has(String(row[idKey] ?? '')) ? problemOf(index) : null;
             return (
               <Fragment key={rowKey}>
                 <tr data-testid={`${noun}-row-${rowKey}`}>
@@ -436,6 +476,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
                           setCell(index, column, decodeCell(cell, column.key ? row[column.key] : undefined))
                         }
                         testId={`${noun}-cell-${rowKey}-${column.key ?? 'value'}`}
+                        label={`${descriptor.label}: ${column.label}`}
                       />
                     </td>
                   ))}
@@ -476,7 +517,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
       <div className="map-control-add">
         <input
           type="text"
-          className="ctl__input map-control-text"
+          className={idRefused ? 'ctl__input ctl__input--invalid map-control-text' : 'ctl__input map-control-text'}
           value={newId}
           placeholder={`New ${noun} id`}
           onChange={(e) => {
@@ -493,11 +534,6 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
         />
         <IconButton token="add" title={`Add ${noun}`} onClick={addRow} testId={`${noun}-add`} />
       </div>
-      {error ? (
-        <div className="map-control-error" role="alert" data-testid={`${noun}-error`}>
-          {error}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -581,39 +617,125 @@ function TextCell({
   );
 }
 
+/**
+ * 077 FR-008, FR-009, FR-012, FR-024 — a number column checked the way every Preferences number box is.
+ *
+ * The cell used to drop a keystroke that left the range and write the rest as typed, so `20` in a 1–16 column
+ * silently stayed `2` and `2.5` was stored. Now the text is the user's until it is confirmed: `checkTyped` names what
+ * is wrong in the Preferences toast as it is typed, Enter or leaving the cell stores a whole number within the
+ * bounds or the nearer bound past one, text that is no whole number stores nothing and stays until it is corrected
+ * (040 FR-007), and Escape restores the stored value.
+ */
+function NumberCell({
+  column,
+  value,
+  label,
+  onCommit,
+  testId,
+}: {
+  column: MapColumn;
+  value: unknown;
+  label: string;
+  onCommit: (value: unknown) => void;
+  testId: string;
+}): ReactElement {
+  // The check takes a descriptor: the column's own bounds and step, named as the toast names the cell.
+  const field = useMemo<FieldDescriptor>(
+    () => ({
+      key: testId,
+      label,
+      description: '',
+      group: '',
+      control: 'number',
+      type: 'number',
+      min: column.min,
+      max: column.max,
+      step: column.step,
+      hardMin: column.hardMin,
+      hardMax: column.hardMax,
+    }),
+    [testId, label, column.min, column.max, column.step, column.hardMin, column.hardMax],
+  );
+  const stored = typeof value === 'number' ? String(value) : '';
+  const [text, setText] = useState(stored);
+  const [invalid, setInvalid] = useState(false);
+  const focused = useRef(false);
+  const fieldNotice = useFieldNotice(`${testId}-invalid`);
+  useEffect(() => {
+    if (!focused.current) setText(stored);
+  }, [stored]);
+  useEffect(() => {
+    fieldNotice(invalid ? typedProblem(text, field) : null);
+  }, [fieldNotice, invalid, text, field]);
+
+  const commit = (raw: string): void => {
+    const check = checkTyped(raw, field);
+    const n = check.ok ? check.value : check.clampTo;
+    if (n === undefined) {
+      setInvalid(true);
+      // The same refused entry confirmed again flashes its toast (one condition, one notice).
+      fieldNotice(typedProblem(raw, field), true);
+      return;
+    }
+    setInvalid(false);
+    setText(String(n));
+    if (n !== value) onCommit(n);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      className={invalid ? 'ctl__input ctl__input--invalid map-control-number' : 'ctl__input map-control-number'}
+      value={text}
+      min={column.min}
+      max={column.max}
+      step={column.step}
+      aria-label={label}
+      aria-invalid={invalid}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onChange={(e) => {
+        setText(e.target.value);
+        // An emptied cell is a value being typed, not a wrong one: it is named only if it is confirmed empty.
+        setInvalid(e.target.value.trim() !== '' && !checkTyped(e.target.value, field).ok);
+      }}
+      onBlur={(e) => {
+        focused.current = false;
+        commit(e.currentTarget.value);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit(e.currentTarget.value);
+        // An Escape that puts the stored value back is the cell's own: prevented, so the list modal stays open.
+        if (e.key === 'Escape' && (invalid || text !== stored)) {
+          e.preventDefault();
+          setInvalid(false);
+          setText(stored);
+        }
+      }}
+      data-testid={testId}
+    />
+  );
+}
+
 interface MapCellProps {
   column: MapColumn;
   value: unknown;
   options?: readonly (string | number)[];
   onCommit: (value: unknown) => void;
   testId: string;
+  /** How the Preferences toast names this cell: the setting and the column ("Indentation by language: Width"). */
+  label: string;
 }
 
-function MapCell({ column, value, options, onCommit, testId }: MapCellProps): ReactElement {
+function MapCell({ column, value, options, onCommit, testId, label }: MapCellProps): ReactElement {
   const choices = column.allowedValues ?? options ?? [];
   // A language-valued cell shows the language's NAME while still storing its id.
   const isLanguage = column.label === 'Language' && !column.allowedValues;
 
   if (column.control === 'number') {
-    return (
-      <input
-        type="number"
-        className="ctl__input map-control-number"
-        value={typeof value === 'number' ? value : ''}
-        min={column.min}
-        max={column.max}
-        onChange={(e) => {
-          const next = Number(e.target.value);
-          // Refuse an out-of-range value rather than writing it: the tolerant parser would drop it
-          // on the next load and the user's setting would silently revert (FR-017).
-          if (!Number.isFinite(next)) return;
-          if (column.min !== undefined && next < column.min) return;
-          if (column.max !== undefined && next > column.max) return;
-          onCommit(next);
-        }}
-        data-testid={testId}
-      />
-    );
+    return <NumberCell column={column} value={value} label={label} onCommit={onCommit} testId={testId} />;
   }
 
   /*

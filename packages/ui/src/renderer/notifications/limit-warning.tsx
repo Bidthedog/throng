@@ -1,5 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
-import { logCaught } from '@throng/core';
+import { formatGrouped, logCaught } from '@throng/core';
+import { useAppSettings } from '../config/config-store.js';
 import { useNotify } from '../common/notification.js';
 import './notifications.css';
 
@@ -28,6 +29,9 @@ export function LimitWarning(): null {
   const liveId = useRef('');
   // Set while the card is being closed by following the link, so `onDismiss` can tell the two apart.
   const followed = useRef(false);
+  // 077 T060 (constitution X, FR-014) — the limit it names is the setting's value when the warning is raised.
+  const limit = useRef(0);
+  limit.current = useAppSettings().notifications.panelLimit;
 
   useEffect(() => {
     const api = window.throng?.notifications;
@@ -51,7 +55,7 @@ export function LimitWarning(): null {
         subject: { kind: 'none' },
         title: 'Notifications are piling up',
         message:
-          'The Notifications panel has reached its limit, so the oldest notifications are being dropped. Change the notification preferences, or dismiss what you have dealt with: unattended notifications can affect performance.',
+          `The Notifications panel has reached its limit of ${formatGrouped(limit.current)} notifications, so the oldest notifications are being dropped. Change the notification preferences, or dismiss what you have dealt with: unattended notifications can affect performance.`,
         testId: TEST_ID,
         display: { toast: true, panel: false },
         sticky: true,

@@ -12,12 +12,17 @@ import {
   panelDisplayTitle,
   panelRemovalVerb,
   previewTitleParts,
+  previewIconOf,
   previewPanelTypeLabel,
   previewPathOf,
   previewProviderIdOf,
   PREVIEW_KIND,
   toDisplayPath,
   effectiveActivePanelId,
+  cellDialogOn,
+  wrapCellsOn,
+  lockFirstRowOn,
+  lockFirstColumnOn,
   panelZoomLevel,
   zoomFactor,
   findPanelLocations,
@@ -27,6 +32,9 @@ import {
   type Panel,
   type PreviewPanelConfig,
   isFlowingDocument,
+  supportsScrollSync,
+  previewGoToKind,
+  canPrint,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
 import { PanelErrorBoundary } from './panel-error-boundary.js';
@@ -57,6 +65,7 @@ import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
 import { useCopyToClipboard } from '../common/use-copy.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
+import { previewEditorOpen } from '../editor/editor-open.js';
 import {
   getFindSession,
   openFind,
@@ -88,15 +97,19 @@ import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
 import { PanelHeaderSaveIcons } from './panel-header-save-icons.js';
+import { headerControlsFit, useHeaderWidth } from './panel-header-fit.js';
 import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
 import { useReportSubjectFailure } from './panel-failure-notice.js';
 import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import { destroyPanelSearch } from '../search/search-store.js';
-import { openPreviewHeadingOutline } from '../preview/preview-panel-handles.js';
+import { openPreviewHeadingOutline, printPreviewFromPanel } from '../preview/preview-panel-handles.js';
+import { printEditorPanel } from '../editor/editor-print.js';
+import { usePrintFailureNotice } from '../print/print-failure.js';
 import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js';
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
+import { anotherPanelShowsFile } from '../editor/document-views.js';
 import { revealPanelFile } from './reveal-panel-file.js';
 import { BackForwardButtons } from '../navigation/back-forward-buttons.js';
 import { usePanelHistory } from '../navigation/history-store.js';
@@ -124,6 +137,7 @@ function EdgeDropZone({ panelId, edge }: { panelId: string; edge: Edge }): React
  * (FR-014/018). Header buttons add a sibling Panel or close this one.
  */
 export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string }): ReactElement {
+  const printFailed = usePrintFailureNotice(); // 075 FR-080
   const ws = useWorkspace();
   const { activeProject, projects } = useProjects();
   const confirm = useConfirm();
@@ -357,6 +371,9 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     panel.kind === 'editor' ? editorUi?.filePath : null,
     editorProjectRoot,
   );
+  // 067 FR-069b — a narrow header keeps its title: the controls give way, a whole one at a time (panel-header-fit.ts).
+  const headerFitAnchor = useRef<HTMLSpanElement>(null);
+  const headerFit = headerControlsFit(useHeaderWidth(headerFitAnchor));
   const fullTitle = panelDisplayTitle(panel, titleSources);
   // 054 FR-005a — a preview's title names its file; hovering it shows the file's full path.
   const previewPath = isPreview
@@ -367,8 +384,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const titleTruncated = effectiveTitle !== fullTitle;
   /*
    * FR-032 — a preview's title in its two halves, so the header's truncation marker lands on the NAME
-   * (`name… - Preview`). The generic `--truncated` class draws its `…` after the whole title, which for
-   * a preview would read `name - Preview…` and mark the one half that is never cut.
+   * (`name… - Markdown Preview`). The generic `--truncated` class draws its `…` after the whole title, which for
+   * a preview would read `name - Markdown Preview…` and mark the one half that is never cut.
    */
   const previewTitle = previewTitleParts(panel, titleSources, maxNameLength);
 
@@ -390,11 +407,18 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // context menu. A confirmation is shown only when the Panel hosts a live
   // terminal; a plain/empty Panel is removed immediately.
   const destroyPanel = async (): Promise<void> => {
+    // The name every prompt and confirm below gives the panel: what its header shows, never the stored fallback title
+    // ("Blank Panel 3"), which the reader cannot find on screen (MT-16 / MT-107 walk-through, 2026-11-21).
+    const shownName = fullTitle;
     // Dirty-editor guard (FR-006a): destroying a Panel with unsaved editor content
     // prompts save/discard/cancel before anything else. Cancel aborts entirely.
     const editorActions = getEditorActions(panel.id);
-    if (editorActions?.isDirty()) {
-      const name = editorUi?.displayName ?? panel.title;
+    // 073 FR-033 — only the LAST panel showing a dirty document asks: an editor and a CSV Preview Editor on one file
+    // share its document, so closing either while the other shows it loses nothing (MT-03 walk-through, 2026-11-21).
+    const shownFile = isPreview ? previewUi?.filePath : editorUi?.filePath;
+    const stillShown = anotherPanelShowsFile(wsRef.current.layout, new Set([panel.id]), shownFile, isPreview ? 'grid' : 'editor');
+    if (editorActions?.isDirty() && !stillShown) {
+      const name = editorUi?.displayName ?? shownName;
       const choice = await promptDirtyClose(name, editorUi?.filePath ? [name] : [], {
         movedOut: editorUi?.movedOut === true,
       });
@@ -431,8 +455,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     // well as the place: a preview this window opened is its to end whichever project it belongs to.
     const previewPlace = { inSubWorkspace, layoutProjectId: ws.layout?.projectId };
     const activeMessage = killsSession
-      ? `Destroy “${panel.title}”? Its running terminal will be terminated.`
-      : `Destroy “${panel.title}”? Its terminal keeps running in the project.`;
+      ? `Destroy “${shownName}”? Its running terminal will be terminated.`
+      : `Destroy “${shownName}”? Its terminal keeps running in the project.`;
 
     // Closing the LAST Panel of a sub-workspace closes the whole sub-workspace
     // (FR-029): the removePanel op keeps the workspace non-empty, so here the ✕
@@ -443,7 +467,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     if (subWin !== null && totalPanels <= 1) {
       const ok = await confirm({
         title: 'Destroy sub-workspace',
-        message: active ? activeMessage : `Destroy “${panel.title}”?`,
+        message: active ? activeMessage : `Destroy “${shownName}”?`,
         warningMessage: `This is the last panel in “${subWin.name}” — destroying it destroys the sub-workspace (project-owned panels it mirrored are merely closed).`,
         confirmLabel: 'Destroy sub-workspace',
         cancelLabel: 'Cancel',
@@ -480,11 +504,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     // active-terminal message already reflects that its session keeps running.
     const closeActiveMessage = killsSession
       ? activeMessage
-      : `Close “${panel.title}”? It leaves this sub-workspace; its terminal keeps running in the project.`;
+      : `Close “${shownName}”? It leaves this sub-workspace; its terminal keeps running in the project.`;
     if (plan.dialogs > 0 || cascades) {
       const ok = await confirm({
         title: `${panelVerb} Panel`,
-        message: active ? (panelVerb === 'Close' ? closeActiveMessage : activeMessage) : `${panelVerb} “${panel.title}”?`,
+        message: active ? (panelVerb === 'Close' ? closeActiveMessage : activeMessage) : `${panelVerb} “${shownName}”?`,
         warningMessage,
         confirmLabel: `${panelVerb} Panel`,
         cancelLabel: 'Cancel',
@@ -496,8 +520,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
       const sure = await confirm({
         title: 'Are you absolutely sure?',
         message: killsSession
-          ? `This destroys “${panel.title}” and terminates its running terminal.`
-          : `This closes “${panel.title}” here (its terminal keeps running in the project).`,
+          ? `This destroys “${shownName}” and terminates its running terminal.`
+          : `This closes “${shownName}” here (its terminal keeps running in the project).`,
         confirmLabel: "Yes, I'm absolutely sure",
         cancelLabel: 'No, I concede',
         danger: true,
@@ -553,6 +577,12 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
      * panel, the same order `panel-body`'s FR-067 refusal uses; any other close removes it as before.
      */
     if (isPreview) ws.clearPanelType(panel.id);
+    /*
+     * 002 FR-016a — the workspace's LAST panel is kept (FR-016), so × there would remove nothing and leave the panel's
+     * kind over the content just torn down: an editor with no document, a Find in Files panel titled as one. It returns
+     * to the blank form instead, which remembers the type it had for the form to offer.
+     */
+    if (!inSubWorkspace && totalPanels <= 1) ws.clearPanelType(panel.id);
     ws.removePanel(panel.id);
     // Cascade to the sub-workspaces ONLY when destroying from the project (FR-026).
     // A sub-workspace destroy stays local (no broadcast → the project is untouched).
@@ -611,6 +641,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         if (panel.kind === 'terminal') focusTerminal(panel.id);
       }}
       /*
+       * 074 FR-083a (2026-11-19) — a press INSIDE a frame (an HTML preview's sandboxed page) never reaches this
+       * element's pointer-down: the page is another document. Focus moving into the frame is told as a bubbling
+       * `focusin` from the frame element (`providers/html/frame-input.ts`, from the frame document's own focusin), so that activates the panel instead.
+       */
+      onFocus={(e) => {
+        if (!(e.target instanceof HTMLIFrameElement)) return;
+        ws.setActivePanel(tabId, panel.id);
+        setActivePane('workspace');
+      }}
+      /*
        * 044 FR-105 — the mouse's back (3) and forward (4) buttons over an editor or a preview step THIS panel,
        * the one under the pointer, whichever panel has focus. Default-prevented on both press and release, so
        * nothing else — Chromium's own history navigation included — acts on them. Performed on release, and
@@ -665,6 +705,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           const others = (ws.layout?.tabs ?? [])
             .filter((t) => t.id !== tabId)
             .map((t) => ({ id: t.id, title: t.title, disabled: getMaximiseStack(t.id).length > 0 }));
+          // The preview's provider is the component's `previewProvider` (the run's, else the persisted or derived one),
+          // resolved once for the title and every row below. The per-panel toggles belong to a run that has named its
+          // provider, so they read the run's alone.
+          const runProvider = isPreview && previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
           // 033 US5 (T062) — the items live in `panel-header-menu.ts`, which declares their
           // sections; `ContextMenu` derives the dividers from those. This handler supplies the
           // panel's state and the action bodies that need the confirm dialog, the clipboard and the
@@ -700,16 +744,56 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               // 044 FR-033 — a preview's provider KIND (never its identity) and whether it is parented.
               preview: isPreview
                 ? {
-                    // The run's provider once an update has named it; before that, whichever provider
-                    // claims the persisted file (`editorFilePath` reads `config.filePath` for any kind).
-                    providerKind:
-                      (previewUi ? previewRegistry.get(previewUi.providerId) : undefined)?.kind ??
-                      previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? '')?.kind ??
-                      'text',
+                    providerKind: previewProvider?.kind ?? 'text',
                     parented: previewUi?.parent != null,
                     flowingDocument: isFlowingDocument(
-                      (previewUi ? previewRegistry.get(previewUi.providerId) : undefined) ??
-                        previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? ''),
+                      previewProvider,
+                    ),
+                    scrollSync: supportsScrollSync(
+                      previewProvider,
+                    ),
+                    ...(runProvider?.cellDialog === true
+                      ? {
+                          cellDialog: {
+                            on: cellDialogOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.cellDialog,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.editLongCellsInDialog : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
+                    ...(runProvider?.wrapToggle === true
+                      ? {
+                          wrap: {
+                            on: wrapCellsOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.wrapCells,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.wrapCells : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
+                    ...(runProvider?.lockToggles === true
+                      ? {
+                          lockFirstRow: {
+                            on: lockFirstRowOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.lockFirstRow,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstRow : undefined,
+                            ),
+                          },
+                          lockFirstColumn: {
+                            on: lockFirstColumnOn(
+                              (panel.config as PreviewPanelConfig | undefined)?.lockFirstColumn,
+                              previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstColumn : undefined,
+                            ),
+                          },
+                        }
+                      : {}),
+                    goTo: previewGoToKind(
+                      previewProvider,
+                    ),
+                    // 075 FR-062 — Print… is drawn disabled for a provider that cannot print.
+                    printable: canPrint(
+                      previewProvider,
                     ),
                   }
                 : null,
@@ -886,6 +970,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 goToHeading: () => {
                   openPreviewHeadingOutline(panel.id);
                 },
+                // 075 FR-061 — the same handles `preview.print`'s and `editor.print`'s chord dispatches use.
+                print: () => {
+                  if (panel.kind === 'editor') void printEditorPanel(panel.id, undefined, printFailed);
+                  else printPreviewFromPanel(panel.id);
+                },
                 /*
                  * Replace All needs a term and a replacement, and with no bar open there is
                  * neither. So the menu row OPENS the bar in that case rather than firing a
@@ -919,10 +1008,38 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 },
                 // 044 FR-015b — the SAME function the status bar's button and the body menu's row run; it
                 // reads parented-or-standalone from the store when chosen, so both rows reach it.
-                openInEditor: () => runPreviewEditorRoute(panel, () => wsRef.current),
+                openInEditor: () =>
+                  runPreviewEditorRoute(panel, () => wsRef.current, previewEditorOpen(() => wsRef.current, settings.editor.openTarget)),
                 goToEditor: () => runPreviewEditorRoute(panel, () => wsRef.current),
                 // 044 FR-122 — the one command body, from the value this window holds when the menu opened.
                 toggleSyncScroll: () => void toggleSyncScroll(settings.editor.previews.syncScroll),
+                // 073 FR-036b — the panel's own choice, saved with the panel; a panel that has not chosen reads the setting.
+                toggleCellDialog: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.cellDialog;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.editLongCellsInDialog : undefined;
+                  if (provider?.cellDialog === true) wsRef.current.updatePanelConfig(panel.id, { cellDialog: !cellDialogOn(held, setting) });
+                },
+                // 073 FR-013 — the panel's own choice, saved with the panel; a panel that has not chosen reads the setting.
+                toggleWrap: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.wrapCells;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.wrapCells : undefined;
+                  if (provider?.wrapToggle === true) wsRef.current.updatePanelConfig(panel.id, { wrapCells: !wrapCellsOn(held, setting) });
+                },
+                // 073 FR-039a — the panel's own choices, saved with the panel; a panel that has not chosen reads the setting.
+                toggleLockFirstRow: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.lockFirstRow;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstRow : undefined;
+                  if (provider?.lockToggles === true) wsRef.current.updatePanelConfig(panel.id, { lockFirstRow: !lockFirstRowOn(held, setting) });
+                },
+                toggleLockFirstColumn: () => {
+                  const provider = previewUi ? previewRegistry.get(previewUi.providerId) : undefined;
+                  const held = (panel.config as PreviewPanelConfig | undefined)?.lockFirstColumn;
+                  const setting = previewUi ? settings.editor.previews.providers[previewUi.providerId]?.lockFirstColumn : undefined;
+                  if (provider?.lockToggles === true) wsRef.current.updatePanelConfig(panel.id, { lockFirstColumn: !lockFirstColumnOn(held, setting) });
+                },
               },
             }),
           );
@@ -956,14 +1073,17 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   title={flavour ? `${typeLabel} · ${flavour}` : `Panel type: ${typeLabel}`}
                   aria-label={typeLabel}
                 >
-                  <Icon token={desc.icon} />
+                  {/* 074 FR-103 — a preview is headed by its provider's own preview icon. */}
+                  <Icon token={isPreview ? previewIconOf(previewProvider) : desc.icon} />
                 </span>
               );
             })()
           : null}
         {/* 044 FR-104 — Back / Forward, on editors and previews only (FR-100). 069 FR-065: after the type icon,
             which leads the header, and before the title. */}
-        {hasHistory ? (
+        {/* A zero-size anchor, so the header's width can be read from inside it (FR-069b). */}
+        <span ref={headerFitAnchor} hidden aria-hidden="true" />
+        {hasHistory && headerFit.history ? (
           <BackForwardButtons
             panelId={panel.id}
             onBack={() => void navigatePanelHistory(wsRef.current, panel.id, 'back')}
@@ -971,7 +1091,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           />
         ) : null}
         <span
-          className={`panel-box__title${titleTruncated && previewTitle === null ? ' panel-box__title--truncated' : ''}`}
+          className={`panel-box__title${titleTruncated && previewTitle === null ? ' panel-box__title--truncated' : ''}${previewTitle !== null ? ' panel-box__title--split' : ''}`}
           data-testid={`panel-title-${panel.id}`}
         >
           {previewTitle !== null ? (
@@ -1013,9 +1133,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          *
          * 044 FR-040, FR-043 — a PARENTED preview displays its source document's dot too, read from the
          * update main sent (never editor-state, so the document is still counted once). A standalone
-         * preview never wears it. The editor gate stays spelled out inline, where
+         * preview never wears it — unless it holds the document itself (073 FR-033: a CSV Preview Editor's
+         * grid document), when the dot is that document's. The editor gate stays spelled out inline, where
          * `unsaved-dot-call-sites.test.ts` reads it. */}
-        {(panel.kind === 'editor' && editorUi?.dirty) || (isPreview && previewUi?.parent != null && previewUi.dirty) ? (
+        {(panel.kind === 'editor' && editorUi?.dirty) ||
+        (isPreview && (previewUi?.parent != null || previewUi?.ownsDocument === true) && previewUi.dirty) ? (
           <span
             className="throng-unsaved-dot panel-box__unsaved"
             data-testid={`panel-unsaved-${panel.id}`}
@@ -1043,11 +1165,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         ) : null}
         <span className="panel-box__actions">
           {/* 067 FR-069 — an editor's Save and Save As, then the separator, before the common icons. */}
-          {panel.kind === 'editor' ? (
+          {/* 073 FR-035a — the CSV Preview Editor edits its document, so it carries the same two controls. They
+              run the actions its body registers (`getEditorActions`), exactly as an editor's do. The preview
+              does not report a moved-out file, so Save stays enabled: main refuses it there. */}
+          {panel.kind === 'editor' || (isPreview && previewUi?.providerId === 'csv') ? (
             <PanelHeaderSaveIcons
               panelId={panel.id}
               keybindings={keybindings}
-              movedOut={editorUi?.movedOut === true}
+              movedOut={panel.kind === 'editor' && editorUi?.movedOut === true}
             />
           ) : null}
           {/*
@@ -1071,6 +1196,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             054 FR-071 — Maximise / Restore, before the +. The same toggle as the title-menu row and the
             `panel.toggleMaximise` chord; on the maximised panel it is the Restore control (FR-071).
           */}
+          {/* 067 FR-069b — Split, then Focus Mode, then Destroy give way to the title; each stays on the header menu. */}
+          {headerFit.focus ? (
           <IconButton
             token={isMaximisedPanel ? 'panelRestore' : 'panelMaximise'}
             // The live chord in the tooltip, as the Back / Forward buttons show theirs.
@@ -1081,6 +1208,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             // The box's own pointer-down has already made this panel the active one.
             onClick={() => toggleMaximisePanel(tabId, panel.id)}
           />
+          ) : null}
+          {headerFit.split ? (
           <IconButton
             token="add"
             // 054 FR-074 — drawn disabled, not hidden, while the tab is maximised, and saying why.
@@ -1113,6 +1242,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               );
             }}
           />
+          ) : null}
+          {headerFit.destroy ? (
           <IconButton
             token="windowClose"
             className=""
@@ -1123,6 +1254,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             testId={`panel-close-${panel.id}`}
             onClick={() => void destroyPanel()}
           />
+          ) : null}
         </span>
       </div>
       {showsZoomIndicator ? (

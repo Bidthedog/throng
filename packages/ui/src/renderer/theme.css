@@ -615,6 +615,7 @@ textarea,
 }
 
 .project-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -729,7 +730,6 @@ textarea,
 
 .project-item--active .project-item__switch,
 .project-item--active .project-item__name,
-.project-item--active .project-item__counts,
 .project-item--active .project-item__path,
 .project-item--active .project-item__grip,
 .project-item--active .project-item__controls button {
@@ -772,6 +772,19 @@ textarea,
   flex: 0 0 auto;
 }
 
+/* #702 — the busy glyph, in the dot's own 14 px box while the project opens, so nothing in the row
+ * moves. */
+.project-item__opening {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  --throng-size-icon: 14px;
+}
+
 .project-item__name-row {
   display: flex;
   align-items: baseline;
@@ -786,21 +799,76 @@ textarea,
   flex: 0 1 auto;
 }
 
-/* Tab/panel count indicator after the project name (stays put; name ellipsizes). */
-.project-item__counts {
-  flex: 0 0 auto;
-  color: var(--text-dim);
-  font-size: 11px;
-}
-
+/*
+ * #695, 077 FR-027 — the action buttons take no room until the pointer is over the row: out of the flow
+ * (and unseen) at rest, so the name and the path use the row's whole width; back in the flow on hover,
+ * where the labels give way to them. Out of the flow rather than `display: none`, so they stay
+ * targetable at the same place.
+ */
 .project-item__controls {
   display: flex;
   gap: 2px;
   opacity: 0;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .project-item:hover .project-item__controls {
   opacity: 1;
+  position: static;
+  transform: none;
+}
+
+/* The name and the path: an ellipsis at rest, the rest scrolled into view on hover (FR-032, #695). */
+.project-item__marquee {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.project-item__marquee-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  will-change: transform;
+}
+
+.project-item__marquee-text--scrolling {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* #695, 077 FR-027 — the row's popover, on the tab popover's surface (`throng-popup`). */
+.project-popover {
+  position: fixed;
+  z-index: 1000;
+  min-width: 240px;
+  max-width: 440px;
+  pointer-events: none;
+}
+
+.project-popover__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.project-popover__path {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.project-popover__detail,
+.project-popover__hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .project-item__controls button {
@@ -1290,16 +1358,52 @@ textarea,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 067 FR-069b — a minimum share of the header, at any panel width: never drawn 0 px wide. The header's controls
+   * give way instead (panel-header-fit.ts); half the header at the narrowest still shows a letter and its ellipsis. */
+  min-width: min(4em, 50%);
+}
+
+/*
+ * 044 FR-032, amended 2026-11-21 — a preview's title is its name and its type suffix (" - CSV Preview"). In a narrow
+ * header the name gives way first, ellipsised, down to the ellipsis alone; the suffix gives way only after that.
+ *
+ * The weighting is in the shrink FACTORS — 1000 for the name, 1 for the suffix — not in a suffix factor below 1: once
+ * the name stops at its floor, flexbox scales the space still to be found by the unfrozen factors' sum when it is below
+ * 1, so a suffix at 0.001 shrank 0.2 px of the 19 it had to, and the title box clipped it (MT-120b).
+ */
+.panel-box__title--split {
+  display: inline-flex;
+}
+
+.panel-box__title-name {
+  flex: 0 1000 auto;
+  /* Room for the "…" itself: at 1ch the glyph did not fit, and the name was clipped to a bare letter, unmarked. */
+  min-width: 1em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-box__title-suffix {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
 }
 
 /* Per-Panel origin-project label, shown only inside a sub-workspace window. Sits
    right-aligned before the header actions, coloured by the project (or the
    sub-workspace, for a project-less Panel). */
 .panel-box__project {
-  /* Owner (project / sub-workspace) text: right-aligned and ALWAYS visible — it
-   * never shrinks, so the editor file pill's folder-brackets truncate first
-   * (FR-085). */
-  flex: 0 0 auto;
+  /* Owner (project / sub-workspace) text: right-aligned, and the last thing in the
+   * header to give way — the editor file pill's folder-brackets truncate first
+   * (FR-085). 067 FR-069b: it gives way only once the title is at its floor,
+   * ellipsised, so it never pushes the title out. */
+  flex: 0 0.001 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-left: auto;
   padding: 0 8px;
   font-size: 10px;
@@ -2390,7 +2494,7 @@ textarea,
  * the stored name, to be copied out of a selection, or to accumulate across successive reductions —
  * which is exactly what `truncateGraphemes` being marker-free buys, and this is the other half of it.
  */
-/* 044 FR-032 — a preview title marks its NAME half (`name… - Preview`); its suffix is never cut. */
+/* 044 FR-032 — a preview title marks its NAME half (`name… - Markdown Preview`); its suffix is never cut. */
 .tab-chip__label--truncated::after,
 .panel-box__title--truncated::after,
 .panel-box__title-name--truncated::after {
@@ -2882,6 +2986,17 @@ textarea,
   transition: opacity var(--throng-popup-fade-out) ease-in;
 }
 
+/* 074 (2026-11-20) — a preview's zoom stays shown, faded as its controls are until the pointer is over the preview. */
+.zoom-indicator--resting {
+  opacity: 0.35;
+  transition: opacity 120ms ease-out;
+}
+
+.preview-diagram-frame:hover .zoom-indicator--resting,
+.preview-diagram-frame--in-pane .zoom-indicator--resting,
+.preview-pdf-view:hover .zoom-indicator--resting,
+/* FR-031g — full while its panel is in Focus Mode, as it is under the pointer. */
+.tab-body[data-maximised] .panel-box--maximised .zoom-indicator--resting,
 .zoom-indicator--shown {
   opacity: 1;
   transition: opacity var(--throng-popup-fade-in) ease-out;
@@ -2889,6 +3004,7 @@ textarea,
 
 @media (prefers-reduced-motion: reduce) {
   .zoom-indicator,
+  .zoom-indicator--resting,
   .zoom-indicator--shown {
     transition: none;
   }
@@ -4827,6 +4943,11 @@ canvas.status-popover__plot {
 }
 
 /* The "?" helpers (FR-119): the existing help glyph, small, beside what it explains; its words open in the popover style. */
+/* A helper's text keeps its line breaks: a list of placeholders reads one to a line. */
+.info-helper-popover {
+  white-space: pre-line;
+}
+
 .info-helper {
   display: inline-flex;
   align-items: center;

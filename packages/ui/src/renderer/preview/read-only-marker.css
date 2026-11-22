@@ -1,0 +1,56 @@
+/* 073 FR-050a — a workbook preview's Read-only marker: a padlock and the words, coloured as the strip's readouts are.
+   FR-050b — an edit tried on its grid pulses it, as a repeated notice card pulses (`notification.css`): a ring in the
+   theme's accent that grows and goes, from the token alone. With reduced motion, the ring alone.
+   Status-bar chrome, not preview content, so it lives here rather than in `preview.css` (whose FR-083 rules keep the
+   accent to the focus outline). */
+.preview-read-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 4px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.preview-read-only__icon {
+  display: inline-flex;
+  width: 1em;
+  height: 1em;
+}
+
+.preview-read-only__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.preview-read-only--pulsing {
+  animation: preview-read-only-pulse 600ms ease-out;
+}
+
+@keyframes preview-read-only-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--throng-colour-accent);
+    transform: scale(1);
+  }
+  35% {
+    box-shadow: 0 0 0 3px var(--throng-colour-accent);
+    transform: scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-read-only--pulsing {
+    animation: preview-read-only-pulse-still 600ms ease-out;
+  }
+
+  @keyframes preview-read-only-pulse-still {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--throng-colour-accent);
+    }
+    35% {
+      box-shadow: 0 0 0 3px var(--throng-colour-accent);
+    }
+  }
+}

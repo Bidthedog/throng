@@ -36,6 +36,7 @@ export {
   logFilePid,
   nextRotatedName,
   normaliseRetention,
+  retentionFromEnv,
   retentionPlan,
   rotatedName,
   sessionFileName,

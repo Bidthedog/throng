@@ -44,6 +44,10 @@ export interface ProjectsSettings {
   unloadTerminalAction: UnloadTerminalAction;
   /** Whether a folder opened from outside throng switches to its project or only loads it (067 FR-035). */
   openFromOutside: OpenFromOutside;
+  /** #695, 077 FR-027 — how long the pointer rests on a project row before its popover opens, in ms. */
+  popoverDelayMs: number;
+  /** #695, 077 FR-027 — whether a project row shows its popover at all. */
+  popoverEnabled: boolean;
 }
 
 /** What a folder arriving from outside throng does to the active project (067 FR-035). */
@@ -136,8 +140,8 @@ export interface TerminalAttentionSettings {
   /** Master switch: off withdraws every terminal mark (FR-063). */
   enabled: boolean;
   signals: TerminalAttentionSignals;
-  /** How long a terminal must be silent before `outputQuiet` fires, in seconds. */
-  quietSeconds: number;
+  /** How long a terminal must be silent before `outputQuiet` fires, in ms (077 FR-001). */
+  quietMs: number;
 }
 
 /**
@@ -602,10 +606,10 @@ export interface AppSettings {
  * warning below its critical) are resolved where they are read, by `resolveResourceMonitorSettings`.
  */
 export interface ResourceMonitorSettings {
-  /** Seconds between captures, for the status bar and the modal alike (FR-004). */
-  captureIntervalSeconds: number;
-  /** Minutes of history a modal session keeps per node (FR-033a). */
-  historyMinutes: number;
+  /** Milliseconds between captures, for the status bar and the modal alike (FR-004; 077 FR-001). */
+  captureIntervalMs: number;
+  /** Milliseconds of history a modal session keeps per node (FR-033a; 077 FR-001). */
+  historyMs: number;
   /** Usage bands (FR-046): % of the machine for CPU, % of installed RAM for memory. */
   cpuWarningPercent: number;
   cpuCriticalPercent: number;
@@ -626,12 +630,12 @@ export interface ResourceMonitorSettings {
 export interface DiagnosticsSettings {
   /** Threshold for what reaches the log files: fatal | error | warn | info | debug. Fatal is always written. */
   logLevel: LogLevel;
-  /** Size (KB) a log file may reach before it rolls over (066 FR-018). */
-  maxFileSizeKb: number;
+  /** Size in bytes a log file may reach before it rolls over (066 FR-018; 077 FR-001). */
+  maxFileBytes: number;
   /** How many ACTIVE days of logs to keep — days throng ran, not calendar days (066 FR-019). */
   keepDays: number;
-  /** The most the logs folder may hold, in MB; oldest files go first (066 FR-019a). */
-  maxTotalMb: number;
+  /** The most the logs folder may hold, in bytes; oldest files go first (066 FR-019a; 077 FR-001). */
+  maxTotalBytes: number;
 }
 
 /**
@@ -849,7 +853,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     destroySubWorkspace: 'double',
     killProcesses: 'double',
   },
-  projects: { unloadTerminalAction: 'keepRunning', openFromOutside: 'switch' },
+  projects: { unloadTerminalAction: 'keepRunning', openFromOutside: 'switch', popoverDelayMs: 300, popoverEnabled: true },
   panes: {
     projects: { maxWidth: DEFAULT_PROJECTS_MAX_WIDTH },
     fileExplorer: { maxWidth: DEFAULT_EXPLORER_MAX_WIDTH },
@@ -909,7 +913,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
         unseenOutput: false,
         outputQuiet: false,
       },
-      quietSeconds: 10,
+      quietMs: 10_000,
     },
   },
   attention: {
@@ -997,7 +1001,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     lastProjectFolder: '',
   },
   search: {
-    asYouTypeDebounceMs: 120,
+    // 077 FR-011 — on the 25 ms grid.
+    asYouTypeDebounceMs: 125,
     inFiles: {
       // Reuse the panel you already have. A user searching repeatedly is refining ONE question, and
       // a fresh panel per attempt buries the workspace in results they have already read (FR-021).
@@ -1033,17 +1038,17 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   diagnostics: {
     logLevel: DEFAULT_LOG_LEVEL,
-    maxFileSizeKb: DEFAULT_RETENTION.maxFileBytes / 1024,
+    maxFileBytes: DEFAULT_RETENTION.maxFileBytes,
     keepDays: DEFAULT_RETENTION.keepDays,
-    maxTotalMb: DEFAULT_RETENTION.maxTotalBytes / (1024 * 1024),
+    maxTotalBytes: DEFAULT_RETENTION.maxTotalBytes,
   },
   // IMPORTED, never retyped (030 T017): the parse falls back to this same object, so a divergence
   // between "what the file resolves to when the section is absent" and "what a reset returns you
   // to" could not otherwise be detected by any test either side owns.
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   resourceMonitor: {
-    captureIntervalSeconds: 2,
-    historyMinutes: 5,
+    captureIntervalMs: 2000,
+    historyMs: 300_000,
     cpuWarningPercent: 50,
     cpuCriticalPercent: 80,
     memoryWarningPercent: 50,
@@ -1076,9 +1081,9 @@ function diagnosticsSettings(raw: unknown, d: DiagnosticsSettings): DiagnosticsS
   const v = isRecord(raw) ? raw : {};
   return {
     logLevel: parseLogLevel(v.logLevel, d.logLevel),
-    maxFileSizeKb: wholeNumber(v.maxFileSizeKb, d.maxFileSizeKb),
+    maxFileBytes: wholeNumber(v.maxFileBytes, d.maxFileBytes),
     keepDays: wholeNumber(v.keepDays, d.keepDays),
-    maxTotalMb: wholeNumber(v.maxTotalMb, d.maxTotalMb),
+    maxTotalBytes: wholeNumber(v.maxTotalBytes, d.maxTotalBytes),
     // `keepFiles` (031 FR-015) is superseded by 066 FR-020: a file that still carries it is read
     // without complaint and the key simply dropped.
   };
@@ -1192,6 +1197,9 @@ function projectsSettings(raw: unknown, d: ProjectsSettings): ProjectsSettings {
       ? (p.unloadTerminalAction as UnloadTerminalAction)
       : d.unloadTerminalAction,
     openFromOutside: p.openFromOutside === 'switch' || p.openFromOutside === 'load' ? p.openFromOutside : d.openFromOutside,
+    // 077 FR-016 — no clamp here: the bounds guard holds it to the descriptor's range, the one bound.
+    popoverDelayMs: wholeNumber(p.popoverDelayMs, d.popoverDelayMs),
+    popoverEnabled: typeof p.popoverEnabled === 'boolean' ? p.popoverEnabled : d.popoverEnabled,
   };
 }
 
@@ -1238,11 +1246,8 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
     autoRevealActiveFile,
     sortOrder,
     showOpenInOsDefaultProgram,
-    // The descriptor's own bounds, so a hand-edited value outside them cannot reach the tree.
-    popoverDelayMs: Math.min(
-      EXPLORER_POPOVER_DELAY_MAX_MS,
-      Math.max(0, wholeNumber(v.popoverDelayMs, fallback.popoverDelayMs)),
-    ),
+    // 077 FR-016 — no clamp here: the bounds guard holds it to the descriptor's range, the one bound.
+    popoverDelayMs: wholeNumber(v.popoverDelayMs, fallback.popoverDelayMs),
   };
 }
 
@@ -1418,12 +1423,12 @@ function terminalAttentionSettings(
       unseenOutput: boolOr(s.unseenOutput, f.unseenOutput),
       outputQuiet: boolOr(s.outputQuiet, f.outputQuiet),
     },
-    quietSeconds: wholeNumber(v.quietSeconds, fallback.quietSeconds),
+    quietMs: wholeNumber(v.quietMs, fallback.quietMs),
   };
 }
 
 function cloneTerminalAttention(a: TerminalAttentionSettings): TerminalAttentionSettings {
-  return { enabled: a.enabled, signals: { ...a.signals }, quietSeconds: a.quietSeconds };
+  return { enabled: a.enabled, signals: { ...a.signals }, quietMs: a.quietMs };
 }
 
 /** 057: per-field tolerant parse of the top-level `attention` section. */
@@ -1873,8 +1878,8 @@ export function parseAppSettings(raw: unknown): AppSettings {
 function resourceMonitorSettings(raw: unknown, d: ResourceMonitorSettings): ResourceMonitorSettings {
   const v = isRecord(raw) ? raw : {};
   return {
-    captureIntervalSeconds: wholeNumber(v.captureIntervalSeconds, d.captureIntervalSeconds),
-    historyMinutes: wholeNumber(v.historyMinutes, d.historyMinutes),
+    captureIntervalMs: wholeNumber(v.captureIntervalMs, d.captureIntervalMs),
+    historyMs: wholeNumber(v.historyMs, d.historyMs),
     cpuWarningPercent: wholeNumber(v.cpuWarningPercent, d.cpuWarningPercent),
     cpuCriticalPercent: wholeNumber(v.cpuCriticalPercent, d.cpuCriticalPercent),
     memoryWarningPercent: wholeNumber(v.memoryWarningPercent, d.memoryWarningPercent),

@@ -83,6 +83,21 @@ import type { EditorRecovery, RecoveredDoc, RecoveredFormat, RecoverySnapshot } 
  */
 const BULK_EDIT_VIEW_ID = '__throng:bulk-edit__';
 
+/**
+ * 073 research R1 — the id prefix of a GRID DOCUMENT: the document a CSV Preview Editor opens for its
+ * file on the first grid edit when no editor holds it (`csv-grid-service.ts`). It is an ordinary
+ * document in every respect but one: no panel answers to its id. So "is this file open in an editor?"
+ * ignores it ({@link EditorCoordinator.isOpen}, {@link EditorCoordinator.openInto}) — an editor opened on
+ * the file is a new panel, whose `load` joins it as a linked panel — and it records no navigation
+ * history, because the preview panel has its own.
+ */
+export const GRID_DOCUMENT_PREFIX = 'csv-grid:';
+
+/** Whether `panelId` names a grid document rather than a panel. */
+export function isGridDocumentId(panelId: string): boolean {
+  return panelId.startsWith(GRID_DOCUMENT_PREFIX);
+}
+
 /** 052 FR-012 (data-model "Coordinator document state") — a plain Save of a replaced document. */
 const REPLACED_SAVE_REFUSAL = 'This file was replaced. Use Save As to keep your changes.';
 
@@ -109,10 +124,10 @@ const REPLACED_SAVE_REFUSAL = 'This file was replaced. Use Save As to keep your 
  * `changed` fires whenever canonical text changed: an edit, a bulk replace, an undo or redo, AND every
  * reset (revert, restore recovered, live disk reload, reload from disk, auto-recovery) — and once per
  * flip of `getContent().contentless` (the document has no content of its file to follow: the FR-106d
- * stand-in, a restore-time unloadable register, until the path reads), text or no text, because a
- * parented preview shows FR-026's notice exactly while that holds (adversarial review main item 1, fix
- * round 1 ruling). A document that was read and then lost its file keeps its buffer and is NOT
- * contentless, so deleting its file fires no `changed`. `dirtyChanged`
+ * stand-in, a restore-time unloadable register, until the path reads), text or no text — and once per flip
+ * of its file being gone (`fileMissing` or `unloadable`), because a parented preview shows FR-026's notice
+ * while either holds (adversarial review main item 1; #696, superseding the fix round 1 ruling). A document
+ * that was read and then lost its file still keeps its buffer (006 FR-099). `dirtyChanged`
  * fires exactly once per flip of the document's dirty state, whatever caused it, and never when nothing
  * flipped. `registered` starts a new baseline: the listener reads a newly registered document's
  * initial state from `getContent`.
@@ -133,6 +148,17 @@ export interface DocumentLifecycleListener {
   changed(documentPanelId: string): void;
   /** The document's dirty state flipped. Once per flip, never otherwise. */
   dirtyChanged(documentPanelId: string, dirty: boolean): void;
+  /**
+   * #703 — the document's last editor is closing with unsaved changes: the grid document id of a CSV Preview
+   * Editor still showing it, which takes the document over (as a linked panel would, 052 FR-011), or
+   * `undefined` when no view of it remains.
+   */
+  gridHeirFor?(documentPanelId: string): string | undefined;
+  /**
+   * The SAME document was re-keyed from panel `from` to panel `to` (052 FR-011, #703), told BEFORE the
+   * `unregistered`/`registered` pair, so a view following `from` follows `to` instead of falling to disk.
+   */
+  handedOver?(from: string, to: string): void;
 }
 
 /**
@@ -271,7 +297,7 @@ interface CoordDoc {
    * for `changed` on a flip of it. A same-path re-load carries this object over to the replacement
    * document — it is the same document to the listener.
    */
-  reported: { path: string | null; dirty: boolean; contentless: boolean };
+  reported: { path: string | null; dirty: boolean; contentless: boolean; gone: boolean };
 }
 
 /**
@@ -434,7 +460,7 @@ export interface CoordinatorDeps {
   refusalFor?: (
     absPath: string,
     ownership?: OpenOwnership,
-  ) => Promise<{ reason: string; encoding?: EncodingId } | undefined>;
+  ) => Promise<{ reason: string; encoding?: EncodingId; size?: number; limit?: number } | undefined>;
   /**
    * 044 u4/u7 — `PreviewService`'s observer. Optional (a suite that does not exercise it omits it).
    * `main.ts` always passes one: a relay built before the coordinator and pointed at `PreviewService` the
@@ -497,6 +523,24 @@ export class EditorCoordinator {
   private heirOf(ownerId: string): string | undefined {
     for (const [linked, link] of this.links) if (link.owner === ownerId) return linked;
     return undefined;
+  }
+
+  /**
+   * #703 — with no linked panel left, a CSV Preview Editor still showing an UNSAVED document inherits it as
+   * its grid document, so closing the editor loses nothing (Principle XI; 073 FR-033). A clean document
+   * closes as before: the grid goes back to the file, which holds the same text.
+   */
+  private gridHeirOf(doc: CoordDoc): string | undefined {
+    if (!doc.authority.dirty || isGridDocumentId(doc.panelId)) return undefined;
+    const listener = this.deps.documentLifecycle;
+    if (listener?.gridHeirFor === undefined) return undefined;
+    try {
+      const heir = listener.gridHeirFor(doc.panelId);
+      return heir !== undefined && isGridDocumentId(heir) && !this.docs.has(heir) ? heir : undefined;
+    } catch (err) {
+      console.error('[editor-coordinator] document lifecycle listener threw on gridHeirFor:', err);
+      return undefined;
+    }
   }
 
   /** Point every link to `fromId` at `toId` instead, telling each linked panel (links are one hop). */
@@ -737,7 +781,7 @@ export class EditorCoordinator {
         encoding: content.encoding,
         hasBom: content.hasBom,
       }),
-      reported: previous?.reported ?? { path: null, dirty: false, contentless: false },
+      reported: previous?.reported ?? { path: null, dirty: false, contentless: false, gone: false },
     };
     // A successful load means the path could be read (027 / #161), which is what draws the editor's
     // banner; the FR-106d stand-in is the opposite. `fileMissing` is left FALSE either way — it drives
@@ -1263,7 +1307,7 @@ export class EditorCoordinator {
         encoding: meta.encoding,
         hasBom: meta.hasBom,
       }),
-      reported: previous?.reported ?? { path: null, dirty: false, contentless: false },
+      reported: previous?.reported ?? { path: null, dirty: false, contentless: false, gone: false },
     };
     doc.unloadable = opts.unloadable === true;
     // A mount that failed to read its path never read it here: nothing of the file's for FR-099 to keep.
@@ -1290,6 +1334,7 @@ export class EditorCoordinator {
       doc.reported.path = null;
       doc.reported.dirty = doc.authority.dirty;
       doc.reported.contentless = false;
+      doc.reported.gone = false;
       if (told !== null) this.tell('unregistered', (l) => l.unregistered(told, doc.panelId));
       return;
     }
@@ -1333,7 +1378,7 @@ export class EditorCoordinator {
    * refusing it here would delete 018's recovery path without a single failing test near the editor.
    */
   async openInto(absPath: string, ownership?: OpenOwnership): Promise<OpenDecision> {
-    const decision = openOrFocus(this.registry, absPath);
+    const decision = this.editorDecision(absPath);
     if (decision.action !== 'open') return decision;
 
     const refusal = await this.deps.refusalFor?.(absPath, ownership);
@@ -1341,7 +1386,21 @@ export class EditorCoordinator {
   }
 
   isOpen(absPath: string): boolean {
-    return isOpenAnywhere(this.registry, absPath);
+    if (!isOpenAnywhere(this.registry, absPath)) return false;
+    return this.editorDecision(absPath).action === 'focus';
+  }
+
+  /**
+   * `openOrFocus` as an EDITOR sees it (073 R1): a grid document is not an editor, so the panel to focus
+   * is the first editor linked to it, and with none the file opens in a new editor (which joins it).
+   */
+  private editorDecision(absPath: string): OpenDecision {
+    const decision = openOrFocus(this.registry, absPath);
+    if (decision.action !== 'focus' || !isGridDocumentId(decision.panelId)) return decision;
+    for (const [panelId, link] of this.links) {
+      if (link.owner === decision.panelId) return { action: 'focus', panelId, windowId: link.windowId };
+    }
+    return { action: 'open' };
   }
 
   /**
@@ -2188,6 +2247,8 @@ export class EditorCoordinator {
     navigation: EditorLoadNavigation | undefined,
     persisted: PersistedHistory | undefined,
   ): void {
+    // 073 R1 — a grid document is no panel, and its preview keeps its own history.
+    if (isGridDocumentId(panelId)) return;
     if (navigation?.kind !== 'history') {
       this.tellHistory('recordOpen', (h) => h.recordOpen(panelId, absPath, persisted));
       return;
@@ -2214,8 +2275,12 @@ export class EditorCoordinator {
   private notifyAfterMutation(doc: CoordDoc, textChanged: boolean, dirtyWithheld = false): void {
     if (textChanged && doc.saveRefused !== null) this.scheduleRefusalCheck(doc);
     const contentless = isContentless(doc);
-    const contentFlipped = contentless !== doc.reported.contentless;
+    // #696 — whether its file is gone (deleted, moved away outside throng, or no longer readable at its path):
+    // a parented preview shows FR-026's notice while it is, so a flip is news to it even when no text moved.
+    const gone = doc.fileMissing === true || doc.unloadable === true;
+    const contentFlipped = contentless !== doc.reported.contentless || gone !== doc.reported.gone;
     doc.reported.contentless = contentless;
+    doc.reported.gone = gone;
     if (textChanged || contentFlipped) this.tell('changed', (l) => l.changed(doc.panelId));
     // A save follows this edit at once (`applyExternalEdit`'s `saveFollows`): the dirty state is not news.
     if (dirtyWithheld) return;
@@ -2594,7 +2659,7 @@ export class EditorCoordinator {
       this.links.delete(panelId);
       return;
     }
-    const heir = this.heirOf(panelId);
+    const heir = this.heirOf(panelId) ?? this.gridHeirOf(doc);
     if (heir !== undefined) {
       this.handOver(doc, heir);
       return;
@@ -2654,6 +2719,7 @@ export class EditorCoordinator {
     this.repointLinks(from, heir, reset);
     const told = doc.reported.path;
     if (told !== null) {
+      this.tell('handedOver', (l) => l.handedOver?.(from, heir));
       this.tell('unregistered', (l) => l.unregistered(told, from));
       this.tell('registered', (l) => l.registered(told, heir));
     }
@@ -2684,8 +2750,9 @@ export class EditorCoordinator {
     /**
      * 044 — the document has NO content of its file to follow: its path cannot be read and has never been
      * read in its panel (the FR-106d stand-in, a restore-time unloadable register). A parented preview shows
-     * FR-026's notice exactly while this holds; a document read and then deleted keeps its buffer and is
-     * not contentless (FR-022 over FR-026, fix round 1 ruling). `changed` fires on every flip of it.
+     * FR-026's notice while this holds, and while the file of a document that WAS read is gone (`fileMissing`,
+     * `unloadable`; #696). A document read and then deleted keeps its buffer and is not contentless. `changed`
+     * fires on every flip of either.
      */
     contentless: boolean;
     encoding: EncodingId;

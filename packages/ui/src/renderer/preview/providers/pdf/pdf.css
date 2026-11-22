@@ -1,0 +1,224 @@
+/* 074 FR-062a — the pages and, pinned over them top-left, the view controls (as a picture preview's). */
+.preview-pdf-view {
+  position: relative;
+  height: 100%;
+}
+
+.preview-pdf__toolbar {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 3px;
+  background: var(--throng-colour-surfaceActive);
+  opacity: 0.35;
+  transition: opacity 120ms ease-out;
+}
+
+.preview-pdf-view:hover .preview-pdf__toolbar,
+.preview-pdf__toolbar:focus-within {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-pdf__toolbar {
+    transition: none;
+  }
+}
+
+/* A text glyph (Zoom 100%'s "1:1") is wider than an icon box: the box grows to it and never wraps. */
+.preview-pdf__toolbar .icon {
+  width: auto;
+  min-width: var(--throng-size-icon, 16px);
+  white-space: nowrap;
+}
+
+/* 074 US4 — the PDF Preview body: pages one after another, on the themed panel background (FR-060). */
+.preview-pdf {
+  height: 100%;
+  overflow: auto;
+  /* Fit reads the width inside the scrollbar; a gutter that is always there keeps that width from flipping as the
+     vertical scrollbar comes and goes with the pages' height at each scale (2026-11-19). */
+  scrollbar-gutter: stable;
+  padding: 12px 0;
+  box-sizing: border-box;
+  background: var(--throng-colour-surfaceActive);
+  outline: none;
+}
+
+.preview-pdf:focus-visible {
+  outline: 2px solid var(--throng-colour-activePanelBorder);
+  outline-offset: -2px;
+}
+
+/* FR-062c — the layout control's group, set apart from the zoom controls. */
+.preview-pdf__toolbar-gap {
+  width: 6px;
+}
+
+/*
+ * FR-062c — the pages' layout. Single Page: one under another, centred. Two Pages: two to a row, like an open book.
+ * Side by Side: as many to a row as the panel's width holds, wrapping, so a resize reflows them. 12px between pages
+ * and either side of them, which Fit leaves clear (`PAGE_GAP_PX`).
+ */
+.preview-pdf__pages--single {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+}
+
+.preview-pdf__pages--two {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: center;
+  align-items: start;
+  gap: 12px;
+  padding: 0 12px;
+}
+
+.preview-pdf__pages--wrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0 12px;
+}
+
+/* A page wider than the panel scrolls sideways from its left edge rather than being centred off it. */
+.preview-pdf__pages--single,
+.preview-pdf__pages--two {
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+.preview-pdf__page {
+  position: relative;
+  flex: none;
+  /* A placeholder until the page paints: PDF.js fills the canvas with the page's own white itself. */
+  background: var(--throng-colour-surfaceActive);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+}
+
+.preview-pdf__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 074 FR-065c — a page with nothing drawn yet, once its paint has taken longer than the spinner's delay. The glyph
+   holds still for a reader who asked for less motion (`busy-glyph.css`). */
+.preview-pdf__page-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--throng-colour-textMuted);
+}
+
+/*
+ * 074 FR-068a — PDF.js's text layer (its own viewer's `.textLayer` rules, `pdfjs-dist/web/pdf_viewer.css`): spans laid
+ * over the canvas at the page's scale, transparent so the canvas shows, selectable so the reader can copy. Sized by
+ * `--total-scale-factor`, which `pdf-renderer.ts` sets per paint.
+ */
+.preview-pdf__text {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+}
+
+.preview-pdf__text :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.preview-pdf__text > :not(.markedContent),
+.preview-pdf__text .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+
+  z-index: 1;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.preview-pdf__text .markedContent {
+  display: contents;
+}
+
+.preview-pdf__text span[role='img'] {
+  cursor: default;
+  user-select: none;
+}
+
+/* The selection shows over the canvas's own text, in the theme's selection colour, translucent. */
+.preview-pdf__text ::selection {
+  background: color-mix(in srgb, var(--throng-colour-editorSelection) 55%, transparent);
+  color: transparent;
+}
+
+.preview-pdf__text br::selection {
+  background: transparent;
+}
+
+.preview-pdf__text .endOfContent {
+  position: absolute;
+  inset: 100% 0 0;
+  display: block;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+
+.preview-pdf__text.selecting .endOfContent {
+  top: 0;
+}
+
+/* Over the canvas and its text, invisible until focused or hovered: a PDF draws its own link styling. */
+.preview-pdf__link {
+  position: absolute;
+  z-index: 2;
+  display: block;
+}
+
+.preview-pdf__link:hover,
+.preview-pdf__link:focus-visible {
+  outline: 1px solid var(--throng-colour-activePanelBorder);
+}
+
+/* FR-067 — the one inline notice. */
+.preview-pdf__notice {
+  margin: 0 12px;
+  padding: 0.35em 0.6em;
+  border-left: 3px solid var(--throng-colour-danger);
+  background: var(--throng-colour-editorBg);
+  color: var(--throng-colour-text);
+}

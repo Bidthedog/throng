@@ -7,12 +7,18 @@ export interface DocumentState {
   relPath: string;
   /** The manual language override; null when the document has none. */
   languageId: string | null;
+  /**
+   * 073 FR-040 — the CSV Preview Editor's column widths for this file, as the JSON the renderer wrote
+   * (column index → px); null when it has none. Opaque here: the daemon and renderer own its shape.
+   */
+  gridColumnWidths: string | null;
 }
 
 interface DocumentStateRow {
   project_id: string;
   rel_path: string;
   language_id: string | null;
+  grid_column_widths: string;
 }
 
 /**
@@ -33,7 +39,7 @@ export class DocumentStateRepository {
   get(ownerUser: string, projectId: string, relPath: string): DocumentState | null {
     const row = this.db
       .prepare(
-        `SELECT project_id, rel_path, language_id FROM document_state
+        `SELECT project_id, rel_path, language_id, grid_column_widths FROM document_state
           WHERE owner_user = ? AND project_id = ? AND rel_path = ?`,
       )
       .get(ownerUser, projectId, relPath) as DocumentStateRow | undefined;
@@ -50,14 +56,6 @@ export class DocumentStateRepository {
    * hand the file back to detection, which is precisely what the user overrode.
    */
   set(ownerUser: string, projectId: string, relPath: string, languageId: string | null): DocumentState {
-    if (languageId === null) {
-      this.db
-        .prepare(
-          `DELETE FROM document_state WHERE owner_user = ? AND project_id = ? AND rel_path = ?`,
-        )
-        .run(ownerUser, projectId, relPath);
-      return { projectId, relPath, languageId: null };
-    }
     this.db
       .prepare(
         `INSERT INTO document_state (owner_user, project_id, rel_path, language_id, updated_at)
@@ -66,7 +64,35 @@ export class DocumentStateRepository {
            DO UPDATE SET language_id = excluded.language_id, updated_at = excluded.updated_at`,
       )
       .run(ownerUser, projectId, relPath, languageId, new Date().toISOString());
-    return { projectId, relPath, languageId };
+    return this.settle(ownerUser, projectId, relPath);
+  }
+
+  /**
+   * 073 FR-040 — set the file's grid column widths (the renderer's JSON), or clear them with null. Each
+   * leaf is independent: clearing one never touches the other, and the row goes only when both are
+   * empty (an absent row and an empty one still mean the same thing).
+   */
+  setGridColumnWidths(ownerUser: string, projectId: string, relPath: string, widthsJson: string | null): DocumentState {
+    this.db
+      .prepare(
+        `INSERT INTO document_state (owner_user, project_id, rel_path, language_id, grid_column_widths, updated_at)
+           VALUES (?, ?, ?, NULL, ?, ?)
+         ON CONFLICT(owner_user, project_id, rel_path)
+           DO UPDATE SET grid_column_widths = excluded.grid_column_widths, updated_at = excluded.updated_at`,
+      )
+      .run(ownerUser, projectId, relPath, widthsJson ?? '', new Date().toISOString());
+    return this.settle(ownerUser, projectId, relPath);
+  }
+
+  /** Delete the row when nothing is left in it, and answer what is stored now. */
+  private settle(ownerUser: string, projectId: string, relPath: string): DocumentState {
+    this.db
+      .prepare(
+        `DELETE FROM document_state
+          WHERE owner_user = ? AND project_id = ? AND rel_path = ? AND language_id IS NULL AND grid_column_widths = ''`,
+      )
+      .run(ownerUser, projectId, relPath);
+    return this.get(ownerUser, projectId, relPath) ?? { projectId, relPath, languageId: null, gridColumnWidths: null };
   }
 
   /**
@@ -153,7 +179,7 @@ export class DocumentStateRepository {
     exists: (relPath: string) => boolean,
   ): number {
     const rows = this.db
-      .prepare(`SELECT project_id, rel_path, language_id FROM document_state
+      .prepare(`SELECT project_id, rel_path, language_id, grid_column_widths FROM document_state
                  WHERE owner_user = ? AND project_id = ?`)
       .all(ownerUser, projectId) as DocumentStateRow[];
     const doomed = rows.filter((r) => !exists(r.rel_path));
@@ -176,5 +202,6 @@ function toState(row: DocumentStateRow): DocumentState {
     // A stale id — a language a later build removed — is returned AS IT WAS STORED. It is never
     // rewritten or dropped, so a build that reintroduces the language resolves it again (FR-005b).
     languageId: row.language_id,
+    gridColumnWidths: row.grid_column_widths === '' ? null : row.grid_column_widths,
   };
 }

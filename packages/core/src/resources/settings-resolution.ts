@@ -1,9 +1,9 @@
 import type { UsageThresholds } from './bands.js';
 
-/** The `resourceMonitor.*` leaves as stored — each already clamped to its own range. */
+/** The `resourceMonitor.*` leaves as stored (077: durations in ms) — each already clamped to its own range. */
 export interface ResourceMonitorRaw {
-  readonly captureIntervalSeconds: number;
-  readonly historyMinutes: number;
+  readonly captureIntervalMs: number;
+  readonly historyMs: number;
   readonly cpuWarningPercent: number;
   readonly cpuCriticalPercent: number;
   readonly memoryWarningPercent: number;
@@ -20,7 +20,11 @@ export interface ResolvedResourceMonitorSettings {
   readonly popoverDelayMs: number;
 }
 
-export const MAX_INTERVAL_SECONDS = 60;
+/**
+ * 077 FR-017 — the capture interval's slider, in ms: its descriptor declares it, and the modal's interval menu offers
+ * the same stops, so the two never disagree.
+ */
+export const CAPTURE_INTERVAL_MS = { min: 2000, max: 60_000, step: 1000 } as const;
 
 /** FR-004b: the history window decides the fastest capture, so no node keeps more than 150 points. */
 const BANDS: readonly { readonly upToMinutes: number; readonly minSeconds: number }[] = [
@@ -30,8 +34,6 @@ const BANDS: readonly { readonly upToMinutes: number; readonly minSeconds: numbe
   { upToMinutes: 30, minSeconds: 30 },
 ];
 
-/** The intervals the modal's control offers (FR-004a), before the window's minimum is applied. */
-const INTERVAL_CHOICES = [2, 5, 10, 15, 30, 60] as const;
 
 export function minimumIntervalFor(historyMinutes: number): number {
   for (const band of BANDS) if (historyMinutes <= band.upToMinutes) return band.minSeconds;
@@ -51,7 +53,10 @@ export function raisedIntervalFor(historyMinutes: number, storedIntervalSeconds:
 
 export function allowedIntervals(historyMinutes: number): number[] {
   const min = minimumIntervalFor(historyMinutes);
-  return INTERVAL_CHOICES.filter((s) => s >= min);
+  // 077 FR-017 — every stop the Preferences slider has, from the window's minimum up.
+  const out: number[] = [];
+  for (let ms = Math.max(CAPTURE_INTERVAL_MS.min, min * 1000); ms <= CAPTURE_INTERVAL_MS.max; ms += CAPTURE_INTERVAL_MS.step) out.push(ms / 1000);
+  return out;
 }
 
 /** Points per node a modal session keeps: one per capture across the window. */
@@ -68,12 +73,14 @@ const belowCritical = (warning: number, critical: number): number => (warning >=
  * below it.
  */
 export function resolveResourceMonitorSettings(raw: ResourceMonitorRaw): ResolvedResourceMonitorSettings {
-  const min = minimumIntervalFor(raw.historyMinutes);
-  const capped = Math.min(raw.captureIntervalSeconds, MAX_INTERVAL_SECONDS);
+  const historyMinutes = raw.historyMs / 60_000;
+  const min = minimumIntervalFor(historyMinutes);
+  // 077 FR-016 — no cap of its own: the bounds guard holds the stored interval to its descriptor's range.
+  const stored = raw.captureIntervalMs / 1000;
   return {
-    intervalSeconds: Math.max(capped, min),
-    historyMinutes: raw.historyMinutes,
-    intervalRaised: capped < min,
+    intervalSeconds: Math.max(stored, min),
+    historyMinutes,
+    intervalRaised: stored < min,
     thresholds: {
       cpuWarning: belowCritical(raw.cpuWarningPercent, raw.cpuCriticalPercent),
       cpuCritical: raw.cpuCriticalPercent,

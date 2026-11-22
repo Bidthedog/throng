@@ -44,9 +44,12 @@ export function setPanelType(
   kind: PanelKind,
   config: PanelConfig,
 ): WorkspaceLayout {
-  return updatePanel(layout, panelId, (p) =>
-    p.kind === undefined ? { ...p, kind, config } : p,
-  );
+  return updatePanel(layout, panelId, (p) => {
+    if (p.kind !== undefined) return p;
+    // 002 FR-016a — a typed panel has no former type to offer.
+    const { formerKind: _formerKind, ...rest } = p;
+    return { ...rest, kind, config };
+  });
 }
 
 /**
@@ -97,7 +100,8 @@ export function clearPanelType(layout: WorkspaceLayout, panelId: string): Worksp
     // `rest` while kind and config are dropped. Removing it here would silently disable command
     // memory and leave the pre-filled form with nothing to read.
     const { kind: _kind, config: _config, ...rest } = p;
-    return { ...rest, type: 'panel' };
+    // 002 FR-016a — remember the type, so the blank form can offer it again.
+    return { ...rest, type: 'panel', ...(_kind !== undefined ? { formerKind: _kind } : {}) };
   });
 }
 

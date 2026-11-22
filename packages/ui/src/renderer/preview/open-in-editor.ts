@@ -6,7 +6,7 @@
  *
  * | Preview is   | Route          | What happens                                                              |
  * |--------------|----------------|---------------------------------------------------------------------------|
- * | standalone   | Open in Editor | `openInto` first; `focus` → that editor, nothing placed; `open` → a new editor splitting the preview's slot on its LEFT; `refuse` → the refusal notice, nothing placed |
+ * | standalone   | Open in Editor | "Open files in" = Last Active Editor with an editor in the tab: the editor side's own open (`openFileInTab`) puts the file there (075 FR-093b). Otherwise `openInto` first; `focus` → that editor, nothing placed; `open` → a new editor splitting the preview's slot on its LEFT; `refuse` → the refusal notice, nothing placed |
  * | parented     | Go to Editor   | the parent's tab to the front, the parent active and focused; `openInto`'s `focus` answer has main raise the window holding it |
  *
  * `openInto` is main's one-buffer oracle — the question every editor open asks first (006 FR-011a, 041
@@ -19,7 +19,7 @@
  * {@link runPreviewEditorRoute}, which reads the preview's parented state from `preview-store` when it is
  * chosen — so the three cannot disagree about which of the two routes a click takes (FR-015b).
  */
-import { PREVIEW_KIND, collectPanels, previewPathOf, type Panel, type PreviewPanelConfig } from '@throng/core';
+import { PREVIEW_KIND, collectPanels, previewPathOf, type EditorOpenTarget, type Panel, type PreviewPanelConfig } from '@throng/core';
 import { getPreviewState } from './preview-store.js';
 import { focusLocalPanel, type PreviewPlacementWorkspace } from './open-preview.js';
 import { setActivePane } from '../workspace/active-pane.js';
@@ -38,6 +38,16 @@ export interface EditorOpenIntoBridge {
   openInto(req: { absPath: string; ownerKind?: 'project' | 'subworkspace'; ownerProjectId?: string }): Promise<OpenIntoAnswer>;
 }
 
+/**
+ * 075 FR-093b — the "Open files in" setting (`editor.openTarget`, 023 FR-025/FR-026) as Open in Editor applies it, and
+ * the editor side's open that reuses the tab's last active editor (`reuseLastActiveEditor`): `null` from it means the
+ * tab has no editor to reuse. Supplied by the window; absent, Open in Editor opens a new editor, as it did before.
+ */
+export interface PreviewEditorOpen {
+  readonly openTarget: EditorOpenTarget;
+  reuse(tabId: string, absPath: string, ownerProjectId?: string): Promise<boolean> | null;
+}
+
 export interface PreviewEditorRouteArgs {
   /** The workspace, or a getter for it — read again after main answers, as `openPreview` does. */
   ws: PreviewPlacementWorkspace | (() => PreviewPlacementWorkspace);
@@ -47,11 +57,15 @@ export interface PreviewEditorRouteArgs {
   filePath: string;
   /** The preview's origin project — the document's owner the question is asked about. */
   projectId: string;
+  /** 075 FR-093b — where "Open files in" sends the file; absent: a new editor beside the preview. */
+  editorOpen?: PreviewEditorOpen;
 }
 
 export type PreviewEditorRouteOutcome =
   | { kind: 'focused'; panelId: string }
   | { kind: 'opened'; panelId: string }
+  /** 075 FR-093b — the file went to the tab's last active editor, through the editor side's own open. */
+  | { kind: 'reused'; landed: boolean }
   | { kind: 'refused'; reason: string }
   /** No bridge, or nowhere to put the editor. */
   | { kind: 'unavailable' };
@@ -72,6 +86,13 @@ function focusIfLocal(ws: PreviewPlacementWorkspace, panelId: string): void {
 
 /** FR-015c — Open in Editor, from a standalone preview. */
 export async function openPreviewInEditor(args: PreviewEditorRouteArgs): Promise<PreviewEditorRouteOutcome> {
+  // 075 FR-093b — "Open files in" = Last Active Editor: the tab's last active editor takes the file, by the same open
+  // the file tree and Quick Open use. Only with no editor there to reuse does the preview place one of its own.
+  if (args.editorOpen?.openTarget === 'lastActive') {
+    const tab = tabHolding(current(args.ws), args.previewPanelId);
+    const reused = tab === undefined ? null : args.editorOpen.reuse(tab.id, args.filePath, args.projectId);
+    if (reused !== null) return { kind: 'reused', landed: await reused };
+  }
   const answer = await ask(args);
   if (answer === null) return { kind: 'unavailable' };
   const ws = current(args.ws);
@@ -119,7 +140,7 @@ export async function goToPreviewParent(
  * in Editor while it is standalone — decided from `preview-store` NOW. A preview that is not a preview, or
  * shows no file, does nothing.
  */
-export function runPreviewEditorRoute(panel: Panel, ws: () => PreviewPlacementWorkspace): void {
+export function runPreviewEditorRoute(panel: Panel, ws: () => PreviewPlacementWorkspace, editorOpen?: PreviewEditorOpen): void {
   if (panel.kind !== PREVIEW_KIND) return;
   const state = getPreviewState(panel.id);
   // 050 R26 — a moved-out preview has no editor to open or focus: the file is no longer this project's, and
@@ -138,6 +159,7 @@ export function runPreviewEditorRoute(panel: Panel, ws: () => PreviewPlacementWo
     previewPanelId: panel.id,
     filePath,
     projectId: panel.originProjectId,
+    ...(editorOpen !== undefined ? { editorOpen } : {}),
   };
   const route = state?.parent ? goToPreviewParent({ ...args, parentPanelId: state.parent.panelId }) : openPreviewInEditor(args);
   route.catch((error: unknown) => {

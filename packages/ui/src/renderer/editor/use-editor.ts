@@ -107,6 +107,8 @@ import { occurrenceCompartment, occurrenceExtensionFor } from './occurrence-high
 import { clearDocumentOverride, loadDocumentOverride, toRelPath } from './language-override.js';
 import { isSameDocument, subscribeDocumentLanguageChange } from './document-language-events.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
+import { printEditorPanel } from './editor-print.js';
+import { usePrintFailureNotice } from '../print/print-failure.js';
 import {
   clampSelection,
   clearEditorViewState,
@@ -116,6 +118,7 @@ import {
 import { forgetPanelCaret, setPanelCaret } from './caret-store.js';
 import { clearEditorHoveredLink, setEditorHoveredLink } from './editor-hovered-link-store.js';
 import { hideLinkHintFor } from '../links/link-hint-store.js';
+import { syncMarkExtension } from './sync-mark.js';
 import { attachEditorScrollRelay, type EditorScrollRelay } from './editor-scroll-relay.js';
 import {
   forgetDocumentMetrics,
@@ -430,6 +433,8 @@ function commandsFor(deps: {
 const docScrollByPath = new Map<string, number>();
 
 export function useEditor(params: UseEditorParams): void {
+  // 075 FR-080 — a Print… that cannot reach Print Preview says so here.
+  const printFailedRef = useRef(usePrintFailureNotice());
   const { panel, tabId, projectRoot, rootless, ownerProjectId, container } = params;
   const onReadyRef = useRef(params.onReady);
   onReadyRef.current = params.onReady;
@@ -1361,7 +1366,11 @@ export function useEditor(params: UseEditorParams): void {
       if (isMissingReason(entry.reason) && !metaRef.current.settings.warnOnMissingFile) continue;
       reportPanelFailureRef.current({
         panelId,
-        message: missingFileMessage(entry.reason, entry.encoding),
+        message: missingFileMessage(
+          entry.reason,
+          entry.encoding,
+          entry.size !== undefined && entry.limit !== undefined ? { size: entry.size, limit: entry.limit } : undefined,
+        ),
         detail: missingFileDetail(entry, os),
       });
     }
@@ -1757,6 +1766,8 @@ export function useEditor(params: UseEditorParams): void {
           filePath: absPath,
           reason: loaded.reason,
           ...('encoding' in loaded && loaded.encoding ? { encoding: loaded.encoding } : {}),
+          // 077 FR-014 — a too-large refusal quotes the file's size and the limit.
+          ...(loaded.reason === 'too-large' ? { size: loaded.size, limit: loaded.limit } : {}),
         },
       ]);
       publishState();
@@ -1941,6 +1952,8 @@ export function useEditor(params: UseEditorParams): void {
           readOnlyCompartment.of(movedOutExtensions(movedOutRef.current)),
           drawSelection(),
           highlightActiveLine(),
+          // 073 FR-033d — the line Synchronise Scrolling has the preview in step at, softly highlighted.
+          syncMarkExtension(panelId),
           /**
            * A block is MANY selection ranges, and CodeMirror will not keep them without this (US6).
            *
@@ -2130,6 +2143,11 @@ export function useEditor(params: UseEditorParams): void {
                   gotoLine: {
                     open: () => setNavigationModal({ kind: 'gotoLine', panelId }),
                     chord: firstBinding(keybindingsRef.current, 'navigate.gotoLine'),
+                  },
+                  // 075 FR-064a — the editor's Print…, as the header row and Ctrl+P run it.
+                  print: {
+                    run: () => void printEditorPanel(panelId, undefined, printFailedRef.current),
+                    chord: firstBinding(keybindingsRef.current, 'editor.print'),
                   },
                   /*
                    * 044 FR-002 — Open Preview, decided at MENU-OPEN time for Go To Line's reason: the

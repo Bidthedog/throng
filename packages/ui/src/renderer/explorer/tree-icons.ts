@@ -43,7 +43,7 @@ const BY_EXTENSION: Record<string, IconKey> = {
   ...kinds('fileJson', ['json']),
   ...kinds('fileMarkdown', ['md', 'markdown']),
   ...kinds('fileText', ['txt', 'log']),
-  ...kinds('fileImage', ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico']),
+  ...kinds('fileImage', ['png', 'apng', 'jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'gif', 'svg', 'webp', 'avif', 'bmp', 'dib', 'ico', 'cur']),
   ...kinds('fileArchive', ['zip', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'zst', '7z', 'rar']),
   ...kinds('fileShell', ['sh', 'bash', 'zsh', 'fish', 'ksh', 'bat', 'cmd']),
   ...kinds('fileConfig', ['yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', 'env', 'properties']),

@@ -154,6 +154,67 @@
   outline: 2px solid var(--throng-colour-accent);
 }
 
+/*
+ * 073 FR-033d — the sync mark's indicator, in the gutter strip level with the block that holds the line the preview and
+ * its editor are in step at. A bar in the strip's own left edge, clear of the fold toggle (which sits from -1.5em to
+ * -0.25em): drawn from the `border` token, the one colour a preview rule may use besides its text, so it stays on the pairing
+ * every preview colour sits on (SC-005; the accent is the focus ring's alone). It fades when `--on` goes, and exists only with the gutter.
+ */
+.preview-markdown--gutter .preview-sync-mark {
+  position: relative;
+}
+
+.preview-markdown--gutter .preview-sync-mark::before {
+  content: '';
+  position: absolute;
+  left: -2em;
+  top: 0;
+  bottom: 0;
+  width: 0.25em;
+  border-radius: 0.125em;
+  border-left: 0.25em solid var(--throng-colour-border);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease-out;
+}
+
+.preview-markdown--gutter .preview-sync-mark--on::before {
+  opacity: 1;
+  transition-duration: 120ms;
+}
+
+/* (Maintainer, 2026-11-22: "scroll highlight doesn't seem to work … for code blocks") — a block that scrolls sideways
+   (code, a display equation) clips its own ::before, so its bar is drawn as two shadows, which its overflow cannot
+   clip: the `border` one showing 0.25em past the `editorBg` one, where the bar of any other block stands. */
+/* Off, the bar is the page's own background, so it fades as every other block's does, its colour easing (073 T107). */
+.preview-markdown--gutter pre.preview-sync-mark,
+.preview-markdown--gutter div[data-math].preview-sync-mark {
+  box-shadow:
+    -1.75em 0 0 var(--throng-colour-editorBg),
+    -2em 0 0 var(--throng-colour-editorBg);
+  transition: background-color 600ms ease-out, box-shadow 600ms ease-out;
+}
+
+.preview-markdown--gutter pre.preview-sync-mark--on,
+.preview-markdown--gutter div[data-math].preview-sync-mark--on {
+  box-shadow:
+    -1.75em 0 0 var(--throng-colour-editorBg),
+    -2em 0 0 var(--throng-colour-border);
+  transition-duration: 120ms;
+}
+
+/* (Maintainer, 2026-11-22: "highlight the full line that matches the editor scroll highlight") — and the block itself
+   is washed exactly as the editor washes its line (`editor.css`), fading with it; held to that declaration by
+   preview-css-tokens.test.ts. */
+.preview-markdown .preview-sync-mark {
+  transition: background-color 600ms ease-out;
+}
+
+.preview-markdown .preview-sync-mark--on {
+  background-color: color-mix(in srgb, var(--throng-colour-accent) 22%, transparent);
+  transition-duration: 120ms;
+}
+
 .preview-markdown p,
 .preview-markdown ul,
 .preview-markdown ol,
@@ -251,6 +312,137 @@
   padding: 0 0 0 0.9em;
   margin-left: 0;
   border-left: 3px solid var(--throng-colour-border);
+}
+
+/* ── Callouts (075 FR-001 – FR-007, FR-020, contracts/callout-markup.md) ────────────────────────────
+ *
+ * Styled by attribute only (the sanitiser admits no class), and by ROLE, never by type: the registry maps a
+ * type to one of seven roles and the pipeline writes it, so a new type needs no rule here (FR-019a). Each
+ * role's colour token paints the border, icon and title; the background is that colour tinted over the
+ * preview's background at 12% — `calloutTint` in core is the same mix, and the contrast guard
+ * (`measureCalloutContrast`) measures title and body text on exactly it. Body text stays `editorFg`.
+ */
+.preview-markdown [data-callout] {
+  margin: 0 0 0.9em;
+  padding: 0.45em 0.9em;
+  border-left: 3px solid var(--throng-colour-calloutNeutral);
+  background: color-mix(in srgb, var(--throng-colour-calloutNeutral) 12%, var(--throng-colour-editorBg));
+}
+
+.preview-markdown [data-callout] > [data-callout-title] {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-weight: 600;
+  color: var(--throng-colour-calloutNeutral);
+}
+
+.preview-markdown [data-callout][data-callout-fold] > [data-callout-title] {
+  cursor: pointer;
+}
+
+.preview-markdown [data-callout] > [data-callout-title]:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 2px;
+}
+
+.preview-markdown [data-callout] > [data-callout-title] > [data-callout-title-text] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.preview-markdown [data-callout] > [data-callout-body] {
+  margin-top: 0.4em;
+}
+
+.preview-markdown [data-callout] > [data-callout-body] > :last-child {
+  margin-bottom: 0;
+}
+
+.preview-markdown [data-callout][data-callout-collapsed] > [data-callout-body] {
+  display: none;
+}
+
+.preview-markdown [data-callout-role='info'] {
+  border-left-color: var(--throng-colour-calloutInfo);
+  background: color-mix(in srgb, var(--throng-colour-calloutInfo) 12%, var(--throng-colour-editorBg));
+}
+.preview-markdown [data-callout-role='info'] > [data-callout-title] {
+  color: var(--throng-colour-calloutInfo);
+}
+
+.preview-markdown [data-callout-role='accent'] {
+  border-left-color: var(--throng-colour-calloutAccent);
+  background: color-mix(in srgb, var(--throng-colour-calloutAccent) 12%, var(--throng-colour-editorBg));
+}
+.preview-markdown [data-callout-role='accent'] > [data-callout-title] {
+  color: var(--throng-colour-calloutAccent);
+}
+
+.preview-markdown [data-callout-role='success'] {
+  border-left-color: var(--throng-colour-calloutSuccess);
+  background: color-mix(in srgb, var(--throng-colour-calloutSuccess) 12%, var(--throng-colour-editorBg));
+}
+.preview-markdown [data-callout-role='success'] > [data-callout-title] {
+  color: var(--throng-colour-calloutSuccess);
+}
+
+.preview-markdown [data-callout-role='question'] {
+  border-left-color: var(--throng-colour-calloutQuestion);
+  background: color-mix(in srgb, var(--throng-colour-calloutQuestion) 12%, var(--throng-colour-editorBg));
+}
+.preview-markdown [data-callout-role='question'] > [data-callout-title] {
+  color: var(--throng-colour-calloutQuestion);
+}
+
+.preview-markdown [data-callout-role='warning'] {
+  border-left-color: var(--throng-colour-calloutWarning);
+  background: color-mix(in srgb, var(--throng-colour-calloutWarning) 12%, var(--throng-colour-editorBg));
+}
+.preview-markdown [data-callout-role='warning'] > [data-callout-title] {
+  color: var(--throng-colour-calloutWarning);
+}
+
+.preview-markdown [data-callout-role='danger'] {
+  border-left-color: var(--throng-colour-calloutDanger);
+  background: color-mix(in srgb, var(--throng-colour-calloutDanger) 12%, var(--throng-colour-editorBg));
+}
+.preview-markdown [data-callout-role='danger'] > [data-callout-title] {
+  color: var(--throng-colour-calloutDanger);
+}
+
+/* The icon and the fold control take the title's colour (`currentColor` art) and the icon size. */
+.preview-markdown .preview-callout__icon,
+.preview-markdown .preview-callout__fold {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+/* ── Maths (075 FR-040, FR-043, FR-044) ─────────────────────────────────────────────────────────────
+ *
+ * An equation takes the text colour it sits in (KaTeX draws in `currentColor`), so it follows the theme
+ * without a colour of its own. A display equation is its own block, scrolled sideways rather than clipped
+ * when it is wider than the pane. An expression KaTeX refused shows its source in the invalid-code colour.
+ */
+.preview-markdown div[data-math] {
+  margin: 0 0 0.9em;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/*
+ * KaTeX's MathML half is drawn nowhere (KaTeX's own stylesheet clips it to nothing) but was still laid out:
+ * a quarter of every equation's nodes, measured at 103 → 66 ms of layout for 500 equations (SC-006). It stays
+ * in the DOM for a rich copy (FR-050); the placeholder's `aria-label` names the equation instead.
+ */
+.preview-markdown [data-math] .katex-mathml {
+  display: none;
+}
+
+.preview-markdown [data-math][data-math-error] {
+  color: var(--throng-colour-syntaxInvalid);
+  font-family: var(--throng-font-editor-family);
+  white-space: pre-wrap;
 }
 
 /* ── Code (FR-080, FR-086) ──────────────────────────────────────────────────────────────────────── */
