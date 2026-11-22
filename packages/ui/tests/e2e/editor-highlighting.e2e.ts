@@ -11,6 +11,7 @@ import {
   type AppOptions,
   type OpenApp,
   pressAction,
+  markdownOpensInEditor,
 } from './harness.js';
 
 /*
@@ -278,8 +279,14 @@ test('switching theme repaints code LIVE — no reopen, no view rebuild', { tag:
 
 test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, raise no error (SHOULD)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
+  // 074 FR-016 (Q5) — an HTML file opens in its preview by default; this test wants its EDITOR from the tree.
+  const cfgHtml = mkdtempSync(join(tmpdir(), 'throng-cfg-highlight-html-'));
+  writeFileSync(
+    join(cfgHtml, 'settings.json'),
+    JSON.stringify({ editor: { previews: { providers: { html: { defaultOpenAction: 'editor' } } } } }),
+  );
   try {
-    await runApp(async (_app, win) => {
+    await runOwnApp(async (_app, win) => {
       const errors: string[] = [];
       win.on('pageerror', (e) => errors.push(e.message));
       await createProject(win, 'HL', root);
@@ -299,8 +306,9 @@ test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, rais
         .toBeGreaterThan(1);
 
       expect(errors, `a mixed-language file must never raise an error: ${errors.join('; ')}`).toEqual([]);
-    });
+    }, { env: { THRONG_CONFIG_ROOT: cfgHtml } });
   } finally {
+    cleanupTemp(cfgHtml);
     cleanupTemp(root);
   }
 });
@@ -673,6 +681,7 @@ test('MARKDOWN is highlighted — headings, emphasis, links and inline code (FR-
   );
   try {
     await runApp(async (_app, win) => {
+      await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
       await createProject(win, 'SwitchProj', root);
       const pid = await newClickedEditor(win);
       await openSwitchFile(win, pid, 'f-notes.md', 'A heading');

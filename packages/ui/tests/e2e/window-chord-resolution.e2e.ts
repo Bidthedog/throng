@@ -463,6 +463,7 @@ test('from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and
   };
 
   // ── Ctrl+Shift+Alt+Numpad0 resets a zoomed window (FR-027, FR-114). ─────────────────────────
+  const unzoomedWidth = await win.evaluate(() => window.innerWidth);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.setZoomLevel(2));
   await expect.poll(() => zoomLevel(app)).toBe(2);
   await expect(textarea).toBeFocused();
@@ -485,14 +486,48 @@ test('from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and
   // `code` is asserted here.
   expect(await win.evaluate(() => (window as unknown as { __t049Key?: string }).__t049Key)).toMatch(/\|Numpad0$/);
   await expect.poll(() => zoomLevel(app), { message: 'Ctrl+Shift+Alt+Numpad0 did not reset the zoom' }).toBe(0);
+  /*
+   * Main reports the zoom at once; the renderer lays out at it later. The side-pane width coordinator re-collapses
+   * the Explorer on that relayout when the panes do not fit, so Ctrl+Shift+Alt+M pressed before it lands reveals a
+   * pane the late relayout then folds back to a rail (macOS, pipeline 45022827061: 3 of 25, the tree never mounted).
+   * Wait for the renderer's own width, then two frames: the width had settled in every sampled run (pipeline
+   * 45023752679, 50 of 50), so the late piece is the ResizeObserver callback, delivered in the frame after layout.
+   */
+  await expect.poll(() => win.evaluate(() => window.innerWidth), { message: 'the renderer never laid out at the reset zoom' }).toBe(unzoomedWidth);
+  await win.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   expect(await leaked(beforeZoom), 'Ctrl+Shift+Alt+Numpad0 reached the shell').toEqual([]);
 
   // ── Ctrl+Shift+Alt+M focuses the File Explorer (FR-016, FR-117). ───────────────────────────────
   const beforeFocus = (await inputWrites(win, pid)) ?? [];
   await win.keyboard.press(chordFor('focus.explorer'));
-  await expect
-    .poll(() => win.evaluate(() => document.activeElement?.closest('[data-testid="file-explorer-tree"]') !== null))
-    .toBe(true);
+  /*
+   * A macOS flake (pipeline 45011164348, xcode-27): focus never reached the tree within the poll, and the file's
+   * retry passed in 2 s. A miss says where focus was instead, what the explorer looked like, and what the terminal
+   * decided for the keys it last saw — so the next one names its cause rather than only its symptom.
+   */
+  const inTree = (): Promise<boolean> =>
+    win.evaluate(() => document.activeElement?.closest('[data-testid="file-explorer-tree"]') !== null);
+  try {
+    await expect.poll(inTree).toBe(true);
+  } catch (error) {
+    const state = await win.evaluate((id) => {
+      const el = document.activeElement as HTMLElement | null;
+      const tree = document.querySelector<HTMLElement>('[data-testid="file-explorer-tree"]');
+      const rect = tree?.getBoundingClientRect();
+      const diag = (window as unknown as { __throngTerminalDiagnostics?: () => Record<string, { keys: unknown[] }> })
+        .__throngTerminalDiagnostics?.()[id];
+      return {
+        hasFocus: document.hasFocus(),
+        innerWidth: window.innerWidth,
+        paneHide: document.querySelector('[data-testid="pane-hide-right"]') !== null,
+        active: el === null ? null : `${el.tagName}#${el.id}.${el.className}[${el.getAttribute('data-testid') ?? ''}]`,
+        tree: tree === null ? null : { w: rect?.width, h: rect?.height, roleTree: tree.querySelector('[role="tree"]') !== null, hidden: getComputedStyle(tree).visibility },
+        paneRail: document.querySelector('[data-testid="pane-rail-right"]') !== null,
+        keys: diag?.keys.slice(-4) ?? null,
+      };
+    }, pid);
+    throw new Error(`${(error as Error).message}\nfocus state after Ctrl+Shift+Alt+M: ${JSON.stringify(state)}`, { cause: error });
+  }
   expect(await leaked(beforeFocus), 'Ctrl+Shift+Alt+M reached the shell').toEqual([]);
 
   // ── Ctrl+Shift+Alt+PageDown switches project (FR-010). ───────────────────────────────────────

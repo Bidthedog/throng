@@ -20,9 +20,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetEditorScrollStore,
+  editorCentreLine,
+  editorCentreLineOf,
   editorTopLine,
   editorTopLineOf,
   forgetEditorTopLine,
+  publishEditorCentreLine,
   publishEditorTopLine,
   registerEditorScroller,
   requestEditorTopLine,
@@ -199,5 +202,37 @@ describe('editorTopLine reads the top visible source line of a view (R23)', () =
     const { view, lineAt } = fakeView(null, () => 99);
     expect(editorTopLine(view)).toBe(0);
     expect(lineAt).not.toHaveBeenCalled();
+  });
+});
+
+describe('editorCentreLine reads the line under the viewport\'s vertical centre (073 FR-033e)', () => {
+  function view(height: number | undefined, posAt: (y: number) => number | null) {
+    const posAtCoords = vi.fn((c: { x: number; y: number }, _p: false): number | null => posAt(c.y));
+    const v: TopLineView = {
+      scrollDOM: { getBoundingClientRect: () => ({ top: 120, left: 0, ...(height === undefined ? {} : { height }) }) },
+      contentDOM: { getBoundingClientRect: () => ({ top: 124, left: 48 }) },
+      posAtCoords,
+      state: { doc: { lineAt: (pos: number) => ({ number: Math.floor(pos / 10) + 1 }) } },
+    };
+    return { v, posAtCoords };
+  }
+
+  it('asks a half viewport below the top, at the content\'s left, and answers its 0-based line', () => {
+    const { v, posAtCoords } = view(400, (y) => (y === 120 + 200 ? 330 : 100));
+    expect(editorCentreLine(v)).toBe(33);
+    expect(posAtCoords).toHaveBeenCalledWith({ x: 49, y: 320 }, false);
+    expect(editorTopLine(v)).toBe(10); // the top is a different line: sync keys on it, the mark on the centre
+  });
+
+  it('answers the top line for a view with no height, or no position under the middle', () => {
+    expect(editorCentreLine(view(undefined, () => 50).v)).toBe(5);
+    expect(editorCentreLine(view(400, (y) => (y === 320 ? null : 70)).v)).toBe(7);
+  });
+
+  it('is published beside the top line and forgotten with the view', () => {
+    publishEditorCentreLine('ed-1', 33);
+    expect(editorCentreLineOf('ed-1')).toBe(33);
+    forgetEditorTopLine('ed-1');
+    expect(editorCentreLineOf('ed-1')).toBeNull();
   });
 });

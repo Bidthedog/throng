@@ -14,7 +14,7 @@ const ATTENTION_DEFAULTS = {
     unseenOutput: false,
     outputQuiet: false,
   },
-  quietSeconds: 10,
+  quietMs: 10_000,
 };
 
 describe('parseAppSettings — terminals section (005 Phase B)', () => {

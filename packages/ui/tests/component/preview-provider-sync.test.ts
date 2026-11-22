@@ -48,6 +48,8 @@ import { ConfigProvider, useConfigLoaded } from '../../src/renderer/config/confi
 import { PreviewProviderRegistryContext } from '../../src/renderer/preview/provider-registry-context.js';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
 import { PreviewProviderSync } from '../../src/renderer/preview/preview-provider-sync.js';
+import { registerEditorActions, unregisterEditorActions, type EditorActions } from '../../src/renderer/editor/editor-actions.js';
+import { __resetDirtyCloseStore, useDirtyCloseRequest, type DirtyCloseRequest } from '../../src/renderer/editor/dirty-close-store.js';
 
 const PROJECT = 'proj-1';
 
@@ -313,5 +315,52 @@ describe('a synced project preview loses only this window’s mirror (FR-042, FR
     expect(destroyed).not.toHaveBeenCalledWith('synced');
     // 'keep' survives, so the sub-workspace itself is untouched.
     expect(subWorkspace.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('073 FR-063 — a preview holding an unsaved document asks before it closes', () => {
+  const asked: { request: DirtyCloseRequest | null } = { request: null };
+  function PromptProbe(): null {
+    asked.request = useDirtyCloseRequest();
+    return null;
+  }
+  const dirtyActions = (saveForClose: () => Promise<boolean>): EditorActions =>
+    ({ isDirty: () => true, saveForClose }) as unknown as EditorActions;
+
+  afterEach(() => {
+    __resetDirtyCloseStore();
+    unregisterEditorActions('a');
+    asked.request = null;
+  });
+
+  it('keeps the dirty preview on Cancel and closes the others', async () => {
+    const { destroyed, setSettings } = mount(layoutOf([row(preview('a'), plain('b'), preview('d'))]));
+    render(createElement(PromptProbe));
+    await ready(['a', 'b', 'd']);
+    registerEditorActions('a', dirtyActions(() => Promise.resolve(true)));
+
+    setSettings(providers(false));
+    await waitFor(() => expect(asked.request?.targetLabel).toBe('Panel a'));
+    expect(ids()).toEqual(['a', 'b', 'd']); // nothing closes while the question is open
+    act(() => asked.request?.resolve('cancel'));
+
+    await waitFor(() => expect(ids()).toEqual(['a', 'b']));
+    expect(destroyed).toHaveBeenCalledWith('d');
+    expect(destroyed).not.toHaveBeenCalledWith('a');
+  });
+
+  it('saves and then closes on Save', async () => {
+    const saveForClose = vi.fn(() => Promise.resolve(true));
+    const { setSettings } = mount(layoutOf([row(preview('a'), plain('b'))]));
+    render(createElement(PromptProbe));
+    await ready(['a', 'b']);
+    registerEditorActions('a', dirtyActions(saveForClose));
+
+    setSettings(providers(false));
+    await waitFor(() => expect(asked.request).not.toBeNull());
+    act(() => asked.request?.resolve('save'));
+
+    await waitFor(() => expect(ids()).toEqual(['b']));
+    expect(saveForClose).toHaveBeenCalledTimes(1);
   });
 });

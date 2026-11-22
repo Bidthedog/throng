@@ -183,11 +183,10 @@ describe('a restore whose file is gone registers an unloadable document (027 / #
   });
 
   /*
-   * Fix round 1 ruling (FR-022 over FR-026 for a document that holds content): recovered text restored into
-   * it IS content to follow — the user's own unsaved work — so the notice clears and the preview shows it,
-   * exactly as it would for a document that was read and then lost its file.
+   * #696 (superseding the fix round 1 ruling) — recovered text restored into it is the user's work, and the editor
+   * keeps it, but the FILE is still gone: the preview keeps its notice. Once the file exists again it shows that work.
    */
-  it('recovered text restored into it is content to follow: the notice clears and that text is shown', async () => {
+  it('recovered text restored into it keeps the notice while the file is gone, and is shown once it is back', async () => {
     const notes = join(root, 'notes.md');
     coord.register(meta('ed1', notes), '', { unloadable: true });
     expect((await attach('v1', notes)).notice).toEqual({ kind: 'deleted' });
@@ -198,7 +197,13 @@ describe('a restore whose file is gone registers an unloadable document (027 / #
     await settle();
 
     expect(coord.getContent('ed1')).toMatchObject({ unloadable: true, contentless: false, dirty: true });
-    expect(lastFor('v1')).toMatchObject({
+    expect((await previews.refresh('v1')).update).toMatchObject({ parent: { panelId: 'ed1' }, notice: { kind: 'deleted' } });
+
+    await writeFile(notes, '# disk\n');
+    await coord.verifyPath('ed1');
+    clock.advance(1000);
+    await settle();
+    expect((await previews.refresh('v1')).update).toMatchObject({
       parent: { panelId: 'ed1' },
       notice: null,
       dirty: true,
@@ -270,13 +275,14 @@ describe('the FR-106d stand-in (Back in an editor onto a deleted file)', () => {
 });
 
 /*
- * Fix round 1 ruling — FR-022 wins for a document that HOLDS CONTENT. A document that was read and then lost
- * its file keeps its buffer (FR-099), and the editor's banner already owns that condition (one condition,
- * one notice). So its parented preview keeps following the buffer, with no FR-026 notice and nothing
- * covering the body. The notice is only for a document with no content to follow (above).
+ * #696 (044 FR-026 as amended 2026-11-20) — SUPERSEDES the fix round 1 ruling, which kept a parented preview
+ * following the buffer of a document whose file had gone. A preview shows a FILE: once that file no longer
+ * exists the preview unloads and says so, whoever else holds its text. The editor keeps its buffer (006
+ * FR-099) and its own banner, so nothing the user typed is lost; the preview shows it again the moment the
+ * file exists again — restored on disk, or saved from the editor.
  */
-describe('a parented preview whose document was READ keeps following its buffer when the file goes', () => {
-  it('deleted under an open editor: no notice, the buffer stays on screen; restored: still no notice (markRestored)', async () => {
+describe('a parented preview whose document was READ unloads when the file goes (#696)', () => {
+  it('deleted under an open editor: the deleted notice, a Refresh flashes it; restored: the file again', async () => {
     const a = await file('a.md', '# A\n');
     await openEditor('ed1', a);
     await attach('v1', a);
@@ -285,21 +291,19 @@ describe('a parented preview whose document was READ keeps following its buffer 
     await unlink(a);
     coord.markDeleted([a]);
     await settle();
-    expect(updatesFor('v1').filter((u) => u.notice !== null)).toEqual([]);
+    expect(lastFor('v1')).toMatchObject({ parent: { panelId: 'ed1' }, notice: { kind: 'deleted' } });
     expect((await previews.refresh('v1')).update).toMatchObject({
       parent: { panelId: 'ed1' },
-      notice: null,
-      content: { kind: 'text', text: '# A\n' },
+      notice: { kind: 'deleted', repeat: true },
     });
 
     await writeFile(a, '# A\n');
     await coord.markRestored([a]);
     await settle();
-    expect(updatesFor('v1').filter((u) => u.notice !== null)).toEqual([]);
-    expect(lastFor('v1')).toMatchObject({ parent: { panelId: 'ed1' }, notice: null });
+    expect(lastFor('v1')).toMatchObject({ parent: { panelId: 'ed1' }, notice: null, content: { kind: 'text', text: '# A\n' } });
   });
 
-  it('the user’s own unsaved work stays on screen while the file is gone and after it comes back', async () => {
+  it('the user’s unsaved work is not shown while the file is gone, and is shown again once it is back', async () => {
     const a = await file('a.md', '# A\n');
     await openEditor('ed1', a);
     editDocument(coord, meta('ed1', a), '# mine\n');
@@ -308,13 +312,14 @@ describe('a parented preview whose document was READ keeps following its buffer 
     coord.markDeleted([a]);
     clock.advance(1000);
     await settle();
+    expect(lastFor('v1')).toMatchObject({ notice: { kind: 'deleted' } });
 
     await writeFile(a, '# disk\n');
     await coord.verifyPath('ed1');
     await settle();
 
+    // The editor kept the work (006 FR-099); the preview follows it again.
     expect(coord.getContent('ed1')).toMatchObject({ text: '# mine\n', unloadable: false });
-    expect(updatesFor('v1').filter((u) => u.notice !== null)).toEqual([]);
     expect((await previews.refresh('v1')).update).toMatchObject({
       notice: null,
       dirty: true,
@@ -322,7 +327,7 @@ describe('a parented preview whose document was READ keeps following its buffer 
     });
   });
 
-  it('a failed verify of a document that was read adds no notice either', async () => {
+  it('a failed verify of a document that was read shows the deleted notice', async () => {
     const a = await file('a.md', '# A\n');
     await openEditor('ed1', a);
     await attach('v1', a);
@@ -333,8 +338,9 @@ describe('a parented preview whose document was READ keeps following its buffer 
     await settle();
 
     expect(coord.getContent('ed1')).toMatchObject({ unloadable: true });
-    expect(updatesFor('v1').filter((u) => u.notice !== null)).toEqual([]);
+    expect(lastFor('v1')).toMatchObject({ notice: { kind: 'deleted' } });
   });
+
 });
 
 describe('a link followed onto a file whose document could not read it', () => {

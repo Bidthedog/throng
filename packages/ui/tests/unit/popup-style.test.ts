@@ -27,7 +27,7 @@ const POPUPS: Readonly<Record<string, string>> = {
   'attention-popover': 'attention/attention-popover.tsx',
   'notification-place-popover': 'notifications/place-popover.tsx',
   'status-popover': 'resources/status-popover.tsx',
-  'info-helper-popover': 'resources/info-helper.tsx',
+  'info-helper-popover': 'common/help-tip.tsx',
   'monitor-help': 'resources/help-panel.tsx',
   'cm-ws-hover-name': 'editor/view-whitespace.ts',
   'link-hint': 'links/link-hint.tsx',

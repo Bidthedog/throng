@@ -47,7 +47,7 @@ test.beforeAll(async () => {
   // MT-05: the maintainer's file, byte for byte, under a folder whose name has a space and capitals.
   mkdirSync(join(root, 'UPPER TEST'));
   copyFileSync(fileURLToPath(new URL('./fixtures/mermaid-order-platform.mmd', import.meta.url)), join(root, 'UPPER TEST', 'test.mmd'));
-  shared = await openApp();
+  shared = await openApp({ markdownOpensIn: 'editor' });
   await createProject(shared.win, 'PreviewMermaid', root);
   editorId = await firstPanelId(shared.win);
   await shared.win.getByTestId(`panel-type-select-${editorId}`).selectOption('editor');
@@ -60,20 +60,24 @@ test.afterAll(async () => {
   if (root) cleanupTemp(root);
 });
 
-/** Click a file in the tree into the editor, then open its preview from the status bar; the new panel's id. */
+/** Click a file in the tree into the editor, then open its preview from the status bar; the preview panel's id. */
 async function previewFromEditor(win: Page, file: string, text: string): Promise<string> {
   await win.getByTestId('file-explorer-tree').getByText(file, { exact: true }).click();
   await expect(win.getByTestId(`editor-${editorId}`).locator('.cm-content')).toContainText(text, { timeout: 8000 });
   const button = win.getByTestId(`editor-preview-${editorId}`);
   await expect(button).toBeEnabled();
-  const body = win.locator('[data-testid^="preview-body-"]');
-  const before = new Set(await body.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid'))));
   await button.click();
-  await expect.poll(async () => (await body.count()) > before.size).toBe(true);
-  const ids = await body.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''));
-  const added = ids.find((id) => !before.has(id));
-  if (!added) throw new Error(`previewFromEditor(${file}): no new preview panel appeared`);
-  return added.replace('preview-body-', '');
+  // 075 (2026-11-20) — under Last Active the button reuses the preview already open rather than adding one, so
+  // the panel is found by its title (054 FR-005a: the full file name), whether it is new or reused.
+  const title = `${file} - Markdown Preview`; // 054 FR-005a: the full file name; 074 FR-104: its type
+  const titled = win
+    .locator('[data-testid^="panel-title-"]')
+    .filter({ hasText: new RegExp(`^${title.replace(/\./g, '\\.')}$`) })
+    .first();
+  await expect(titled).toBeAttached({ timeout: 8000 });
+  const testId = await titled.getAttribute('data-testid');
+  if (!testId) throw new Error(`previewFromEditor(${file}): no preview panel titled ${title}`);
+  return testId.replace('panel-title-', '');
 }
 
 /**
@@ -83,7 +87,7 @@ async function previewFromEditor(win: Page, file: string, text: string): Promise
  */
 async function previewFromTree(win: Page, file: string): Promise<string> {
   await win.getByTestId('file-explorer-tree').getByText(file, { exact: true }).click();
-  const title = `${file} - Preview`; // 054 FR-005a: the full file name
+  const title = `${file} - Mermaid Preview`; // 054 FR-005a: the full file name; 074 FR-104: its type
   const heading = win.locator('[data-testid^="panel-title-"]').filter({ hasText: new RegExp(`^${title.replace(/\./g, '\\.')}$`) }).first();
   // Attached, not visible: this only finds the panel's id. A panel squeezed beside an earlier preview in a small
   // window (a hosted macOS runner's) draws its title too narrow to count as visible; the callers assert what the
@@ -131,7 +135,7 @@ test('a standalone .mmd file previews as one diagram through the Mermaid provide
   const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('.preview-diagram-frame__layer svg').first();
   await expect(svg).toBeVisible({ timeout: 15_000 });
   await expect(svg).toContainText('Begin here');
-  await expect(win.getByTestId(`panel-title-${id}`)).toHaveText('flow.mmd - Preview'); // 054 FR-005a, as Markdown
+  await expect(win.getByTestId(`panel-title-${id}`)).toHaveText('flow.mmd - Mermaid Preview'); // 054 FR-005a; 074 FR-104
 });
 
 test('MT-05: a large real-world flowchart in a folder with a space and capitals previews as a drawing', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {

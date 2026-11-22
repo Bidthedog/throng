@@ -29,6 +29,9 @@ export const TEST_TEXT: PreviewProviderDescriptor = {
   displayName: 'Test text',
   extensions: ['.prvtxt'],
   kind: 'text',
+  // 074 FR-103 — declares a preview icon of its own (any key will do); `testBinary` declares none, so the two
+  // cover a provider's own icon and the generic one.
+  previewIcon: 'previewHtml',
   settings: [
     {
       leaf: 'shout',

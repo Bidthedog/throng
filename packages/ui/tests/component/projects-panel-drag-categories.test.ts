@@ -278,6 +278,27 @@ describe('drag-to-reorder across category boundaries (FR-055, S3)', () => {
     expect(server.invoke).not.toHaveBeenCalledWith('projects.move', expect.anything());
   });
 
+  // dnd-kit cancels a pointer drag on Escape; the cancel left the row dragging, the indicator up and its pointer
+  // tracking installed for every later move.
+  it('Escape mid-drag ends the drag with nothing moved: no dragging row, no indicator, no tracking', async () => {
+    const server = threeCategoryFixture();
+    await mount(server);
+    layoutRows();
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const grip = screen.getByTestId('project-grip-p3');
+    fireEvent.pointerDown(grip, { isPrimary: true, button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(document, { isPrimary: true, pointerId: 1, clientX: 10, clientY: 20 });
+    await waitFor(() => expect(document.querySelector('.project-item--dragging')).not.toBeNull());
+    fireEvent.pointerMove(document, { isPrimary: true, pointerId: 1, clientX: 10, clientY: 165 });
+    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+    await waitFor(() => expect(document.querySelector('.project-item--dragging')).toBeNull());
+    expect(screen.queryByTestId('project-insert-indicator')).toBeNull();
+    expect(removed.mock.calls.some(([type, , capture]) => type === 'pointermove' && capture === true)).toBe(true);
+    expect(server.invoke).not.toHaveBeenCalledWith('projects.reorder', expect.anything());
+    expect(server.invoke).not.toHaveBeenCalledWith('projects.move', expect.anything());
+    removed.mockRestore();
+  });
+
   it('a drop between two projects of another category calls moveProject at that slot', async () => {
     const server = threeCategoryFixture();
     await mount(server);

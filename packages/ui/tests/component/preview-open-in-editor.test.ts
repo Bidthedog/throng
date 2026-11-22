@@ -44,6 +44,9 @@ import {
 import type { PreviewPlacementWorkspace } from '../../src/renderer/preview/open-preview.js';
 import { goToPreviewParent, openPreviewInEditor } from '../../src/renderer/preview/open-in-editor.js';
 import { __resetPanelFocus, registerPanelFocus } from '../../src/renderer/workspace/panel-focus.js';
+import { registerEditorActions, unregisterEditorActions, type EditorActions } from '../../src/renderer/editor/editor-actions.js';
+import { setLastActiveEditor } from '../../src/renderer/editor/last-active-editor.js';
+import { removeEditorState, setEditorState } from '../../src/renderer/editor/editor-state.js';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
 import { mountMarkdownPreview, previewUpdate, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
@@ -345,5 +348,72 @@ describe('the status bar, the body menu and the header menu reach the one route 
     });
     // Nothing was placed: the tab holds the preview and its parent, as before.
     expect(collectPanels(mounted.ws().layout!.tabs[0].root)).toHaveLength(2);
+  });
+});
+
+/*
+ * The maintainer, 2026-11-20 17:00 — "When clicking 'open in editor' in any preview, the 'Open files in' preference
+ * should control where the editor opens." Open in Editor from a standalone preview obeys `editor.openTarget` (023
+ * FR-025/FR-026) as every other open does: Last Active Editor puts the file in the tab's last active editor; New
+ * Editor opens a new one beside the preview (044 FR-015c), as it always did.
+ */
+describe('Open in Editor obeys "Open files in" (023 FR-026)', () => {
+  let m: MountedPreviewWindow | undefined;
+  afterEach(() => {
+    if (editorId !== '') {
+      unregisterEditorActions(editorId);
+      removeEditorState(editorId);
+    }
+    m?.unmount();
+    m = undefined;
+  });
+
+  /** A window with the preview and, in the same tab, an editor the user last worked in. */
+  async function withLastActiveEditor(openTarget: 'lastActive' | 'new') {
+    m = await mountMarkdownPreview('hello', FILE, {
+      providers: { registry, views },
+      providerId: 'testText',
+      settings: { editor: { openTarget } },
+    });
+    await screen.findByTestId(`fake-body-${m.id}`);
+    const ws = m.ws();
+    const tabId = ws.layout!.tabs[0]!.id;
+    act(() => {
+      const id = ws.addPanel(tabId);
+      editorId = id;
+    });
+    const openFile = vi.fn(() => Promise.resolve());
+    registerEditorActions(editorId, { openFile, isDirty: () => false } as unknown as EditorActions);
+    // An editor as the open routes see one — its actions and its published state — without mounting an editor body,
+    // which is not under test; and the tab's last active editor.
+    setEditorState(editorId, { displayName: 'other.prvtxt' });
+    setLastActiveEditor(tabId, editorId);
+    m.openInto.mockImplementation(() => Promise.resolve({ action: 'open' }));
+    // A new editor's body asks main for its file: answered never, as this is about where the panel goes, not its load.
+    Reflect.set((window.throng as unknown as { editor: object }).editor, 'load', vi.fn(() => new Promise(() => {})));
+    return { openFile, tabId };
+  }
+  let editorId = '';
+
+  it('Last Active Editor: the file lands in the tab’s last active editor, and no panel is added', async () => {
+    const { openFile, tabId } = await withLastActiveEditor('lastActive');
+    const before = collectPanels(m!.ws().layout!.tabs.find((t) => t.id === tabId)!.root).length;
+
+    fireEvent.click(await screen.findByTestId(`preview-editor-${m!.id}`));
+
+    await waitFor(() => expect(openFile).toHaveBeenCalledWith(FILE));
+    expect(collectPanels(m!.ws().layout!.tabs.find((t) => t.id === tabId)!.root)).toHaveLength(before);
+  });
+
+  it('New Editor: a new editor opens beside the preview, and the last active one is left alone', async () => {
+    const { openFile, tabId } = await withLastActiveEditor('new');
+    const before = collectPanels(m!.ws().layout!.tabs.find((t) => t.id === tabId)!.root).length;
+
+    fireEvent.click(await screen.findByTestId(`preview-editor-${m!.id}`));
+
+    await waitFor(() =>
+      expect(collectPanels(m!.ws().layout!.tabs.find((t) => t.id === tabId)!.root)).toHaveLength(before + 1),
+    );
+    expect(openFile).not.toHaveBeenCalled();
   });
 });

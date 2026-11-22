@@ -52,12 +52,17 @@ describe('linkHoverText — FR-168’s table', () => {
     expect(linkHoverText({ kind: 'stays' }, 'Ctrl')).toBe('Ctrl+Click to follow');
   });
 
+  it('a file whose type opens in the OS default program says so (074 FR-018a)', () => {
+    expect(linkHoverText({ kind: 'osDefaultProgram' }, 'Ctrl')).toBe('Ctrl+Click to open in OS default program');
+  });
+
   it('never promises a browser for a file destination', () => {
     for (const destination of [
       { kind: 'editor', openTarget: 'lastActive' },
       { kind: 'editor', openTarget: 'new' },
       { kind: 'preview' },
       { kind: 'osExplorer' },
+      { kind: 'osDefaultProgram' },
     ] as const) {
       expect(linkHoverText(destination, 'Ctrl'), destination.kind).not.toContain('browser');
     }

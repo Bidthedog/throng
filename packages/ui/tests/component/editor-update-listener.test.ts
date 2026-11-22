@@ -59,8 +59,11 @@ const PATH = 'C:/proj/note.txt';
  */
 const DOC = 'alpha\nbeta gamma\ndelta\n';
 
-/** Distinctive enough that a `setTimeout(…, 4321)` can only be the auto-save timer. */
-const AUTO_SAVE_MS = 4321;
+/**
+ * Distinctive enough that a `setTimeout(…, 2345)` can only be the auto-save timer, and inside the setting's 0 – 3 s range:
+ * a stored value past its hard bound is clamped on read, so 4321 became 3000 and no timer matched.
+ */
+const AUTO_SAVE_MS = 2345;
 
 beforeEach(() => {
   __resetCaretStore();

@@ -13,13 +13,15 @@ import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { SETTINGS_METADATA, type FieldDescriptor } from '@throng/core';
 import { SettingControl } from '../../src/renderer/preferences/form-controls.js';
+import { NotificationProvider } from '../../src/renderer/common/notification.js';
 
 const KEY = 'terminals.titleTemplate';
 const descriptor = SETTINGS_METADATA.find((d: FieldDescriptor) => d.key === KEY) as FieldDescriptor;
 
 function renderControl(value: string) {
   const onCommit = vi.fn();
-  render(createElement(SettingControl, { descriptor, value, onCommit }));
+  // 077 FR-024 — under the provider, as in the Preferences window: the refusal is a toast carrying the box's `…-invalid` id.
+  render(createElement(NotificationProvider, null, createElement(SettingControl, { descriptor, value, onCommit })));
   return { onCommit, input: screen.getByTestId(`control-${KEY}`) as HTMLInputElement };
 }
 

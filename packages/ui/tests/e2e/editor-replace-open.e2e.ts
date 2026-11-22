@@ -66,7 +66,7 @@ test.describe.configure({ mode: 'serial' });
 let shared: OpenApp;
 const roots: string[] = [];
 test.beforeAll(async () => {
-  shared = await openApp();
+  shared = await openApp({ markdownOpensIn: 'editor' });
 });
 test.afterAll(async () => {
   await shared?.close();
@@ -289,7 +289,7 @@ test('the replaced pair is still one document after a restart (FR-010, SC-004)',
         await expect.poll(() => textOf(join(root, 'dest', 'note.md'))).toContain('BEFOREZ');
         await expectLinkPersisted(dataDir, 'ReplRestart');
       },
-      { dataDir, userDataDir },
+      { dataDir, userDataDir, markdownOpensIn: 'editor' },
     );
 
     // Step 5: a second launch restores both panels onto the one document.
@@ -310,7 +310,7 @@ test('the replaced pair is still one document after a restart (FR-010, SC-004)',
         await expect(content(win, p1!)).toContainText('AFTERZ', { timeout: 10_000 });
         await expectNoOpenFailure(win);
       },
-      { dataDir, userDataDir },
+      { dataDir, userDataDir, markdownOpensIn: 'editor' },
     );
   } finally {
     cleanupTemp(root);

@@ -97,17 +97,22 @@ function source(relative: string): string {
 }
 
 describe('throng:preview:* — channels and kinds (§1)', () => {
-  it('registers the nine invokes and the four sends, and nothing else', () => {
+  it('registers the fourteen invokes and the four sends, and nothing else', () => {
     const ipc = fakeIpc();
     registerPreviewIpc(ipc, recordingService());
 
     expect([...ipc.handles.keys()].sort()).toEqual([
       'throng:preview:attach',
+      'throng:preview:gridEdit', // 073 — the CSV Preview Editor's grid operations
+      'throng:preview:gridRedo',
+      'throng:preview:gridSave',
+      'throng:preview:gridUndo',
       'throng:preview:isOpen',
       'throng:preview:navigate',
       'throng:preview:open',
       'throng:preview:openPaths',
       'throng:preview:readEmbeds', // 054 — preview-embeds.contract.test.ts
+      'throng:preview:readSource', // 073 R7, 074 R4 — below
       'throng:preview:refresh',
       'throng:preview:resolveWikiTargets',
       'throng:preview:toggleTask', // 054 — preview-ipc-054.contract.test.ts
@@ -154,6 +159,37 @@ describe('throng:preview:* — channels and kinds (§1)', () => {
     ]) {
       expect(globals).toContain(member);
     }
+  });
+});
+
+describe('throng:preview:readSource — 074 R4', () => {
+  it('forwards the panel id and answers with what the reader answered', async () => {
+    const ipc = fakeIpc();
+    const asked: string[] = [];
+    registerPreviewIpc(ipc, recordingService(), undefined, {
+      readSource: async (panelId) => {
+        asked.push(panelId);
+        return { ok: true, bytes: new Uint8Array([1, 2]), mime: 'application/pdf' };
+      },
+    });
+    const answer = await ipc.handles.get('throng:preview:readSource')!(event(1), { panelId: 'v1' });
+    expect(asked).toEqual(['v1']);
+    expect(answer).toEqual({ ok: true, bytes: new Uint8Array([1, 2]), mime: 'application/pdf' });
+  });
+
+  it('refuses a malformed payload, a missing reader and a reader that throws, with 404', async () => {
+    const bare = fakeIpc();
+    registerPreviewIpc(bare, recordingService());
+    expect(await bare.handles.get('throng:preview:readSource')!(event(1), { panelId: 'v1' })).toEqual({ ok: false, status: 404 });
+    const ipc = fakeIpc();
+    registerPreviewIpc(ipc, recordingService(), undefined, { readSource: () => Promise.reject(new Error('boom')) });
+    expect(await ipc.handles.get('throng:preview:readSource')!(event(1), {})).toEqual({ ok: false, status: 404 });
+    expect(await ipc.handles.get('throng:preview:readSource')!(event(1), { panelId: 'v1' })).toEqual({ ok: false, status: 404 });
+  });
+
+  it('is named by the preload and the renderer declaration', () => {
+    expect(source('../../src/preload/preload.cts')).toContain("ipcRenderer.invoke('throng:preview:readSource'");
+    expect(source('../../src/renderer/global.d.ts')).toContain('readSource?:');
   });
 });
 

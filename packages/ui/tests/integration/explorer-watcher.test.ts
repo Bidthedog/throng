@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ExplorerWatcher } from '../../src/main/explorer-watcher.js';
 import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
+import { SharedFileWatcher } from '../../src/main/shared-file-watcher.js';
+import { skipUnlessLinux } from '@throng/core/testing';
+import type { IFileWatcher } from '@throng/core';
 
 function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -95,3 +98,66 @@ describe('ExplorerWatcher live-sync push (004 US2 T029)', () => {
     }
   });
 });
+
+/*
+ * 062 FR-051 — editing an ignore list (the explorer's globs, a hidden set, search's lists) re-asks the project watch,
+ * which widens or narrows in place. Linux's per-directory watch is the one that leaves a folder unwatched.
+ */
+describe.skipIf(skipUnlessLinux('the per-directory watch is the strategy only Linux uses (#585)'))(
+  'ExplorerWatcher follows an edited ignore list (062 FR-051)',
+  () => {
+    it('stops and starts following a folder as the list changes, on the same watch', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'throng-explorer-rescope-'));
+      await mkdir(join(root, 'node_modules', 'pkg'), { recursive: true });
+      const inner = new NodeFileWatcher(30, { recursiveStrategy: 'per-directory' });
+      let opened = 0;
+      const counting: IFileWatcher = {
+        watch: (...args) => {
+          opened += 1;
+          return inner.watch(...args);
+        },
+      };
+      let ignoring = true;
+      const heard: string[] = [];
+      const watcher = new ExplorerWatcher(
+        new SharedFileWatcher(counting),
+        (evt, _root, relPaths) => heard.push(...(relPaths ?? [evt.relDir])),
+        undefined,
+        () => (rel) => ignoring && rel === 'node_modules',
+      );
+      const until = async (what: string, ok: () => boolean): Promise<void> => {
+        const started = Date.now();
+        while (!ok()) {
+          if (Date.now() - started > 5000) throw new Error(`timed out: ${what}; heard ${JSON.stringify(heard)}`);
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      };
+      try {
+        watcher.setRoot(root);
+        await writeFile(join(root, 'node_modules', 'pkg', 'one.js'), 'x');
+        await writeFile(join(root, 'kept.txt'), 'x');
+        await until('the kept file', () => heard.includes('kept.txt'));
+        await new Promise((r) => setTimeout(r, 200));
+        expect(heard).not.toContain('node_modules/pkg/one.js');
+
+        ignoring = false; // the user takes node_modules off the list
+        watcher.rescope();
+        await writeFile(join(root, 'node_modules', 'pkg', 'two.js'), 'x');
+        await until('a change inside the unignored folder', () => heard.includes('node_modules/pkg/two.js'));
+
+        ignoring = true; // and puts it back
+        watcher.rescope();
+        heard.length = 0;
+        await writeFile(join(root, 'node_modules', 'pkg', 'three.js'), 'x');
+        await writeFile(join(root, 'kept2.txt'), 'x');
+        await until('the second kept file', () => heard.includes('kept2.txt'));
+        await new Promise((r) => setTimeout(r, 200));
+        expect(heard).not.toContain('node_modules/pkg/three.js');
+        expect(opened, 'an edited list opened a second watch').toBe(1);
+      } finally {
+        watcher.dispose();
+        await rm(root, { recursive: true, force: true });
+      }
+    }, 30_000);
+  },
+);

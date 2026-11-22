@@ -91,6 +91,21 @@ const press = (user: ReturnType<typeof userEvent.setup>, key: string): Promise<v
  * scrolled to." Both readings of "collapsed" are driven: hidden inside a collapsed ancestor, and its
  * OWN section collapsed.
  */
+describe('following a heading link into a COLLAPSED callout (075 FR-010)', () => {
+  it('opens the callout around the heading, and scrolls to it', async () => {
+    const doc = ['# Top', '', '[Jump inside](#inside)', '', '> [!note]- Folded', '> ## Inside', '> body'].join('\n');
+    m = await mountMarkdownPreview(doc);
+    await screen.findByText('Jump inside', {}, COLD);
+    const host = screen.getByTestId(`preview-body-${m.id}`);
+    await waitFor(() => expect(host.querySelector('[data-callout-collapsed]')).not.toBeNull());
+
+    fireEvent.click(screen.getByText('Jump inside'), { ctrlKey: true });
+
+    await waitFor(() => expect(host.querySelector('[data-callout-collapsed]')).toBeNull());
+    await waitFor(() => expect(host.scrollTop).toBeGreaterThan(0));
+  });
+});
+
 describe('Go to Heading onto a COLLAPSED heading (FR-042c, FR-040)', () => {
   const open = async (): Promise<HTMLElement> => {
     m = await mountMarkdownPreview(DOC);

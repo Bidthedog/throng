@@ -124,10 +124,9 @@ describe('a project row (FR-012)', () => {
     await ready();
     act(() => setAttentionMarks([makeMark('p1', 'a', { title: 'Build' }), makeMark('p2', 'a', { title: 'Tests', raisedAt: 2 })]));
     const placed = mark('a')!;
-    // An EMPTY title, not an absent one: the mark sits inside the switch button, whose own title
-    // ("Double-click to rename") a browser would otherwise show over the popover. An empty title on the
-    // nearest element stops the ancestor's from applying.
-    expect(placed.closest('.project-item__switch')).toHaveAttribute('title', 'Double-click to rename');
+    // An EMPTY title, not an absent one: an empty title on the nearest element stops any ancestor's from
+    // applying. The switch button carries none since #695 (its hint moved into the row popover, 077 FR-027).
+    expect(placed.closest('.project-item__switch')).not.toHaveAttribute('title');
     expect(placed).toHaveAttribute('title', '');
     expect(placed).toHaveAttribute('aria-label', expect.stringContaining('Tests'));
     fireEvent.mouseEnter(placed);

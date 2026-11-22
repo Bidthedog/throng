@@ -5,7 +5,7 @@
  */
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { connect } from 'node:net';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { copyFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -33,6 +33,7 @@ import { quiesceSampler } from './quiesce-sampler.js';
  * an undefined name here is invisible until it runs.
  */
 import { forceKillProcessTree, stdioHolders, stdioIdentities } from './process-tree.js';
+import { appLogTails, keepAppLogs, userDataDirOf } from './app-logs.js';
 import { resolveIpcAddress } from '@throng/core';
 import { shippedPresses, shippedTwoStroke } from '../shared/window-chords.js';
 import { startPlatform } from '@throng/platform';
@@ -311,6 +312,12 @@ export interface AppOptions {
    * that relationship, in seconds.
    */
   daemonEnv?: Record<string, string>;
+  /**
+   * Set "Open Markdown files in" to Throng Editor in the config root's `settings.json` before the app starts, for a
+   * spec that opens a `.md` from File Explorer or Quick Open to get its EDITOR. Markdown ships Throng Preview since
+   * 2026-11-22 (074 FR-016, amended). An app already running uses {@link markdownOpensInEditor}.
+   */
+  markdownOpensIn?: 'editor';
 }
 
 /** A running app, plus the teardown that `runApp` would otherwise have done for you. */
@@ -366,6 +373,49 @@ export interface OpenApp {
  * Verify a conversion at `--repeat-each=3`, never on one green pass. Four conversions on this branch
  * passed once and were undone; see `launch-sharing.md`.
  */
+/**
+ * Set "Open Markdown files in" to Throng Editor, through the same key-scoped write the settings form makes
+ * (`config.writePatch`, 032 FR-001), and wait until the window has it. For a spec that opens a `.md` from File
+ * Explorer or Quick Open to get its editor: Markdown ships Throng Preview since 2026-11-22 (074 FR-016, amended).
+ *
+ * Main answering with the new value is not the window having it: the click is routed by the renderer's own settings
+ * store, which the change reaches later, and a click before then opened the Preview (macOS, pipeline 45024510134:
+ * the editor stayed empty). So the window is reloaded, and reads its settings afresh. Call it before the test opens
+ * anything; a spec that launches its own app passes `markdownOpensIn` instead, and needs no reload.
+ */
+export async function markdownOpensInEditor(win: Page): Promise<void> {
+  await win.waitForLoadState('domcontentloaded');
+  const result = await win.evaluate(() =>
+    window.throng?.config?.writePatch?.({ kind: 'settings' }, [
+      { path: ['editor', 'previews', 'providers', 'markdown', 'defaultOpenAction'], value: 'editor' },
+    ]),
+  );
+  expect(result?.ok, `the settings write was refused: ${JSON.stringify(result)}`).toBe(true);
+  await expect
+    .poll(
+      () =>
+        win.evaluate(async () => {
+          const got = (await window.throng?.config?.get?.()) as
+            | { settings?: { editor?: { previews?: { providers?: { markdown?: { defaultOpenAction?: string } } } } } }
+            | undefined;
+          return got?.settings?.editor?.previews?.providers?.markdown?.defaultOpenAction;
+        }),
+      { timeout: 5000, message: 'Open Markdown files in never became Throng Editor' },
+    )
+    .toBe('editor');
+  await reloadWindow(win);
+}
+
+/** `markdownOpensIn: 'editor'` — the setting merged into the config root's `settings.json`, read at startup. */
+function seedMarkdownOpensInEditor(cfgRoot: string): void {
+  const file = join(cfgRoot, 'settings.json');
+  const settings = (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {}) as Record<string, Record<string, unknown>>;
+  const editor = (settings.editor ??= {}) as { previews?: { providers?: Record<string, Record<string, unknown>> } };
+  const providers = ((editor.previews ??= {}).providers ??= {});
+  (providers.markdown ??= {}).defaultOpenAction = 'editor';
+  writeFileSync(file, JSON.stringify(settings, null, 2));
+}
+
 export async function openApp(opts: AppOptions = {}): Promise<OpenApp> {
   const started = await launchApp(opts);
   return {
@@ -389,6 +439,10 @@ export async function runApp(
       pipeName: started.pipeName,
       userDataDir: started.userDataDir,
     });
+  } catch (error) {
+    // The test is failing, but Playwright has not recorded it yet: the teardown below runs first.
+    keepLogsOfFailedTest(started.userDataDir, true);
+    throw error;
   } finally {
     await started.teardown();
   }
@@ -638,6 +692,7 @@ async function launchApp(opts: AppOptions): Promise<{
   // override THRONG_CONFIG_ROOT via opts.env).
   const ownCfgRoot = opts.env?.THRONG_CONFIG_ROOT === undefined;
   const cfgRoot = opts.env?.THRONG_CONFIG_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-cfg-'));
+  if (opts.markdownOpensIn === 'editor') seedMarkdownOpensInEditor(cfgRoot);
   let app: ElectronApplication | undefined;
   let endSuddenDeathWatch: () => void = () => {};
   try {
@@ -745,6 +800,7 @@ async function launchApp(opts: AppOptions): Promise<{
     };
 
     const teardownBegan = Date.now();
+    keepLogsOfFailedTest(userData);
     if (!daemon) await phase('killAppSpawnedDaemon', () => killAppSpawnedDaemon(pipeName));
     if (started) await phase('shutdownApp', () => shutdownApp(started));
     if (daemon) await phase('stopDaemon', () => stopDaemon(daemon));
@@ -1046,8 +1102,10 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
   // gone, Playwright's `app.process()` throws ("Cannot read properties of undefined"), so read the
   // pid defensively: no process ⇒ nothing to force-kill, and the graceful path below no-ops fast.
   let pid: number | undefined;
+  let userData: string | undefined;
   try {
     pid = app.process().pid;
+    userData = userDataDirOf(app.process().spawnargs);
   } catch {
     pid = undefined;
   }
@@ -1114,6 +1172,15 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
       } catch {
         /* best-effort: the force-kill below still runs */
       }
+      // What the app itself last wrote: the group above says only that the process lingered, never on which step.
+      if (userData !== undefined) {
+        try {
+          console.warn(`[teardown] the app's own logs at the stall:\n${appLogTails(userData)}`);
+          keepAppLogs(userData, join(test.info().outputDir, 'app-logs', `shutdown-stall-${pid}`));
+        } catch {
+          /* best-effort: outside a test, or the folder went with the process */
+        }
+      }
       // macOS: the process group alone cannot say what a live main process is doing. `sample` (shipped with macOS,
       // no privileges for our own child) writes every thread's stack beside the test's other results.
       if (process.platform === 'darwin') {
@@ -1130,6 +1197,22 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
     // The process is gone now, so this resolves immediately and lets Playwright observe the exit
     // rather than waiting on its own internal kill timeout.
     await app.close().catch(() => {});
+  }
+}
+
+/**
+ * A failed test's app logs, copied out of its user-data folder before teardown deletes it, into the test's output
+ * folder, which the E2E jobs upload as `app-logs-e2e-*`. A passing test keeps nothing. `failing` is for a caller that
+ * holds the error before Playwright has recorded it (`runApp`); otherwise the test's status decides, which an
+ * `afterEach` sees and an `afterAll` does not. Best-effort: outside a test it does nothing.
+ */
+function keepLogsOfFailedTest(userData: string, failing = false): void {
+  try {
+    const info = test.info();
+    if (!failing && info.status === info.expectedStatus) return;
+    keepAppLogs(userData, join(info.outputDir, 'app-logs', basename(userData)));
+  } catch {
+    /* not inside a test */
   }
 }
 
@@ -1418,15 +1501,63 @@ export type SplitDirectionName = 'down' | 'up' | 'right' | 'left';
  * is chosen. Every spec that used to click `panel-add-<id>` and then deal with a rename box goes through
  * here; the new panel takes focus and opens in NO rename mode (FR-002), so there is no box to commit.
  * It does not wait for the new panel: callers assert the count they expect, as they always did.
+ *
+ * A panel too narrow for its **+** draws none (067 FR-069b) — the default 900 px window halves into panels that are —
+ * and the header menu's Split submenu, the same four items, is used instead.
  */
 export async function splitPanelViaMenu(
   win: Page,
   panelId: string,
   direction: SplitDirectionName = 'right',
 ): Promise<void> {
-  await win.getByTestId(`panel-add-${panelId}`).click();
   const label = `Split ${direction.charAt(0).toUpperCase()}${direction.slice(1)}`;
+  if (await headerControlDrawn(win, panelId, 'panel-add')) {
+    await win.getByTestId(`panel-add-${panelId}`).click();
+  } else {
+    await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });
+    await win.getByTestId('menu-item-Split').click();
+  }
   await win.getByTestId(`menu-item-${label}`).click();
+}
+
+/**
+ * Whether the panel header draws one of its width-dependent controls (`panel-add`, `panel-maximise`, `panel-close`,
+ * `panel-back`, `panel-forward`) — 067 FR-069b hides them, a whole control at a time, as the header narrows; every
+ * one stays on the header menu. Read after the header has been measured: two frames, so the ResizeObserver's
+ * width has reached React and the header re-rendered.
+ */
+export async function headerControlDrawn(win: Page, panelId: string, control: string): Promise<boolean> {
+  await expect(win.getByTestId(`panel-handle-${panelId}`)).toBeVisible();
+  await win.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  return (await win.getByTestId(`${control}-${panelId}`).count()) > 0;
+}
+
+/**
+ * Close (destroy) `panelId` through its ✕, or its header menu's row where the header is too narrow to draw the ✕
+ * (067 FR-069b). The caller handles any confirmation, as it did for the ✕.
+ */
+export async function closePanelViaHeader(win: Page, panelId: string): Promise<void> {
+  if (await headerControlDrawn(win, panelId, 'panel-close')) {
+    await win.getByTestId(`panel-close-${panelId}`).click();
+    return;
+  }
+  await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });
+  await win.locator('[data-testid="menu-item-Destroy Panel"], [data-testid="menu-item-Close Panel"]').first().click();
+}
+
+/**
+ * Whether `panelId`'s Back or Forward is enabled — read from the button, or from the header menu's row where the
+ * header is too narrow to draw the buttons (067 FR-069b). The menu is closed again before returning.
+ */
+export async function historyStepEnabled(win: Page, panelId: string, which: 'back' | 'forward'): Promise<boolean> {
+  if (await headerControlDrawn(win, panelId, `panel-${which}`)) return win.getByTestId(`panel-${which}-${panelId}`).isEnabled();
+  await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });
+  const row = win.getByTestId(`menu-item-${which === 'back' ? 'Back' : 'Forward'}`);
+  await expect(row).toBeVisible();
+  const enabled = (await row.getAttribute('aria-disabled')) !== 'true' && !(await row.isDisabled());
+  await win.keyboard.press('Escape');
+  await expect(row).toHaveCount(0);
+  return enabled;
 }
 
 /**

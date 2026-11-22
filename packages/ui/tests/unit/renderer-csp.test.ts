@@ -67,6 +67,7 @@ describe('renderer Content-Security-Policy (Layer 3)', () => {
         'default-src',
         'script-src',
         'style-src',
+        'font-src',
         'img-src',
         'object-src',
         'frame-src',
@@ -86,8 +87,23 @@ describe('renderer Content-Security-Policy (Layer 3)', () => {
     expect(scriptSrc).not.toContain("'unsafe-inline'");
   });
 
-  it("style-src 'self' 'unsafe-inline' — unchanged; CodeMirror and the theme provider mount style elements", () => {
-    expect(policy.get('style-src')).toEqual(["'self'", "'unsafe-inline'"]);
+  /*
+   * 'unsafe-inline' because CodeMirror and the theme provider mount style elements. 074 FR-072, FR-092 — plus the
+   * asset route alone: the HTML preview's `srcdoc` frame INHERITS this policy, and its injected frame policy can only
+   * narrow it, so without the route a page's own `<link rel="stylesheet">` (rewritten to `throng-preview://asset/…`)
+   * never loads. The route serves `text/css` only to an HTML run, confined to the project.
+   */
+  /*
+   * 074 FR-092a — an HTML Preview frame is same-origin (FR-074a) and so inherits this policy, which cannot follow a
+   * user-edited safe list: `https:` is granted for styles and fonts here, and narrowed to each frame's own sources by
+   * the frame's policy and the request filter, which still refuses both to every other document.
+   */
+  it("style-src 'self' 'unsafe-inline', the asset route and https: (FR-092a)", () => {
+    expect(policy.get('style-src')).toEqual(["'self'", "'unsafe-inline'", 'throng-preview://asset', 'https:']);
+  });
+
+  it("font-src 'self' throng-preview: https: — no data:, no http: (FR-092a)", () => {
+    expect(policy.get('font-src')).toEqual(["'self'", 'throng-preview:', 'https:']);
   });
 
   /*
@@ -100,13 +116,19 @@ describe('renderer Content-Security-Policy (Layer 3)', () => {
     expect(policy.get('img-src')).toEqual(["'self'", 'https:', 'throng-preview:', 'blob:']);
   });
 
-  it.each(['object-src', 'frame-src', 'base-uri', 'form-action'])("%s 'none'", (directive) => {
+  // 074 FR-092 (research R6) — the ONE frame grant: the HTML preview's follow route, which answers 204 and serves
+  // no document, so a plain click on a link in the sandboxed page navigates nowhere. Nothing else may be framed.
+  it('frame-src admits the follow route alone', () => {
+    expect(policy.get('frame-src')).toEqual(['throng-preview://follow']);
+  });
+
+  it.each(['object-src', 'base-uri', 'form-action'])("%s 'none'", (directive) => {
     expect(policy.get(directive)).toEqual(["'none'"]);
   });
 
   // Implied by the exact set above; kept so the R8 reason has a test that names it.
-  it('leaves connect-src, font-src and media-src on default-src, so remote fetches, fonts and media are refused (R8)', () => {
-    for (const directive of ['connect-src', 'font-src', 'media-src']) {
+  it('leaves connect-src and media-src on default-src, so remote fetches and media are refused (R8)', () => {
+    for (const directive of ['connect-src', 'media-src']) {
       expect(policy.has(directive), directive).toBe(false);
     }
   });

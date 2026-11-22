@@ -88,7 +88,8 @@ describe('notifications merge contract', () => {
     });
     expect(resolved.notifications.confirmDismissAll).toBe(false);
     expect(resolved.notifications.panelLimit).toBe(250);
-    const bad = parseAppSettings({ notifications: { confirmDismissAll: 'x', panelLimit: 5, toastDurationMs: 1 } });
+    // Malformed is no number at all; an out-of-range number is the bounds guard's to move (077 FR-016).
+    const bad = parseAppSettings({ notifications: { confirmDismissAll: 'x', panelLimit: 'many', toastDurationMs: null } });
     expect(bad.notifications.confirmDismissAll).toBe(true);
     expect(bad.notifications.panelLimit).toBe(100);
     expect(bad.notifications.toastDurationMs).toBe(3000);

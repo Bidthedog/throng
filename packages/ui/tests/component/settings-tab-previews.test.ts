@@ -23,7 +23,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createPreviewProviderRegistry, previewSettingsDescriptors } from '@throng/core';
+import { createPreviewProviderRegistry, formatGrouped, previewSettingsDescriptors } from '@throng/core';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
@@ -107,6 +107,7 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
       'setting-editor.previews.updateDelayMs',
       'setting-editor.previews.maxWaitMs',
       'setting-editor.previews.syncScroll',
+      'setting-editor.previews.syncHighlightMs',
       'setting-editor.previews.copyFormat',
     ]);
     const subsections = [...subsection().querySelectorAll(':scope > .fold-content > .settings-subgroup')].map((el) =>
@@ -115,12 +116,22 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
     expect(subsections).toEqual([
       'settings-subsection-Editor-Previews-Markdown',
       'settings-subsection-Editor-Previews-Mermaid',
+      // 073 — the CSV Preview Editor and the spreadsheet preview, after them.
+      'settings-subsection-Editor-Previews-CSV',
+      'settings-subsection-Editor-Previews-Spreadsheet',
+      // 074 FR-010 — each media provider its own subsection, in registration order.
+      'settings-subsection-Editor-Previews-Image',
+      'settings-subsection-Editor-Previews-SVG',
+      'settings-subsection-Editor-Previews-PDF',
+      'settings-subsection-Editor-Previews-HTML',
     ]);
     expect(ownRows(screen.getByTestId('settings-subsection-Editor-Previews-Markdown'))).toEqual([
       `setting-${MD}.enabled`,
       `setting-${MD}.defaultOpenAction`,
       `setting-${MD}.openTarget`,
       `setting-${MD}.renderMermaid`,
+      // 075 FR-042 — Typeset math.
+      `setting-${MD}.typesetMath`,
       `setting-${MD}.loadRemoteImages`,
       `setting-${MD}.showFrontMatter`,
       `setting-${MD}.gutter`,
@@ -136,7 +147,7 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
     // The provider rows carry the provider's display name, and none of them "Open files with" (019 FR-024).
     const section = subsection();
     expect(within(section).getByText('Markdown: Enabled')).toBeInTheDocument();
-    expect(within(section).getByText('Markdown: Default open action')).toBeInTheDocument();
+    expect(within(section).getByText('Open Markdown files in')).toBeInTheDocument();
     expect(within(section).getByText('Markdown: Load remote images')).toBeInTheDocument();
     // `editor.openOnClick`'s label — a different setting, which two rows under one name would merge.
     expect(within(section).queryByText(/open files with/i)).toBeNull();
@@ -148,6 +159,13 @@ describe('the Previews subsection over the shipped registry (FR-060, FR-060a, FR
     expect(within(section).getByText('Markdown: Show front matter')).toBeInTheDocument();
     expect((control('editor.previews.syncScroll') as HTMLInputElement).checked).toBe(true);
     expect((control(`${MD}.showFrontMatter`) as HTMLInputElement).checked).toBe(true);
+    // 073 FR-033f: the highlight duration is drawn beside it, a 0 – 10 s slider in half seconds showing its shipped 1.5 s.
+    // 077 FR-001: stored in ms — the slider moves over 0 – 10,000 in 500s, and the readout beside it says 1.5 s.
+    expect(within(section).getByText('Scroll-sync highlight duration')).toBeInTheDocument();
+    const duration = [...screen.getByTestId('setting-editor.previews.syncHighlightMs').querySelectorAll('input')];
+    expect(duration.some((i) => i.getAttribute('step') === '500' && i.getAttribute('max') === '10000' && i.getAttribute('min') === '0')).toBe(true);
+    expect(duration.some((i) => i.type === 'range' && Number(i.value) === 1500)).toBe(true);
+    expect(screen.getByTestId('control-editor.previews.syncHighlightMs-value').textContent).toBe(`${formatGrouped(1.5)} s`);
 
     // The control for the Markdown-disabled case below: the same controls are LIVE while Markdown is on.
     expect(control(`${MD}.defaultOpenAction`).disabled).toBe(false);
@@ -232,7 +250,7 @@ describe('the tab reads its descriptors from a metadata context (SC-003 prerequi
 
     const section = subsection();
     expect(within(section).getByText('Test text: Enabled')).toBeInTheDocument();
-    expect(within(section).getByText('Test text: Default open action')).toBeInTheDocument();
+    expect(within(section).getByText('Open Test text files in')).toBeInTheDocument();
     expect(within(section).getByText('Test text: Shout')).toBeInTheDocument();
     // The shipped registry is not what drew this form.
     expect(within(section).queryByText('Markdown: Enabled')).toBeNull();

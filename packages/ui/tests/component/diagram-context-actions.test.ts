@@ -11,7 +11,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/renderer/preview/diagram/rasterise.js', () => ({
+vi.mock('../../src/renderer/preview/diagram/rasterise.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/renderer/preview/diagram/rasterise.js')>()),
   rasteriseSvg: vi.fn(() => Promise.resolve('data:image/png;base64,AAAA')),
 }));
 

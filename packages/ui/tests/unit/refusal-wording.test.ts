@@ -8,7 +8,7 @@
  * blanket "UTF-8".
  */
 import { describe, expect, it } from 'vitest';
-import { refusalMessage } from '@throng/core';
+import { SETTINGS_METADATA, formatSetting, refusalMessage } from '@throng/core';
 import { taskNoticeMessage } from '../../src/renderer/preview/task-toggle.js';
 import { missingFileMessage } from '../../src/renderer/editor/editor-missing-notice.js';
 import { failureWording } from '../../src/renderer/find-in-files/commit-replace.js';
@@ -24,6 +24,23 @@ describe('the editor open notice (059 T022, review R2)', () => {
   it('names the encoding a not-decodable file was read as', () => {
     expect(missingFileMessage('not-decodable', 'utf16le')).toBe(refusalMessage('not-decodable', 'utf16le'));
     expect(missingFileMessage('not-decodable', 'utf16le')).toContain('UTF-16 LE');
+  });
+});
+
+describe('the editor too-large refusal (077 T045, FR-014)', () => {
+  // The setting's own descriptor, so the sentence is held to the unit Preferences shows the limit in.
+  const limitDescriptor = SETTINGS_METADATA.find((d) => d.key === 'editor.maxOpenFileBytes')!;
+
+  it('quotes the file’s size and the current Max open file size, as Preferences shows it', () => {
+    expect(missingFileMessage('too-large', undefined, { size: 12_000_000, limit: 10_485_760 })).toBe(
+      `That file is too large to open in an editor: ${formatSetting(12_000_000, limitDescriptor)}, over the ${formatSetting(10_485_760, limitDescriptor)} limit set in Preferences.`,
+    );
+  });
+
+  it('quotes the limit it was given, never the shipped default', () => {
+    expect(missingFileMessage('too-large', undefined, { size: 3_000_000, limit: 2_097_152 })).toContain(
+      formatSetting(2_097_152, limitDescriptor),
+    );
   });
 });
 

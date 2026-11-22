@@ -52,6 +52,7 @@ import {
   firstPanelId,
   settle,
   cleanupTemp,
+  markdownOpensInEditor,
 } from './harness.js';
 import { openGotoLine, openQuickOpen, quickOpenRows } from './helpers/navigation.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
@@ -302,6 +303,7 @@ test('both toggles live in Editor · Navigation, ship off, and turning them off 
   try {
     await runApp(
       async (app, win) => {
+        await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
         await settle(win);
         await createProject(win, 'RememberPrefs', root);
         const pid = await newEditor(win);

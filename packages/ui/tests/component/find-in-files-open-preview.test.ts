@@ -15,6 +15,8 @@ import { requestOpenResult } from '../../src/renderer/find-in-files/result-open.
 import { COLD, PROJECT, ROOT, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
 const PREVIEW_DEFAULT = { editor: { previews: { providers: { markdown: { defaultOpenAction: 'preview' } } } } };
+/** Markdown set to Throng Editor — chosen, since it ships Throng Preview (074 FR-016, amended 2026-11-22). */
+const EDITOR_DEFAULT = { editor: { previews: { providers: { markdown: { defaultOpenAction: 'editor' } } } } };
 
 let pv: MountedPreviewWindow | undefined;
 
@@ -103,8 +105,8 @@ describe('an Open In preview row (060 FR-048)', () => {
 });
 
 describe('a file whose default is Editor (FR-030, unchanged)', () => {
-  it('Markdown left at its shipped Editor default opens an editor at the match', async () => {
-    const m = await mount();
+  it('Markdown set to Throng Editor opens an editor at the match', async () => {
+    const m = await mount(EDITOR_DEFAULT);
     act(() => {
       requestOpenResult(row('docs/guide.md'));
     });

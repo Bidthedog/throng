@@ -73,6 +73,12 @@ const SOURCE = `${ROOT}/src/app.ts`;
 
 const PREVIEW = { providers: { markdown: { enabled: true, defaultOpenAction: 'preview' } } };
 const PREVIEW_OFF = { providers: { markdown: { enabled: false, defaultOpenAction: 'preview' } } };
+/** 074 FR-018 — Open Markdown files in: Default OS Program. */
+const OS = { providers: { markdown: { enabled: true, defaultOpenAction: 'os' } } };
+/** Open Markdown files in: Throng Editor — chosen, since Markdown ships Throng Preview (074 FR-016, amended 2026-11-22). */
+const EDITOR = { providers: { markdown: { enabled: true, defaultOpenAction: 'editor' } } };
+const OS_OFF = { providers: { markdown: { enabled: false, defaultOpenAction: 'os' } } };
+const openInOs = vi.fn(async () => undefined);
 
 type Ws = ReturnType<typeof useWorkspace>;
 
@@ -88,6 +94,7 @@ function route(previews: unknown, projectId: string | null = PROJECT): OpenRoute
     previews: parsePreviewSettings(previews, SHIPPED_PREVIEW_PROVIDERS),
     projectId,
     openInEditor: openFileInTab,
+    openInOs,
   };
 }
 
@@ -104,6 +111,7 @@ beforeEach(() => {
     return Promise.resolve(PLACED);
   });
   openFileInTab.mockClear();
+  openInOs.mockClear();
   openFileInTab.mockResolvedValue(true);
 });
 
@@ -146,6 +154,28 @@ describe('a default open action of Preview opens the preview, not an editor (FR-
     expect(opened).toEqual([{ absPath: README, projectId: PROJECT, keepFocus: true, flash: true }]);
     expect(opened[0]).not.toHaveProperty('requesterPanelId');
     expect(openFileInTab).not.toHaveBeenCalled();
+  });
+});
+
+describe('Open <files> in: Default OS Program hands the file to the OS (074 FR-018)', () => {
+  it('openFromTree opens the file in the OS default program, and no editor or preview', async () => {
+    const result = await openFromTree(sliceWs(), README, 'lastActive', route(OS));
+    expect(result).toBe(true);
+    expect(openInOs).toHaveBeenCalledWith(README);
+    expect(openFileInTab).not.toHaveBeenCalled();
+    expect(opened).toEqual([]);
+  });
+
+  it('openFromQuickOpen does the same, and answers that a file was opened', async () => {
+    await expect(openFromQuickOpen(sliceWs(), 'tab-1', README, 'lastActive', route(OS))).resolves.toBe(true);
+    expect(openInOs).toHaveBeenCalledWith(README);
+    expect(openFileInTab).not.toHaveBeenCalled();
+  });
+
+  it('a disabled provider suspends Default OS Program: the file opens in an editor', async () => {
+    await openFromTree(sliceWs(), README, 'lastActive', route(OS_OFF));
+    expect(openInOs).not.toHaveBeenCalled();
+    expect(openFileInTab).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -197,8 +227,8 @@ describe('an editor where Preview is not the answer (FR-050, FR-062)', () => {
     expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'lastActive', undefined, { flash: true });
   });
 
-  it('the shipped default (Editor) calls openFileInTab exactly as before', async () => {
-    await openFromTree(sliceWs(), README, 'new', route({}));
+  it('Throng Editor calls openFileInTab exactly as before', async () => {
+    await openFromTree(sliceWs(), README, 'new', route(EDITOR));
     expect(opened).toEqual([]);
     expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'new', undefined, { flash: true });
   });
@@ -403,8 +433,8 @@ describe('File Explorer click and Enter go through the router (T135)', () => {
     expect(panels.filter((p) => p.kind === 'editor')).toHaveLength(0);
   });
 
-  it('at the shipped default the intent reaches the editor route (the control)', async () => {
-    const { openInto } = await mountChrome({}, createElement(EditorOpenListener, null));
+  it('at Throng Editor the intent reaches the editor route (the control)', async () => {
+    const { openInto } = await mountChrome(EDITOR, createElement(EditorOpenListener, null));
 
     await treeOpen(README);
 

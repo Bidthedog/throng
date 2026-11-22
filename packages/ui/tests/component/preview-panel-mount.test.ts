@@ -537,10 +537,10 @@ describe('054 — the panel type is named after the provider', () => {
 });
 
 describe('the header names a preview through panelDisplayTitle, marking the NAME when shortened (FR-031, FR-032)', () => {
-  it('titles a standalone preview `<file name> - Preview` (054 FR-005a)', async () => {
+  it('titles a standalone preview `<file name> - <Type> Preview` (054 FR-005a, 074 FR-104)', async () => {
     const { id } = await mountPreview();
     await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${id}`).textContent).toBe(`${fileNameOf(FILE)} - Preview`),
+      expect(screen.getByTestId(`panel-title-${id}`).textContent).toBe(`${fileNameOf(FILE)} - Test text Preview`),
     );
   });
 
@@ -554,10 +554,10 @@ describe('the header names a preview through panelDisplayTitle, marking the NAME
     const name = title.querySelector('.panel-box__title-name');
     const suffix = title.querySelector('.panel-box__title-suffix');
     expect(name).toHaveClass('panel-box__title-name--truncated');
-    expect(suffix?.textContent).toBe(' - Preview');
+    expect(suffix?.textContent).toBe(' - Test text Preview');
     // The marker is CSS (`::after` on the name), so the text is the bounded name plus the whole suffix.
     expect(name?.nextElementSibling).toBe(suffix);
-    expect(title.textContent?.endsWith(' - Preview')).toBe(true);
+    expect(title.textContent?.endsWith(' - Test text Preview')).toBe(true);
   });
 
   it('draws no marker when nothing was shortened', async () => {

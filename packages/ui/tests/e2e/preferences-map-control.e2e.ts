@@ -135,26 +135,38 @@ test('a removed row STICKS — an empty map means empty (FR-022c); reset CLEARS 
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win);
+      // 077 FR-025 — each table is edited in its modal, and written when the modal is saved.
+      const edit = (key: string) => prefs.getByTestId(`list-edit-${key}`).click();
+      const save = (key: string) => prefs.getByTestId(`list-editor-save-${key}`).click();
 
+      await edit('editor.languageByExtension');
       await prefs.getByTestId('map-new-key-editor.languageByExtension').fill('.bar');
       await prefs.getByTestId('map-add-editor.languageByExtension').click();
+      await save('editor.languageByExtension');
       await expect
         .poll(() => Object.keys(readSettings(cfgRoot)?.editor?.languageByExtension ?? {}))
         .toContain('.bar');
 
+      await edit('editor.languageByExtension');
       await prefs.getByTestId('map-remove-editor.languageByExtension-.bar').click();
+      await expect(prefs.getByTestId('map-row-editor.languageByExtension-.bar')).toHaveCount(0);
+      await save('editor.languageByExtension');
 
       // The whole of FR-022c: a map that fell back to its shipped value whenever it was empty could
       // never be cleared — the user deletes the row, saves, and watches it come straight back.
       await expect
         .poll(() => readSettings(cfgRoot)?.editor?.languageByExtension, { message: 'the removal sticks' })
         .toEqual({});
-      await expect(prefs.getByTestId('map-row-editor.languageByExtension-.bar')).toHaveCount(0);
+      await expect(prefs.getByTestId('list-summary-editor.languageByExtension')).toHaveText('No entries');
 
       // Add an extension mapping, and remove a language's indentation.
+      await edit('editor.languageByExtension');
       await prefs.getByTestId('map-new-key-editor.languageByExtension').fill('.zig');
       await prefs.getByTestId('map-add-editor.languageByExtension').click();
+      await save('editor.languageByExtension');
+      await edit('editor.indentByLanguage');
       await prefs.getByTestId('map-remove-editor.indentByLanguage-go').click();
+      await save('editor.indentByLanguage');
       /*
        * Wait for BOTH edits to have been written before resetting.
        *

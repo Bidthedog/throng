@@ -385,14 +385,25 @@ async function mount(seed: ProjectDto[] = [], stubs: Stubs = {}) {
  */
 const projectError = (): HTMLElement => screen.getAllByTestId('project-error')[0];
 
-/** The counts chip for a project row, by NAME (the sidebar accumulates rows across a test). */
-const countsOf = (name: string): HTMLElement => {
+/**
+ * A project row's popover, by NAME (the sidebar accumulates rows across a test): the pointer rests on the
+ * row and the popover that opens is that row's (#695, 077 FR-027 — the counts left the row for it). Throws
+ * until it is, so a `waitFor` around it waits out `projects.popoverDelayMs`.
+ */
+const popoverOf = (name: string): HTMLElement => {
   const row = screen
     .getAllByTestId(/^project-item-/)
     .find((el) => (el.textContent ?? '').includes(name));
   if (!row) throw new Error(`no project row named ${name}`);
-  return within(row).getByTestId(/^project-counts-/);
+  const id = (row.getAttribute('data-testid') ?? '').slice('project-item-'.length);
+  fireEvent.pointerMove(row);
+  const popover = screen.getByTestId('project-popover');
+  if (popover.getAttribute('data-project-id') !== id) throw new Error(`the popover open is not ${name}'s`);
+  return popover;
 };
+
+/** The tab and panel counts for a project row, from its popover. */
+const countsOf = (name: string): HTMLElement => within(popoverOf(name)).getByTestId('project-popover-counts');
 
 /** `harness.ts:710`'s `createProject`, one layer down. */
 async function createProject(
@@ -552,19 +563,19 @@ describe('the row controls are icon-set icons, not text glyphs (069 FR-010)', ()
   });
 });
 
-describe('the tab/panel counts beside each project (projects-panel.tsx:455)', () => {
+describe('the tab/panel counts in each project\'s popover (#695, 077 FR-027)', () => {
   it('counts the OPEN project from its live layout, as tabs and panels are added', async () => {
     // MIGRATED FROM `project-counts.e2e.ts:12`.
     const { user } = await mount([], { picked: undefined });
 
     await createProject(user, 'Live', 'C:/c/live');
-    await waitFor(() => expect(countsOf('Live')).toHaveTextContent('(1T·1P)'));
+    await waitFor(() => expect(countsOf('Live')).toHaveTextContent('1 tab, 1 panel'));
 
     await user.click(screen.getByTestId('add-tab'));
-    await waitFor(() => expect(countsOf('Live')).toHaveTextContent('(2T·2P)'));
+    await waitFor(() => expect(countsOf('Live')).toHaveTextContent('2 tabs, 2 panels'));
 
     await user.click(screen.getByTestId('add-panel'));
-    await waitFor(() => expect(countsOf('Live')).toHaveTextContent('(2T·3P)'));
+    await waitFor(() => expect(countsOf('Live')).toHaveTextContent('2 tabs, 3 panels'));
   });
 
   it('counts a CLOSED project from what the daemon actually persisted for it', async () => {
@@ -579,7 +590,7 @@ describe('the tab/panel counts beside each project (projects-panel.tsx:455)', ()
     await createProject(user, 'Alpha', 'C:/c/alpha');
     const alphaId = projectIdOf('Alpha');
     await user.click(screen.getByTestId('add-tab'));
-    await waitFor(() => expect(countsOf('Alpha')).toHaveTextContent('(2T·2P)'));
+    await waitFor(() => expect(countsOf('Alpha')).toHaveTextContent('2 tabs, 2 panels'));
 
     // The autosave, observed rather than slept through.
     await waitFor(
@@ -587,12 +598,12 @@ describe('the tab/panel counts beside each project (projects-panel.tsx:455)', ()
       { timeout: 4000 },
     );
 
-    // Creating Beta switches away from Alpha; Alpha's chip must now come from `projects.list`.
+    // Creating Beta switches away from Alpha; Alpha's counts must now come from `projects.list`.
     await createProject(user, 'Beta', 'C:/c/beta');
     await waitFor(() => expect(screen.getByTestId('layout-state')).toHaveTextContent(/^loaded:/));
 
-    await waitFor(() => expect(countsOf('Alpha')).toHaveTextContent('(2T·2P)'));
-    await waitFor(() => expect(countsOf('Beta')).toHaveTextContent('(1T·1P)'));
+    await waitFor(() => expect(countsOf('Alpha')).toHaveTextContent('2 tabs, 2 panels'));
+    await waitFor(() => expect(countsOf('Beta')).toHaveTextContent('1 tab, 1 panel'));
   });
 });
 
@@ -812,24 +823,29 @@ describe('each project row carries its own path (FR-032)', () => {
     expect(pathOf('Otherly')).not.toContain('deep/path');
   });
 
-  it('068 FR-064: the path hover reads the path, then `(id: <id>)` on a second line', async () => {
+  // 068 FR-064's path-and-ID hover, carried by the row's popover since #695 (077 FR-027).
+  it('the row popover reads the full path and the project ID', async () => {
     const { user } = await mount([], { picked: undefined });
     await createProject(user, 'Pathy', 'C:/code/some/deep/path');
     await createProject(user, 'Otherly', 'C:/code/elsewhere');
 
-    const titleOf = (name: string): string | null => {
-      const row = screen
-        .getAllByTestId(/^project-item-/)
-        .find((el) => (el.textContent ?? '').includes(name));
-      return row ? within(row).getByTestId('project-path').getAttribute('title') : null;
+    const read = async (name: string): Promise<{ path: string; id: string }> => {
+      const popover = await waitFor(() => popoverOf(name));
+      return {
+        path: within(popover).getByTestId('project-popover-path').textContent ?? '',
+        id: within(popover).getByTestId('project-popover-id').textContent ?? '',
+      };
     };
     // The ids are the daemon's own — what a log record names (`project=<project:ID>`) — and differ per row.
-    const pathy = titleOf('Pathy') ?? '';
-    const otherly = titleOf('Otherly') ?? '';
-    expect(pathy).toMatch(/^C:\/code\/some\/deep\/path\n\(id: p\d+\)$/);
-    expect(otherly).toMatch(/^C:\/code\/elsewhere\n\(id: p\d+\)$/);
-    expect(pathy.split('\n')[1]).not.toBe(otherly.split('\n')[1]);
-    // The visible line is still the path alone.
+    const pathy = await read('Pathy');
+    fireEvent.pointerOut(screen.getByTestId('project-popover'), { relatedTarget: document.body });
+    const otherly = await read('Otherly');
+    expect(pathy.path).toBe('C:/code/some/deep/path');
+    expect(otherly.path).toBe('C:/code/elsewhere');
+    expect(pathy.id).toMatch(/^ID: p\d+$/);
+    expect(otherly.id).toMatch(/^ID: p\d+$/);
+    expect(pathy.id).not.toBe(otherly.id);
+    // The visible line is still the path alone, with no native tooltip.
     expect(pathOf('Pathy')).toBe('C:/code/some/deep/path');
   });
 });

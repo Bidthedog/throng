@@ -13,6 +13,10 @@ import {
   measureContrast,
   assertInScopeContrast,
   assertSyntaxBodyContrast,
+  assertSyntaxSelectionContrast,
+  SYNTAX_SELECTION_MIN,
+  SYNTAX_TOKENS,
+  contrastPairingsFor,
   knownContrastIssues,
   CONTRAST_PAIRINGS,
   IN_SCOPE_THEMES,
@@ -190,6 +194,40 @@ describe('contrast (WCAG 2.1 AA over enumerated pairings)', () => {
       };
       expect(() => assertSyntaxBodyContrast([dim]), name).not.toThrow();
     }
+  });
+
+  // #105: the selection is the other background code is painted on.
+  it('every bundled theme passes the syntax-on-selection gate', () => {
+    expect(() => assertSyntaxSelectionContrast(themes)).not.toThrow();
+  });
+
+  it('throws for a gated theme whose syntax hue vanishes into its selection', () => {
+    const muddy: Theme = {
+      ...ALL_DEFAULT_THEMES.Light,
+      name: 'Light',
+      colours: { ...ALL_DEFAULT_THEMES.Light.colours, editorSelection: ALL_DEFAULT_THEMES.Light.colours.syntaxComment },
+    };
+    expect(() => assertSyntaxSelectionContrast([muddy])).toThrow(/Light.*syntaxComment on editorSelection/);
+  });
+
+  it('leaves the by-design low-contrast themes ungated on the selection', () => {
+    for (const name of BY_DESIGN_LOW_CONTRAST_THEMES) {
+      const dim: Theme = {
+        ...ALL_DEFAULT_THEMES[name],
+        name,
+        colours: { ...ALL_DEFAULT_THEMES[name].colours, editorSelection: ALL_DEFAULT_THEMES[name].colours.syntaxComment },
+      };
+      expect(() => assertSyntaxSelectionContrast([dim]), name).not.toThrow();
+    }
+  });
+
+  it('measures every syntax token on the selection, derived from the token set, at WCAG AA body', () => {
+    const onSelection = CONTRAST_PAIRINGS.filter((p) => p.bg === 'editorSelection').map((p) => p.fg);
+    expect(onSelection.sort()).toEqual([...SYNTAX_TOKENS].sort());
+    for (const p of CONTRAST_PAIRINGS.filter((x) => x.bg === 'editorSelection')) expect(p.min, p.label).toBe(SYNTAX_SELECTION_MIN);
+    expect(SYNTAX_SELECTION_MIN).toBe(4.5);
+    const extra: Theme = { ...ALL_DEFAULT_THEMES.Light, colours: { ...ALL_DEFAULT_THEMES.Light.colours, syntaxDecorator: '#123456' } };
+    expect(contrastPairingsFor(extra).some((p) => p.fg === 'syntaxDecorator' && p.bg === 'editorSelection')).toBe(true);
   });
 
   it('gates the syntax body pairings above the WCAG AA body floor', () => {

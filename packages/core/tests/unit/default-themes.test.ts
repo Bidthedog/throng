@@ -38,7 +38,8 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 // 79 since 057 round 13 (FR-139): `attentionFailedMark` retired — a Failed mark looks like any other.
 // 86 since 069 FR-061: the seven file icon category colours.
 // 87 since 069 FR-064: `fileIconOther`, the unknown file's neutral grey.
-const EXPECTED_COLOUR_TOKEN_COUNT = 87;
+// 94 since 075 FR-022: the seven callout colour roles.
+const EXPECTED_COLOUR_TOKEN_COUNT = 94;
 /** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
 const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
 /**
@@ -59,6 +60,14 @@ const ADDED_SINCE_FIXTURE = [
   'fileIconArchive',
   'fileIconScript',
   'fileIconOther',
+  // 075 FR-022 — the callout colour roles, derived per theme (callout-theme-tokens.test.ts guards them).
+  'calloutNeutral',
+  'calloutInfo',
+  'calloutAccent',
+  'calloutSuccess',
+  'calloutQuestion',
+  'calloutWarning',
+  'calloutDanger',
   'warning',
   'linkUnderline',
   'linkUnderlineHover',
