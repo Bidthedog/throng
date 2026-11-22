@@ -307,12 +307,12 @@ describe('where it lives and what it is drawn with (FR-001, 040 FR-023/FR-024)',
     expect(syncButton.nextElementSibling).toBe(inGroup);
   });
 
-  it('draws the theme’s `preview` icon token, and no text label', async () => {
+  it('draws the file type’s preview icon token — `previewMarkdown` for a Markdown file (074 FR-103) — and no text label', async () => {
     await strip({ filePath: FILE });
     const icon = (button() as HTMLElement).querySelector('.icon');
     expect(icon).not.toBeNull();
     expect(icon).toHaveAttribute('aria-hidden', 'true');
-    expect(icon?.innerHTML).toBe(markupFor('preview'));
+    expect(icon?.innerHTML).toBe(markupFor('previewMarkdown'));
     expect((button() as HTMLElement).textContent?.trim()).toBe('');
   });
 });
@@ -346,11 +346,12 @@ describe('the scroll-sync toggle (FR-122c)', () => {
 
   it('is titled Synchronise Scrolling, with the chord only when one is bound', async () => {
     await strip({ filePath: FILE });
-    expect(toggle()).toHaveAttribute('title', 'Synchronise Scrolling');
-    expect(toggle()).toHaveAccessibleName('Synchronise Scrolling');
+    expect(toggle()).toHaveAttribute('title', 'Synchronise Scrolling: enabled');
+    expect(toggle()).toHaveAccessibleName('Synchronise Scrolling: enabled');
+    expect(toggle()).toHaveClass('setting-toggle');
     cleanupStrip();
     await strip({ filePath: FILE, keybindings: { 'preview.toggleSyncScroll': ['Ctrl+Alt+F8'] } });
-    await waitFor(() => expect(toggle()).toHaveAttribute('title', 'Synchronise Scrolling (Ctrl+Alt+F8)'));
+    await waitFor(() => expect(toggle()).toHaveAttribute('title', 'Synchronise Scrolling: enabled (Ctrl+Alt+F8)'));
   });
 
   it('is absent wherever the preview button is (FR-122a)', async () => {
@@ -360,6 +361,11 @@ describe('the scroll-sync toggle (FR-122c)', () => {
     cleanupStrip();
     await strip({ filePath: FILE, projectRoot: null });
     expect(toggle()).toBeNull();
+  });
+
+  it('is drawn for a CSV editor too, though a CSV preview is not a flowing document (073 FR-033c)', async () => {
+    await strip({ filePath: `${ROOT}/data.csv` });
+    expect(toggle()).not.toBeNull();
   });
 
   it('is ENABLED while the preview button is disabled for a switched-off provider (FR-122a)', async () => {

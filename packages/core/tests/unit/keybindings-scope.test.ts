@@ -298,6 +298,8 @@ describe('registered commands (FR-017c — the absence is the requirement)', () 
     'editor.toggleWhitespace',
     'editor.convertLineEndingsToLf',
     'editor.convertLineEndingsToCrlf',
+    // Print… for the editor's document: opens Print Preview, never a terminal's Ctrl+P.
+    'editor.print',
   ];
 
   it('registers EXACTLY the expected editor commands (016, word-wrap, 059’s four), no more', () => {

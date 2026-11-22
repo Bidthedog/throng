@@ -112,7 +112,7 @@ function settleDebounce(): void {
  * of WHY each matches.
  */
 const UNMATCHED = 'behaviour.tabHoverActivateMs';
-const MATCHED = 'appearance.theme';
+const MATCHED = 'notifications.toastWidthPx';
 
 beforeEach(() => {
   // 056 FR-016 folds sections by default; these cases read rows, so open the sections (research R10).
@@ -143,8 +143,8 @@ describe('the settings search box, its debounce and its reset (X) button (FR-049
      * run in the 3ms this took".
      */
     expect(rowCount(UNMATCHED)).toBe(1);
-    typeQuery('theme');
-    expect(box().value).toBe('theme'); // typing is never laggy
+    typeQuery('toast width');
+    expect(box().value).toBe('toast width'); // typing is never laggy
     expect(rowCount(UNMATCHED), 'the filter ran before its debounce elapsed').toBe(1);
 
     // Narrows the form once the debounce quiets, taking emptied groups with it.
@@ -175,6 +175,15 @@ describe('the settings search box, its debounce and its reset (X) button (FR-049
     expect(groupCount('Appearance')).toBe(0);
   });
 
+  it('finds no Theme row: the Themes tab chooses the theme, so a search for it is never a dead row (077 FR-026)', () => {
+    mount();
+    expect(rowCount('appearance.theme')).toBe(0);
+    expect(screen.queryByTestId('settings-subgroup-General-Appearance')).toBeNull();
+    typeQuery('active appearance theme');
+    settleDebounce();
+    expect(rowCount('appearance.theme')).toBe(0);
+  });
+
   it('cancels a keystroke that was still in flight when the reset was pressed', () => {
     /*
      * The half `applySearch.cancel()` exists for. Without it the pending timer fires 150ms after the
@@ -182,7 +191,7 @@ describe('the settings search box, its debounce and its reset (X) button (FR-049
      * no longer on screen.
      */
     mount();
-    typeQuery('theme');
+    typeQuery('toast width');
     // NOT settled — the timer is armed and has not fired.
     fireEvent.click(screen.getByTestId('settings-search-clear'));
     expect(box().value).toBe('');

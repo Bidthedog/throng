@@ -41,6 +41,11 @@ function walk(dir: string, match: RegExp): string[] {
  * Registered, not merely listed: the value is the ANSWER to "does this flip and clamp, and where?".
  */
 const REGISTERED: Readonly<Record<string, string>> = {
+  // 073 — both sit INSIDE the grid's own scroller or body, positioned against it, never over the page.
+  '.data-grid__editor':
+    'grid/data-grid.tsx — laid over its cell inside the grid canvas; it scrolls with the cell and cannot leave the panel',
+  '.preview-grid-width':
+    'grid/grid.css — anchored to the top-right corner of the grid body inside the panel; nothing to flip or clamp',
   '.context-menu':
     'workspace/context-menu.tsx — measures and flips X/Y against the viewport; submenus flip too',
   '.ctl__font-list':
@@ -48,6 +53,10 @@ const REGISTERED: Readonly<Record<string, string>> = {
   // Not anchored to anything, so there is no edge to flip away from: these are centred or corner-pinned
   // overlays that cover the window by design, and clamping is the browser's job.
   '.modal-overlay': 'a full-viewport scrim — centred, nothing to flip away from',
+  '.print-preview__toast':
+    'print-preview/print-toast.tsx (maintainer, 2026-11-22) — a field\'s validation message, bottom-centre of the Print Preview window; a max-width of the viewport clamps it, and it is anchored to nothing, so nothing to flip away from',
+  '.modal-blocker':
+    'common/modal-blocker.tsx (075 FR-071 on Linux) — an invisible inset:0 layer over a window a modal Print Preview covers; nothing to flip away from',
   '.transient-scrim':
     'common/transient-scrim.tsx — the ONE scrim shared by every registry-held overlay, so a hand-off between two overlays in different component trees cannot leave a frame with no scrim at all; inset:0, so nothing to flip away from',
   '.notices':
@@ -70,7 +79,7 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.status-popover':
     'resources/status-popover.tsx (055 FR-115) — the status-bar item\'s popover. ANCHORED to the item at the bottom of the window, so it has edges to run off and flips: placed by useAnchoredPosition (clampToViewport — the positioner the tab and attention popovers share), which flips it above the bar and clamps whatever remains; measured in a layout effect and held `visibility: hidden` until placed. Its width is fixed, its max-width the viewport\'s',
   '.info-helper-popover':
-    'resources/info-helper.tsx (055 FR-119) — the sentences a "?" helper opens. ANCHORED to its helper, so it has edges to run off and flips: placed by useAnchoredPosition (clampToViewport — the positioner the tab and attention popovers share), measured in a layout effect and held `visibility: hidden` until placed; portaled to the body so no scroll container clips it; its max-width keeps it narrower than the window',
+    'common/help-tip.tsx (055 FR-119) — the sentences a "?" helper opens. ANCHORED to its helper, so it has edges to run off and flips: placed by useAnchoredPosition (clampToViewport — the positioner the tab and attention popovers share), measured in a layout effect and held `visibility: hidden` until placed; portaled to the body so no scroll container clips it; its max-width keeps it narrower than the window',
   '.monitor-help':
     'resources/help-panel.tsx (055 FR-093) — the Resource Monitor\'s help popover. ANCHORED to its "?" button, so it has edges to run off and really does flip: it opens below the button by default and clampToViewport (the positioner the context menu, colour picker and tab popover share) right-aligns it to the button when it would overflow the window, flips it above near the bottom, and clamps whatever remains. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints in the wrong place first; its own max-height and scroll clamp it when the window is shorter than the text',
 
@@ -107,6 +116,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — the tab strip itself. Its z-index belongs to the ::before/::after OVERFLOW FADES (031/#225), which are decoration painted over the scrolling track and are `pointer-events: none`. Nothing opens out of it, so there is no edge to flip away from; the fades are clamped to the strip by construction',
   '.explorer-path-popover':
     'explorer/path-popover.tsx — the File Explorer row hover popover (069 FR-059): the row\'s icon, large, beside its path. ANCHORED to its row through the same useAnchoredPosition as the tab popover, so it opens below the row, flips above it when there is no room below, and clamps whatever remains so no part leaves the viewport; held `visibility: hidden` until placed',
+  '.project-popover':
+    "sidebar/project-row-popover.tsx — the Projects pane row popover (#695, 077 FR-027): the full name, ID, path and counts. ANCHORED to its row through the same useAnchoredPosition as the tab popover, so it opens below the row, flips above it when there is no room below (the last rows of the list), and clamps whatever remains so no part leaves the viewport; held `visibility: hidden` until placed, portaled to the body, and `pointer-events: none` so it never swallows the row's click",
   '.tabstrip-popover':
     "workspace/tab-popover.tsx — the tab hover popover (031 US6 / FR-051). ANCHORED to its chip, so it has edges to run off and really does flip: it opens down-left by default and clampToViewport right-aligns it to the chip when opening at the chip's left edge would overflow the window (the LAST tab in the strip, which is where a hover is most likely to be asked for), flips it above the chip when there is no room below, and clamps whatever remains so no part leaves the viewport. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints at the wrong position first",
   '.notification-place-popover':
@@ -123,6 +134,12 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — 054 FR-046l / FR-032: a diagram\'s focus ring and its Find in Files reveal mark (preview/diagram/diagram.css), ::after / ::before overlays inset over their own diagram box, which clips them (overflow: hidden), `pointer-events: none`; anchored to nothing, so nothing to flip away from',
   '.preview-diagram-host--revealed':
     'chrome — 054 FR-032\'s reveal mark, selected through the host it marks (`.preview-diagram-host--revealed .preview-diagram-frame::before`): the same inset overlay over its own diagram box as `.preview-diagram-frame` above',
+  '.preview-pdf__toolbar':
+    'chrome — 074 FR-062a\'s PDF view controls (preview/providers/pdf/pdf-body.tsx): pinned to the top-left INSIDE the PDF view, outside its scrolling pages; anchored to nothing that moves, so nothing to flip away from',
+  '.preview-pdf__text':
+    'chrome — 074 FR-068a\'s selectable text layer (PDF.js TextLayer): inset over its own page canvas, clamped to that page by construction; anchored to nothing, so nothing to flip away from',
+  '.preview-pdf__link':
+    'chrome — 074 FR-066\'s link hotspots: inset over their own page at the link\'s rectangle, clamped to that page by construction; anchored to nothing, so nothing to flip away from',
   '.zoom-indicator':
     'chrome — #486 / 054 FR-046n\'s zoom percentage (workspace/zoom-indicator.tsx): pinned to the top-right INSIDE the panel or diagram box that zoomed, which clips it, `pointer-events: none`, no controls; anchored to nothing that moves, so nothing to flip away from',
   '.title-tooltip':
@@ -133,8 +150,10 @@ const REGISTERED: Readonly<Record<string, string>> = {
 };
 
 /** A rule that leaves the flow AND lifts above the page is a floating surface, whatever it is called. */
-function floatingSelectors(css: string): string[] {
+function floatingSelectors(source: string): string[] {
   const found = new Set<string>();
+  // Comments first: a file name in one (`pdf.css`, `diagram-frame.tsx`) would otherwise read as a class selector.
+  const css = source.replace(/\/\*[\s\S]*?\*\//g, '');
   // Crude but honest block splitting: selectors up to `{`, declarations up to `}`.
   for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selector = (match[1] ?? '').trim();

@@ -179,8 +179,16 @@ describe('the file and save chords resolve to nothing over a preview (044 FR-021
     { chord: 'F2', ev: { key: 'F2' }, action: 'file.rename', live: 'placeholder' },
     { chord: 'Ctrl+X', ev: { key: 'x', ctrl: true }, action: 'file.cut', live: 'placeholder' },
     { chord: 'Ctrl+C', ev: { key: 'c', ctrl: true }, action: 'file.copy', live: 'placeholder' },
-    { chord: 'Ctrl+S', ev: { key: 's', ctrl: true }, action: 'editor.save', live: 'editor' },
   ];
+
+  // 073 FR-035 supersedes 044 FR-021 for Save and Save As: both resolve over a preview, and the dispatcher
+  // saves only an editable one (`preview-read-only.test.ts` proves the dispatcher half).
+  it('Ctrl+S and Ctrl+Alt+S resolve over a preview, for the CSV Preview Editor (073 FR-035, FR-035a)', () => {
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, { key: 's', ctrl: true }, over('preview'), quiet)).toBe('editor.save');
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, { key: 's', ctrl: true, alt: true }, over('preview'), quiet)).toBe(
+      'editor.saveAs',
+    );
+  });
 
   for (const { chord, ev, action, live } of INERT) {
     it(`${chord} resolves to ${action} over ${live}, and to NOTHING over a preview`, () => {

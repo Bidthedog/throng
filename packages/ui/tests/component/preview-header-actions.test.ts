@@ -20,7 +20,7 @@
  * or an FR-026 file notice. The FR-027 notice (the file type has no preview) offers Close only, so none of
  * the three appears for it.
  */
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -33,6 +33,9 @@ import {
 } from '@throng/core';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
 import { isPreviewOpen } from '../../src/renderer/preview/preview-open-store.js';
+import { registerEditorActions, unregisterEditorActions, type EditorActions } from '../../src/renderer/editor/editor-actions.js';
+import { setEditorState } from '../../src/renderer/editor/editor-state.js';
+import { __resetDirtyCloseStore, useDirtyCloseRequest } from '../../src/renderer/editor/dirty-close-store.js';
 import { mountMarkdownPreview, previewUpdate, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
 const FILE = 'D:/proj/notes.prvtxt';
@@ -93,6 +96,61 @@ describe('the ordinary rows (FR-033)', () => {
     expect(m!.preview.destroyed).toHaveBeenCalledWith(id);
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
     expect(screen.queryByTestId('dirty-close-dialog')).toBeNull();
+  });
+
+  /*
+   * 073 FR-033 — only closing the LAST panel showing a dirty document asks. The MT-03 walk-through (2026-11-21) closed
+   * a grid that owned its document while an editor still showed it, and was asked "has unsaved changes". The prompt is
+   * read from its store: the dialog that draws it is the app root's, not this harness's.
+   */
+  it('closing a dirty grid while an editor still shows its document asks nothing', async () => {
+    const { id } = await mountText();
+    const asked = renderHook(() => useDirtyCloseRequest());
+    act(() => {
+      m!.ws().addPanel(m!.ws().layout!.tabs[0].id);
+    });
+    const editorId = panels().find((p) => p.id !== id)!.id;
+    registerEditorActions(id, { isDirty: () => true, saveForClose: async () => true } as unknown as EditorActions);
+    m!.push(update({ revision: 2, dirty: true, ownsDocument: true }));
+    // An editor on the same file, as the walk-through had. Its body mounts and loads; the load never settles here,
+    // since only the editor's presence in the layout and its file are under test.
+    const editorBridge = (window as unknown as { throng: { editor: Record<string, unknown> } }).throng.editor;
+    editorBridge.load = () => new Promise(() => {});
+    act(() => setEditorState(editorId, { filePath: FILE, dirty: true }));
+    act(() => m!.ws().setPanelType(editorId, 'editor', { filePath: FILE }));
+    try {
+      await openHeaderMenu();
+      fireEvent.click(item('Close Panel'));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(asked.result.current, 'asked although the editor still shows the document').toBeNull();
+      await waitFor(() => expect(panels().map((p) => p.id)).not.toContain(id));
+    } finally {
+      __resetDirtyCloseStore();
+      unregisterEditorActions(id);
+    }
+  });
+
+  it('closing the last view of a dirty grid document still asks (FR-033)', async () => {
+    const { id } = await mountText();
+    const asked = renderHook(() => useDirtyCloseRequest());
+    act(() => {
+      m!.ws().addPanel(m!.ws().layout!.tabs[0].id);
+    });
+    registerEditorActions(id, { isDirty: () => true, saveForClose: async () => true } as unknown as EditorActions);
+    m!.push(update({ revision: 2, dirty: true, ownsDocument: true }));
+    try {
+      await openHeaderMenu();
+      fireEvent.click(item('Close Panel'));
+      await waitFor(() => expect(asked.result.current).not.toBeNull());
+      // It names the panel as its header does, never by the stored fallback title ("Blank Panel"): the walk-through
+      // (MT-16, MT-107, 2026-11-21) read prompts and confirms naming a panel the reader could not find.
+      const header = screen.getByTestId(`panel-title-${id}`).textContent ?? '';
+      expect(header).not.toBe('');
+      expect(asked.result.current?.targetLabel, 'named by its stored title, not its header').toBe(header);
+    } finally {
+      act(() => __resetDirtyCloseStore());
+      unregisterEditorActions(id);
+    }
   });
 
   it('Reveal File in File Explorer dispatches throng:reveal-in-tree for the previewed file (046 FR-001)', async () => {

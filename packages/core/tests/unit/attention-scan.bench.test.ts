@@ -34,14 +34,33 @@ function mixedChunk(bellsPerChunk: number): string {
   return text;
 }
 
+/**
+ * This thread's CPU time in ms, or wall time on a Node with no `threadCpuUsage` (before 23.9). Wall time measured
+ * the machine, not the scan: in a whole parallel unit run beside the component suite, a pass that reads ~8 ms/MB
+ * alone read 74 ms/MB against the bound of 50. CPU time does not count the time the scheduler kept the thread waiting.
+ */
+const cpuNow = (): number => {
+  const u = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : null;
+  return u ? (u.user + u.system) / 1000 : performance.now();
+};
+/**
+ * The fastest of `SAMPLES` passes, as `occurrence-performance.test.ts` takes the fastest of its means: a thread sharing
+ * its core and cache with a busy neighbour slows a whole pass at a time, and a cost every pass pays is in every sample.
+ * Each pass is 10 MB, long enough for Windows' 15.6 ms CPU-clock ticks.
+ */
+const SAMPLES = 3;
 function msPerMb(bellsPerChunk: number): { ms: number; hits: number } {
-  const scan = createAttentionScan();
   const chunk = mixedChunk(bellsPerChunk);
+  let best = Number.POSITIVE_INFINITY;
   let hits = 0;
-  const started = performance.now();
-  for (let scanned = 0; scanned < TOTAL; scanned += chunk.length) hits += scan.scan(chunk).length;
-  const elapsed = performance.now() - started;
-  return { ms: elapsed / (TOTAL / (1024 * 1024)), hits };
+  for (let sample = 0; sample < SAMPLES; sample++) {
+    const scan = createAttentionScan();
+    hits = 0;
+    const started = cpuNow();
+    for (let scanned = 0; scanned < TOTAL; scanned += chunk.length) hits += scan.scan(chunk).length;
+    best = Math.min(best, cpuNow() - started);
+  }
+  return { ms: best / (TOTAL / (1024 * 1024)), hits };
 }
 
 describe('attention scan cost (SC-004)', () => {

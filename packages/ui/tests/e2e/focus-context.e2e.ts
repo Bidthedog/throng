@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject, firstPanelId, geom, installResizeProbe, openApp, panelIds, type AppOptions, type OpenApp, TEST_SHELL } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, closePanelViaHeader, createProject, firstPanelId, geom, installResizeProbe, openApp, panelIds, type AppOptions, type OpenApp, TEST_SHELL } from './harness.js';
 
 // 012 US1 (FR-001/002/005, SC-001a/006): the active panel is a single, visible,
 // theme-driven focus context per window — the foreground treatment when the
@@ -93,7 +93,8 @@ test('exactly one active panel; it dims on window blur and restores on focus, wi
 
     // Closing the active panel re-homes focus to the FR-005 deterministic target:
     // the panel PRECEDING it in layout order (p1), never leaving the window inputless.
-    await win.getByTestId(`panel-close-${p2}`).click();
+    // Its ✕, or the header menu's row where the panel is too narrow to draw one (067 FR-069b).
+    await closePanelViaHeader(win, p2);
     await expect(win.locator('.panel-box')).toHaveCount(2);
     await expect(win.getByTestId(`panel-${p1}`)).toHaveAttribute('data-active', 'true');
     await expect(win.locator('.panel-box--active')).toHaveCount(1);

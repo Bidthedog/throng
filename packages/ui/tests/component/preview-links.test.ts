@@ -258,6 +258,12 @@ describe('fix round 1 (item 7) — a link title cannot be reordered by bidi cont
       expect(message).toMatch(/gnp\.exe\.md|install/);
     }
   });
+
+  it('a Back/Forward refused for unsaved grid edits says so (073 FR-033a)', () => {
+    expect(linkNoticeMessage({ kind: 'history-refused', target: 'D:/proj/a.csv', reason: 'unsaved' }, 'D:/proj')).toBe(
+      'This grid has unsaved changes. Save them to go back or forward.',
+    );
+  });
 });
 
 describe('Ctrl+click follows, a plain click does not (FR-094)', () => {
@@ -504,6 +510,24 @@ describe('068 FR-002, FR-006 — a vault-root wikilink follows the file main res
 });
 
 describe('in a mounted panel (the chrome’s half)', () => {
+  /*
+   * 074 FR-018 / FR-018a — a preview link to a file whose type is set to Default OS Program is followed into the OS
+   * program, so its hint must say so: it said "open in throng active editor", a panel the follow never opens.
+   */
+  it('words a link to a file set to Default OS Program for the OS program it opens in (074 FR-018a)', async () => {
+    const m = await mountMarkdownPreview(['# T', '', '[Manual](docs/manual.pdf) and [Diagram](docs/flow.mmd)'].join('\n'), DOC, {
+      settings: { editor: { previews: { providers: { pdf: { defaultOpenAction: 'os' } } } } },
+    });
+    try {
+      fireEvent.click(await screen.findByText('Manual', {}, COLD));
+      expect(peekLinkHint()?.text).toBe('Ctrl+Click to open in OS default program');
+      fireEvent.click(screen.getByText('Diagram'));
+      expect(peekLinkHint()?.text).toBe('Ctrl+Click to open in throng preview');
+    } finally {
+      m.unmount();
+    }
+  });
+
   it('Ctrl+Enter (preview.followLink) follows the focused link exactly as Ctrl+click does (FR-096c)', async () => {
     const m = await mountMarkdownPreview(LINKS);
     try {

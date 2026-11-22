@@ -168,7 +168,7 @@ export function config(
   const base = DEFAULT_APP_SETTINGS.terminals.attention;
   return {
     enabled: base.enabled,
-    quietMs: base.quietSeconds * 1000,
+    quietMs: base.quietMs,
     notifyByDefault: DEFAULT_APP_SETTINGS.terminals.defaultNotifications,
     ...overrides,
     signals: { ...base.signals, ...signals },

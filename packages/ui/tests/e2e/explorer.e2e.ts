@@ -18,6 +18,7 @@ import { openApp,
   type AppOptions,
   type OpenApp, FILE_OP_TIMEOUT_MS,
   pressAction,
+  markdownOpensInEditor,
 } from './harness.js';
 import type { Locator, Page } from '@playwright/test';
 
@@ -354,6 +355,7 @@ test('keyboard shortcuts operate on the tree: F2 renames (US3)', { tag: ['@exten
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
+      await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
       await createProject(win, 'Demo', projectRoot);
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
@@ -485,6 +487,7 @@ test('remembers selection per project; root is selectable', { tag: ['@extended',
   const rootB = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
+      await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
       await createProject(win, 'Alpha', rootA);
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();

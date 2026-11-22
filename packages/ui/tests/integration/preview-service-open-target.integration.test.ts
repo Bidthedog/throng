@@ -259,15 +259,51 @@ describe('open — target.mode "lastActive" reuses a live standalone run (047 US
     coord2.destroy('ed1'); // already gone; a second destroy is a no-op
   });
 
-  it('a parented placement branch (steps 1–3) ignores `target` entirely — FR-012 unchanged', async () => {
+  it('with no preview to reuse, a file open in an editor still gets one beside it', async () => {
     const a = await file('a.md');
     await coord.load({ ...meta('ed1', a) });
 
     const res = await open(a, { mode: 'lastActive', reusePanelId: 'v-nonexistent' }, REQUESTER);
 
     // beside the local parent, exactly as an ordinary `hasParentLocally: false` open beside a document
-    // already does today — `target` plays no part until step 4.
+    // already does today.
     expect(res).toMatchObject({ kind: 'placedElsewhere' });
+  });
+
+  /*
+   * 075 (2026-11-20, supersedes 047 FR-012 for Last Active) — the maintainer: "Only one markdown preview should
+   * exist unless the user explicitly opens a second one." A preview opened from an editor (its Preview button)
+   * used to open beside it whatever was already showing a preview of that type, so previewing a second file left
+   * two Markdown previews.
+   */
+  it('a file open in an editor REUSES the last active preview, paired with that editor', async () => {
+    const a = await file('a.md');
+    const b = await file('b.md');
+    await coord.load({ ...meta('ed1', b) });
+    await attach('v1', a); // the preview already showing, of another file
+
+    const res = await previews.open(REQUESTER, {
+      absPath: b,
+      projectId: 'P',
+      hasParentLocally: true,
+      target: { mode: 'lastActive', reusePanelId: 'v1' },
+    });
+
+    expect(res, 'a second preview was placed instead of the open one being reused').toEqual({ kind: 'navigated', panelId: 'v1' });
+    expect(previews.run('v1')?.filePath).toBe(b);
+    const after = await previews.refresh('v1');
+    expect(after.update?.parent).toEqual({ panelId: 'ed1', title: expect.any(String) });
+  });
+
+  it('a file open in an editor under "new" still opens beside it', async () => {
+    const a = await file('a.md');
+    const b = await file('b.md');
+    await coord.load({ ...meta('ed1', b) });
+    await attach('v1', a);
+
+    const res = await previews.open(REQUESTER, { absPath: b, projectId: 'P', hasParentLocally: true, target: { mode: 'new', reusePanelId: null } });
+
+    expect(res).toMatchObject({ kind: 'placeLocally', besidePanelId: 'ed1' });
   });
 });
 
@@ -310,5 +346,32 @@ describe('one preview type per provider (054)', () => {
     const flow = await file('flow.mmd', 'graph TD; A-->B\n');
     await attach('v2', flow);
     expect(previews.run('v2')?.providerId).toBe('mermaid');
+  });
+});
+
+/*
+ * 074 (maintainer report, 2026-11-19) — a reused binary preview must hand its body a source it has not seen. A PDF
+ * (or image) body reloads when its `resource` URL changes, and nothing else tells it the file did: the first move
+ * of a freshly attached run to another PDF built the SAME `?rev=` as the attach had, so the second PDF went on
+ * showing the first one's state — an encrypted first PDF's notice over a readable second one.
+ */
+describe('reusing a binary preview for another file (074)', () => {
+  it('hands the reused panel a source URL it has not had before, on the first move and every one after', async () => {
+    const a = await file('locked.pdf', '%PDF-1.7 encrypted');
+    const b = await file('readable.pdf', '%PDF-1.7 readable');
+    const c = await file('third.pdf', '%PDF-1.7 third');
+    const first = await attach('v1', a);
+    expect(first.content).toMatchObject({ kind: 'resource' });
+    const seen = [(first.content as { url: string }).url];
+
+    for (const next of [b, c]) {
+      push.clear();
+      expect(await open(next, { mode: 'lastActive', reusePanelId: 'v1' })).toEqual({ kind: 'navigated', panelId: 'v1' });
+      const moved = push.updates.filter((u) => u.update.panelId === 'v1' && u.update.filePath === next).at(-1);
+      expect(moved?.update.content).toMatchObject({ kind: 'resource' });
+      const url = (moved!.update.content as { url: string }).url;
+      expect(seen, `the move to ${next} reused a source URL the panel already had`).not.toContain(url);
+      seen.push(url);
+    }
   });
 });

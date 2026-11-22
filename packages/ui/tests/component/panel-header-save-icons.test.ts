@@ -127,6 +127,33 @@ describe('a panel that is not an editor (FR-070)', () => {
   });
 });
 
+describe('the CSV Preview Editor (073 FR-035a)', () => {
+  it('shows the same Save and Save As controls and separator as an editor, with the same tooltips', async () => {
+    const m = await mountMarkdownPreview('a,b\n1,2\n', 'D:/proj/data.csv', { providerId: 'csv' });
+    const save = await screen.findByTestId(`panel-save-${m.id}`);
+    const saveAs = screen.getByTestId(`panel-save-as-${m.id}`);
+    expect(screen.getByTestId(`panel-save-separator-${m.id}`)).toBeTruthy();
+    expect(save.getAttribute('title')).toBe(`Save (${firstBinding(DEFAULT_KEYBINDINGS, 'editor.save')})`);
+    expect(saveAs.getAttribute('title')).toBe(`Save As (${firstBinding(DEFAULT_KEYBINDINGS, 'editor.saveAs')})`);
+    m.unmount();
+  });
+
+  it('Save As asks for a location through the editor\'s own dialog, and cancelling saves nothing', async () => {
+    const m = await mountMarkdownPreview('a,b\n1,2\n', 'D:/proj/data.csv', { providerId: 'csv' });
+    const choose = vi.fn(async () => null);
+    const gridSave = vi.fn(async () => ({ ok: true }));
+    const throng = window.throng as unknown as { editor?: Record<string, unknown>; preview?: Record<string, unknown> };
+    throng.editor = { ...(throng.editor ?? {}), chooseSavePath: choose };
+    throng.preview = { ...(throng.preview ?? {}), gridSave };
+    // The body is loaded lazily and registers the save actions when it mounts: wait for the grid first.
+    await screen.findByTestId(`csv-grid-${m.id}`, undefined, { timeout: 5000 });
+    fireEvent.click(await screen.findByTestId(`panel-save-as-${m.id}`));
+    await waitFor(() => expect(choose).toHaveBeenCalledWith({ defaultDir: 'D:/proj', defaultName: 'data.csv' }));
+    expect(gridSave).not.toHaveBeenCalled();
+    m.unmount();
+  });
+});
+
 describe('what they do (FR-071)', () => {
   it('Save runs the same editor action the chord and the menu run', async () => {
     await mountWithHeader();
@@ -192,3 +219,64 @@ describe('a narrow title bar (FR-069a)', () => {
     expect(screen.getByTestId('menu-item-Save As…')).toBeTruthy();
   });
 });
+
+/*
+ * 067 FR-069b — the maintainer's ruling of 2026-11-21: a narrow panel keeps its title. At about 150 px the header's
+ * controls took the whole width and the title was drawn 0 px wide. The rest of the header now gives way, a whole
+ * control at a time — after Save As and Save, Back / Forward, then Split, then Focus Mode, then Destroy — and every one
+ * stays on the header's menu. (The width the title is drawn at is `panel-header-narrow.e2e.ts`'s: jsdom has no layout.)
+ */
+describe('a narrow header gives way to the title (FR-069b)', () => {
+  const present = (id: string): boolean => screen.queryByTestId(`${id}-${PANEL}`) !== null;
+  const drawn = (): Record<string, boolean> => ({
+    history: present('panel-history'),
+    split: present('panel-add'),
+    focus: present('panel-maximise'),
+    destroy: present('panel-close'),
+  });
+
+  it('hides Back / Forward, then Split, then Focus Mode, then Destroy, and widening restores them', async () => {
+    await mountWithHeader();
+    resizeHeader(1000);
+    expect(drawn()).toEqual({ history: true, split: true, focus: true, destroy: true });
+
+    resizeHeader(200);
+    await waitFor(() => expect(drawn()).toEqual({ history: false, split: true, focus: true, destroy: true }));
+    resizeHeader(150);
+    await waitFor(() => expect(drawn()).toEqual({ history: false, split: false, focus: true, destroy: true }));
+    resizeHeader(120);
+    await waitFor(() => expect(drawn()).toEqual({ history: false, split: false, focus: false, destroy: true }));
+    resizeHeader(60);
+    await waitFor(() => expect(drawn()).toEqual({ history: false, split: false, focus: false, destroy: false }));
+
+    resizeHeader(1000);
+    await waitFor(() => expect(drawn()).toEqual({ history: true, split: true, focus: true, destroy: true }));
+  });
+
+  // An entry can arrive with no measurement (an observer that reports only its target, as tab-chip-attention.test.ts's
+  // does): that is "not measured yet", so every control stays, as it does before the first measurement.
+  it('treats an entry without a measured box as not yet measured, and draws every control', async () => {
+    await mountWithHeader();
+    const header = screen.getByTestId(`panel-handle-${PANEL}`);
+    act(() => {
+      for (const o of observers) {
+        const watching = o.targets.filter((t) => t === header || t.contains(header) || header.contains(t));
+        if (watching.length > 0) o.cb(watching.map((target) => ({ target }) as ResizeObserverEntry), {} as ResizeObserver);
+      }
+    });
+    expect(drawn()).toEqual({ history: true, split: true, focus: true, destroy: true });
+  });
+
+  it('keeps every hidden control on the header menu, and the title in the header', async () => {
+    await mountWithHeader();
+    resizeHeader(60);
+    await waitFor(() => expect(present('panel-close')).toBe(false));
+    expect(screen.getByTestId(`panel-title-${PANEL}`)).toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByTestId(`panel-handle-${PANEL}`));
+    for (const row of ['Save', 'Save As…', 'Back', 'Forward', 'Split', 'Enter Focus Mode']) {
+      expect(await screen.findByTestId(`menu-item-${row}`), row).toBeTruthy();
+    }
+    expect(screen.getByTestId(/^menu-item-(Destroy|Close) Panel$/)).toBeTruthy();
+  });
+});
+

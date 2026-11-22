@@ -37,6 +37,7 @@ import {
   cleanupTemp,
   NEW_WINDOW_TIMEOUT_MS,
   pressAction,
+  historyStepEnabled,
   type OpenApp,
 } from './harness.js';
 
@@ -46,7 +47,7 @@ const TYPED = 'Typed in the main window';
 let shared: OpenApp;
 let projectSeq = 0;
 test.beforeAll(async () => {
-  shared = await openApp();
+  shared = await openApp({ markdownOpensIn: 'editor' });
 });
 test.afterAll(async () => {
   await shared?.close();
@@ -125,7 +126,8 @@ test('a parented preview synced into a sub-workspace follows its parent typed in
     await expect(mainPreview).toContainText('Setup fixture');
     // One preview, one position: the other window moved with it.
     await expect(childPreview).toContainText('Setup fixture', { timeout: 10_000 });
-    await expect(child.getByTestId(`panel-back-${previewId}`)).toBeEnabled({ timeout: 10_000 });
+    // The button, or the header menu's row where the panel is too narrow to draw it (067 FR-069b).
+    await expect.poll(() => historyStepEnabled(child!, previewId, 'back'), { timeout: 10_000 }).toBe(true);
 
     /* ── FR-110: Back pressed in the SUB-WORKSPACE window moves the MAIN window's preview ──────── */
     await childPreview.getByText('Introductory text for the setup fixture', { exact: false }).click();
@@ -136,7 +138,7 @@ test('a parented preview synced into a sub-workspace follows its parent typed in
     // have brought back to a window that pressed nothing.
     await expect(mainPreview).toContainText(TYPED);
     await expect(childPreview).toContainText(TYPED, { timeout: 10_000 });
-    await expect(win.getByTestId(`panel-forward-${previewId}`)).toBeEnabled({ timeout: 10_000 });
+    await expect.poll(() => historyStepEnabled(win, previewId, 'forward'), { timeout: 10_000 }).toBe(true);
   } finally {
     if (child) await closeIfOpen(child);
     cleanupTemp(root);

@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="refresh" content="0; url=https://evil.test/refresh" />
+    <meta http-equiv="Content-Security-Policy" content="default-src *" />
+    <base href="https://evil.test/base/" />
+    <title>Hostile page</title>
+    <link rel="stylesheet" href="hostile-style.css" />
+    <link rel="stylesheet" href="https://cdn.evil.test/remote.css" />
+    <link rel="preload" href="https://cdn.evil.test/preload.js" as="script" />
+    <link rel="prefetch" href="https://cdn.evil.test/prefetch" />
+    <link rel="icon" href="https://cdn.evil.test/favicon.ico" />
+    <script>window.parent.postMessage('inline-script-ran', '*');</script>
+    <script src="https://cdn.evil.test/remote.js"></script>
+    <style>
+      @import url("https://cdn.evil.test/imported.css");
+      @import "local-import.css";
+      body { background: url(https://evil.test/bg.png); }
+      .logo { background-image: url('img/local-bg.png'); }
+    </style>
+  </head>
+  <body onload="window.parent.postMessage('onload-ran', '*')" autofocus>
+    <h1 id="top">Hostile</h1>
+    <p style="background: url(https://evil.test/inline.png)">Inline style with a remote url.</p>
+    <img src="img/logo.png" alt="logo" onerror="window.parent.postMessage('onerror-ran', '*')" />
+    <img src="https://evil.test/remote.png" alt="remote" />
+    <img srcset="img/small.png 1x, https://evil.test/large.png 2x" alt="srcset" />
+    <img src="../../../outside.png" alt="outside" />
+    <img src="data:image/png;base64,iVBORw0KGgo=" alt="data" />
+    <a href="https://example.test/page">External link</a>
+    <a href="other.html#part">Relative link</a>
+    <a href="#top">Fragment link</a>
+    <a href="javascript:window.parent.postMessage('js-url-ran','*')">JavaScript link</a>
+    <a href="https://evil.test/blank" target="_blank" ping="https://evil.test/ping">Target blank</a>
+    <form action="https://evil.test/submit" method="post">
+      <input name="q" autofocus />
+      <button formaction="https://evil.test/formaction">Send</button>
+    </form>
+    <iframe src="https://evil.test/frame"></iframe>
+    <iframe srcdoc="&lt;script&gt;parent.postMessage('srcdoc-ran','*')&lt;/script&gt;"></iframe>
+    <object data="https://evil.test/object.swf"></object>
+    <embed src="https://evil.test/embed.swf" />
+    <svg width="10" height="10"><image href="https://evil.test/svg-image.png" width="10" height="10" /><script>parent.postMessage('svg-script-ran','*')</script></svg>
+    <noscript><img src="https://evil.test/noscript.png" /></noscript>
+  </body>
+</html>

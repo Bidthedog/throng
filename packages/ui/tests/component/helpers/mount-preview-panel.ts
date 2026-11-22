@@ -186,6 +186,8 @@ export interface MountPreviewOptions {
 }
 
 export interface MountedPreviewWindow extends MountedPreview {
+  /** 074 R6 — deliver main's `throng:preview:frameLink` (a Ctrl+clicked link in a sandboxed page). */
+  pushFrameLink(link: { panelId: string; href: string }): void;
   /** `window.throng.editor.openInto`, answering `open` unless a test says otherwise. */
   openInto: ReturnType<typeof vi.fn>;
   /** `window.throng.files.revealDocument`. */
@@ -220,6 +222,7 @@ export async function mountMarkdownPreview(
   const configListeners = new Set<(payload: { settings: unknown }) => void>();
   const openExternal = vi.fn();
   const generalOpenExternal = vi.fn();
+  const frameLinkListeners = new Set<(link: { panelId: string; href: string }) => void>();
   const embeds = opts.embeds;
   const preview = {
     ...(embeds === undefined
@@ -282,6 +285,11 @@ export async function mountMarkdownPreview(
     }),
     onPlace: vi.fn(() => () => {}),
     onFocus: vi.fn(() => () => {}),
+    // 074 R6 — a Ctrl+clicked link in a sandboxed page, delivered by `pushFrameLink`.
+    onFrameLink: vi.fn((cb: (link: { panelId: string; href: string }) => void) => {
+      frameLinkListeners.add(cb);
+      return () => frameLinkListeners.delete(cb);
+    }),
     // 054 R4 — `throng:preview:toggleTask`: applied, unless a test answers a refusal.
     toggleTask: vi.fn(() => Promise.resolve({ ok: true as const, savedToDisk: true })),
   };
@@ -358,6 +366,11 @@ export async function mountMarkdownPreview(
   };
   return {
     id,
+    pushFrameLink: (link) => {
+      act(() => {
+        for (const l of [...frameLinkListeners]) l(link);
+      });
+    },
     preview: preview as unknown as MountedPreview['preview'],
     openExternal,
     generalOpenExternal,

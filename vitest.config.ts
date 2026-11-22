@@ -12,6 +12,8 @@ const alias = {
   '@throng/core/testing': fileURLToPath(
     new URL('./packages/core/src/testing/index.ts', import.meta.url),
   ),
+  // 073 FR-009 (T081) — the CSV subpath the renderer's lazy grid code imports.
+  '@throng/core/csv': fileURLToPath(new URL('./packages/core/src/csv/index.ts', import.meta.url)),
   '@throng/core': pkg('core'),
   '@throng/ipc-contract': pkg('ipc-contract'),
   '@throng/platform-windows': pkg('platform-windows'),

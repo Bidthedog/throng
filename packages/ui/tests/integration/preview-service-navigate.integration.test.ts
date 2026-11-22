@@ -434,7 +434,8 @@ describe('fix round 1 — a target that cannot be read never shows the previous 
     expect(res.update.filePath).toBe(big);
     expect(res.update.content).not.toBeNull();
     expect(res.update.content).toEqual({ kind: 'text', text: '' });
-    expect(res.update.notice).toEqual({ kind: 'too-large' });
+    // 077 FR-014, FR-015 (T055) — the notice quotes the target's size and the limit that refused it.
+    expect(res.update.notice).toEqual({ kind: 'too-large', size: 4104, limit: 1024, limitKey: 'editor.maxOpenFileBytes' });
     for (const { update } of push.updates.filter((u) => u.update.panelId === 'v1' && u.update.filePath === big)) {
       expect(update.content).not.toBeNull();
     }

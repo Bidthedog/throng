@@ -121,6 +121,16 @@ describe('and carries what type of panel it is', () => {
     ]);
   });
 
+  it('names a preview by its type, with that type’s own preview icon (074 FR-103, FR-104)', () => {
+    const preview = (id: string, filePath: string): Panel =>
+      ({ type: 'panel', id, originProjectId: 'proj', title: 'Panel 5', kind: 'preview', config: { filePath } }) as Panel;
+
+    expect(rows([preview('p-md', 'C:/proj/notes.md'), preview('p-pdf', 'C:/proj/manual.pdf')])).toEqual([
+      { name: 'notes.md - Markdown Preview', icon: 'previewMarkdown', typeLabel: 'Markdown Preview' },
+      { name: 'manual.pdf - PDF Preview', icon: 'previewPdf', typeLabel: 'PDF Preview' },
+    ]);
+  });
+
   it('carries NEITHER for an untyped panel, whose name is already the placeholder', () => {
     // The "Select Panel Type" form is what it is showing, so the absence is the information.
     expect(rows([terminalPanel({ id: 'p-none', kind: undefined, title: 'Panel 9' })])).toEqual([

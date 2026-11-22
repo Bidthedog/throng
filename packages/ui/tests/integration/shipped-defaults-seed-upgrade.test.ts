@@ -648,9 +648,10 @@ describe.skipIf(skipOnMacos('upgrades a Windows or Linux seed from before v14; n
     // and 060 to 25 (`busy`, `groupFolderTree`), then 060's hand-test round to 26 (the plain glyphs),
     // then 060 #532 to 27 (`projectSettings`, `searchExclusions`), and 059 to 28 (the `whitespace` icon token),
     // and 055 to 29 (its twelve resource monitor icon tokens), and 069 to 34 (icons leave every theme),
-    // then to 35 (`fileIconOther` reaches every theme file, FR-070).
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(35);
-    expect(await service.readAppliedVersion()).toBe(35);
+    // then to 35 (`fileIconOther` reaches every theme file, FR-070), 075 to 36 (the callout colours), and 077 to 37 (the
+    // settings unit renames), and #105 to 38 (the readable editor selections).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(38);
+    expect(await service.readAppliedVersion()).toBe(38);
   });
 
   it('a second upgrade writes nothing', async () => {

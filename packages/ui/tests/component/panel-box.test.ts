@@ -23,6 +23,8 @@ import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { PanelPlaceholder } from '../../src/renderer/workspace/panel-placeholder.js';
 import { setEditorState, removeEditorState, allEditorStates } from '../../src/renderer/editor/editor-state.js';
+import { registerEditorActions, unregisterEditorActions } from '../../src/renderer/editor/editor-actions.js';
+import { __resetDirtyCloseStore, useDirtyCloseRequest, type DirtyCloseRequest } from '../../src/renderer/editor/dirty-close-store.js';
 
 /**
  * The PANEL BOX itself — which panel is active, what its header draws, and what closing one does
@@ -118,7 +120,7 @@ function servicesOver(bridge: ThrongBridge): Services {
  * ────────────────────────────────────────────────────────────────────────── */
 
 type Ws = ReturnType<typeof useWorkspace>;
-const captured: { ws: Ws | null; projectCount: number } = { ws: null, projectCount: 0 };
+const captured: { ws: Ws | null; projectCount: number; dirty: DirtyCloseRequest | null } = { ws: null, projectCount: 0, dirty: null };
 
 /**
  * Every panel in the chosen tab, as real `PanelPlaceholder`s.
@@ -132,6 +134,7 @@ function Host({ tabIndex = 0 }: { tabIndex?: number }): ReactElement | null {
   const ws = useWorkspace();
   captured.ws = ws;
   captured.projectCount = useProjects().projects.length;
+  captured.dirty = useDirtyCloseRequest();
   const layout = ws.layout;
   if (!layout) return null;
   const tab = layout.tabs[tabIndex];
@@ -203,6 +206,7 @@ beforeEach(() => {
   captured.projectCount = 0;
 });
 afterEach(() => {
+  __resetDirtyCloseStore();
   for (const s of allEditorStates()) removeEditorState(s.panelId);
   Reflect.deleteProperty(window, 'throng');
 });
@@ -834,5 +838,88 @@ describe('a Find in Files panel heads itself with what it IS (FR-060)', () => {
         'Find in Files: needle',
       ),
     );
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The workspace's last panel: × returns it to the blank form (002 FR-016a)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * Maintainer, 2026-11-20: "clicking 'X' on the last editor should close it (with all the standard checks / dialogues),
+ * and return the panel to its [blank form] … the panel type should be set to the last panel type that was loaded —
+ * assuming it is an available option." And: "pressing X on the last 'Find in files' panel just shows a blank panel with
+ * a 'Find in files' title; it should revert back to the Blank Panel form with nothing selected."
+ *
+ * The workspace keeps its last panel (002 FR-016), so × there ran the close checks, tore the content down, and then
+ * removed nothing: the panel kept its kind over an emptied body.
+ */
+describe('× on the workspace\'s last panel returns it to the blank form (002 FR-016a)', () => {
+  const kindOf = (id: string) => panelsIn(live()).find((p) => p.id === id)?.kind;
+
+  it('a Find in Files panel becomes a Blank Panel, its title with it, and the form selects nothing', async () => {
+    const { user } = mount();
+    await ready();
+    const [only] = panelsIn(live()).map((p) => p.id);
+    act(() => live().setPanelType(only, 'findInFiles', {}));
+    await waitFor(() => expect(screen.getByTestId(`panel-title-${only}`)).toHaveTextContent('Find in Files'));
+
+    await user.click(screen.getByTestId(`panel-close-${only}`));
+
+    await waitFor(() => expect(kindOf(only)).toBeUndefined());
+    expect(screen.getByTestId(`panel-title-${only}`)).toHaveTextContent('Blank Panel');
+    // Find in Files is not a type the form offers, so nothing is preselected.
+    expect(await screen.findByTestId(`panel-type-select-${only}`)).toHaveValue('');
+  });
+
+  it('a dirty editor asks first: Cancel leaves it an editor', async () => {
+    const { user } = mount();
+    await ready();
+    const [only] = panelsIn(live()).map((p) => p.id);
+    act(() => live().setPanelType(only, 'editor', {}));
+    await waitFor(() => expect(kindOf(only)).toBe('editor'));
+    const actions = { save: vi.fn(), saveAs: vi.fn(), saveForClose: vi.fn(async () => true), isDirty: () => true, openFile: vi.fn(), revert: vi.fn(), reloadFromDisk: vi.fn(async () => false) };
+    await waitFor(() => registerEditorActions(only, actions));
+
+    await user.click(screen.getByTestId(`panel-close-${only}`));
+    await waitFor(() => expect(captured.dirty).not.toBeNull());
+    act(() => captured.dirty!.resolve('cancel'));
+
+    await act(() => Promise.resolve());
+    expect(kindOf(only)).toBe('editor');
+    unregisterEditorActions(only);
+  });
+
+  it('a dirty editor discarded becomes a Blank Panel whose form preselects Editor', async () => {
+    const { user } = mount();
+    await ready();
+    const [only] = panelsIn(live()).map((p) => p.id);
+    act(() => live().setPanelType(only, 'editor', {}));
+    await waitFor(() => expect(kindOf(only)).toBe('editor'));
+    const actions = { save: vi.fn(), saveAs: vi.fn(), saveForClose: vi.fn(async () => true), isDirty: () => true, openFile: vi.fn(), revert: vi.fn(), reloadFromDisk: vi.fn(async () => false) };
+    await waitFor(() => registerEditorActions(only, actions));
+
+    await user.click(screen.getByTestId(`panel-close-${only}`));
+    await waitFor(() => expect(captured.dirty).not.toBeNull());
+    act(() => captured.dirty!.resolve('discard'));
+
+    await waitFor(() => expect(kindOf(only)).toBeUndefined());
+    expect(panelsIn(live()).find((p) => p.id === only)?.formerKind).toBe('editor');
+    expect(await screen.findByTestId(`panel-type-select-${only}`)).toHaveValue('editor');
+    unregisterEditorActions(only);
+  });
+
+  it('a panel that is not the last is still removed (002 FR-016)', async () => {
+    const { user } = mount();
+    const ws = await ready();
+    await waitFor(() => expect(live().addPanel(tabOf(ws).id)).toBeTruthy());
+    await waitFor(() => expect(boxes()).toHaveLength(2));
+    const [first] = panelsIn(live()).map((p) => p.id);
+    act(() => live().setPanelType(first, 'findInFiles', {}));
+
+    await user.click(screen.getByTestId(`panel-close-${first}`));
+
+    await waitFor(() => expect(boxes()).toHaveLength(1));
+    expect(panelsIn(live()).map((p) => p.id)).not.toContain(first);
   });
 });

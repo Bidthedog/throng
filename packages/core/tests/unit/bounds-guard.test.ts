@@ -79,18 +79,19 @@ describe('applyDeclaredBounds — every declared bound, discovered from the regi
 
 describe('hard bounds — the control range is not always the enforced one (FR-015a-c)', () => {
   it('enforces hardMax where declared, so a deliberate wider bound survives', () => {
-    // diagnostics.maxFileSizeKb declares min/max 64-4096 so its SLIDER stays aimable, while its
-    // hard bound is 64 MB. A user's hand-set 64 MB log cap must not be rewritten to 4 MB.
-    const raw = withValue(DEFAULT_APP_SETTINGS, 'diagnostics.maxFileSizeKb', 65_536);
+    // diagnostics.maxFileBytes declares min/max 256 KB-4 MB so its SLIDER stays aimable, while its
+    // hard bound is 64 MB (077: stored in bytes). A user's hand-set 64 MB log cap must not be
+    // rewritten to 4 MB.
+    const raw = withValue(DEFAULT_APP_SETTINGS, 'diagnostics.maxFileBytes', 67_108_864);
     const { value, corrected } = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
-    expect(at(value, 'diagnostics.maxFileSizeKb')).toBe(65_536);
+    expect(at(value, 'diagnostics.maxFileBytes')).toBe(67_108_864);
     expect(corrected).toBe(false);
   });
 
   it('still clamps beyond the hard bound', () => {
-    const raw = withValue(DEFAULT_APP_SETTINGS, 'diagnostics.maxFileSizeKb', 999_999);
+    const raw = withValue(DEFAULT_APP_SETTINGS, 'diagnostics.maxFileBytes', 999_999_999);
     const { value } = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
-    expect(at(value, 'diagnostics.maxFileSizeKb')).toBe(65_536);
+    expect(at(value, 'diagnostics.maxFileBytes')).toBe(67_108_864);
   });
 
   it('uses min/max as the hard bound when no hardMin/hardMax is declared', () => {
@@ -99,7 +100,7 @@ describe('hard bounds — the control range is not always the enforced one (FR-0
     // five, #408); the pattern it demonstrated is unaffected by which settings still carry it.
     for (const [key, max] of [
       ['diagnostics.keepDays', 30],
-      ['search.asYouTypeDebounceMs', 1000],
+      ['tabs.maxNameLength', 128],
     ] as const) {
       const raw = withValue(DEFAULT_APP_SETTINGS, key, max + 5000);
       const { value } = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
@@ -255,8 +256,8 @@ describe('the declared range wins over the range the parser used to accept', () 
   const cases = [
     // 066 FR-020 replaced `diagnostics.keepFiles` (declared 1–20, parsed 1–50) with keepDays; the
     // point — a declared range with no hard bound wins — is the same.
-    { key: 'diagnostics.keepDays', min: 1, max: 30, wasAccepted: 365 },
-    { key: 'search.asYouTypeDebounceMs', min: 0, max: 1000, wasAccepted: 60_000 },
+    { key: 'diagnostics.keepDays', min: 1, max: 30, hardMax: undefined, clampedTo: 30, wasAccepted: 365 },
+    { key: 'search.asYouTypeDebounceMs', min: 0, max: 2000, hardMax: 10_000, clampedTo: 10_000, wasAccepted: 60_000 },
   ] as const;
 
   for (const c of cases) {
@@ -264,13 +265,14 @@ describe('the declared range wins over the range the parser used to accept', () 
       const d = declared(c.key);
       expect(d.min, `${c.key} min`).toBe(c.min);
       expect(d.max, `${c.key} max`).toBe(c.max);
-      // No hard bound: nothing here has a stated reason for accepting more than the control offers.
+      // 077 research R6 — a debounce's typed values go past its slider, to a declared hard maximum; nothing else here
+      // has a stated reason for accepting more than the control offers.
       expect(d.hardMin, `${c.key} declares an undeclared-in-the-spec hardMin`).toBeUndefined();
-      expect(d.hardMax, `${c.key} declares an undeclared-in-the-spec hardMax`).toBeUndefined();
+      expect(d.hardMax, `${c.key} hardMax`).toBe(c.hardMax);
 
       const raw = withValue(DEFAULT_APP_SETTINGS, c.key, c.wasAccepted);
       const out = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
-      expect(at(out.value, c.key), `${c.key} was accepted at ${c.wasAccepted}`).toBe(c.max);
+      expect(at(out.value, c.key), `${c.key} was accepted at ${c.wasAccepted}`).toBe(c.clampedTo);
     });
   }
 
@@ -295,11 +297,11 @@ describe('the declared range wins over the range the parser used to accept', () 
     // The exception that proves the rule: these two carry hard bounds, so removing their clamps
     // must not cost a user the capability the clamp used to allow.
     const big = applyDeclaredBounds(
-      withValue(DEFAULT_APP_SETTINGS, 'diagnostics.maxFileSizeKb', 65_536),
+      withValue(DEFAULT_APP_SETTINGS, 'diagnostics.maxFileBytes', 67_108_864),
       SETTINGS_METADATA,
       DEFAULT_APP_SETTINGS,
     );
-    expect(at(big.value, 'diagnostics.maxFileSizeKb')).toBe(65_536);
+    expect(at(big.value, 'diagnostics.maxFileBytes')).toBe(67_108_864);
 
     const small = applyDeclaredBounds(
       withValue(DEFAULT_APP_SETTINGS, 'editor.maxOpenFileBytes', 2048),
@@ -322,24 +324,24 @@ describe('parseAppSettings no longer enforces a range of its own (FR-009)', () =
   it('passes an out-of-range value straight through — clamping is not its job', () => {
     const parsed = parseAppSettings({
       terminals: { commandPollMs: 1 },
-      diagnostics: { keepDays: 999, maxFileSizeKb: 1 },
+      diagnostics: { keepDays: 999, maxFileBytes: 1 },
       search: { asYouTypeDebounceMs: -5 },
     });
     expect(parsed.terminals.commandPollMs).toBe(1);
     expect(parsed.diagnostics.keepDays).toBe(999);
-    expect(parsed.diagnostics.maxFileSizeKb).toBe(1);
+    expect(parsed.diagnostics.maxFileBytes).toBe(1);
     expect(parsed.search.asYouTypeDebounceMs).toBe(-5);
   });
 
   it('still rejects values that are not numbers at all — TYPE tolerance is its job', () => {
     const parsed = parseAppSettings({
       terminals: { commandPollMs: 'often' },
-      diagnostics: { keepDays: {}, maxFileSizeKb: Number.NaN },
+      diagnostics: { keepDays: {}, maxFileBytes: Number.NaN },
       search: { asYouTypeDebounceMs: 'soon' },
     });
     expect(parsed.terminals.commandPollMs).toBe(DEFAULT_APP_SETTINGS.terminals.commandPollMs);
     expect(parsed.diagnostics.keepDays).toBe(DEFAULT_APP_SETTINGS.diagnostics.keepDays);
-    expect(parsed.diagnostics.maxFileSizeKb).toBe(DEFAULT_APP_SETTINGS.diagnostics.maxFileSizeKb);
+    expect(parsed.diagnostics.maxFileBytes).toBe(DEFAULT_APP_SETTINGS.diagnostics.maxFileBytes);
     expect(parsed.search.asYouTypeDebounceMs).toBe(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs);
   });
 
@@ -347,12 +349,12 @@ describe('parseAppSettings no longer enforces a range of its own (FR-009)', () =
     const { value } = parseSettingsGuarded({
       ...structuredClone(DEFAULT_APP_SETTINGS),
       terminals: { ...DEFAULT_APP_SETTINGS.terminals, commandPollMs: 1 },
-      diagnostics: { ...DEFAULT_APP_SETTINGS.diagnostics, keepDays: 999, maxFileSizeKb: 1 },
+      diagnostics: { ...DEFAULT_APP_SETTINGS.diagnostics, keepDays: 999, maxFileBytes: 1 },
       search: { asYouTypeDebounceMs: -5 },
     });
     expect(value.terminals.commandPollMs).toBe(250);
     expect(value.diagnostics.keepDays).toBe(30);
-    expect(value.diagnostics.maxFileSizeKb).toBe(64);
+    expect(value.diagnostics.maxFileBytes).toBe(1024); // its hardMin, 1 KB
     expect(value.search.asYouTypeDebounceMs).toBe(0);
   });
 });

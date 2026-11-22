@@ -191,6 +191,8 @@ describe('a LIST row confirms on Enter by LETTING GO (021)', () => {
      * an answer.
      */
     const { user } = renderBound(excludeGlobs, ['**/node_modules']);
+    // 077 FR-025 — a list is edited in its modal.
+    await user.click(screen.getByTestId('list-edit-explorer.excludeGlobs'));
     const row = box('control-explorer.excludeGlobs-item-0');
     await user.clear(row);
     await user.type(row, '**/.hidden{Enter}');
@@ -208,16 +210,15 @@ describe('a LIST row confirms on Enter by LETTING GO (021)', () => {
      * inheriting a green bar from a test that was measuring the wrong keystroke.
      */
     const { user, onCommit } = renderBound(excludeGlobs, ['**/node_modules']);
+    // 077 FR-025 — the row writes to the modal's draft as it is typed; Save writes the setting, once.
+    await user.click(screen.getByTestId('list-edit-explorer.excludeGlobs'));
     const row = box('control-explorer.excludeGlobs-item-0');
     await user.clear(row);
     await user.type(row, '**/.hidden');
-
-    expect(onCommit).toHaveBeenLastCalledWith(['**/.hidden']);
-    const beforeEnter = onCommit.mock.calls.length;
-
     await user.keyboard('{Enter}');
-    expect(onCommit.mock.calls.length, 'Enter must not re-commit a value the row already stored').toBe(
-      beforeEnter,
-    );
+    expect(onCommit, 'nothing is written before Save').not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId('list-editor-save-explorer.excludeGlobs'));
+    expect(onCommit.mock.calls, 'Save writes what the row held as typed, once').toEqual([[['**/.hidden']]]);
   });
 });

@@ -84,6 +84,14 @@ describe('the limit warning (FR-031f)', () => {
     expect(warning()).not.toBeNull();
   });
 
+  // 077 T060 (constitution X, FR-014): text about a quantity a setting governs quotes the setting's current value.
+  it('names the panel limit it reached, as Preferences shows it', async () => {
+    settingsPayload = { version: 1, notifications: { panelLimit: 120 } };
+    await mount();
+    act(() => reachLimit());
+    expect(warning()!.textContent).toContain('its limit of 120 notifications');
+  });
+
   it('raises it whatever the warning mode — even Never display', async () => {
     settingsPayload = { version: 1, notifications: { warning: { mode: 'never' } } };
     await mount();

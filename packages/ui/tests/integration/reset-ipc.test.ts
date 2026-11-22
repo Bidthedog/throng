@@ -94,7 +94,7 @@ describe('throng:config:resetSetting', () => {
       editor: {
         ...DEFAULT_APP_SETTINGS.editor,
         autoSave: !DEFAULT_APP_SETTINGS.editor.autoSave,
-        autoSaveDebounceMs: 9999,
+        autoSaveDebounceMs: 2999, // not the default, and within the 0 – 3 s range a read clamps to
       },
     });
 
@@ -103,7 +103,7 @@ describe('throng:config:resetSetting', () => {
     expect(res.ok).toBe(true);
     const after = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
     expect(after.editor.autoSave).toBe(SHIPPED.settings.editor.autoSave);
-    expect(after.editor.autoSaveDebounceMs).toBe(9999); // sibling leaf untouched
+    expect(after.editor.autoSaveDebounceMs).toBe(2999); // sibling leaf untouched
   });
 
   // The refusal ("no-default", writes nothing) is asserted on the service in shipped-defaults-reset.test.ts.

@@ -14,8 +14,8 @@ import { EditorOpenListener } from '../../src/renderer/editor/editor-open.js';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
 import { COLD, ROOT, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
-const DOC = ['# Readme', '', '[Logo](img/logo.png) and [Out](../outside.png)', '', '[Guide](docs/guide.md)'].join('\n');
-const LOGO = `${ROOT}/img/logo.png`;
+const DOC = ['# Readme', '', '[Logo](img/logo.zip) and [Out](../outside.png)', '', '[Guide](docs/guide.md)'].join('\n');
+const LOGO = `${ROOT}/img/logo.zip`;
 const BINARY = { action: 'refuse', reason: 'binary' };
 
 let m: MountedPreviewWindow | undefined;

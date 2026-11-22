@@ -176,6 +176,8 @@ export function lateListener(): DocumentLifecycleListener & {
     repointed: (f: string, t: string, d: string) => void (relay.muted || target?.repointed(f, t, d)),
     changed: (d: string) => void (relay.muted || target?.changed(d)),
     dirtyChanged: (d: string, dirty: boolean) => void (relay.muted || target?.dirtyChanged(d, dirty)),
+    gridHeirFor: (d: string) => (relay.muted ? undefined : target?.gridHeirFor?.(d)),
+    handedOver: (f: string, t: string) => void (relay.muted || target?.handedOver?.(f, t)),
   };
   return relay;
 }

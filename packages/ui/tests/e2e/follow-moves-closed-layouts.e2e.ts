@@ -45,6 +45,7 @@ import {
   commitTabRename,
   FILE_OP_TIMEOUT_MS,
   pressAction,
+  markdownOpensInEditor,
 } from './harness.js';
 import { openQuickOpen, quickOpenRows, chooseQuickOpenRow } from './helpers/navigation.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
@@ -60,7 +61,7 @@ let shared: OpenApp;
 const sharedTemps: string[] = [];
 
 test.beforeAll(async () => {
-  shared = await openApp();
+  shared = await openApp({ markdownOpensIn: 'editor' }); // .md opens its editor (074 FR-016, amended)
 });
 
 /** Close every sub-workspace window, so the next test opens its own rather than focusing a stale one. */
@@ -396,6 +397,7 @@ test('a tab not shown since launch follows a rename across a restart (FR-007, FR
   try {
     // Session 1: an editor on a.md in a second tab T2; T1 left showing.
     await runOwnApp(async (_app, win) => {
+      await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
       await settle(win);
       await createProject(win, 'Unshown', root);
       await win.getByTestId('tab-add').click();

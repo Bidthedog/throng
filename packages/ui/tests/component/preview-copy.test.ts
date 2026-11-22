@@ -29,7 +29,10 @@ import { createHtmlExporter } from '../../src/renderer/preview/providers/markdow
 /** 054 T040 — jsdom has no canvas: the PNG rasteriser is injected as this fixed image. */
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const rasterise = vi.hoisted(() => vi.fn());
-vi.mock('../../src/renderer/preview/diagram/rasterise.js', () => ({ rasteriseSvg: rasterise }));
+vi.mock('../../src/renderer/preview/diagram/rasterise.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/renderer/preview/diagram/rasterise.js')>()),
+  rasteriseSvg: rasterise,
+}));
 rasterise.mockImplementation(() => Promise.resolve(PNG));
 import { createPreviewProviderRegistry } from '@throng/core';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
@@ -701,6 +704,24 @@ describe('a diagram in the selection (054 FR-049a)', () => {
     expect(html).not.toMatch(/<svg|NodeLabel|data-diagram/);
     expect(richText()).toContain('```mermaid\ngraph TD');
     expect(rasterise).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a callout in a rich copy (075, edge case "Copy")', () => {
+  it('keeps the callout as a quotation headed by its title, without the [!type] marker, its icon or its fold control', () => {
+    const exporter = createHtmlExporter(window);
+    const fragment = document.createRange().createContextualFragment(
+      '<div data-callout="warning" data-callout-role="warning">' +
+        '<div data-callout-title="" role="button" tabindex="0"><span aria-hidden="true" class="preview-callout__icon"></span>Mind <em>this</em><span aria-hidden="true" class="preview-callout__fold"></span></div>' +
+        '<div data-callout-body=""><p>The body.</p>' +
+        '<div data-callout="tip"><div data-callout-title="">Inner</div><div data-callout-body=""><p>Nested.</p></div></div>' +
+        '</div></div>',
+    );
+    const html = exporter(fragment);
+    expect(html).toBe(
+      '<blockquote><p><strong>Mind <em>this</em></strong></p><p>The body.</p>' +
+        '<blockquote><p><strong>Inner</strong></p><p>Nested.</p></blockquote></blockquote>',
+    );
   });
 });
 

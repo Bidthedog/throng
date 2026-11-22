@@ -17,6 +17,7 @@ import {
   buildPreviewTextModel,
   findPreviewMatches,
   locate,
+  locateEnd,
   type TextModelNode,
 } from '../../src/renderer/preview/preview-search-model.js';
 
@@ -113,6 +114,28 @@ describe('locate — offset → (node, offset), for building a Range', () => {
   it('answers null past the end of the model', () => {
     const model = buildPreviewTextModel(el([text('abc')]));
     expect(locate(model, 4)).toBeNull();
+  });
+});
+
+describe('locateEnd — a range END at a join stays in the node that ends there', () => {
+  // Walk-through 2026-11-21 (MT-48): a match ending at the end of its paragraph ended at offset 0 of the next
+  // paragraph's text, and Chromium gave that range a second client rect — a frame on the next line's first letter.
+  it('ends a match that stops at a join in the node it stopped in', () => {
+    const a = text('Loading text kept');
+    const b = text('x squared');
+    const model = buildPreviewTextModel(el([el([a]), el([b])]));
+    expect(locateEnd(model, 17)).toEqual({ node: a, offset: 17 });
+  });
+
+  it('agrees with locate away from a join, and at the very start and end', () => {
+    const a = text('Hello ');
+    const b = text('world');
+    const model = buildPreviewTextModel(el([a, b]));
+    expect(locateEnd(model, 0)).toEqual({ node: a, offset: 0 });
+    expect(locateEnd(model, 3)).toEqual({ node: a, offset: 3 });
+    expect(locateEnd(model, 8)).toEqual({ node: b, offset: 2 });
+    expect(locateEnd(model, 11)).toEqual({ node: b, offset: 5 });
+    expect(locateEnd(model, 12)).toBeNull();
   });
 });
 

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   SETTINGS_METADATA,
   SETTINGS_INTERNAL_KEYS,
-  HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS,
   settingsLeaves,
 } from '../../src/config/settings-metadata.js';
 import {
@@ -125,9 +124,7 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
     expect(byKey.get('editor.maxOpenFileBytes')?.control).toBe('slider');
     // string arrays → array
     expect(byKey.get('explorer.excludeGlobs')?.control).toBe('array');
-    // The three terminal-flavour controls are HIDDEN for v1.0.0 (see the dedicated block below):
-    // they are no longer in the rendered registry, so `byKey` does not carry them. Their control
-    // shapes are asserted against HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS instead.
+    // #67 — the terminal-flavour settings each declare the control their shape needs (see the block below).
   });
 
   it('groups every descriptor into a labelled section', () => {
@@ -309,35 +306,26 @@ describe('editor.previews.* and editor.navigation.historySize are required leave
   });
 });
 
-describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 re-exposes them)', () => {
+describe('the terminal-flavour settings are in the Settings tab (#67)', () => {
   const rendered = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
-  const hidden = new Map(HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS.map((d) => [d.key, d]));
-  const HIDDEN_KEYS = [
-    'terminals.flavours',
-    'terminals.disabledBuiltins',
-    'terminals.defaultShellArguments',
-  ] as const;
+  const KEYS = ['terminals.flavours', 'terminals.disabledBuiltins', 'terminals.defaultShellArguments'] as const;
 
-  it('classifies all three as internal, so they are not in the configurable set', () => {
-    for (const key of HIDDEN_KEYS) {
-      expect(SETTINGS_INTERNAL_KEYS, key).toContain(key);
-      expect(settingsLeaves(), key).not.toContain(key);
+  it('are configurable settings with a descriptor each, under the one Terminal heading', () => {
+    for (const key of KEYS) {
+      expect(SETTINGS_INTERNAL_KEYS, key).not.toContain(key);
+      expect(settingsLeaves(), key).toContain(key);
+      expect(rendered.get(key)?.group, key).toBe('Terminal');
     }
   });
 
-  it('does not render them: no descriptor in the rendered SETTINGS_METADATA', () => {
-    for (const key of HIDDEN_KEYS) {
-      expect(rendered.has(key), key).toBe(false);
-    }
+  it('declare the control their shape needs: ordered records, a picker over detected built-ins, a keyed table', () => {
+    expect(rendered.get('terminals.flavours')).toMatchObject({ control: 'records', idKey: 'id' });
+    expect(rendered.get('terminals.disabledBuiltins')?.control).toBe('multiselect');
+    expect(rendered.get('terminals.defaultShellArguments')?.control).toBe('map');
   });
 
-  it('keeps their descriptors intact for #67 to re-expose (a hide, not a revert)', () => {
-    // The controls are withheld, not deleted — #67 re-exposes them by spreading this array back
-    // into SETTINGS_METADATA. Assert the shapes survive so a stray deletion is caught here.
-    expect(hidden.get('terminals.flavours')?.control).toBe('records');
-    expect(hidden.get('terminals.flavours')?.idKey).toBe('id');
-    expect(hidden.get('terminals.disabledBuiltins')?.control).toBe('multiselect');
-    expect(hidden.get('terminals.defaultShellArguments')?.control).toBe('map');
+  it('keep the per-flavour command recipes internal, outside #67', () => {
+    expect(SETTINGS_INTERNAL_KEYS).toContain('terminals.commandRecipes');
   });
 });
 
@@ -392,7 +380,7 @@ describe('SETTINGS_METADATA new-project + verb changes (011)', () => {
  * ══ WHY THE DEFAULTS ARE ASSERTED HERE AND NOT ONLY IN `app-settings.test.ts` ══
  *
  * Because a default is carried by the SCHEMA as well as by the constant, and the two can disagree
- * silently. FR-075 moves `settleMs` onto a slider whose stops are 50 ms apart: a shipped value
+ * silently. FR-075 moves `settleMs` onto a slider whose stops are 25 ms apart (077 R6; 50 ms at FR-075): a shipped value
  * BETWEEN two stops is reachable only by typing, so a user who drags the control can never get back
  * to what the application shipped with. That is a property of the constant and the descriptor
  * TOGETHER, and neither file's own tests can see it.
@@ -435,9 +423,11 @@ describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/
   });
 
   it('leaves the find bar’s own debounce where it was — the two keys are deliberately distinct', () => {
-    // FR-075 moves this one interval and no other. 120 ms times a re-scan of ONE buffer already in
+    // FR-075 moves this one interval and no other (077 R6 later nudged it 120 → 125 to sit on a 25 ms
+    // slider stop). 125 ms times a re-scan of ONE buffer already in
     // memory; 500 ms gates a walk over the whole project.
-    expect(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs).toBe(120);
+    expect(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs).toBe(125);
+    expect(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs).not.toBe(DEFAULT_APP_SETTINGS.search.inFiles.settleMs);
   });
 
   it('puts the shipped 500 exactly on a slider stop, so a drag can always return to it', () => {
@@ -445,7 +435,7 @@ describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/
     expect(d?.control).toBe('slider');
     expect(d?.min).toBe(0);
     expect(d?.max).toBe(2000);
-    expect(d?.step).toBe(50);
+    expect(d?.step).toBe(25); // 077 R6: debounces move in 25 ms steps
     const shipped = DEFAULT_APP_SETTINGS.search.inFiles.settleMs;
     expect(shipped).toBeGreaterThanOrEqual(d!.min!);
     expect(shipped).toBeLessThanOrEqual(d!.max!);
@@ -585,14 +575,26 @@ describe('the Attention settings in the registry (057 US4)', () => {
   const attentionGroup = SETTINGS_METADATA.filter((d) => d.group === 'General' && d.subgroup === 'Attention');
   const terminalAttention = SETTINGS_METADATA.filter((d) => d.group === 'Terminal' && d.subgroup === 'Attention');
 
-  it('keeps the clear delay and the taskbar badge in Attention (FR-108/FR-111: the notification choices moved to Notifications)', () => {
-    expect(attentionGroup.map((d) => d.key).sort()).toEqual(['attention.clearDelayMs', 'attention.taskbarBadge']);
+  it('keeps the taskbar badge in General › Attention (FR-108/FR-111: the notification choices moved to Notifications)', () => {
+    expect(attentionGroup.map((d) => d.key)).toEqual(['attention.taskbarBadge']);
+  });
+
+  it('puts the side panes\' widths under General › Window, and leaves no Panes group (077 FR-023)', () => {
+    for (const key of ['panes.projects.maxWidth', 'panes.fileExplorer.maxWidth']) {
+      expect(SETTINGS_METADATA.find((d) => d.key === key), key).toMatchObject({ group: 'General', subgroup: 'Window' });
+    }
+    expect(SETTINGS_METADATA.filter((d) => d.group === 'Panes')).toEqual([]);
+  });
+
+  it('puts the clear delay under Notifications › Attention, beside the row that announces a mark (077 FR-021)', () => {
+    const clearDelay = SETTINGS_METADATA.find((d) => d.key === 'attention.clearDelayMs');
+    expect(clearDelay).toMatchObject({ group: 'Notifications', subgroup: 'Attention', label: 'Clear delay' });
   });
 
   it('holds the master switch, seven signals and the quiet time under Terminal › Attention', () => {
     const keys = terminalAttention.map((d) => d.key);
     expect(keys.filter((k) => k.startsWith('terminals.attention.signals.'))).toHaveLength(7);
     expect(keys).toContain('terminals.attention.enabled');
-    expect(keys).toContain('terminals.attention.quietSeconds');
+    expect(keys).toContain('terminals.attention.quietMs');
   });
 });

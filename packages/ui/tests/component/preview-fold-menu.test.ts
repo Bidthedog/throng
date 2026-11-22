@@ -97,6 +97,23 @@ describe('the body menu, mounted over a real Markdown preview', () => {
     expect(screen.queryByTestId(/menu-item-(Collapse|Expand) This H/)).toBeNull();
   });
 
+  it('Collapse All and Expand All leave each callout\'s own fold state as it was (075 FR-009)', async () => {
+    const doc = 'intro text\n\n# One\n\n> [!note]+ Open\n> open body\n\n> [!tip]- Shut\n> shut body\n';
+    m = await mountMarkdownPreview(doc);
+    const intro = await screen.findByText('intro text', {}, COLD);
+    const callout = (type: string): HTMLElement => document.querySelector<HTMLElement>(`[data-callout="${type}"]`)!;
+    await waitFor(() => expect(callout('tip').hasAttribute('data-callout-collapsed')).toBe(true));
+    expect(callout('note').hasAttribute('data-callout-collapsed')).toBe(false);
+
+    for (const row of ['Collapse All', 'Expand All']) {
+      fireEvent.contextMenu(intro, { clientX: 5, clientY: 5 });
+      fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
+      fireEvent.click(await screen.findByTestId(`menu-item-${row}`));
+      expect(callout('note').hasAttribute('data-callout-collapsed'), `${row} folded the open callout`).toBe(false);
+      expect(callout('tip').hasAttribute('data-callout-collapsed'), `${row} opened the shut callout`).toBe(true);
+    }
+  });
+
   it('opened over content under "Two" (H2): Collapse This H2, and clicking it hides that section only', async () => {
     m = await mountMarkdownPreview(DOC);
     const bodyTwo = await screen.findByText('body two', {}, COLD);

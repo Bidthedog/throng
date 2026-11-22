@@ -331,14 +331,31 @@ describe('front matter hidden (FR-117)', () => {
  * and far below the quadratic one. Measured on a workstation: 50,000 headings render in ~380 ms (that is
  * markdown-it's own linear cost) against ~150 s before the fix; front matter in ~15 ms against ~10.5 s. The
  * bound leaves room for a loaded parallel run without coming near either quadratic figure.
+ *
+ * Timed in this thread's CPU, not wall time, and as the fastest of `SAMPLES` renders, as `occurrence-performance` and
+ * `text-fidelity-perf` do. In three whole unit runs at once (load ~6 on 20 cores) the 50,000-heading render read
+ * 4.5-7.6 s of wall time against 0.8-1.2 s of thread CPU: the rest is time spent waiting for a core, which is no
+ * part of the cost under test, and it failed the bound in every such run. Node before 23.9 has no `threadCpuUsage`
+ * and falls back to wall time. The bound is unchanged.
  */
 describe('a hostile document renders within a bound (adversarial review I1, I2)', () => {
   const BOUND_MS = 5_000;
+  const SAMPLES = 3;
+
+  const now = (): number => {
+    const u = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : null;
+    return u ? (u.user + u.system) / 1000 : performance.now();
+  };
 
   function timed(text: string): { out: string; ms: number } {
-    const started = performance.now();
-    const out = html(text);
-    return { out, ms: performance.now() - started };
+    let out = '';
+    let ms = Number.POSITIVE_INFINITY;
+    for (let s = 0; s < SAMPLES; s++) {
+      const started = now();
+      out = html(text);
+      ms = Math.min(ms, now() - started);
+    }
+    return { out, ms };
   }
 
   it('front matter: a plain scalar with a 100,000-space run (I1)', () => {

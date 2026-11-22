@@ -45,6 +45,7 @@ import { terminalContentMenu } from '../../src/renderer/terminal/terminal-conten
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
 import { findInFilesContentMenu } from '../../src/renderer/find-in-files/content-menu.js';
 import { previewContentMenu } from '../../src/renderer/preview/content-menu.js';
+import { setPanelFindAbsent } from '../../src/renderer/preview/unsearchable-panels.js';
 
 /*
  * Split on the ABSENCE of a section, exactly as `context-menu.tsx` now does. `'separator' in item`
@@ -1368,7 +1369,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
     const enabled = row(panelHeader({ ...base, openPreview: editorAffordance() }), 'Open Preview');
     expect(enabled?.disabled ?? false).toBe(false);
     expect(enabled?.section).toBe('navigate');
-    expect(enabled?.icon).toBe('preview');
+    expect(enabled?.icon).toBe('previewMarkdown'); // 074 FR-103 — the file type's own preview icon
 
     // FR-012 — the file already has its one preview.
     expect(row(panelHeader({ ...base, openPreview: editorAffordance({ previewOpen: true }) }), 'Open Preview')?.disabled).toBe(true);
@@ -1479,6 +1480,29 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       'Zoom',
       'Flag',
     ]);
+  });
+
+  // 074 FR-086a / FR-062b (2026-11-19) — a picture has no text and nothing to go to: neither Find… nor Go to Heading….
+  it('a picture preview offers neither Find… nor Go to Heading…', () => {
+    const p = previewPanel();
+    setPanelFindAbsent(p.id, true);
+    try {
+      const labels = panelHeader({ panel: p, preview: { ...binaryPreview, goTo: null } }).map((i) => i.label);
+      expect(labels).not.toContain('Find…');
+      expect(labels).not.toContain('Go to Heading…');
+      expect(labels).not.toContain('Go to Page…');
+      expect(labels).toContain('Refresh');
+    } finally {
+      setPanelFindAbsent(p.id, false);
+    }
+  });
+
+  // 073 FR-043a — a grid's Go to goes to a row, so its header menu names it Go to Row… (every panel action has a menu item).
+  it('a grid preview offers Go to Row…, not Go to Heading…', () => {
+    const labels = panelHeader({ panel: previewPanel(), preview: { ...binaryPreview, goTo: 'row' } }).map((i) => i.label);
+    expect(labels).toContain('Go to Row…');
+    expect(labels).not.toContain('Go to Heading…');
+    expect(labels).not.toContain('Go to Page…');
   });
 
   it('its verb is Close whatever the ownership verb would be (011 FR-030)', () => {

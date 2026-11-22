@@ -34,7 +34,7 @@ const FIXTURES = fileURLToPath(new URL('../fixtures/preview/', import.meta.url))
 
 let shared: OpenApp;
 test.beforeAll(async () => {
-  shared = await openApp();
+  shared = await openApp({ markdownOpensIn: 'editor' });
 });
 test.afterAll(async () => {
   await shared?.close();

@@ -178,14 +178,15 @@ describe('hide ended processes (FR-105)', () => {
 
 describe('the capture interval (FR-004a)', () => {
   it('offers only the intervals the history window allows', async () => {
-    await mount({ captureIntervalSeconds: 2, historyMinutes: 5 });
+    // 077 FR-001 — the settings are stored in ms; the control offers whole seconds.
+    await mount({ captureIntervalMs: 2000, historyMs: 300_000 });
     const options = within(screen.getByTestId('monitor-interval')).getAllByRole('option').map((o) => Number(o.getAttribute('value')));
     expect(options).toEqual(allowedIntervals(5));
     expect(options[0]).toBe(2);
   });
 
   it('offers a longer minimum for a longer window, and shows the interval in force', async () => {
-    await mount({ captureIntervalSeconds: 2, historyMinutes: 30 });
+    await mount({ captureIntervalMs: 2000, historyMs: 1_800_000 });
     const select = screen.getByTestId('monitor-interval') as HTMLSelectElement;
     const options = within(select).getAllByRole('option').map((o) => Number(o.getAttribute('value')));
     expect(options).toEqual(allowedIntervals(30));
@@ -194,12 +195,21 @@ describe('the capture interval (FR-004a)', () => {
     expect(select.value).toBe('30');
   });
 
-  it('writes resourceMonitor.captureIntervalSeconds through the settings API when changed', async () => {
+  // 077 FR-017 — the menu offers the Preferences slider's stops (every second), so an interval set there is one of them.
+  it('offers every second the Preferences slider does, and checks a value set there', async () => {
+    await mount({ captureIntervalMs: 7000, historyMs: 300_000 });
+    const select = screen.getByTestId('monitor-interval') as HTMLSelectElement;
+    const options = within(select).getAllByRole('option').map((o) => Number(o.getAttribute('value')));
+    expect(options).toEqual(Array.from({ length: 59 }, (_, i) => i + 2));
+    expect(select.value).toBe('7');
+  });
+
+  it('writes resourceMonitor.captureIntervalMs, in ms, through the settings API when changed', async () => {
     await mount();
     fireEvent.change(screen.getByTestId('monitor-interval'), { target: { value: '10' } });
 
     await waitFor(() => expect(writePatch).toHaveBeenCalledTimes(1));
-    expect(writePatch).toHaveBeenCalledWith({ kind: 'settings' }, [{ path: ['resourceMonitor', 'captureIntervalSeconds'], value: 10 }]);
+    expect(writePatch).toHaveBeenCalledWith({ kind: 'settings' }, [{ path: ['resourceMonitor', 'captureIntervalMs'], value: 10_000 }]);
   });
 
   it('is titled for what it sets', async () => {

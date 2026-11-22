@@ -24,7 +24,7 @@
  *                        in `quick-open-target.e2e.ts`, which owns its behaviour. This file asserts
  *                        only its ABSENCE (FR-011), which is the half nothing else covers.
  */
-import { TEST_SHELL } from './harness.js';
+import { TEST_SHELL, markdownOpensInEditor } from './harness.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -425,6 +425,7 @@ test('a file opened by Quick Open produces the same outcome as the same file ope
   const viaQuickOpen = createDeepTree('throng-qo-sc4-qo-');
   try {
     await runApp(async (_app, win) => {
+      await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
       await settle(win);
 
       /**

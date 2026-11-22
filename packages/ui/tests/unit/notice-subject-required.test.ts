@@ -115,8 +115,9 @@ function compile(name: string, source: string): { code: number; output: string }
       compilerOptions: { noEmit: true, composite: false, incremental: false },
       // The fixture, plus the renderer's ambient globals: `window.throng` is declared in
       // `global.d.ts`, and without it every bridge call in the graph tsc walks reports TS2339 —
-      // seven failures that have nothing to do with what is being measured.
-      include: ['fixture.ts', '../../../src/renderer/global.d.ts'],
+      // seven failures that have nothing to do with what is being measured. Every other renderer declaration
+      // file too (075: the callout parser package ships no types of its own), for the same reason.
+      include: ['fixture.ts', '../../../src/renderer/**/*.d.ts'],
     }),
     'utf8',
   );

@@ -87,6 +87,17 @@ describe('Synchronise Scrolling in the panel menu', () => {
     expect(labels(previewWith(false))).not.toContain('Synchronise Scrolling');
   });
 
+  // 074 FR-062b — the header's Go to row names where a PDF goes.
+  it('names Go to Page… in a PDF preview’s menu, and Go to Heading… in a Markdown one', () => {
+    const pdf = headerMenu({
+      panel: { type: 'panel', id: 'p', kind: 'preview', title: 'P' },
+      preview: { providerKind: 'binary', parented: false, flowingDocument: false, goTo: 'page' },
+    });
+    expect(labels(pdf)).toContain('Go to Page…');
+    expect(labels(pdf)).not.toContain('Go to Heading…');
+    expect(labels(previewWith(true))).toContain('Go to Heading…');
+  });
+
   it('is offered for a Markdown editor and its preview', () => {
     expect(labels(editorWith(MARKDOWN))).toContain('Synchronise Scrolling');
     expect(labels(previewWith(true))).toContain('Synchronise Scrolling');
@@ -118,5 +129,17 @@ describe('a right-click over a diagram', () => {
 
   it('adds nothing away from a diagram', () => {
     expect(labels(previewMenu(true))).not.toContain('Copy Diagram as Image');
+  });
+
+  // 074 FR-033 (2026-11-19) — an image or SVG is a picture already: its row is Copy Image.
+  it('reads Copy Image over a picture', () => {
+    const items = previewContentMenu({
+      selectionEmpty: true,
+      find: { run: () => {} },
+      goToHeading: { run: () => {} },
+      diagram: { inFocus: false, copyImage: () => {}, toggleFocus: () => {}, picture: true },
+    });
+    expect(items[0]).toMatchObject({ label: 'Copy Image', section: 'contextual' });
+    expect(labels(items)).not.toContain('Copy Diagram as Image');
   });
 });

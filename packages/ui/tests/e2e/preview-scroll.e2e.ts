@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { openApp, runApp, createProject as newProject, firstPanelId, focusEditor, cleanupTemp, pressAction, settle, type OpenApp } from './harness.js';
+import { openApp, runApp, createProject as newProject, firstPanelId, focusEditor, cleanupTemp, pressAction, settle, type OpenApp, markdownOpensInEditor } from './harness.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
 import { openGotoLine } from './helpers/navigation.js';
 
@@ -49,7 +49,7 @@ test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
 test.beforeAll(async () => {
-  shared = await openApp();
+  shared = await openApp({ markdownOpensIn: 'editor' });
 });
 test.afterAll(async () => {
   await shared?.close();
@@ -187,6 +187,7 @@ test('a live update of a parented preview keeps the heading the reader was looki
   cpSync(join(FIXTURES, 'long-1000.md'), join(root, 'long-1000.md'));
   try {
     await runApp(async (_app, win) => {
+      await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
       await createProject(win, 'PreviewScroll', root);
       const editorId = await editorPanel(win);
       await win.getByTestId('file-explorer-tree').getByText('long-1000.md', { exact: true }).click();

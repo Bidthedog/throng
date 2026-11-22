@@ -37,11 +37,13 @@ const EXPECTED = [
   // converting between units — and it inherits the same forced step of 2, because 1 across 118 is
   // 0.85% and the aimable-slider rule rejects it.
   { key: 'tabs.maxWidth', min: 10, max: 128, step: 2, value: 32 },
-  { key: 'tabs.chevronRepeatDelayMs', min: 100, max: 3000, step: 50, value: 350 },
+  // 077 R6: the slider narrowed 3000 → 1500, and a hard maximum of 10 s keeps any longer hand-set delay.
+  { key: 'tabs.chevronRepeatDelayMs', min: 100, max: 1500, step: 50, value: 350, hardMax: 10_000 },
   // US7 / FR-058. A finer step than its two neighbours because the popover delay is the one a user
   // tunes in small amounts — 25 across 0–1500 is 1.67%, still clear of the aimable-slider floor,
   // and 500 lands exactly on 0 + 25×20.
-  { key: 'tabs.popoverDelayMs', min: 0, max: 1500, step: 25, value: 500 },
+  // 077 R6 — a hover dwell, so up to 10 s typed in the box.
+  { key: 'tabs.popoverDelayMs', min: 0, max: 1500, step: 25, value: 500, hardMax: 10_000 },
 ] as const;
 
 describe('the Tabs settings group (FR-030, FR-034, FR-044h, FR-047, FR-050, FR-054a, FR-058)', () => {
@@ -66,10 +68,11 @@ describe('the Tabs settings group (FR-030, FR-034, FR-044h, FR-047, FR-050, FR-0
       expect(d!.min, e.key).toBe(e.min);
       expect(d!.max, e.key).toBe(e.max);
       expect(d!.step, e.key).toBe(e.step);
-      // The guard enforces the CONTROL's range for these three: no wider hand-set value is
-      // legitimate, so neither declares a hard bound (contrast diagnostics.maxFileSizeKb).
+      // The guard enforces the CONTROL's range for these: no wider hand-set value is legitimate, so
+      // none declares a hard bound (contrast diagnostics.maxFileBytes) — except where 077 narrowed a
+      // slider and declared a hard maximum to keep what a user could already store.
       expect(d!.hardMin, e.key).toBeUndefined();
-      expect(d!.hardMax, e.key).toBeUndefined();
+      expect(d!.hardMax, e.key).toBe('hardMax' in e ? e.hardMax : undefined);
     }
   });
 
@@ -79,7 +82,8 @@ describe('the Tabs settings group (FR-030, FR-034, FR-044h, FR-047, FR-050, FR-0
     const d = byKey.get('behaviour.tabHoverActivateMs');
     expect(d?.group).toBe('Tabs');
     expect(d?.control).toBe('slider');
-    expect([d?.min, d?.max, d?.step]).toEqual([0, 5000, 50]);
+    // 077 R6 — a hover dwell: 0–1500 in 25 ms steps on the slider, up to 10 s typed.
+    expect([d?.min, d?.max, d?.step, d?.hardMax]).toEqual([0, 1500, 25, 10_000]);
     expect(getAtPath(DEFAULT_APP_SETTINGS, 'behaviour.tabHoverActivateMs')).toBe(600);
   });
 
@@ -154,8 +158,8 @@ describe('the Tabs settings are bounded by their DECLARATION alone (FR-041)', ()
       maxNameLength: 128,
       maxWidth: 128,
       newTabPosition: 'afterActive',
-      chevronRepeatDelayMs: 3000,
-      popoverDelayMs: 1500,
+      chevronRepeatDelayMs: 10_000, // its hardMax (077), above the 1500 slider maximum
+      popoverDelayMs: 10_000, // its hardMax (077 R6, a hover dwell), above the 1500 slider maximum
     });
     expect(corrected).toBe(true);
   });

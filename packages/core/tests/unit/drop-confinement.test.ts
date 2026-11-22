@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { resolveDrop, type DropCandidate } from '../../src/editor/drop.js';
+import { formatSetting, type FieldDescriptor } from '../../src/index.js';
+
+/** `editor.maxOpenFileBytes` as Preferences shows it: bytes, in MB. */
+const SIZE = { storedUnit: 'bytes', display: 'MB' } as FieldDescriptor;
 
 /**
  * 018 / US9 — the drop decision (FR-057 … FR-066a, SC-011/SC-012).
@@ -108,6 +112,17 @@ describe('resolveDrop — what is not a text file', () => {
     const d = resolveDrop(file('C:\\code\\demo\\huge.log', 2_000_000), doc, roots, LIMITS);
     expect(d.ok).toBe(false);
     if (!d.ok) expect(d.reason).toBe('too-large');
+    // 077 FR-014 — the size and the limit named as the setting is shown, digit-grouped, quoting its value.
+    if (!d.ok) {
+      expect(d.error).toBe(
+        `File is too large to open: ${formatSetting(2_000_000, SIZE)}, over the ${formatSetting(LIMITS.maxOpenFileBytes, SIZE)} limit set in Preferences.`,
+      );
+    }
+  });
+
+  it('carries the size and the limit on a too-large refusal, so a later notice can quote them (077 T045)', () => {
+    const d = resolveDrop(file('C:\\code\\demo\\huge.log', 2_000_000), doc, roots, LIMITS);
+    expect(d).toMatchObject({ ok: false, reason: 'too-large', size: 2_000_000, limit: LIMITS.maxOpenFileBytes });
   });
 
   it('checks confinement BEFORE size — an out-of-tree file is refused for the reason that matters', () => {

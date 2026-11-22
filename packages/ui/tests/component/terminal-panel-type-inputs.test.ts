@@ -427,7 +427,7 @@ describe('a flavour added to settings appears without a restart (FR-010a, migrat
  */
 const FORM_PANEL = 'p-form';
 
-function mountForm(): { user: ReturnType<typeof userEvent.setup> } {
+function mountForm(opts: { formerKind?: 'terminal' } = {}): { user: ReturnType<typeof userEvent.setup> } {
   Reflect.set(window, 'throng', {
     terminal: {
       listFlavours: () => Promise.resolve(FLAVOURS),
@@ -481,7 +481,7 @@ function mountForm(): { user: ReturnType<typeof userEvent.setup> } {
             createElement(
               NotificationProvider,
               null,
-              createElement(PanelTypeForm, { panelId: FORM_PANEL, projectRoot: 'C:/proj' }),
+              createElement(PanelTypeForm, { panelId: FORM_PANEL, projectRoot: 'C:/proj', ...opts }),
             ),
           ),
         ),
@@ -509,5 +509,18 @@ describe('Confirm is gated by a chosen type, and Clear returns the form to empty
     expect(screen.queryByTestId('terminal-flavour')).toBeNull();
     expect(screen.getByTestId(`panel-type-confirm-${FORM_PANEL}`)).toBeDisabled();
     expect(select.value).toBe('');
+  });
+
+  /*
+   * Maintainer report 2026-11-22 — close a terminal and the panel returns to this form with Terminal already
+   * chosen (002 FR-016a), but Confirm stays greyed until the type is changed away and back. The form is
+   * filled the moment it mounts, before the shell list has arrived, so the flavour it picks is none.
+   */
+  it('a form that returns with Terminal chosen can be confirmed once the shells have loaded', async () => {
+    mountForm({ formerKind: 'terminal' });
+    const select = (await screen.findByTestId(`panel-type-select-${FORM_PANEL}`)) as HTMLSelectElement;
+    expect(select.value).toBe('terminal');
+    await waitFor(() => expect(screen.getByTestId(`panel-type-confirm-${FORM_PANEL}`)).toBeEnabled());
+    expect((screen.getByTestId('terminal-flavour') as HTMLSelectElement).value).toBe(FLAVOURS[0]?.id);
   });
 });

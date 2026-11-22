@@ -1197,7 +1197,7 @@ describe('a file throng cannot open, and the OS program preference (067 FR-116, 
     await act(async () => {
       window.dispatchEvent(
         new CustomEvent('throng:open-file', {
-          detail: { projectId: PROJECT, relPath: 'pic.png', absPath: 'D:/proj/pic.png', gesture },
+          detail: { projectId: PROJECT, relPath: 'pic.zip', absPath: 'D:/proj/pic.zip', gesture },
         }),
       );
     });
@@ -1213,7 +1213,7 @@ describe('a file throng cannot open, and the OS program preference (067 FR-116, 
   it('opens a binary file in the OS on a double click', async () => {
     withPreference(true, BINARY);
     await ready();
-    expect(await raise('dblclick')).toEqual(['pic.png']);
+    expect(await raise('dblclick')).toEqual(['pic.zip']);
   });
 
   it('raises no notice and opens nothing on a single click', async () => {
@@ -1227,7 +1227,7 @@ describe('a file throng cannot open, and the OS program preference (067 FR-116, 
   it('opens it in the OS from the double-click event that follows an opening first click', async () => {
     withPreference(true, BINARY);
     await ready();
-    expect(await raise('dblclickUnsupportedOnly')).toEqual(['pic.png']);
+    expect(await raise('dblclickUnsupportedOnly')).toEqual(['pic.zip']);
   });
 
   it('leaves a file the editor can open to the editor, whatever the gesture', async () => {

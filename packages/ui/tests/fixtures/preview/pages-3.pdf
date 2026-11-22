@@ -1,0 +1,45 @@
+%PDF-1.4
+% 074 US4 fixture: three pages, an internal link from page 1 to page 3. Hand-written; PDF.js reconstructs the xref.
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 6 0 R /Resources << /Font << /F1 9 0 R >> >>
+   /Annots [10 0 R] >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R /Resources << /Font << /F1 9 0 R >> >> >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 8 0 R /Resources << /Font << /F1 9 0 R >> >> >>
+endobj
+6 0 obj
+<< /Length 58 >>
+stream
+BT /F1 24 Tf 72 720 Td (Page one - go to page three) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Length 39 >>
+stream
+BT /F1 24 Tf 72 720 Td (Page two) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Length 41 >>
+stream
+BT /F1 24 Tf 72 720 Td (Page three) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+10 0 obj
+<< /Type /Annot /Subtype /Link /Rect [72 710 420 745] /Border [0 0 0] /Dest [5 0 R /Fit] >>
+endobj
+trailer
+<< /Root 1 0 R /Size 11 >>
+%%EOF

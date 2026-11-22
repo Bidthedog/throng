@@ -312,6 +312,22 @@ describe('the Open In target names the tab’s last active editor (FR-098)', () 
     expect(within(flyout).queryByTestId('menu-item-Last Active Editor (Scratch)')).toBeNull();
   });
 
+  // MT-11 walk-through (2026-11-21): "Last Active Editor (Blank Panel 4)" for an editor whose header read "people".
+  // The name is the one its header shows (048 FR-032), never the stored fallback title.
+  it('names the editor as its header does, not by its stored fallback title', async () => {
+    setLastActiveEditor(TAB_ID, 'p1');
+    setEditorState('p1', { filePath: 'C:/projects/demo/other.txt' });
+    const layout = oneNamedPanel('Blank Panel 4');
+    const tab = layout.tabs[0]!;
+    const asEditor = { ...layout, tabs: [{ ...tab, root: { ...(tab.root as object), kind: 'editor' } as typeof tab.root }] };
+    const { user, tree } = await mount(asEditor);
+
+    const flyout = await openInFlyout(user, tree);
+
+    expect(within(flyout).queryByTestId('menu-item-Last Active Editor (Blank Panel 4)')).toBeNull();
+    expect(within(flyout).getByTestId('menu-item-Last Active Editor (other)')).toBeVisible();
+  });
+
   it('names the STORE’s panel, not the tab’s active one, when the two differ', async () => {
     /*
      * `activePanelId` stays on `p1` (createDefaultLayout sets it and addPanel does not move it)

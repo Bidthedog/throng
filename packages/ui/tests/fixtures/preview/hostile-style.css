@@ -1,0 +1,10 @@
+/* 074 FR-090 — the hostile HTML fixture's own stylesheet: a remote import and a remote url(), both of which the
+   frame's CSP and the request filter refuse, and a local url() that loads through the asset route. */
+@import url("https://cdn.evil.test/from-stylesheet.css");
+h1 {
+  color: rgb(200, 0, 0);
+  background-image: url("https://evil.test/from-stylesheet.png");
+}
+.local {
+  background-image: url("img/local-bg.png");
+}
