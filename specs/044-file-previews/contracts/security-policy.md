@@ -183,6 +183,10 @@ img-src 'self' https: throng-preview:; object-src 'none'; frame-src 'none';
 base-uri 'none'; form-action 'none'
 ```
 
+*(As 044 shipped it. 054 added `img-src blob:`; 074 added `frame-src throng-preview://follow` and
+`style-src throng-preview://asset` — see the 074 amendment below. `index.html` and `renderer-csp.test.ts` hold the
+current policy.)*
+
 `style-src 'unsafe-inline'` is unchanged (CodeMirror and the theme provider mount style elements);
 the sanitiser forbids document `style` attributes and elements, so it is not reachable from a file.
 
@@ -252,3 +256,69 @@ T210, commit `0c741da9`.)* The grant
 lets any process raise a window until the next user input (`ASFW_ANY`), the same exposure #199 already
 accepted for terminal commands; it is requested only in answer to the user's own Ctrl+click, Ctrl+Enter
 or *Open Link*.
+
+## Amendment — spec 074, media previews (2026-11-18)
+
+*(Amended by 074 FR-091, FR-092; `specs/074-media-file-previews/contracts/media-providers.md` §5.)* Each new
+provider keeps all four layers. A defect in one layer is never enough to run code or make a request.
+
+| Provider | Layer 1/2 — isolation | Layer 3 — CSP | Layer 4 — request filter | Protocol |
+|---|---|---|---|---|
+| Image | drawn by an SVG `<image>` (image mode); nothing inserted from the file | `img-src throng-preview:` (unchanged) | unchanged | source route, `sourceMimeTypes`, own size cap |
+| SVG | the source is never DOM: parsed inert for its size, drawn from a `blob:` in **secure static image mode** (no script, no external load) | `img-src blob:` (unchanged) | unchanged | none — the text arrives as a snapshot |
+| `svg` fence in Markdown | as SVG; the Markdown sanitiser still strips raw `<svg>` (`ADD_FORBID_CONTENTS`) | unchanged | unchanged | none |
+| PDF | PDF.js core API: canvas plus its text layer (spans whose `textContent` PDF.js sets — no markup from the file; 074 FR-068a, 2026-11-19), no annotation layer, no scripting, no XFA, no WASM, no font/cMap fetch; bytes passed as `data` | worker under `script-src 'self'` (unchanged) | unchanged | bytes through `preview.readSource`, which calls the protocol handler itself |
+| HTML | own DOMPurify whole-document profile (scripts, handlers, `javascript:`, frames, objects, `base`, `meta`, non-stylesheet links, form actions, `target` removed; every resource URL rewritten to the asset route or dropped); `<iframe sandbox="allow-popups" srcdoc>` — opaque origin, no script, no forms, no top navigation | injected frame policy `default-src 'none'; img-src throng-preview:; style-src 'unsafe-inline' throng-preview:; font-src throng-preview:; media-src throng-preview:`, plus the renderer's inherited one | **a request from a sub-frame never reaches `https:`**, whatever Load remote images says (`fromSubFrame`) | asset route widened by `assetMimeTypes` for HTML runs only; `follow` route answers 204 |
+
+**The Layer 3 grants** (FR-092), both pinned by `renderer-csp.test.ts`:
+
+- `frame-src throng-preview://follow`. It admits exactly the navigation a plain click on a rewritten link starts
+  inside the HTML frame; that route serves no document (204, never committed), so the frame keeps its page.
+- `style-src … throng-preview://asset` (2026-11-19, FR-072). A `srcdoc` frame **inherits** the renderer's policy,
+  and its injected frame policy can only narrow it, so without this grant the page's own `<link rel="stylesheet">`
+  — rewritten to the asset route — was refused and the page drew unstyled. The route serves `text/css` only to an
+  HTML run (`assetMimeTypes`), confined to the project; the Markdown sanitiser still forbids `<link>` and `<style>`,
+  so no other surface can name it.
+
+**Window opening**: a Ctrl+click in the frame (`allow-popups`; no script can open one) reaches
+`window-open-guard.ts`, which denies every window; a `throng-preview://follow/<panelId>?href=…` request with the
+`background-tab` disposition is sent to that window as `throng:preview:frameLink` and followed by the preview chrome
+as any preview link is (044 FR-090, FR-091). Pinned by `window-open-guard.test.ts`.
+
+Tests: `picture-blocks.test.ts`, `html-sanitise.test.ts`, `html-preview.test.ts`, `pdf-preview.test.ts`,
+`preview-seam-074.test.ts` (the sub-frame rows), `preview-protocol-074.integration.test.ts`, and end to end
+`preview-media.e2e.ts`.
+
+## Amendment — spec 074, same-origin HTML frame and safe sources (2026-11-20)
+
+*(Amended by 074 FR-074a, FR-072a, FR-092a, FR-093a; supersedes the HTML row above where they differ.)*
+
+| Layer | HTML Preview, from 2026-11-20 |
+|---|---|
+| 1/2 — isolation | Same DOMPurify profile; an `https:` stylesheet, font or image is **kept** when its origin is one of the panel's safe sources (global `editor.previews.providers.html.safeSources` ∪ the project's list), and every other remote reference is dropped **and recorded** for the panel's notice. Frame `<iframe sandbox="allow-same-origin allow-popups" name="throng-html-<panelId>" srcdoc>`: the frame shares the renderer's origin so the panel can update it in place, read its scroll, search it and hear its input; **no `allow-scripts`**, so nothing in it runs. The opaque-origin containment of the row above is given up (FR-074a); script is still refused by three independent layers (sanitiser, sandbox, frame policy). |
+| 3 — CSP | Frame policy `img-src`, `style-src`, `font-src` gain the safe sources; never `script-src`. Renderer policy grants `style-src … https:` and `font-src 'self' throng-preview: https:` (FR-092a) — a same-origin `srcdoc` frame inherits it and a meta policy cannot follow a user-edited list. Pinned by `renderer-csp.test.ts`. |
+| 4 — request filter | A sub-frame `https:` request is allowed only as `image`, `stylesheet` or `font`, only from a frame named `throng-html-<panelId>`, and only when that window registered the URL's origin for that panel (`throng:preview:setFrameSources`, normalised again in main). Every top-level document still loads nothing remote but a permitted image. Pinned by `renderer-request-policy-safe-sources.test.ts` and `frame-sources.test.ts`. |
+| Input | The main-process frame input relay is retired: the renderer listens on the frame document itself (FR-083a). |
+
+Tests: `html-sanitise-safe-sources.test.ts`, `renderer-request-policy-safe-sources.test.ts`, `frame-sources.test.ts`,
+`renderer-csp.test.ts`, `html-preview.test.ts`, and end to end `preview-media.e2e.ts` / `preview-media-hostile.e2e.ts`.
+
+## Amendment — spec 075, printing (2026-11-20, recorded at the 073/074/075 merge)
+
+*(Amended by 075 FR-066, FR-071, FR-072, FR-079; `specs/075-markdown-preview-extensions/contracts/print.md`.)*
+
+Two windows take part in printing, and neither makes a request a filter does not see — the guarantee Layer 4 makes
+for every renderer.
+
+| Window | Session | What it loads | Filter |
+|---|---|---|---|
+| **Print Preview** | the default session | the app's own `index.html` (the same bundle as every window), sandboxed, context-isolated, with the app's preload | Layer 4 as written: `file:` under the renderer directory, `throng-preview:`, `data:`/`blob:`. It draws pages from PDF bytes handed over IPC (PDF.js, as 074's PDF row), never from a URL |
+| **Print host** (hidden; lays out and prints) | a partition of its own, `throng-print-host` | one printable document written to `<userData>/print-jobs/hosts/<id>.html` (removed when the host closes, at quit, and swept at start), with **JavaScript disabled**, sandboxed, context-isolated | its own `onBeforeRequest`, installed once on that session: allow the host's own file, the app's bundled assets, `data:`, `throng-preview:` (the app's own protocol handler, registered on the session — the same confinement as the app's), and the exact remote image URLs the preview had loaded; **cancel everything else** |
+
+The printable document carries its own policy: `default-src 'none'; img-src throng-preview: data: <the loaded remote
+images>; style-src 'unsafe-inline'; font-src file: throng-asset: data:` — no `script-src`, so nothing in it runs; a
+remote image the preview did not show prints as its alternative text, never as a request (FR-079). A picture drawn
+from a `blob:` URL is inlined as `data:` from its own bytes, since a `blob:` URL belongs to the preview's window.
+
+Tests: `print-printable.test.ts` (the document, its policy, inlined pictures), `print-controller.test.ts`,
+`print-host-files.test.ts`, and end to end `print-preview.e2e.ts`.

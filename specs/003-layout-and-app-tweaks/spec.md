@@ -442,7 +442,8 @@ handle is on the boundary and dragging it resizes the sidebar cleanly.
   panel); destroying its last panel/tab deletes the sub-workspace and removes it from the list (the
   relocation warning applies).
 - **Last panel/tab in the main workspace**: the never-empty invariant holds (≥1 Tab, ≥1 Panel per
-  active project) — the destroy is refused (consistent with 002 FR-016).
+  active project) — the destroy is refused (consistent with 002 FR-016). *(Superseded by 002 FR-016a, 2026-11-20:
+  the panel returns to the blank panel form instead.)*
 - **All colours in use** (projects + sub-workspaces share the palette/registry): the picker falls
   back to the least-recently-used colour.
 - **Project folder conflicts on create or edit** (identical / parent / child): rejected with an
