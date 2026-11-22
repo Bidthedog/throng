@@ -236,6 +236,28 @@ describe('drag-to-reorder by the grip', () => {
     await waitFor(() => expect(names()).toEqual(['Detached B', 'Detached A']));
   });
 
+  // dnd-kit cancels a pointer drag on Escape (and on a resize or the window hiding) through onDragCancel, never onDragEnd.
+  it('Escape mid-drag ends the drag with nothing moved: no dragging row, no indicator, no tracking', async () => {
+    const server = makeServer([sw('swA', 'Detached A'), sw('swB', 'Detached B')]);
+    await mount(server);
+    await waitFor(() => expect(names()).toEqual(['Detached A', 'Detached B']));
+    layoutRows();
+    const removed = vi.spyOn(window, 'removeEventListener');
+
+    const grip = screen.getByTestId('subworkspace-grip-swB');
+    fireEvent.pointerDown(grip, { isPrimary: true, button: 0, pointerId: 1, clientX: 10, clientY: 50 });
+    fireEvent.pointerMove(document, { isPrimary: true, pointerId: 1, clientX: 10, clientY: 40 });
+    await waitFor(() => expect(document.querySelectorAll('.subworkspace-item--dragging')).toHaveLength(1));
+    fireEvent.pointerMove(document, { isPrimary: true, pointerId: 1, clientX: 10, clientY: 5 });
+    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+
+    await waitFor(() => expect(document.querySelectorAll('.subworkspace-item--dragging')).toHaveLength(0));
+    expect(screen.queryByTestId('subworkspace-insert-indicator')).toBeNull();
+    expect(removed.mock.calls.some(([type, , capture]) => type === 'pointermove' && capture === true)).toBe(true);
+    expect(server.invoke).not.toHaveBeenCalledWith('subworkspace.reorder', expect.anything());
+    removed.mockRestore();
+  });
+
   it('dropping A back onto its own slot keeps the order, so the test above is not satisfied by any drop', async () => {
     const server = makeServer([sw('swA', 'Detached A'), sw('swB', 'Detached B')]);
     await mount(server);

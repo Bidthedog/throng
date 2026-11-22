@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -167,13 +167,27 @@ export function SubworkspacesPanel({
     window.addEventListener('pointermove', handler, true);
   };
 
-  const onDragEnd = (event: DragEndEvent): void => {
-    const id = parseDragId(String(event.active.id));
-    const slot = slotRef.current;
+  const stopTracking = (): void => {
     if (moveListener.current) {
       window.removeEventListener('pointermove', moveListener.current, true);
       moveListener.current = null;
     }
+  };
+  // A drag cancelled (Escape, a resize, the window hiding) ends with nothing moved: its tracking, its row style and its
+  // drop indicator all go. dnd-kit reports a cancel through onDragCancel only, never onDragEnd.
+  const onDragCancel = (): void => {
+    stopTracking();
+    setDraggingId(null);
+    setIndicatorY(null);
+    slotRef.current = null;
+  };
+  // Nor does a drag in progress outlive the panel.
+  useEffect(() => stopTracking, []);
+
+  const onDragEnd = (event: DragEndEvent): void => {
+    const id = parseDragId(String(event.active.id));
+    const slot = slotRef.current;
+    stopTracking();
     setDraggingId(null);
     setIndicatorY(null);
     slotRef.current = null;
@@ -244,7 +258,7 @@ export function SubworkspacesPanel({
       {/* 018 / FR-051 — the third of four copy-pasted error strips. Now the shared model. Its CSS
           block was a verbatim copy of the Projects panel's, hard-coded #3a1d22 on #ff9aa6 and all. */}
       {minimised ? null : (
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
         <ul className="subworkspace-list" data-testid="subworkspace-list" ref={listRef}>
           {draggingId !== null && indicatorY !== null ? (
             <div
