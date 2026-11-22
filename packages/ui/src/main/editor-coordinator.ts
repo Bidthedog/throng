@@ -2494,9 +2494,12 @@ export class EditorCoordinator {
       return this.saveMovedOut(doc, payload.absPath);
     }
 
+    // What this save writes. An edit can land while the write is awaited; it is not on disk, so it
+    // must not be marked saved with it.
+    const written = doc.authority.doc;
     const result = await this.service.save({
       absPath: target,
-      text: doc.authority.text,
+      text: written.toString(),
       ...this.writeFormat(doc, payload.encoding),
       ownerKind: doc.ownerKind,
       ownerRoot: doc.ownerRoot,
@@ -2514,9 +2517,9 @@ export class EditorCoordinator {
     if (doc.absPath && pathChanged) unregisterPanel(this.registry, doc.panelId);
     doc.absPath = target;
     registerOpen(this.registry, target, { panelId: doc.panelId, windowId: doc.windowId });
-    // What we hold IS what the file holds now — so the document is clean, and an undo past
-    // this point re-dirties it for free (FR-026d).
-    doc.authority.markSaved();
+    // What we wrote IS what the file holds now — so the document is clean unless an edit landed during
+    // the write, and an undo past this point re-dirties it for free (FR-026d).
+    doc.authority.markSaved(written);
     doc.fileMissing = false; // the save re-created the file (FR-099)
     doc.unloadable = false; // …and the path is demonstrably writable, so it reads (027 / #161)
     doc.neverRead = false; // what is on disk now is this buffer
@@ -2529,10 +2532,12 @@ export class EditorCoordinator {
       clearTimeout(doc.recoveryTimer);
       doc.recoveryTimer = undefined;
     }
-    void this.recovery.remove(doc.panelId);
+    // An edit made during the write keeps its recovery copy and its unsaved dot.
+    if (doc.authority.dirty) this.scheduleRecovery(doc);
+    else void this.recovery.remove(doc.panelId);
     // Mirror the clean state to any other window showing this document, so a synced
     // editor's unsaved dot clears everywhere on save (FR-034). No origin to exclude.
-    this.relay({ panelId: doc.panelId, dirty: false });
+    this.relay({ panelId: doc.panelId, dirty: doc.authority.dirty });
     if (wasReplaced) {
       // 052 FR-012 — Save As kept the changes: an ordinary document at its new path, claimed and watched
       // above. `reported.path` was cleared when it was replaced, so `announcePath` says `registered`.
@@ -2583,9 +2588,10 @@ export class EditorCoordinator {
     const here = doc.absPath;
     const destinationRoot = here ? doc.allProjectRoots.find((root) => isUnderPath(here, root)) : undefined;
     if (destinationRoot === undefined) return refused('This file moved to another project, which is no longer open.');
+    const written = doc.authority.doc;
     const result = await this.service.save({
       absPath: target,
-      text: doc.authority.text,
+      text: written.toString(),
       ...this.writeFormat(doc),
       ownerKind: 'project',
       ownerRoot: destinationRoot,
@@ -2600,7 +2606,7 @@ export class EditorCoordinator {
     this.adoptSavedFormat(doc);
     const pathChanged = doc.absPath !== target;
     doc.absPath = target;
-    doc.authority.markSaved();
+    doc.authority.markSaved(written);
     doc.fileMissing = false;
     doc.unloadable = false;
     doc.neverRead = false;
@@ -2610,8 +2616,9 @@ export class EditorCoordinator {
       clearTimeout(doc.recoveryTimer);
       doc.recoveryTimer = undefined;
     }
-    void this.recovery.remove(doc.panelId);
-    this.relay({ panelId: doc.panelId, dirty: false });
+    if (doc.authority.dirty) this.scheduleRecovery(doc);
+    else void this.recovery.remove(doc.panelId);
+    this.relay({ panelId: doc.panelId, dirty: doc.authority.dirty });
     this.relay({ panelId: doc.panelId, movedTo: target, movedOut: true });
     if (pathChanged) this.tellHistory('rewriteCurrent', (h) => h.rewriteCurrent(doc.panelId, target));
     this.notifyAfterMutation(doc, false);

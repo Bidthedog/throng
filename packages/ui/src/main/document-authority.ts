@@ -209,14 +209,18 @@ export class DocumentAuthority {
   }
 
   /**
-   * The document was written to disk: what we hold is now what the file holds.
+   * The document was written to disk: `written` is what the file holds now.
    *
    * The per-line record is mapped through every edit (059 FR-061), so it always has one entry per
    * line break and a save writes each line with its own ending. Before FR-061 a save after an edit
    * that added or removed a line fell back to the dominant ending everywhere and dropped the record.
+   *
+   * `written` is the content the save took BEFORE its I/O, never what is held now: an edit can land
+   * while the write is awaited, and that edit is not on disk. Marking it saved dropped it — the save's
+   * own watch event then read the older file into a "clean" buffer.
    */
-  markSaved(): void {
-    this.savedDoc = this.content;
+  markSaved(written: Text = this.content): void {
+    this.savedDoc = written;
     this.savedFormat = this.format;
     this.savedEnc = this.enc;
   }
