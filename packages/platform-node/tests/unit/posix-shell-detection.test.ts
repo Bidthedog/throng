@@ -51,6 +51,19 @@ describe('POSIX shell detection: folders beyond PATH (070 FR-017, research R9)',
     expect(shells.filter((s) => s.id === 'bash')).toHaveLength(1);
   });
 
+  // 062 FR-014: the default is the user's login shell — even one throng has no flavour for (`chsh -s /usr/bin/xonsh`).
+  it.skipIf(skipOnWindows('needs a POSIX filesystem: execute bits and /-rooted paths'))('reports a login shell throng does not know first, by its file name', async () => {
+    const dir = tempDir();
+    for (const name of ['bash', 'xonsh']) writeFileSync(join(dir, name), '#!/bin/sh\n', { mode: 0o755 });
+    const shells = await new PosixShellDetection({
+      readShellsFile: async () => `${join(dir, 'bash')}\n${join(dir, 'xonsh')}\n`,
+      env: { PATH: '', SHELL: join(dir, 'xonsh') },
+      passwdShell: () => undefined,
+    }).detectInstalledShells();
+    expect(shells.map((s) => s.file)).toEqual([join(dir, 'xonsh'), join(dir, 'bash')]);
+    expect(shells[0]).toMatchObject({ id: 'xonsh', label: 'xonsh' });
+  });
+
   it.skipIf(skipOnWindows('needs a POSIX filesystem: execute bits and /-rooted paths'))('falls back to the passwd shell, and ignores a login shell that is not an absolute path', async () => {
     const system = tempDir();
     const brew = tempDir();

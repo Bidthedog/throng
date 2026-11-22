@@ -86,7 +86,10 @@ export class PosixShellDetection implements IShellDetection {
     const byId = new Map<string, DetectedShell>();
     const realOf = new Map<string, string>();
     for (const file of candidates) {
-      const known = KNOWN.find((k) => k.names.includes(basename(file)));
+      // The login shell is the default whatever it is (062 FR-014): one throng has no flavour for is named by its file.
+      const known =
+        KNOWN.find((k) => k.names.includes(basename(file))) ??
+        (file === login ? { id: basename(file), label: basename(file) } : undefined);
       if (!known || byId.has(known.id) || !(await isExecutable(file))) continue;
       const real = await realpath(file).catch((error: unknown) => {
         logCaught('posix-shell-detection: resolve shell path', error);
