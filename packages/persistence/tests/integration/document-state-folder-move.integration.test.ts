@@ -51,6 +51,20 @@ describe('a folder rename or move carries the overrides of the files inside it (
     }
   });
 
+  it('re-keys the files beneath a folder whose name holds an emoji', () => {
+    // SQLite's substr counts characters; JS's length counts UTF-16 units, two for an emoji.
+    const { repo, close } = freshRepo();
+    try {
+      repo.set(OWNER, 'p1', 'notes 🚀/a.txt', 'markdown');
+
+      expect(repo.movePath(OWNER, 'p1', 'notes 🚀', 'notes')).toBe(true);
+
+      expect(repo.get(OWNER, 'p1', 'notes/a.txt')?.languageId).toBe('markdown');
+    } finally {
+      close();
+    }
+  });
+
   it('leaves a SIBLING whose name merely starts with the folder name alone', () => {
     const { repo, close } = freshRepo();
     try {
