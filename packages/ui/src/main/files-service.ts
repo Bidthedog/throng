@@ -7,7 +7,7 @@
  * the filesystem only through this service. All failures are returned as
  * `{ error }` (non-fatal, FR-025), never thrown across the bridge.
  */
-import { hostTraits, logCaught, logExpected, pathCompareKey, trashTerm } from '@throng/core';
+import { logCaught, logExpected, nameProblem, pathCompareKey, trashTerm } from '@throng/core';
 import { basename, dirname, join } from 'node:path';
 import {
   dedupeName,
@@ -56,8 +56,6 @@ export type DeleteMode = 'recycle' | 'permanent';
 
 const NO_ROOT = 'No active project.';
 const OUTSIDE = 'Target is outside the project root.';
-/** What cannot be in a name here. On Linux a backslash can (062 FR-021). */
-const separatorInName = (name: string): boolean => (hostTraits().paths.backslashIsSeparator ? /[\\/]/ : /\//).test(name);
 
 export class FilesService {
   private root: string | null = null;
@@ -254,7 +252,8 @@ export class FilesService {
     if (!this.root) return { error: NO_ROOT };
     if (relPath === '') return { error: 'The project root cannot be renamed.' };
     const name = newName.trim();
-    if (name.length === 0 || separatorInName(name)) return { error: 'Invalid name.' };
+    const problem = nameProblem(name);
+    if (problem !== null) return { error: problem };
     // A rename IS a move (FR-006), and it had #87's hole identically: the file leaves the path every
     // open editor of it is pointing at. Same bracket, same callbacks — because it is the same fact,
     // and a second signal for it would be a second thing to keep in step.

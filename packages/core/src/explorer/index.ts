@@ -14,7 +14,7 @@ export { isWithinRoot, isDropAllowed, isRoot, relPathUnderRoot } from './path-ru
 export type { TargetNode } from './target.js';
 export { resolveTarget } from './target.js';
 export type { RenameResult, DedupeStyle } from './naming.js';
-export { validateRename, dedupeName } from './naming.js';
+export { validateRename, dedupeName, nameProblem } from './naming.js';
 // 050 R3 — the pure rules a paste or drag is planned by.
 export { classifyTopLevel, clashKind, keepBothName, landingPlan, newerOf } from './transfer-plan.js';
 export type { TopLevelClass, ClashKind, ClashChoice, Landing } from './transfer-plan.js';
