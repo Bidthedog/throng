@@ -43,8 +43,10 @@ configuration-editor completeness, themeable icon controls, documentation curren
 
 ## Amending the constitution
 
-The bar is high and the precedent is well established — read the SYNC IMPACT REPORT block at the top
-of the file before proposing anything; it is a written record of how past bumps were argued.
+The bar is high and the precedent is well established — read `.specify/memory/constitution-history.md`
+before proposing anything; it is the written record of how past bumps were argued, newest first. The
+constitution itself carries only the latest amendment's SYNC IMPACT REPORT; an amendment moves that
+report to the top of the history file and writes its own in its place.
 
 - **MAJOR** = a previously-stated guarantee is withdrawn or reversed, or a principle is redefined so
   that previously-compliant work becomes non-compliant.
@@ -59,7 +61,15 @@ found; and record deferred TODOs honestly. **Audit the code before writing the r
 draft rule would have declared the shipped codebase non-compliant on rules its author believed it
 already met. A rule no design can satisfy governs nothing; a rule the codebase quietly violates is
 worse than none. Where a gap is real, state it as an **end-state requirement under Incremental
-Delivery**, enumerate the known violations in the principle itself, and file tracked issues.
+Delivery**, enumerate the known violations in the skill reference that holds the rule's detail (or
+in the principle, where it has none), and file tracked issues.
+
+**The constitution keeps one MUST per rule; the detail lives in skills** (7.4.1). A rule's lists,
+tables, registers and procedures sit in `references/constitution-<topic>.md` inside the owning area
+skill, and the constitution's MUST names that file. Those files are part of the constitution
+(Governance): an amendment that changes one edits it in the same change, and moving detail out is
+PATCH only when it moves verbatim behind a MUST that names it — detail left in a skill with no MUST
+pointing at it is a withdrawn guarantee (MAJOR).
 
 ## Writing requirements
 

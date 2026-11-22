@@ -33,6 +33,10 @@ only, behind `skipUnlessMacos(reason)`.
 
 ## The hygiene rules (Principle III, NON-NEGOTIABLE)
 
+The binding text of the hygiene, no-orphaned-views, Unload and elevation rules, and of the terminal
+tiers' override detail, is [references/constitution-terminals.md](references/constitution-terminals.md)
+(binding: constitution Principles III and IV). The notes below are the working summary.
+
 - **No orphaned OS processes.** Every end path — user close, kill, panel destroy, project delete,
   app-close "terminate all", the shell exiting itself, daemon shutdown — must release every resource
   the terminal created, *including the per-terminal `conhost.exe`*. A host reaps its terminals before
@@ -73,8 +77,8 @@ to select it alone is gone (034 FR-057), along with the shards whose runner-minu
 Two tiers, and both are enforced at the Constitution Check gate:
 
 - **Reserved — never bindable** in a scope live in a terminal: `Ctrl+C/D/Z/A/E/W/U/K/R/L/Q`.
-- **Shadowable — only as a recorded exception** enumerated in the constitution. Three remain:
-  `Ctrl+F` (`search.find`), `Ctrl+H` (`search.replace`), `Ctrl+S` (`editor.save`).
+- **Shadowable — only as a recorded exception** enumerated in the constitution's *Recorded
+  exceptions to the terminal tiers* register (Principle IV).
 
 Also binding: one command, one chord across panel types; and parity across shell flavours — a new
 binding may not widen the Git Bash / PowerShell gap. A chord throng consumes never reaches the shell,

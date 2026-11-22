@@ -71,6 +71,8 @@ for the inner loop; `td audit` and `td rank` read the recorded telemetry.
 - **Never run `npm run build` in a worktree while its throng is open.** It replaces the hashed renderer
   chunks the running app still loads, whose next dynamic import fails with "Failed to fetch dynamically
   imported module".
+- **`npm run typecheck` is `tsc -b`, which writes into `dist`** — the same hazard. While the worktree's
+  throng is open, typecheck each package with `npx tsc --noEmit -p packages/<pkg>` instead.
 - **Run a worktree's tests from inside the worktree.** Tests that read repo files through
   `process.cwd()` (`release-*.test.ts`, `docs-currency.test.ts`) read whichever checkout the shell is
   in; `vitest --root <worktree>` from the main checkout does not change that, and they silently pass or

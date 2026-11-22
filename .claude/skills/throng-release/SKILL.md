@@ -610,6 +610,9 @@ set or a step in this runbook.
     does, what runs where, what only a real release proves, adding a reviewer.
   - [signing-and-reproducibility.md](references/signing-and-reproducibility.md) — why a checksum
     and not a signature; the SC-008 claim.
+- [constitution-ci-lanes.md](references/constitution-ci-lanes.md) — the static-analysis gate and
+  what pull-request CI and the full pipeline must run (binding: constitution, Development Workflow &
+  Quality Gates).
 - [build-and-packaging.md](references/build-and-packaging.md) — packaging constraints (`npmRebuild: false`,
   `asar: false`, the bundled host-Node runtime) and the CI shape.
 - `specs/020-application-packaging/`, `specs/042-release-notes-and-artifacts/` — the requirements
