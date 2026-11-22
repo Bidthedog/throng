@@ -43,6 +43,14 @@ describe('login shells on macOS', () => {
     });
   });
 
+  // pwsh -Login runs the POSIX login profiles through /bin/sh (path_helper's PATH included); it must be the first flag.
+  it('starts pwsh with -l first, ahead of its shipped -NoLogo, and not again beside the user’s own -Login', () => {
+    withHostTraits('macos', () => {
+      expect(resolveLaunchSpec(flavour('pwsh', ['-NoLogo']), '', '/Users/dev/p').args).toEqual(['-l', '-NoLogo']);
+      expect(resolveLaunchSpec(flavour('pwsh'), '-Login -NoLogo', '/Users/dev/p').args).toEqual(['-Login', '-NoLogo']);
+    });
+  });
+
   it.each(['dash', 'ksh'])('starts %s with -l too, as Terminal.app would', (id) => {
     withHostTraits('macos', () => {
       expect(resolveLaunchSpec(flavour(id), '', '/Users/dev/p').args).toEqual(['-l']);
