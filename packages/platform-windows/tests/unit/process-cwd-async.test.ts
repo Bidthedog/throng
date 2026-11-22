@@ -17,9 +17,9 @@ const source = readFileSync(fileURLToPath(new URL('../../src/windows-process-cwd
   .replace(/\/\/.*$/gm, '');
 
 /** A fake process whose cwd is `C:\\work`, each call answering on a later timer tick. */
-function fakeFfi(opts: { hangOn?: number } = {}): ProcessCwdFfi {
+function fakeFfi(opts: { hangOn?: number; cwd?: string } = {}): ProcessCwdFfi {
   const later = <T>(value: T): Promise<T> => new Promise((r) => setTimeout(() => r(value), 1));
-  const path = Buffer.from('C:\\work', 'utf16le');
+  const path = Buffer.from(opts.cwd ?? 'C:\\work', 'utf16le');
   return {
     openProcess: (_a, _i, pid) => (pid === opts.hangOn ? new Promise(() => {}) : later({ pid })),
     closeHandle: () => later(true),
@@ -53,6 +53,12 @@ describe('051 R6 — WindowsProcessCwd reads off the event loop', () => {
     clearInterval(timer);
     expect([...cwds.values()]).toEqual(['C:\\work', 'C:\\work', 'C:\\work']);
     expect(ticks).toBeGreaterThan(0);
+  });
+
+  // Windows keeps a process's current directory with its trailing separator; a drive root's is its only one.
+  it('reports a drive root as the root, and any other folder without its trailing separator', async () => {
+    expect([...(await new WindowsProcessCwd(fakeFfi({ cwd: 'C:\\' })).read([10])).values()]).toEqual(['C:\\']);
+    expect([...(await new WindowsProcessCwd(fakeFfi({ cwd: 'C:\\work\\' })).read([10])).values()]).toEqual(['C:\\work']);
   });
 
   it('a process that never answers is left out after the limit; the others are still reported', async () => {

@@ -150,7 +150,8 @@ async function readOne(api: ProcessCwdFfi, pid: number): Promise<string | null> 
     // The path text itself.
     const pathBuf = Buffer.alloc(length);
     if (!(await api.readMemory(handle, bufferPtr, pathBuf, length))) return null;
-    const cwd = pathBuf.toString('utf16le').replace(/\\+$/, ''); // drop a trailing separator
+    // Drop the trailing separator Windows keeps — except a drive root's, its only one: `C:` alone is drive-relative.
+    const cwd = pathBuf.toString('utf16le').replace(/(?<!^[A-Za-z]:)\\+$/, '');
     return cwd.length > 0 ? cwd : null;
   } catch (error) {
     // A gone or denied process answers with a null handle or a false read, never a throw: a throw is
