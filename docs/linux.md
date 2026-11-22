@@ -28,7 +28,7 @@ The middle mouse button pastes nothing anywhere in throng, terminals included, u
 ## Terminals
 
 - Every shell in `/etc/shells` or on `PATH` that throng knows is offered: bash, zsh, fish, sh, dash, ksh, tcsh, pwsh and nu.
-  Your login shell comes first.
+  Your login shell comes first, even one not in that list.
 - A terminal's folder is read from the system, so no shell integration is needed for it.
 - Terminals have no elevated mode. throng refuses to start as root, and `sudo` inside a terminal works as usual.
 - bash older than 5.3 patch 20, which includes the bash in Ubuntu 26.04, can leave the cursor a few columns short of the

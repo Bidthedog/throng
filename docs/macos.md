@@ -32,9 +32,9 @@ Option types the characters your keyboard layout puts on it. To make it the Meta
 ## Terminals
 
 - Every shell in `/etc/shells` or on your path that throng knows is offered, including those installed with Homebrew.
-  Your login shell, usually zsh, comes first.
+  Your login shell, usually zsh, comes first, even one throng does not otherwise offer.
 - Terminals start as login shells, as Terminal.app's do, so they have your full environment even when throng was
-  opened from the Dock.
+  opened from the Dock. PowerShell does too; Nushell, and a shell throng does not offer, start as they are.
 - A terminal's folder is read from the system, so no shell integration is needed for it.
 - Terminals have no elevated (run as administrator) mode; `sudo` inside a terminal works as usual.
 - The [scroll chords](key-bindings.md#terminal) that use Cmd (Cmd+Home, Cmd+End, Shift+Cmd+Up and Shift+Cmd+Down,
