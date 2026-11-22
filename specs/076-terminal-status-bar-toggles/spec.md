@@ -259,6 +259,9 @@ name and theme-derived icon colours; tabbing reaches each one; Space and Enter f
 - **FR-005** *(constitution VI, v6.0.0)*: Each toggle MUST also be a **checkable item in the terminal's content menu**,
   in its **View & state** section, reflecting the current value and doing exactly what the toggle does. The items
   MUST be present whether or not the terminal status bar is shown.
+  *(2026-11-22, the maintainer: "these menu options need icons. Use the same icons as are used in the terminal status
+  bar, including those that are crossed out if they are disabled.")* Each item MUST draw its toggle's status-bar icon,
+  struck through while the setting is off, exactly as the toggle draws it (FR-002).
 - **FR-006**: Each toggle MUST be a command listed in the Key Bindings editor with a label and description, **with no
   default chord**. A user who binds one MUST NOT be offered a reserved terminal key (constitution IV).
 - **FR-007**: Width pressure MUST NOT hide or overlap any toggle; the link readout truncates first, then the flavour

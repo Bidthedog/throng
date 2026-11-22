@@ -15,12 +15,14 @@ function args(over: Partial<TerminalContentMenuArgs> = {}): TerminalContentMenuA
   };
 }
 
+const ICONS = ['rememberCommand', 'rememberDirectory', 'terminalNotifications'] as const;
+
 function toggles(on: [boolean, boolean, boolean], chord?: string) {
   const flips = [vi.fn(), vi.fn(), vi.fn()];
   const labels = ['Remember the last running command', 'Reopen in the last directory', 'Terminal notifications'];
   return {
     flips,
-    list: labels.map((label, i) => ({ label, on: on[i]!, chord: i === 2 ? chord : undefined, toggle: flips[i]! })),
+    list: labels.map((label, i) => ({ label, icon: ICONS[i]!, on: on[i]!, chord: i === 2 ? chord : undefined, toggle: flips[i]! })),
   };
 }
 
@@ -44,6 +46,15 @@ describe('the terminal content menu’s toggle items (076 FR-005)', () => {
       'menu-item-Terminal notifications',
     ]);
     expect(rows[2]!.shortcut).toBe('Ctrl+Alt+I');
+  });
+
+  // Maintainer, 2026-11-22: "these menu options need icons. Use the same icons as are used in the terminal status bar,
+  // including those that are crossed out if they are disabled."
+  it('draws each with its status-bar icon, as a setting toggle that is struck through while off', () => {
+    const t = toggles([true, false, true]);
+    const rows = terminalContentMenu(args({ toggles: t.list })).filter((i) => i.checked !== undefined);
+    expect(rows.map((r) => r.icon)).toEqual([...ICONS]);
+    expect(rows.map((r) => r.settingToggle)).toEqual([true, true, true]);
   });
 
   it('runs the same flip the toggle runs', () => {
