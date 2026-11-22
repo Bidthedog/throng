@@ -1,6 +1,7 @@
 export {
   HEALTH_PING_METHOD,
   JSON_RPC_METHOD_NOT_FOUND,
+  RPC_MAX_LINE_CHARS,
 } from './health-ping.js';
 export {
   JSON_RPC_INVALID_PARAMS,
