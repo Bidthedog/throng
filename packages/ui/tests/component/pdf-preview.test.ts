@@ -72,7 +72,14 @@ function fakeDoc(pageCount: number, links: Record<number, PdfLink[]> = {}): PdfD
 
 /** Every IntersectionObserver the body creates; `show` fires it for the elements given. */
 const observers: Array<{ callback: IntersectionObserverCallback; targets: Element[] }> = [];
+/**
+ * The elements the test has shown and not hidden since. A real observer reports an element's current intersection as
+ * soon as it is observed, so a page shown before the body's effect observes it is still reported then: without this,
+ * `waitFor(pages)` resolving ahead of that effect lost the `show` and nothing painted (PR CI, component 1/2).
+ */
+const shownElements = new Set<Element>();
 function show(...elements: Element[]): void {
+  for (const el of elements) shownElements.add(el);
   for (const o of observers) {
     const entries = elements
       .filter((el) => o.targets.includes(el))
@@ -83,6 +90,7 @@ function show(...elements: Element[]): void {
 
 /** The observer reports these elements as having left the viewport and its margin. */
 function hide(...elements: Element[]): void {
+  for (const el of elements) shownElements.delete(el);
   for (const o of observers) {
     const entries = elements
       .filter((el) => o.targets.includes(el))
@@ -132,6 +140,7 @@ beforeEach(() => {
   releases.clear();
   texts.length = 0;
   observers.length = 0;
+  shownElements.clear();
   openPdf.mockReset();
   vi.stubGlobal(
     'IntersectionObserver',
@@ -143,6 +152,11 @@ beforeEach(() => {
       }
       observe(el: Element): void {
         this.record.targets.push(el);
+        // As a real observer: its first report, on the next task, says where the element is now.
+        if (shownElements.has(el)) {
+          const { callback } = this.record;
+          setTimeout(() => callback([{ target: el, isIntersecting: true } as unknown as IntersectionObserverEntry], {} as IntersectionObserver), 0);
+        }
       }
       unobserve(): void {}
       disconnect(): void {}
