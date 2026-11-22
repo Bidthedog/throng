@@ -55,7 +55,8 @@ function failOnOversizedChunks(): Plugin {
  * The Markdown preview pipeline's libraries (R21): loaded by dynamic import on the first preview mount.
  * `chunkFor` routes them to the `preview` chunk and `failOnEagerPreview` proves that chunk stays lazy.
  */
-const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//;
+// 075 — `markdown-it-obsidian-callouts`, the callout parser, rides with markdown-it.
+const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|markdown-it-obsidian-callouts|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//;
 
 /**
  * The Mermaid diagram renderer and the packages it pulls in (054 R5, FR-047): imported only by
@@ -66,10 +67,33 @@ const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|
 const DIAGRAM_VENDOR =
   /\/node_modules\/(mermaid|@mermaid-js\/[^/]+|@braintree\/sanitize-url|@iconify\/[^/]+|@upsetjs\/venn\.js|chevrotain|@chevrotain\/[^/]+|langium|vscode-[a-z-]+|cose-base|cytoscape[a-z-]*|d3|d3-[a-z-]+|dagre-d3-es|dayjs|delaunator|elkjs|es-toolkit|hachure-fill|internmap|katex|khroma|layout-base|lodash-es|marked|path-data-parser|points-on-curve|points-on-path|robust-predicates|roughjs|rw|stylis|ts-dedent|uuid)\//;
 
-/** Both lazily-loaded vendor sets, as the eager guard below checks them. */
+/** 073 — the grid previews' libraries: the virtualiser (lazy, with the body) and SheetJS (worker-only). */
+const GRID_VENDOR = /\/node_modules\/(@tanstack\/react-virtual|@tanstack\/virtual-core|xlsx)\//;
+
+/**
+ * 073 FR-009 (T081) — core's CSV parser, its minimal-change writer and the grid operations built on them. Only the grid
+ * bodies (behind their views' dynamic imports) and the parse worker use them in the renderer, so they ride with the
+ * grid rather than in `core`, which every window loads at startup. The cell-text helpers and the clipboard formats stay
+ * in `core`: the preview chrome and the resource monitor read them eagerly. The renderer imports them from
+ * `@throng/core/csv`: through the `@throng/core` barrel the bundler routes them via the eager `core` chunk whatever
+ * chunk they are assigned.
+ */
+const CORE_CSV = /\/packages\/core\/(?:src|dist)\/csv\/(?:index|csv-model|csv-edit|grid-operation|record-lines)\.[jt]s$/;
+
+/**
+ * 074 R5 (FR-065), 075 FR-068a — PDF.js, imported only by `preview/pdf-library.ts`'s dynamic import, which the PDF
+ * Preview and Print Preview share, so no window and no other preview loads it with the app. Its worker is a separate module file the renderer starts itself.
+ */
+const PDF_VENDOR = /\/node_modules\/pdfjs-dist\//;
+
+/** Every lazily-loaded vendor set, as the eager guard below checks them. */
 const LAZY_VENDOR = [
   { pattern: PREVIEW_VENDOR, what: 'the Markdown preview pipeline loads with the app (R21)' },
   { pattern: DIAGRAM_VENDOR, what: 'the Mermaid diagram renderer loads with the app (054 FR-047)' },
+  // 073 FR-009 — the grid's virtualiser arrives with the first grid preview; SheetJS only inside its worker.
+  { pattern: GRID_VENDOR, what: 'the data grid or the workbook reader loads with the app (073 FR-009)' },
+  { pattern: CORE_CSV, what: 'the CSV parser and writer load with the app (073 FR-009)' },
+  { pattern: PDF_VENDOR, what: 'the PDF renderer loads with the app (074 FR-065)' },
 ];
 
 /**
@@ -237,18 +261,28 @@ function chunkFor(rawId: string): string | null {
   // `@throng/core` — the domain layer every window kind shares, most of it the settings and theme
   // metadata. Its own chunk, like a vendor, so no window's app chunk carries it (044: the workspace
   // chunk passed 500 kB).
+  if (CORE_CSV.test(id)) return 'app-preview-grid';
   if (/\/packages\/core\//.test(id)) return 'core';
   // The preview panel and its providers — the app's own code, but its largest self-contained area.
   // Its own chunk keeps the app chunk under 500 kB (047 took it to 525 kB).
   // The Markdown provider's body sits behind `view.ts`'s dynamic imports (R21), so it gets a chunk of
   // its own: in `app-preview`, which the app loads eagerly, those imports would load nothing new.
-  if (/\/src\/renderer\/preview\/providers\/markdown\/(?!view\.ts$)/.test(id)) return 'app-preview-markdown';
-  // 054 FR-042 — the Mermaid provider's body, behind its view's dynamic import for the same reason.
-  if (/\/src\/renderer\/preview\/providers\/mermaid\/(?!view\.ts$)/.test(id)) return 'app-preview-mermaid';
+  // 075 FR-046 — the maths typesetter imports KaTeX and its stylesheet; the body reaches it by `import()` only when
+  // a document holds maths, so it is a chunk of its own, never part of the Markdown body's.
+  if (/\/src\/renderer\/preview\/providers\/markdown\/math-typeset\.ts$/.test(id)) return 'app-preview-math';
+  // 054 FR-042 and 074 FR-065 — every provider's body sits behind its view's dynamic import for the same
+  // reason, so each provider folder gets a chunk of its own. The HTML provider's sanitiser imports DOMPurify,
+  // which in `app-preview` would load the whole `preview` vendor chunk with the app.
+  const provider = /\/src\/renderer\/preview\/providers\/([a-z]+)\/(?!view\.ts$)/.exec(id);
+  if (provider) return `app-preview-${provider[1]}`;
   // 054 FR-047 — the two diagram modules that import a lazy vendor (mermaid; DOMPurify for the SVG profile)
   // are reached only by the block registry's `import()`, so they get a chunk of their own. The diagram's
   // React components and the rasteriser import neither and ride with whatever imports them.
   if (/\/src\/renderer\/preview\/diagram\/(mermaid-renderer|svg-sanitise)\.ts$/.test(id)) return 'app-preview-diagram';
+  // 073 FR-009 — the two grid providers' bodies and the shared grid, behind their views' dynamic imports. The
+  // grid's command registry is the one grid module the window imports eagerly (the key handler), so it stays out.
+  if (/\/src\/renderer\/preview\/providers\/(csv|spreadsheet)\/(?!view\.ts$)/.test(id)) return 'app-preview-grid';
+  if (/\/src\/renderer\/grid\/(?!grid-commands\.ts$)/.test(id)) return 'app-preview-grid';
   if (/\/src\/renderer\/preview\//.test(id)) return 'app-preview';
   // The terminal panel and its stores — the next largest self-contained area, split for the same
   // reason (053's title templates took the app chunk to 501 kB).
@@ -272,6 +306,7 @@ function chunkFor(rawId: string): string | null {
   // `picomatch` from `vendor`, so whatever else `vendor` holds loads in EVERY window, the monitor included
   // (055 SC-002, `failOnHeavyMonitor`).
   if (/\/node_modules\/(react-arborist|react-dnd|react-dnd-html5-backend|dnd-core|@react-dnd\/[^/]+|redux|react-window|memoize-one|fast-deep-equal)\//.test(id)) return 'arborist';
+  if (id.includes('@tanstack/')) return 'app-preview-grid';
   // One chunk per language grammar (016, FR-008). The grammars are imported
   // lazily by id, so a document only ever pays for the language it is in —
   // but only if each stays a separately-fetchable chunk. Folded into
@@ -308,6 +343,8 @@ function chunkFor(rawId: string): string | null {
   // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
   if (PREVIEW_VENDOR.test(id))
     return 'preview';
+  // 074 FR-065 — PDF.js, behind `pdf-library.ts`'s dynamic import, never `vendor`.
+  if (PDF_VENDOR.test(id)) return 'pdf';
   // The Mermaid renderer (054 FR-047): behind `mermaid-renderer.ts`'s dynamic import, never `vendor`. NOT one
   // named group: Mermaid loads each diagram type through its own `import()`, and grouping them all made one
   // 5 MB chunk. Ungrouped, Rolldown splits them along those imports, and `failOnEagerPreview` still refuses
