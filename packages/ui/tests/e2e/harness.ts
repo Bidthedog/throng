@@ -32,7 +32,7 @@ import { quiesceSampler } from './quiesce-sampler.js';
  * tsconfig includes only `src/main` and `src/preload`, so nothing under `tests/` is typechecked and
  * an undefined name here is invisible until it runs.
  */
-import { forceKillProcessTree, stdioHolders, stdioIdentities } from './process-tree.js';
+import { forceKillProcessTree, stdioHolders, stdioHoldersAsRoot, stdioIdentities } from './process-tree.js';
 import { appLogTails, keepAppLogs, userDataDirOf } from './app-logs.js';
 import { resolveIpcAddress } from '@throng/core';
 import { shippedPresses, shippedTwoStroke } from '../shared/window-chords.js';
@@ -1057,6 +1057,10 @@ export const FILE_OP_TIMEOUT_MS = 30_000;
  */
 const SLOW_TEARDOWN_PHASE_MS = 2_000;
 
+/** When a close has waited long enough to start recording who holds the app's stdio (#700), and how often after. */
+const STALL_SAMPLE_AFTER_MS = 2_000;
+const STALL_SAMPLE_EVERY_MS = 1_000;
+
 /**
  * When the WHOLE teardown is worth reporting.
  *
@@ -1148,10 +1152,36 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
     await app.close().catch(() => {});
   })();
 
+  /*
+   * #700: who holds the app's stdio while `close` waits, and when each lets go. A healthy close is over in about a second,
+   * so sampling starts only after STALL_SAMPLE_AFTER_MS; from then a line is added whenever the set of holders changes.
+   * A single scan at the end of the grace has twice reported "(nobody)" for a close that was still waiting.
+   */
+  const timeline: string[] = [];
+  let sampler: ReturnType<typeof setInterval> | undefined;
+  const sampleStart =
+    process.platform === 'linux' && stdio.length > 0
+      ? setTimeout(() => {
+          let last = '';
+          const sample = (): void => {
+            const holders = stdioHoldersAsRoot(stdio);
+            const now = holders.join('\n') || '(nobody)';
+            if (now !== last) timeline.push(`+${Date.now() - began}ms:\n${now}`);
+            last = now;
+          };
+          sample();
+          sampler = setInterval(sample, STALL_SAMPLE_EVERY_MS);
+        }, STALL_SAMPLE_AFTER_MS)
+      : undefined;
   const settledGracefully = await Promise.race([
     graceful.then(() => true),
     new Promise<boolean>((r) => setTimeout(() => r(false), SHUTDOWN_GRACE_MS)),
   ]);
+  clearTimeout(sampleStart);
+  clearInterval(sampler);
+  if (timeline.length > 0) {
+    console.warn(`[teardown] the app's stdio holders while its close waited (${settledGracefully ? `closed after ${Date.now() - began}ms` : 'did not close'}):\n${timeline.join('\n')}`);
+  }
 
   if (!settledGracefully && pid !== undefined) {
     // Name what kept the close waiting before it is killed: `app.close()` settles on the process's `close`, which needs
