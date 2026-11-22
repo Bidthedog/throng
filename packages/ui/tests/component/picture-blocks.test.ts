@@ -133,3 +133,26 @@ describe('imageUrlEntry (FR-020 – FR-025)', () => {
     await expect(renderer.render('u', { theme: {} as never })).rejects.toThrow('This file is not an image throng can show.');
   });
 });
+
+describe('the reduced-motion first frame (074 FR-026)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // Each redraw of a regenerated picture (a new `?rev=`) drew a new first-frame PNG and kept every one alive.
+  it('holds a bounded number of first-frame URLs however often the picture is redrawn', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 4, height: 4, close: () => {} })));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done: BlobCallback) => {
+      done(new Blob(['png'], { type: 'image/png' }));
+    });
+    const renderer = await imageUrlEntry({ loader: ok, readBytes: async () => new Blob(['gif']), reducedMotion: () => true }).load();
+    for (let rev = 0; rev < 100; rev++) await renderer.render(`throng-preview://p/a.gif?rev=${rev}`, { theme: {} as never });
+
+    const created = vi.mocked(URL.createObjectURL).mock.calls.length;
+    const revoked = vi.mocked(URL.revokeObjectURL).mock.calls.length;
+    expect(created).toBe(100);
+    expect(created - revoked).toBeLessThanOrEqual(64);
+  });
+});

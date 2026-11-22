@@ -164,27 +164,53 @@ function sizeFrom(w: string | null, h: string | null, viewBox: string | null): {
 }
 
 /**
- * Blob URLs for SVG sources, newest last, so a live-edited SVG does not leak one URL per keystroke: the oldest is
- * revoked once {@link MAX_SVG_URLS} are held (a frame still showing it keeps its decoded drawing).
+ * Blob URLs by key, newest last, so a picture redrawn on every edit or every change on disk does not leak one URL per
+ * draw: the oldest is revoked once {@link MAX_BLOB_URLS} are held (a frame still showing it keeps its decoded drawing).
  */
-const MAX_SVG_URLS = 64;
-const svgUrls = new Map<string, string>();
+const MAX_BLOB_URLS = 64;
 
-function svgUrlFor(source: string): string {
-  const held = svgUrls.get(source);
-  if (held !== undefined) {
-    svgUrls.delete(source);
-    svgUrls.set(source, held);
+class BoundedBlobUrls {
+  private readonly urls = new Map<string, string>();
+
+  async get(key: string, make: () => Promise<Blob>): Promise<string> {
+    const held = this.take(key);
+    if (held !== undefined) return held;
+    return this.add(key, await make());
+  }
+
+  getSync(key: string, make: () => Blob): string {
+    return this.take(key) ?? this.add(key, make());
+  }
+
+  private take(key: string): string | undefined {
+    const held = this.urls.get(key);
+    if (held === undefined) return undefined;
+    this.urls.delete(key);
+    this.urls.set(key, held);
     return held;
   }
-  const url = URL.createObjectURL(new Blob([source], { type: 'image/svg+xml' }));
-  svgUrls.set(source, url);
-  if (svgUrls.size > MAX_SVG_URLS) {
-    const [oldest, oldUrl] = svgUrls.entries().next().value as [string, string];
-    svgUrls.delete(oldest);
-    URL.revokeObjectURL(oldUrl);
+
+  private add(key: string, blob: Blob): string {
+    const held = this.take(key); // a concurrent draw of the same key got there first
+    if (held !== undefined) return held;
+    const url = URL.createObjectURL(blob);
+    this.urls.set(key, url);
+    if (this.urls.size > MAX_BLOB_URLS) {
+      const [oldest, oldUrl] = this.urls.entries().next().value as [string, string];
+      this.urls.delete(oldest);
+      URL.revokeObjectURL(oldUrl);
+    }
+    return url;
   }
-  return url;
+}
+
+/** SVG sources, keyed by the source: a live-edited SVG mints one per keystroke. */
+const svgUrls = new BoundedBlobUrls();
+/** 074 FR-026 first frames, keyed by the picture's URL: a regenerated picture mints a new `?rev=` per change. */
+const firstFrameUrls = new BoundedBlobUrls();
+
+function svgUrlFor(source: string): string {
+  return svgUrls.getSync(source, () => new Blob([source], { type: 'image/svg+xml' }));
 }
 
 /** Draw SVG `source` as an isolated picture (FR-040, FR-044, FR-045). */
@@ -222,8 +248,8 @@ export interface ImageEntryOptions {
   alt?: (url: string) => string | undefined;
 }
 
-/** 074 FR-026 — the first frame of `blob` as a PNG blob URL (an animated GIF, WebP or APNG stops). */
-async function firstFrameUrl(blob: Blob): Promise<string> {
+/** 074 FR-026 — the first frame of `blob` as a PNG (an animated GIF, WebP or APNG stops). */
+async function firstFramePng(blob: Blob): Promise<Blob> {
   const bitmap = await createImageBitmap(blob);
   try {
     const canvas = document.createElement('canvas');
@@ -232,7 +258,7 @@ async function firstFrameUrl(blob: Blob): Promise<string> {
     canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
     const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (png === null) throw new Error('The first frame could not be drawn.');
-    return URL.createObjectURL(png);
+    return png;
   } finally {
     bitmap.close();
   }
@@ -273,7 +299,7 @@ export function imageUrlEntry(options: ImageEntryOptions = {}): BlockRendererEnt
       let href = url;
       if (readBytes !== undefined && options.reducedMotion?.() === true) {
         const blob = await readBytes(url);
-        if (blob !== null) href = await firstFrameUrl(blob);
+        if (blob !== null) href = await firstFrameUrls.get(url, () => firstFramePng(blob));
       }
       const wrapper = pictureWrapper(href, size.width, size.height, options.alt?.(url));
       if (readBytes !== undefined) {
