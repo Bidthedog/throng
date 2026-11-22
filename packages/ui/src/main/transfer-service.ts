@@ -987,6 +987,11 @@ export class TransferService {
         return { landed: named, moved: await this.land(job, src, named, true) };
       }
       case 'replace': {
+        // A folder holding the incoming item cannot be replaced by it: disposing of the folder takes the item with it,
+        // and under permanent replace nothing would be left of either.
+        if (isWithinRoot(dest, src)) {
+          throw new Error(`"${basename(src)}" is inside the folder it would replace, so it cannot replace it.`);
+        }
         const recycled = await this.dispose(job, dest, existing);
         // A permanently replaced item cannot come back, so its replacement leaves the undo entry
         // out of it too (FR-018f).
