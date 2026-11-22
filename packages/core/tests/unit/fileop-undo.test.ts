@@ -16,6 +16,7 @@ import {
   dropEntriesNamingProjects,
   type FileOpUndoEntry,
 } from '../../src/fileop-undo/undo-stack.js';
+import { withHostTraits } from '../../src/testing/with-host-traits.js';
 
 const mv = (from: string, to: string, at = 1): FileOpUndoEntry => ({ kind: 'move', items: [{ from, to }], at });
 const rn = (from: string, to: string, at = 1): FileOpUndoEntry => ({ kind: 'rename', from, to, at });
@@ -64,6 +65,22 @@ describe('fileop undo engine (024 US3)', () => {
   });
 
   describe('validate (FR-008 — refuse a stale entry)', () => {
+    // A case-only rename (#194) leaves ONE item whose old spelling still "exists" on a case-insensitive
+    // volume, because it IS the item. Undo and redo were refused as "something already exists" every time.
+    it('allows undo and redo of a case-only rename on a case-insensitive host', () => {
+      withHostTraits('windows', () => {
+        const caseInsensitive = (present: string): ((p: string) => boolean) => (p) => p.toLowerCase() === present;
+        expect(validate(rn('C:/p/readme.md', 'C:/p/README.md'), 'undo', caseInsensitive('c:/p/readme.md'))).toEqual({ ok: true });
+        expect(validate(rn('C:/p/readme.md', 'C:/p/README.md'), 'redo', caseInsensitive('c:/p/readme.md'))).toEqual({ ok: true });
+      });
+    });
+
+    it('still refuses a case-only rename onto a separate sibling on a case-sensitive host', () => {
+      withHostTraits('linux', () => {
+        expect(validate(rn('/p/readme.md', '/p/README.md'), 'undo', world(['/p/README.md', '/p/readme.md'])).ok).toBe(false);
+      });
+    });
+
     const world = (present: string[]) => (p: string) => present.includes(p);
 
     it('accepts a move undo when the destination is present and the source is free', () => {

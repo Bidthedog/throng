@@ -8,6 +8,7 @@
  * per-project SQLite store (migration v8); a corrupt/old blob parses back to an empty stack (FR-010a).
  */
 import { logExpected } from '../diagnostics/caught.js';
+import { pathCompareKey } from '../fs/path-id.js';
 
 /**
  * The two projects a cross-project entry spans, by id (050 FR-020). The entry sits in BOTH projects'
@@ -186,9 +187,15 @@ export function validate(
   if (entry.kind === 'paste') return validatePaste(entry, direction, exists);
   for (const m of plannedMoves(entry, direction)) {
     if (!exists(m.from)) return { ok: false, reason: `${m.from} is no longer there.` };
-    if (exists(m.to)) return { ok: false, reason: `Something already exists at ${m.to}.` };
+    // A case-only rename (#194) on a case-insensitive volume: the destination "exists" because it IS the item.
+    if (!isSamePath(m.from, m.to) && exists(m.to)) return { ok: false, reason: `Something already exists at ${m.to}.` };
   }
   return { ok: true };
+}
+
+/** Two spellings of one path under the host's case and separator rules (a case-only rename's two ends). */
+function isSamePath(a: string, b: string): boolean {
+  return pathCompareKey(a) === pathCompareKey(b);
 }
 
 /**
