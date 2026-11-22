@@ -19,9 +19,14 @@ export interface ZoomIndicatorProps {
   /** Changes on every zoom step; `0` is "no step yet", which shows nothing. */
   cue: number;
   testId: string;
+  /**
+   * 074 (2026-11-20) — a preview's indicator: always showing its zoom, faded at rest and full while the pointer is over
+   * the preview, as the preview's own controls are (`diagram.css`, `pdf.css`); a zoom step still brings it up full.
+   */
+  resting?: boolean;
 }
 
-export function ZoomIndicator({ percent, cue, testId }: ZoomIndicatorProps): ReactElement {
+export function ZoomIndicator({ percent, cue, testId, resting = false }: ZoomIndicatorProps): ReactElement {
   const [shown, setShown] = useState(false);
   useEffect(() => {
     if (cue === 0) return undefined;
@@ -30,8 +35,12 @@ export function ZoomIndicator({ percent, cue, testId }: ZoomIndicatorProps): Rea
     return () => clearTimeout(timer);
   }, [cue]);
   return (
-    <div className={`throng-popup zoom-indicator${shown ? ' zoom-indicator--shown' : ''}`} data-testid={testId} aria-hidden="true">
-      {cue === 0 ? '' : `${Math.round(percent)}%`}
+    <div
+      className={`throng-popup zoom-indicator${resting ? ' zoom-indicator--resting' : ''}${shown ? ' zoom-indicator--shown' : ''}`}
+      data-testid={testId}
+      aria-hidden="true"
+    >
+      {cue === 0 && !resting ? '' : `${Math.round(percent)}%`}
     </div>
   );
 }

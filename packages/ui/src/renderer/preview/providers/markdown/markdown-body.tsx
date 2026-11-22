@@ -93,11 +93,14 @@ import {
   splitFrontMatter,
   toggleSection,
   type HeadingRecord,
+  type IconKey,
 } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../../link-dom.js';
 import { taskBoxOf, taskToggleFor } from '../../task-toggle.js';
 import { claimRenderedBlocks, type BlockRendererEntry } from '../../blocks/block-renderers.js';
+import { imageUrlEntry, prefersReducedMotion } from '../../blocks/picture.js';
+import { assetPathOf, claimFramedImages, inDocumentOrder, sizeFramedPicture, type FramedImageSize } from './framed-images.js';
 import { DiagramBlock } from '../../diagram/diagram-block.js';
 import { releaseDiagramSections } from '../../diagram/diagram-sections.js';
 import { diagramThemeFrom } from '../../diagram/diagram-theme.js';
@@ -114,18 +117,24 @@ import { linkScanOptions } from '../../../links/link-scan-options.js';
 import type { MarkdownRenderer } from './markdown-renderer.js';
 import { placeOnStep, shouldDrive, shouldFollow } from '../../scroll-sync-policy.js';
 import {
-  blockLineFor,
   captureScrollAnchor,
   remapAnchorLine,
   restoreScrollAnchor,
-  topBlockLine,
   type ScrollAnchor,
 } from './scroll-anchor.js';
 import { highlightCodeBlocks } from './highlight.js';
 import { applyFoldGutter } from './fold-gutter.js';
-import { applyWikiResolution } from './wikilinks.js';
+import { SyncMarkIndicator } from './sync-mark.js';
+import { BlockIndex } from './block-index.js';
+import { useSyncMarkFrom } from '../../sync-mark-store.js';
+import { applyWikiResolution, WIKI_INDEX_ATTRIBUTE } from './wikilinks.js';
+import type { WikiHrefTarget } from './pipeline.js';
+import { createCalloutFolds, revealCalloutsAt, type CalloutFolds } from './callout-dom.js';
+import { hasMath, showMathPending } from './math-dom.js';
+import { showImagesPending } from '../../loading-placeholder.js';
 import { applyImageEmbedResolution, EMBED_ATTRIBUTE, embedReadRefOf, embedRefOf } from './embeds.js';
 import { embedRefusalText, type PreviewEmbedRead } from '@throng/core';
+import { tooLargeDetail } from '../../preview-notice.js';
 import {
   applyTableLayout,
   chToPx,
@@ -182,6 +191,11 @@ export const FOCUSED_LINK_CLASS = 'preview-markdown__link--focused';
  * editor), and how long a resize waits for the resizing to pause. Rendering yields to input: the reader
  * sees the table a moment later rather than the panel lagging.
  */
+/** 074 R8a — a wiki target as one key: the same reference twice in a document is one answer. */
+function wikiTargetKey(target: WikiHrefTarget): string {
+  return `${target.rooted ? '/' : ''}${target.path}`;
+}
+
 const TABLE_LAYOUT_DEBOUNCE_MS = 120;
 const TABLE_RESIZE_DEBOUNCE_MS = 150;
 
@@ -231,7 +245,11 @@ function applyEmbeds(fragment: DocumentFragment, reads: ReadonlyMap<string, Prev
       replacement = doc.createElement(alone ? 'div' : 'span');
       replacement.className = EMBED_NOTICE_CLASS;
       replacement.setAttribute('role', 'status');
-      replacement.textContent = embedRefusalText(ref, read.reason);
+      replacement.textContent = embedRefusalText(
+        ref,
+        read.reason,
+        read.size !== undefined && read.limit !== undefined ? tooLargeDetail(read.size, read.limit, read.limitKey) : undefined,
+      );
     }
     if (line !== null) replacement.setAttribute('data-source-line', line);
     target.replaceWith(replacement);
@@ -282,6 +300,9 @@ function atScrollEnd(scroller: HTMLElement): boolean {
   return scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1;
 }
 
+/** One animation frame, for work that yields between batches (075 maths typesetting). */
+const nextFrame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
 function scrollerOf(body: HTMLElement): HTMLElement {
   return body.closest<HTMLElement>('.preview-panel__body') ?? body;
 }
@@ -302,17 +323,6 @@ function showAltText(img: HTMLImageElement): void {
   const title = img.getAttribute('title');
   if (title !== null) span.setAttribute('title', title);
   img.replaceWith(span);
-}
-
-/**
- * 044 FR-121g — the block `line` is shown in: the block at or before it, or — for a line above every block —
- * the first block, where `restoreScrollAnchor` would put that line. `null` only for a body with no blocks.
- */
-function blockOf(body: HTMLElement, line: number): number | null {
-  const at = blockLineFor(body, line);
-  if (at !== null) return at;
-  const first = Number(body.querySelector('[data-source-line]')?.getAttribute('data-source-line'));
-  return Number.isFinite(first) ? first : null;
 }
 
 /**
@@ -364,6 +374,8 @@ export function MarkdownBody({
   syncEcho,
   onTopLineChange,
   onTopLineRead,
+  syncMark: syncMarkProp,
+  syncMarkSource,
   placePolicy,
   onViewStateCapture,
   onFollow,
@@ -380,6 +392,7 @@ export function MarkdownBody({
   resolveWikiTargets,
   readEmbeds,
   onToggleTask,
+  readSource,
 }: PreviewBodyProps): ReactElement {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const text = content.kind === 'text' ? content.text : null;
@@ -394,6 +407,8 @@ export function MarkdownBody({
   linkWordingRef.current = linkWording;
   /** FR-117 — Show front matter. Shipped on, so anything but an explicit `false` shows the block. */
   const frontMatter = providerSettings.showFrontMatter !== false;
+  /** 075 FR-042 — Typeset math. Shipped on, so anything but an explicit `false` typesets. */
+  const typesetMath = providerSettings.typesetMath !== false;
   /** 067 FR-132 — the editor's protocol allowlist and known extensions, for the front matter table's links. */
   const linkScan = linkScanOptions(useAppSettings().editor.links);
   const onFailureRef = useRef(onBodyFailure);
@@ -414,6 +429,18 @@ export function MarkdownBody({
   foldStateRef.current = foldState;
   const gutterRef = useRef(gutter);
   gutterRef.current = gutter;
+  /** 073 FR-033d — the sync mark's indicator, redrawn after every draw and whenever the mark or the gutter changes. */
+  const syncMark = useSyncMarkFrom(syncMarkSource, syncMarkProp);
+  /**
+   * 073 T075 — the index of this body's source-mapped blocks (`block-index.ts`), so each scrolled frame reads a few rectangles
+   * instead of measuring every block; and the gutter indicator that moves between two blocks instead of searching them all.
+   */
+  const blockIndex = useRef<BlockIndex | null>(null);
+  blockIndex.current ??= new BlockIndex(() => bodyRef.current);
+  const indicator = useRef<SyncMarkIndicator | null>(null);
+  indicator.current ??= new SyncMarkIndicator(blockIndex.current);
+  const syncMarkRef = useRef(syncMark);
+  syncMarkRef.current = syncMark;
   const onFoldChangeRef = useRef(onFoldChange);
   onFoldChangeRef.current = onFoldChange;
   const onHeadingsRef = useRef(onHeadings);
@@ -429,6 +456,13 @@ export function MarkdownBody({
   readEmbedsRef.current = readEmbeds;
   const embedsRef = useRef<{ filePath: string; reads: Map<string, PreviewEmbedRead> }>({ filePath, reads: new Map() });
   const [embedTick, setEmbedTick] = useState(0);
+  /*
+   * 074 FR-055 (R8a) — what main last answered for each `![[image]]` reference this FILE embeds, by reference.
+   * A draw gives every held image the answer already known BEFORE it claims its framed images, so a wiki image
+   * alone on its line is framed through the same `claimFramedImages` as `![alt](x.png)`; an answer that changes
+   * anything redraws once (the Mermaid-embed pattern above). A different file starts afresh.
+   */
+  const wikiImagesRef = useRef<{ filePath: string; known: Map<string, string | null> }>({ filePath, known: new Map() });
   /** This render's flat heading list (R2), for the fold gutter and `onRevealSection`. */
   const lastHeadingsRef = useRef<readonly HeadingRecord[]>([]);
   /**
@@ -459,13 +493,68 @@ export function MarkdownBody({
    * its portals new keys, so no diagram keeps the old file's last good render or view state (FR-044, 046g).
    */
   const diagramGenerationRef = useRef(0);
+  /*
+   * 074 FR-055 — a standalone local image is drawn in a diagram frame too. One entry for the body's life, so an
+   * unchanged image is never drawn again; its bytes (Copy Image, a reduced-motion first frame) are the asset's,
+   * read through the protocol, and its alternative text is the image's own.
+   */
+  const readSourceRef = useRef(readSource);
+  readSourceRef.current = readSource;
+  const imageAltsRef = useRef(new Map<string, string>());
+  const imageEntry = useMemo(
+    (): BlockRendererEntry =>
+      imageUrlEntry({
+        reducedMotion: prefersReducedMotion,
+        alt: (url) => imageAltsRef.current.get(url),
+        readBytes: async (url) => {
+          const asset = assetPathOf(url);
+          const reader = readSourceRef.current;
+          if (asset === null || reader === undefined) return null;
+          const read = await reader(asset);
+          return read.ok ? new Blob([read.bytes as Uint8Array<ArrayBuffer>], { type: read.mime }) : null;
+        },
+      }),
+    [],
+  );
+  /*
+   * 068 FR-056 — `![[x.png|200]]`'s size, drawn by the frame as the picture's own (R8a). The size is the EMBED's, so
+   * each size has an entry of its own (B1: `|100` and `|300` of one image are two drawings), kept for the body's life
+   * so a redraw hands the frame the same entry and an unchanged image is never drawn again.
+   */
+  const sizedEntriesRef = useRef(new Map<string, BlockRendererEntry>());
+  const sizedImageEntry = useCallback(
+    (size: FramedImageSize): BlockRendererEntry => {
+      const key = `${size.width ?? ''}x${size.height ?? ''}`;
+      const known = sizedEntriesRef.current.get(key);
+      if (known !== undefined) return known;
+      const sized: BlockRendererEntry = {
+        ...imageEntry,
+        load: async () => {
+          const renderer = await imageEntry.load();
+          return {
+            render: async (url, options) => {
+              const picture = await renderer.render(url, options);
+              sizeFramedPicture(picture, size);
+              return picture;
+            },
+          };
+        },
+      };
+      sizedEntriesRef.current.set(key, sized);
+      return sized;
+    },
+    [imageEntry],
+  );
   const claimDiagrams = useCallback((fragment: DocumentFragment, sameDocument: boolean, firstDraw: boolean): void => {
     if (!sameDocument) {
       diagramGenerationRef.current += 1;
       diagramHostsRef.current = [];
     }
     const generation = diagramGenerationRef.current;
-    const claimed = claimRenderedBlocks(fragment, (lang) => lang !== 'mermaid' || renderMermaidRef.current);
+    const claimed = inDocumentOrder(
+      claimRenderedBlocks(fragment, (lang) => lang !== 'mermaid' || renderMermaidRef.current),
+      claimFramedImages(fragment, imageEntry, imageAltsRef.current, sizedImageEntry),
+    );
     const mounts = claimed.map((block, ordinal): DiagramMount => {
       const host = diagramHostsRef.current[ordinal] ?? fragment.ownerDocument.createElement('div');
       host.className = DIAGRAM_HOST_CLASS;
@@ -487,11 +576,40 @@ export function MarkdownBody({
         ? prev
         : mounts,
     );
-  }, [panelId]);
+  }, [panelId, imageEntry, sizedImageEntry]);
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const setsRef = useRef(sets);
   setsRef.current = sets;
+  /**
+   * 075 FR-006 – FR-010 — callouts' icons and fold state (callout-dom.ts). The state is this body's view state:
+   * it outlives re-renders of the same document, resets for a different file, and never leaves the body.
+   */
+  const calloutFoldsRef = useRef<CalloutFolds | null>(null);
+  /**
+   * A callout or a `<details>` opened or closed: what is hidden changed, so the block index is rebuilt and the sync mark
+   * placed again (a mark inside a fold sits on the fold).
+   */
+  const foldsChanged = useCallback((): void => {
+    blockIndex.current?.invalidate();
+    indicator.current?.apply(syncMarkRef.current);
+  }, []);
+  calloutFoldsRef.current ??= createCalloutFolds(foldsChanged);
+  const calloutIconFor = useCallback((key: IconKey): string => resolveIcon(themeRef.current, setsRef.current, key), []);
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body === null) return undefined;
+    const detach = calloutFoldsRef.current?.attach(body);
+    // `toggle` does not bubble: caught on the way down, for every `<details>` in the document.
+    const onToggle = (event: Event): void => {
+      if (event.target instanceof HTMLDetailsElement) foldsChanged();
+    };
+    body.addEventListener('toggle', onToggle, true);
+    return () => {
+      body.removeEventListener('toggle', onToggle, true);
+      detach?.();
+    };
+  }, [foldsChanged]);
   /**
    * Insert/remove the gutter's toggles and hide a collapsed section's blocks over `body`'s CURRENT
    * children — never `replaceChildren`, so calling this from a fold-only update (no new render) never
@@ -634,9 +752,10 @@ export function MarkdownBody({
     const report = onTopLineChangeRef.current;
     const editorLine = editorLineRef.current;
     if (report === undefined || editorLine === null) return;
-    const top = topBlockLine(scroller);
-    if (top === null || !shouldDrive({ previewTopBlock: top, editorLineBlock: blockOf(body, editorLine) })) return;
-    if (report(top) === false) {
+    const index = blockIndex.current!;
+    const top = index.topLine(scroller);
+    if (top === null || !shouldDrive({ previewTopBlock: top, editorLineBlock: index.blockOf(editorLine) })) return;
+    if (report(top, index.centreLine(scroller)) === false) {
       // Compared with a stale editor line: decide again against the next one the chrome hands down.
       reportDeferred.current = true;
       return;
@@ -662,10 +781,11 @@ export function MarkdownBody({
     if (line === null || line === syncedRef.current || body === null) return;
     syncedRef.current = line;
     if (syncEchoRef.current) return;
-    if (!shouldFollow({ previewTopBlock: topBlockLine(scroller), editorLineBlock: blockOf(body, line) })) return;
+    const index = blockIndex.current!;
+    if (!shouldFollow({ previewTopBlock: index.topLine(scroller), editorLineBlock: index.blockOf(line) })) return;
     // The editor moved, and the preview follows it: a place still settling is no longer where it should be.
     pendingPlace.current = null;
-    restoreScrollAnchor(scroller, { line, offsetRatio: 0 });
+    index.scrollLineToTop(scroller, line);
     ownScrollTop.current = scroller.scrollTop;
   }, []);
 
@@ -824,7 +944,7 @@ export function MarkdownBody({
   useEffect(() => {
     onTopLineRead?.(() => {
       const body = bodyRef.current;
-      return body === null || shown.current === null ? null : topBlockLine(scrollerOf(body));
+      return body === null || shown.current === null ? null : blockIndex.current!.topLine(scrollerOf(body));
     });
   }, [onTopLineRead]);
 
@@ -847,7 +967,7 @@ export function MarkdownBody({
         const body = bodyRef.current;
         // A newer text, or an unmount, has overtaken this render: drawing it would show stale content.
         if (cancelled || body === null) return;
-        const { fragment, headings, wikiTargets } = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {}, linkScan });
+        const { fragment, headings, wikiTargets } = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {}, linkScan, typesetMath });
         lastHeadingsRef.current = headings;
         // Dressed BEFORE it is inserted, so the place kept or restored below is measured against the layout the
         // reader will see. The front matter class alone makes its table shorter; dressed after the restore, the
@@ -863,6 +983,18 @@ export function MarkdownBody({
           first.getAttribute('data-source-line') === '0'
         ) {
           first.classList.add(FRONT_MATTER_CLASS);
+        }
+        // 074 FR-055 (R8a) — every held `![[image]]` main has already answered for draws now, so the claim below
+        // frames it exactly as it frames `![alt](x.png)`; one not answered yet stays held until the answer redraws.
+        if (wikiImagesRef.current.filePath !== filePath) wikiImagesRef.current = { filePath, known: new Map() };
+        const wikiImages = wikiImagesRef.current;
+        const heldImageRefs = new Set<string>();
+        for (const img of fragment.querySelectorAll(`img[${WIKI_INDEX_ATTRIBUTE}]`)) {
+          const target = wikiTargets[Number(img.getAttribute(WIKI_INDEX_ATTRIBUTE))];
+          if (target !== undefined) heldImageRefs.add(wikiTargetKey(target));
+        }
+        if (heldImageRefs.size > 0) {
+          applyImageEmbedResolution(fragment, wikiTargets.map((t) => wikiImages.known.get(wikiTargetKey(t))), projectRoot, panelId);
         }
         for (const img of fragment.querySelectorAll<HTMLImageElement>(BLOCKED_IMAGE_SELECTOR)) showAltText(img);
         // 054 — each embed becomes the Mermaid fence its file holds (claimed below like any other), or its notice.
@@ -882,6 +1014,14 @@ export function MarkdownBody({
         const repointed =
           previous !== null && previous.filePath !== file && navigated !== undefined && previous.navigationSeq === navigated;
         claimDiagrams(fragment, previous !== null && (previous.filePath === file || repointed), previous === null);
+        // 075 — callouts are dressed before insertion, like the front matter, so the place kept below is measured
+        // with collapsed callouts collapsed. A different file starts from its markers' signs (FR-008).
+        if (!(previous !== null && (previous.filePath === file || repointed))) calloutFoldsRef.current?.reset();
+        calloutFoldsRef.current?.decorate(fragment, text, calloutIconFor);
+        // 075 FR-043a — what is still to load holds its place with the shared placeholder, measured with the rest:
+        // an equation until the typesetter draws it, an image until it arrives.
+        if (typesetMath) showMathPending(fragment, calloutIconFor('busy'));
+        showImagesPending(fragment, calloutIconFor('busy'));
         if (previous !== null && (previous.filePath === file || repointed)) {
           // FR-024 — an UPDATE. Capture, replace and restore in one synchronous turn, so no scroll the
           // user makes can fall between the two and be undone.
@@ -936,6 +1076,9 @@ export function MarkdownBody({
         // inserted. After the place above, not before: a toggle's own gutter offset must never be measured
         // as part of the scroll anchor's layout.
         drawFoldGutter(body, headings);
+        // The draw replaced every block: the index is rebuilt on the next question, and the indicator is placed again.
+        blockIndex.current?.invalidate();
+        indicator.current?.apply(syncMarkRef.current);
         // 048 FR-083 — the collapsed sections just hidden moved everything below them: a place applied above
         // lands again under the folded layout. In the same task, so the reader never sees the unfolded one.
         reanchor(scroller);
@@ -947,6 +1090,20 @@ export function MarkdownBody({
         onLinkTargetRef.current?.('focus', active !== null && body.contains(active) ? linkTargetOf(active) : null);
         // Highlighting only rebuilds code elements' children, so it can land after the anchor restore.
         void highlightCodeBlocks(body).catch((error: unknown) => logCaught('markdown-body: highlight code blocks', error));
+        /*
+         * 075 FR-046 — the typesetter is imported only when this draw holds maths, so a document without any never
+         * loads KaTeX or a font. It draws in batches that yield a frame (FR-048, Principle XII), stops when a newer
+         * draw supersedes this one, and the place is re-applied once the equations have their real height.
+         */
+        if (typesetMath && hasMath(body)) {
+          const signal = { get cancelled(): boolean { return cancelled; } };
+          import('./math-typeset.js')
+            .then((m) => m.typesetMath(body, nextFrame, m.MATH_BATCH, signal))
+            .then(() => {
+              if (!cancelled) reanchor(scroller);
+            })
+            .catch((error: unknown) => logCaught('markdown-body: typeset maths', error));
+        }
         // 047 R2 — this render's heading tree, the same moment as onDrawn (data-model §13 amended).
         onHeadingsRef.current?.(buildSymbolTree(headings));
         /*
@@ -966,6 +1123,17 @@ export function MarkdownBody({
               applyWikiResolution(current, resolved, projectRoot);
               // 068 FR-011 — the same answer draws, or refuses, each held image embed.
               for (const img of applyImageEmbedResolution(current, resolved, projectRoot, panelId)) showAltText(img);
+              // 074 FR-055 (R8a) — an image answer this draw did not already hold redraws once, framing it.
+              let imagesChanged = false;
+              wikiTargets.forEach((target, i) => {
+                const key = wikiTargetKey(target);
+                if (!heldImageRefs.has(key)) return;
+                const answer = resolved[i] ?? null;
+                // A first answer of "no file" changes nothing a redraw would show: its alt text is already drawn.
+                if (wikiImages.known.has(key) ? wikiImages.known.get(key) !== answer : answer !== null) imagesChanged = true;
+                wikiImages.known.set(key, answer);
+              });
+              if (imagesChanged && wikiImagesRef.current === wikiImages) setEmbedTick((t) => t + 1);
             })
             // main unreachable: links stay unmarked rather than failing the draw
             .catch((error: unknown) => logCaught('markdown-body: resolve wikilink targets', error));
@@ -1003,7 +1171,7 @@ export function MarkdownBody({
     // it is a re-point (T177) — and links and images resolve against it either way. The project, the panel
     // and the remote-image setting change what they resolve to; the front matter setting changes what is
     // drawn at the top. `navigationSeq` is read, not depended on: it never moves without the file moving.
-  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, linkScan, renderMermaid, embedTick, claimDiagrams, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
+  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, linkScan, typesetMath, renderMermaid, embedTick, claimDiagrams, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor, calloutIconFor]);
 
   /*
    * 047 US3 — the reader (or the chrome) toggled a section, Collapse/Expand All, or the gutter setting
@@ -1016,9 +1184,24 @@ export function MarkdownBody({
     const body = bodyRef.current;
     if (body === null || shown.current === null) return;
     drawFoldGutter(body, lastHeadingsRef.current);
+    // A fold changed which blocks are hidden.
+    blockIndex.current?.invalidate();
+    indicator.current?.apply(syncMarkRef.current);
     // 048 FR-083 — fold state seeded late (main's answer after the draw) is a settle point too.
     reanchor(scrollerOf(body));
   }, [foldState, gutter, theme, sets, drawFoldGutter, reanchor]);
+
+  // 073 FR-033d — the sync mark moved or faded: the indicator beside the block holding its line, in the gutter only.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body === null || shown.current === null) return;
+    indicator.current?.apply(syncMark);
+  }, [syncMark, gutter]);
+  // 075 FR-024 — a theme or icon set change redraws the callouts' icons, over the body's current children.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body !== null && shown.current !== null) calloutFoldsRef.current?.refreshIcons(body, calloutIconFor);
+  }, [theme, sets, calloutIconFor]);
 
   /*
    * FR-040 — the chrome's way to expand one section's collapsed ancestors and itself, and bring it to
@@ -1039,7 +1222,10 @@ export function MarkdownBody({
         onFoldChangeRef.current?.(next);
         drawFoldGutter(body, lastHeadingsRef.current);
       }
-      headingElementBySlug(body, slug)?.scrollIntoView({ block: 'start' });
+      const heading = headingElementBySlug(body, slug);
+      // 075 FR-010 — a heading inside a collapsed callout opens it, and every collapsed callout around it.
+      if (heading !== null) revealCalloutsAt(heading);
+      heading?.scrollIntoView({ block: 'start' });
     });
   }, [onRevealSection, drawFoldGutter]);
 

@@ -1,3 +1,4 @@
+import { safeSourceList } from '../preview/safe-sources.js';
 import { pathCompareKey } from '../fs/path-id.js';
 /**
  * Project domain entity (Constitution Principle I). A project is the root
@@ -33,6 +34,11 @@ export interface Project {
    * exclusions toggle says. Independent of `hiddenPaths`, which govern the tree only (FR-025).
    */
   searchExcludeGlobs: string[];
+  /**
+   * 074 FR-072a — remote sources (canonical `https:` origins, optionally `*.`) an HTML Preview of a file in THIS
+   * project may load stylesheets, fonts and images from, beside the global safe-sources preference.
+   */
+  htmlSafeSources: string[];
   /**
    * The category the project is listed under (046 FR-059). A store resolves `''` or an id naming no
    * category of the owner to the default category before handing the project out, so a project read
@@ -197,6 +203,7 @@ export function createProject(input: ProjectInput, ctx: ProjectCreationContext):
     isActive: ctx.isActive ?? false,
     hiddenPaths: [],
     searchExcludeGlobs: [],
+    htmlSafeSources: [],
     categoryId: ctx.categoryId ?? '',
     createdAt: ctx.now,
     updatedAt: ctx.now,
@@ -226,6 +233,11 @@ export function sanitiseSearchExcludeGlobs(globs: readonly unknown[]): string[] 
     if (glob.length > 0) seen.add(glob);
   }
   return [...seen];
+}
+
+/** Set a project's own safe HTML preview sources (074 FR-072a), normalised, bumping `updatedAt`. Pure. */
+export function applyHtmlSafeSources(existing: Project, sources: readonly string[], now: string): Project {
+  return { ...existing, htmlSafeSources: safeSourceList(sources), updatedAt: now };
 }
 
 /** Set a project's own Find in Files exclusions (060 #532, FR-030), bumping `updatedAt`. Pure. */

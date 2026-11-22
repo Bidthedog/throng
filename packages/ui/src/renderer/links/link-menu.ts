@@ -67,6 +67,11 @@ export interface LinkMenuBuildArgs {
   /** FR-032, FR-175 — Copy Link to Clipboard's own action; what it copies is the caller's to decide. */
   readonly copyLink: () => void | Promise<void>;
   readonly performers?: LinkMenuPerformers;
+  /**
+   * 074 FR-103 — the icon Open Preview is drawn with: the preview icon of the provider that claims the linked
+   * file (`previewIconOf`). Absent draws the generic `preview` icon.
+   */
+  readonly previewIcon?: IconKey;
 }
 
 const ICONS: Partial<Record<LinkRow['id'], IconKey>> = {
@@ -131,11 +136,13 @@ export function linkMenuActions(
     ...(args.chord !== undefined && args.chord.length > 0 ? { chord: args.chord } : {}),
   };
 
+  const iconOf = (id: LinkRow['id']): IconKey | undefined =>
+    id === 'openPreview' && args.previewIcon !== undefined ? args.previewIcon : ICONS[id];
   const toAction = (item: LinkRow): MenuAction => ({
     label: item.label,
     section: item.section,
     disabled: item.disabled,
-    ...(ICONS[item.id] !== undefined ? { icon: ICONS[item.id] } : {}),
+    ...(iconOf(item.id) !== undefined ? { icon: iconOf(item.id) } : {}),
     ...(item.shortcut !== undefined ? { shortcut: item.shortcut } : {}),
     ...(item.disabled
       ? {}

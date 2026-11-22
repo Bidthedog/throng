@@ -64,10 +64,18 @@ export interface MapColumn {
   allowedValues?: readonly (string | number)[];
   min?: number;
   max?: number;
+  /** 077 FR-012 — a number column's step, as on {@link FieldDescriptor}. */
+  step?: number;
   /** As on {@link FieldDescriptor}: the enforced bound where it differs from the control's range. */
   hardMin?: number;
   hardMax?: number;
 }
+
+/** 077 FR-001 — the unit a numeric setting is stored in. */
+export type StoredUnit = 'bytes' | 'ms' | 'count' | 'characters' | 'px' | 'percent';
+
+/** 077 FR-005 — the unit a numeric setting is shown in; `own` shows the stored unit itself. */
+export type DisplayUnit = 'MB' | 'ms' | 's' | 'min' | 'days' | 'own';
 
 /** One editor field: a configurable key plus how to render and constrain it. */
 export interface FieldDescriptor {
@@ -145,9 +153,9 @@ export interface FieldDescriptor {
    * 031 (#227) — the bound the read-side guard ENFORCES, where it differs from the control's range.
    *
    * Defaults to `min`/`max`, so every descriptor that declares neither is unaffected and the guard's
-   * contract stays universal. It exists because one shipped setting genuinely needs the two to
-   * differ: `diagnostics.maxFileSizeKb` caps its slider at 4096 so the control stays aimable (one
-   * step must be ≥1% of the range) while a hand-set 64 MB remains legitimate.
+   * contract stays universal. It exists because a setting can need the two to differ: `diagnostics.maxFileBytes`
+   * caps its slider so the control stays aimable while a hand-set 64 MB remains legitimate, and 077 gives every
+   * debounce a hard maximum past its slider (research R6).
    *
    * That intent used to live in a COMMENT, which the guard cannot read — so enforcing the declared
    * maximum would have silently rewritten a user's 64 MB log cap to 4 MB. A wider hard bound must
@@ -155,6 +163,19 @@ export interface FieldDescriptor {
    */
   hardMin?: number;
   hardMax?: number;
+  /**
+   * 077 FR-001 — the unit `settings.json` holds: every size in bytes, every duration in ms. Required for every numeric
+   * SETTING (`slider-descriptors.test.ts`); a theme token's px or weight needs none.
+   */
+  storedUnit?: StoredUnit;
+  /**
+   * 077 FR-005 — the unit the slider and its value are SHOWN in, chosen from the range: `MB` for every size; `ms`,
+   * `s`, `min` or `days` for a duration; `own` for a count, length, pixel or percentage. Display only — the slider's
+   * `min`/`max`/`step` stay in {@link storedUnit}, so no rounding reaches the file (research R1).
+   */
+  display?: DisplayUnit;
+  /** 077 — what a `count` is a count OF ("entries", "rows"); drawn beside the value. */
+  unitLabel?: string;
   /** element control for an 'array' field. */
   itemControl?: ControlKind;
   /** value columns for a 'map' field — the keyed table's shape (016, F5). */
@@ -233,6 +254,12 @@ export interface FieldDescriptor {
   /** The one platform this control means anything on (062). Absent, every platform. Hidden elsewhere, not disabled. */
   onlyOn?: 'windows' | 'linux' | 'macos';
   /**
+   * 077 FR-026 — another Preferences tab edits this setting, so the Settings tab draws no row for it. It is still a
+   * configurable, described setting: Revert All restores it, the JSON tab checks it, and the completeness gate counts
+   * it. Unlike an internal key, which nothing in the editor owns.
+   */
+  editedIn?: 'themes';
+  /**
    * Committing THIS VALUE costs the user something they must agree to first (030 FR-008; 043 FR-082b).
    *
    * The population is every control that can stop a FAILURE reporting itself: the `error` and
@@ -271,6 +298,12 @@ export interface FieldDescriptor {
    * hand-edited one — a second copy of the rule would drift. Absent means no further rule.
    */
   validate?: (value: unknown) => string | null;
+  /**
+   * `array` of `text` only (074 FR-072c): the rule ONE entry must satisfy — `null` when acceptable, else a message
+   * naming what is wrong. The list editor refuses to write an entry it rejects and shows the message beside it; the
+   * read side drops such an entry. Absent means any text is an entry.
+   */
+  validateItem?: (item: string) => string | null;
   /**
    * The control sits on its own line under the description, the full width of the row, rather than
    * in the narrow column beside it (053 FR-014) — for a value too long to read in that column.

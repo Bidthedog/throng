@@ -26,6 +26,8 @@
  */
 import { Text as CodeMirrorText } from '@codemirror/state';
 import { editorMatches, type Match, type MatchModes } from '@throng/core';
+import { logExpected } from '@throng/core';
+import { MATH_TYPESET_ATTRIBUTE } from './math-host.js';
 
 /** DOM's own node-type constants, restated so this file needs no `Node` global (Node-environment tests). */
 const ELEMENT_NODE = 1;
@@ -37,9 +39,22 @@ const TEXT_NODE = 3;
  */
 export interface TextModelNode {
   readonly nodeType: number;
+  readonly nodeName?: string;
   readonly nodeValue?: string | null;
   readonly childNodes: ArrayLike<TextModelNode>;
   getAttribute?(name: string): string | null;
+  /**
+   * 074 FR-086b (R6d) — an `<iframe>`'s document: a same-origin frame's (an HTML Preview's page) is walked as part
+   * of the body, so its text is found like any other; a cross-origin frame's reads `null` and is skipped.
+   */
+  readonly contentDocument?: { readonly body: TextModelNode | null } | null;
+  /** The document the node is in: throng's own, or an HTML Preview page's frame. Absent reads as throng's. */
+  readonly ownerDocument?: unknown;
+}
+
+/** Whether `node` is in throng's own document, where its chrome, diagrams and equations live (074 R6d). */
+function inThrongDocument(node: TextModelNode): boolean {
+  return node.ownerDocument === undefined || node.ownerDocument === globalThis.document;
 }
 
 /** One contiguous run of the model's text that came from a single DOM text node. */
@@ -61,6 +76,20 @@ function hasClass(node: TextModelNode, name: string): boolean {
   return raw.split(/\s+/).includes(name);
 }
 
+/** Elements whose text content is never drawn as text. */
+const NOT_TEXT = new Set(['STYLE', 'SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'TITLE']);
+
+/** A same-origin `<iframe>`'s body, or `null` (not a frame, cross-origin, not loaded). */
+function frameBody(node: TextModelNode): TextModelNode | null {
+  if (node.nodeName?.toUpperCase() !== 'IFRAME') return null;
+  try {
+    return node.contentDocument?.body ?? null;
+  } catch (error) {
+    logExpected('preview-search-model: read a frame', 'a browser may throw rather than answer null for a cross-origin frame; there is nothing to read', error);
+    return null;
+  }
+}
+
 /**
  * The default exclusion (R1): the fold gutter/toggle controls (`.preview-fold-toggle`,
  * `.preview-fold-gutter` — `contracts/menus-commands-controls.md` "Gutter controls"), and anything
@@ -68,11 +97,23 @@ function hasClass(node: TextModelNode, name: string): boolean {
  */
 export function defaultPreviewSearchExclusion(node: TextModelNode): boolean {
   return (
+    // 074 R6d — what a page carries but never draws as text (an HTML Preview's page keeps its own `<style>`).
+    NOT_TEXT.has(node.nodeName?.toUpperCase() ?? '') ||
     node.getAttribute?.('aria-hidden') === 'true' ||
+    // What throng drew, in throng's document only: an HTML Preview page's own element of the same name is the author's.
+    (inThrongDocument(node) && isThrongDrawn(node))
+  );
+}
+
+/** Throng's own chrome, diagrams and equations, by class and attribute. */
+function isThrongDrawn(node: TextModelNode): boolean {
+  return (
     hasClass(node, 'preview-fold-toggle') ||
     hasClass(node, 'preview-fold-gutter') ||
     // 054 FR-032 — a rendered diagram: its labels are drawing, and its toolbar is chrome.
-    hasClass(node, 'preview-diagram-host')
+    hasClass(node, 'preview-diagram-host') ||
+    // 075 FR-049 — a typeset equation is drawing too; with Typeset math off it is plain source text, and found.
+    (node.getAttribute?.(MATH_TYPESET_ATTRIBUTE) ?? null) !== null
   );
 }
 
@@ -92,6 +133,11 @@ export function buildPreviewTextModel(
         entries.push({ from: text.length, to: text.length + value.length, node });
         text += value;
       }
+      return;
+    }
+    const inner = node.nodeType === ELEMENT_NODE ? frameBody(node) : null;
+    if (inner !== null) {
+      walk(inner);
       return;
     }
     for (let i = 0; i < node.childNodes.length; i += 1) walk(node.childNodes[i]!);
@@ -122,6 +168,28 @@ export function locate(model: PreviewTextModel, offset: number): { node: TextMod
     const isLast = mid === entries.length - 1;
     if (offset < entry.from) hi = mid - 1;
     else if (offset < entry.to || (isLast && offset === entry.to)) return { node: entry.node, offset: offset - entry.from };
+    else lo = mid + 1;
+  }
+  return null;
+}
+
+/**
+ * {@link locate} for a range's END: an offset on a join belongs to the node that ENDS there. Resolved into the next
+ * node, a match ending at the end of a paragraph would end at offset 0 of the next one, and Chromium gives such a
+ * range a second client rect — a find frame on the next line's first letter (MT-48, 2026-11-21).
+ */
+export function locateEnd(model: PreviewTextModel, offset: number): { node: TextModelNode; offset: number } | null {
+  const { entries } = model;
+  const first = entries[0];
+  if (first !== undefined && offset === first.from) return { node: first.node, offset: 0 };
+  let lo = 0;
+  let hi = entries.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const entry = entries[mid]!;
+    // Half-open the other way, (from, to].
+    if (offset <= entry.from) hi = mid - 1;
+    else if (offset <= entry.to) return { node: entry.node, offset: offset - entry.from };
     else lo = mid + 1;
   }
   return null;

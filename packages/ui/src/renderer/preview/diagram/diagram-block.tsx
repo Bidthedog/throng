@@ -21,6 +21,7 @@ import type { BlockRendererEntry } from '../blocks/block-renderers.js';
 import type { DiagramTheme } from './diagram-theme.js';
 import { DiagramFrame } from './diagram-frame.js';
 import { Spinner } from '../../common/loading.js';
+import '../loading-placeholder.css';
 
 export interface DiagramBlockProps {
   panelId: string;
@@ -35,6 +36,14 @@ export interface DiagramBlockProps {
   fillsPanel?: boolean;
   /** Passed to `DiagramFrame` — the box height the document gives the diagram (FR-046m), if any. */
   height?: number | null;
+  /** Passed to `DiagramFrame` — 074 FR-020's starting view. */
+  initialMode?: 'fit' | 'actual' | 'open';
+  /** Passed to `DiagramFrame` — 074 FR-031a: the viewport scrolls instead of panning (an Image or SVG preview). */
+  scrolls?: boolean;
+  /** Passed to `DiagramFrame` — 074 FR-027b: hatch a picture's transparent areas. */
+  hatch?: boolean;
+  /** 074 (2026-11-20) — the scale the drawing is shown at, on every change: for the status bar's zoom readout. */
+  onScale?: (scale: number) => void;
 }
 
 export function DiagramBlock({
@@ -46,7 +55,13 @@ export function DiagramBlock({
   maximisable = true,
   fillsPanel = false,
   height = null,
+  initialMode = 'fit',
+  scrolls = false,
+  hatch = true,
+  onScale,
 }: DiagramBlockProps): ReactElement {
+  // 074 — a picture is not a diagram: the entry names what it draws, for the notices.
+  const noun = entry.noun ?? 'diagram';
   const [svg, setSvg] = useState<SVGSVGElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(0);
@@ -65,7 +80,7 @@ export function DiagramBlock({
         },
         (reason: unknown) => {
           if (ticket !== latest.current) return;
-          setError(reason instanceof Error && reason.message.length > 0 ? reason.message : 'The diagram could not be drawn.');
+          setError(reason instanceof Error && reason.message.length > 0 ? reason.message : `The ${noun} could not be drawn.`);
         },
       );
     // `theme` by its key: a re-render of the body hands a new object for the same theme.
@@ -76,15 +91,16 @@ export function DiagramBlock({
     <div className="preview-diagram" data-testid={`diagram-${panelId}-${sectionId}`}>
       {error !== null ? (
         <div className="preview-diagram__notice" role="status" data-testid={`diagram-notice-${panelId}-${sectionId}`}>
-          <span>This diagram could not be drawn: </span>
+          <span>{`This ${noun} could not be drawn: `}</span>
           <span className="preview-diagram__notice-detail">{error}</span>
         </div>
       ) : null}
       {/* The first draw of a diagram can take a moment: say so rather than show nothing. */}
       {svg === null && error === null ? (
-        <div className="preview-diagram__loading" data-testid={`diagram-loading-${panelId}-${sectionId}`}>
-          <Spinner label="Drawing diagram" />
-          <span>Drawing diagram…</span>
+        // 075 FR-043a — the placeholder everything in a preview shows while it loads (`loading-placeholder.css`).
+        <div className="preview-loading preview-loading--block" data-testid={`diagram-loading-${panelId}-${sectionId}`}>
+          <Spinner label={`Drawing ${noun}`} />
+          <span>{`Drawing ${noun}…`}</span>
         </div>
       ) : null}
       {svg !== null ? (
@@ -96,6 +112,10 @@ export function DiagramBlock({
           maximisable={maximisable}
           fillsPanel={fillsPanel}
           height={height}
+          initialMode={initialMode}
+          scrolls={scrolls}
+          hatch={hatch}
+          onScale={onScale}
         />
       ) : null}
     </div>

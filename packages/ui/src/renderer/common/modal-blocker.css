@@ -1,0 +1,8 @@
+/* The window beneath a modal Print Preview, on Linux (modal-blocker.tsx): above everything, invisible, the arrow. */
+.modal-blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  cursor: default;
+  background: transparent;
+}

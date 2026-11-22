@@ -1,0 +1,7 @@
+/* The shared Go to dialog (073 FR-043b). The card and field are `.picker` / `.picker__input`; this is the status line. */
+
+.go-to-dialog__status {
+  padding: 4px 10px 6px;
+  color: var(--throng-colour-textMuted);
+  font-variant-numeric: tabular-nums;
+}

@@ -14,6 +14,7 @@ import { clampToViewport } from '../common/clamp-to-viewport.js';
 import { withDividers } from './menu-dividers.js';
 import { resolveKeydown } from '../config/chord-key.js';
 import { endSplitMode } from './split-mode.js';
+import '../common/setting-toggle.css';
 
 /**
  * Match a keydown against an item's advertised shortcut (e.g. "Ctrl+C"), for in-menu shortcuts.
@@ -62,6 +63,11 @@ export interface MenuAction {
    * The label stays the bare action name, so a test id and a chord never depend on the state.
    */
   checked?: boolean;
+  /**
+   * A row that flips an on/off setting whose status-bar toggle draws `icon` (076 FR-005): the icon is drawn as that
+   * toggle draws it, plain while `checked`, struck through while not (`setting-toggle.css`; maintainer, 2026-11-22).
+   */
+  settingToggle?: boolean;
   /**
    * The command's first keyboard shortcut, shown in brackets after the label in smaller text
    * (US1, #125) — e.g. `Ctrl+C`. Resolved live from the keybindings at the build site via
@@ -440,7 +446,14 @@ function MenuLevel({
               onClose();
             }}
           >
-            <span className="context-menu__icon" aria-hidden>
+            <span
+              className={
+                item.settingToggle === true
+                  ? `context-menu__icon setting-toggle-icon${item.checked === true ? '' : ' setting-toggle-icon--off'}`
+                  : 'context-menu__icon'
+              }
+              aria-hidden
+            >
               {item.icon ? <Icon token={item.icon} /> : ''}
             </span>
             <span className="context-menu__label">{item.label}</span>
@@ -531,7 +544,9 @@ export function ContextMenu({
     onClose();
     requestAnimationFrame(() => {
       const ae = document.activeElement;
-      if ((ae === null || ae === document.body) && opener && opener.isConnected) opener.focus?.();
+      // Without scrolling: the action may have moved the view away from its opener on purpose — Open Link on a PDF
+      // page link goes to that page, and focusing the link with the default scroll pulled the view straight back.
+      if ((ae === null || ae === document.body) && opener && opener.isConnected) opener.focus?.({ preventScroll: true });
     });
   }, [onClose, opener]);
 

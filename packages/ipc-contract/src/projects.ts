@@ -17,6 +17,8 @@ export const PROJECTS_REORDER_METHOD = 'projects.reorder';
 export const PROJECTS_SET_HIDDEN_METHOD = 'projects.setHidden';
 /** 060 #532 — replace a project's own Find in Files exclusions, as `setHidden` replaces its hidden paths. */
 export const PROJECTS_SET_SEARCH_EXCLUDES_METHOD = 'projects.setSearchExcludes';
+/** 074 FR-072a — replace a project's own safe HTML preview sources, as `setSearchExcludes` replaces its exclusions. */
+export const PROJECTS_SET_HTML_SAFE_SOURCES_METHOD = 'projects.setHtmlSafeSources';
 // Project categories (046, contracts/project-categories.md §1). Every refusal, an unknown id
 // included, is JSON_RPC_INVALID_PARAMS.
 export const PROJECTS_CATEGORIES_LIST_METHOD = 'projects.categories.list';
@@ -45,6 +47,12 @@ export interface ProjectDto {
    * predates it still describes a project with none.
    */
   searchExcludeGlobs?: string[];
+  /**
+   * 074 FR-072a — remote `https:` origins an HTML Preview in this project may load stylesheets, fonts and
+   * images from, beside the global preference. Always sent by the daemon; optional on the type so a
+   * renderer fixture that predates it still describes a project with none.
+   */
+  htmlSafeSources?: string[];
   /**
    * The category the project is listed under (046 FR-059). Always resolved by the daemon: `''` or an
    * id naming no category reads back as the owner's default category, so this is never `''`.
@@ -114,6 +122,14 @@ export interface ProjectsSetSearchExcludesParams {
   id: string;
   searchExcludeGlobs: string[];
 }
+export interface ProjectsSetHtmlSafeSourcesParams {
+  id: string;
+  htmlSafeSources: string[];
+}
+export interface ProjectsSetHtmlSafeSourcesResult {
+  project: ProjectDto;
+}
+
 export interface ProjectsSetSearchExcludesResult {
   project: ProjectDto;
 }

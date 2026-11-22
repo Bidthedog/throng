@@ -24,6 +24,7 @@ import { requestRedraw } from '../terminal/redraw.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { getActivePane } from '../workspace/active-pane.js';
 import { isPanelSectionMaximised } from '../workspace/maximise-store.js';
+import { isPanelFindAbsent } from '../preview/unsearchable-panels.js';
 import { getPanelSearch } from './search-controller.js';
 import {
   closeFind,
@@ -124,6 +125,11 @@ export function SearchKeybindings(): null {
       // 054 FR-074 — a preview whose inline diagram is maximised over it has nothing visible to search:
       // every search chord is consumed and does nothing until the diagram is minimised.
       if (findKind === 'preview' && isPanelSectionMaximised(activePanelId)) {
+        e.preventDefault();
+        return;
+      }
+      // 074 FR-086a — a preview body with no text: every search chord is consumed and does nothing.
+      if (findKind === 'preview' && isPanelFindAbsent(activePanelId)) {
         e.preventDefault();
         return;
       }

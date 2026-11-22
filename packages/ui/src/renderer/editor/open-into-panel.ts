@@ -25,7 +25,7 @@ import type { useWorkspace } from '../state/workspace-store.js';
 import { getEditorActions, type EditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
 import { setLastActiveEditor } from './last-active-editor.js';
-import { publishRefusedOpen } from './refusal-store.js';
+import { publishRefusedOpen, refusedOpenOf } from './refusal-store.js';
 import { promptUnsavedOpen, type UnsavedOpenChoice } from './unsaved-open-store.js';
 import { ensurePanelVisible, isPanelHidden, restoreAll } from '../workspace/maximise-store.js';
 
@@ -97,11 +97,7 @@ export async function openIntoEditorPanel(
     // FR-106d — the one deliberate bypass: a history step onto a file that is no longer there still moves,
     // so the panel shows its could-not-read state and the user can step past it.
     if (!(intent.kind === 'history' && isMissingReason(decision.reason))) {
-      publishRefusedOpen({
-        absPath,
-        reason: decision.reason,
-        ...(decision.encoding ? { encoding: decision.encoding } : {}),
-      });
+      publishRefusedOpen(refusedOpenOf(absPath, decision));
       return 'refused';
     }
   }

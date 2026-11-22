@@ -16,12 +16,19 @@
  */
 import type { EditorDocument } from './document.js';
 import { resolveSaveConfinement } from './confinement.js';
+import type { FieldDescriptor } from '../config/metadata.js';
+import { formatSetting } from '../config/numeric-units.js';
+
+/** How `editor.maxOpenFileBytes` is shown (077 FR-001): bytes, in MB. */
+const OPEN_FILE_SIZE = { storedUnit: 'bytes', display: 'MB' } as FieldDescriptor;
 
 export type DropRejection = 'out-of-tree' | 'folder' | 'too-large' | 'not-found';
 
 export type DropDecision =
   | { ok: true; absPath: string }
-  | { ok: false; reason: DropRejection; error: string };
+  | { ok: false; reason: Exclude<DropRejection, 'too-large'>; error: string }
+  /** 077 T045 — the file's size and the limit it is over, in bytes, so a notice raised later can quote them (FR-014). */
+  | { ok: false; reason: 'too-large'; error: string; size: number; limit: number };
 
 export interface DropCandidate {
   /** The REAL path — the caller has already resolved every symlink in it. */
@@ -66,7 +73,10 @@ export function resolveDrop(
     return {
       ok: false,
       reason: 'too-large',
-      error: `File is too large to open (${candidate.size} bytes; limit ${limits.maxOpenFileBytes}).`,
+      size: candidate.size,
+      limit: limits.maxOpenFileBytes,
+      // 077 FR-014 — grouped, in the unit `editor.maxOpenFileBytes` is shown in, quoting its value (7.3.0).
+      error: `File is too large to open: ${formatSetting(candidate.size, OPEN_FILE_SIZE)}, over the ${formatSetting(limits.maxOpenFileBytes, OPEN_FILE_SIZE)} limit set in Preferences.`,
     };
   }
 

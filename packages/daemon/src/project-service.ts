@@ -7,6 +7,7 @@ import {
   PROJECTS_REORDER_METHOD,
   PROJECTS_SET_HIDDEN_METHOD,
   PROJECTS_SET_SEARCH_EXCLUDES_METHOD,
+  PROJECTS_SET_HTML_SAFE_SOURCES_METHOD,
   PROJECTS_CATEGORIES_LIST_METHOD,
   PROJECTS_CATEGORIES_CREATE_METHOD,
   PROJECTS_CATEGORIES_RENAME_METHOD,
@@ -30,6 +31,7 @@ function toDto(project: Project): ProjectDto {
     isActive: project.isActive,
     hiddenPaths: project.hiddenPaths,
     searchExcludeGlobs: project.searchExcludeGlobs,
+    htmlSafeSources: project.htmlSafeSources,
     categoryId: project.categoryId,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
@@ -168,6 +170,16 @@ export class ProjectIpcService {
         throw new RpcError('"searchExcludeGlobs" must be an array of strings', JSON_RPC_INVALID_PARAMS);
       }
       return { project: toDto(this.service.setSearchExcludes(id, globs as string[])) };
+    });
+
+    // 074 FR-072a — the project's own safe HTML preview sources, replaced whole and normalised by core.
+    router.register(PROJECTS_SET_HTML_SAFE_SOURCES_METHOD, (params) => {
+      const id = requireId(params);
+      const sources = asObject(params).htmlSafeSources;
+      if (!Array.isArray(sources) || !sources.every((s) => typeof s === 'string')) {
+        throw new RpcError('"htmlSafeSources" must be an array of strings', JSON_RPC_INVALID_PARAMS);
+      }
+      return { project: toDto(this.service.setHtmlSafeSources(id, sources as string[])) };
     });
 
     // 046 FR-055. orderedIds and an unknown project or category are refused by core, as

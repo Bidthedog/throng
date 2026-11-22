@@ -34,7 +34,7 @@ import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from '.
 // 044 — imports neither this module nor `app-settings.ts`, so no cycle (see its header).
 import { previewSettingsDescriptors } from './preview-settings.js';
 import { validateTitleTemplate } from '../terminal/title-template.js';
-import { minimumIntervalFor, resolveResourceMonitorSettings } from '../resources/settings-resolution.js';
+import { CAPTURE_INTERVAL_MS, minimumIntervalFor, resolveResourceMonitorSettings } from '../resources/settings-resolution.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
@@ -43,30 +43,19 @@ export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
   // The folder last chosen for a project — machine bookkeeping that drives the
   // "Last Viewed" picker option (011), not a hand-tuned setting.
   'newProject.lastProjectFolder',
-  // The three terminal-flavour settings, HIDDEN for v1.0.0 pending #67's proper
-  // implementation. #67 (make flavour editing work through the visual editor)
-  // renders badly and does not work, so its controls must not ship. This is a HIDE, not a
-  // revert: the settings still parse and take effect via a hand-edited settings.json — only
-  // the Settings UI controls are withheld. Their descriptors are kept verbatim in
-  // HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS below and re-exposed with #67 by spreading them back
-  // into SETTINGS_METADATA and deleting these three lines.
-  //
-  // Marking them internal is what keeps the completeness rule (FR-047) satisfied: an internal
-  // leaf is excluded from the configurable set, so it neither demands a descriptor (no
-  // "missing") nor may carry one in the rendered registry (no "unknown") — exactly the
-  // treatment `newProject.lastProjectFolder` above already receives.
-  'terminals.flavours',
-  'terminals.disabledBuiltins',
-  'terminals.defaultShellArguments',
-  // 025: a per-flavour argv template keyed by flavour id. Same shape and same reasoning as
-  // `terminals.flavours` above — it is withheld from the Settings UI until issue 67 settles a
-  // control that can express it, and is hidden here rather than left undescribed.
+  // 025: a per-flavour argv template keyed by flavour id, withheld from the Settings UI: #67 exposed the
+  // flavour tables (custom flavours, their shell arguments, the hidden built-ins) and left this one out of
+  // its scope. Hidden here rather than left undescribed. Marking it internal is what keeps the
+  // completeness rule (FR-047) satisfied: an internal leaf neither demands a descriptor nor may carry one.
   'terminals.commandRecipes',
 ];
 
-/** What this platform's Preferences draws: a control that means nothing here is hidden, not disabled (062). */
+/**
+ * What this platform's Preferences draws: a control that means nothing here is hidden, not disabled (062), and a
+ * setting another tab edits is drawn there, not here (077 FR-026).
+ */
 export function descriptorsForThisPlatform(all: readonly FieldDescriptor[]): readonly FieldDescriptor[] {
-  return all.filter((d) => d.onlyOn === undefined || d.onlyOn === hostTraits().os);
+  return all.filter((d) => (d.onlyOn === undefined || d.onlyOn === hostTraits().os) && d.editedIn === undefined);
 }
 
 /**
@@ -177,16 +166,19 @@ const MARKDOWN_SECTIONS_OPEN: FieldDescriptor = {
  */
 const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
   {
-    key: 'resourceMonitor.captureIntervalSeconds',
-    label: 'Capture interval (seconds)',
+    key: 'resourceMonitor.captureIntervalMs',
+    label: 'Capture interval',
     description:
-      'How often throng measures its own CPU, memory, GPU and I/O, for the status bar and the Resource Monitor alike. A longer history needs a slower capture: up to 5 minutes allows 2 seconds, up to 10 minutes 5, up to 20 minutes 15, and up to 30 minutes 30.',
+      'How often throng measures its own CPU, memory, GPU and I/O, for the status bar and the Resource Monitor alike. A longer history needs a slower capture: when the history window chosen needs a slower one than this, the capture interval in force is shown beside it.',
     group: 'Resource Monitor',
     control: 'slider',
-    min: 2,
-    max: 60,
-    step: 1,
-    minFor: (settings) => minimumIntervalFor(settings.resourceMonitor.historyMinutes),
+    // 077 FR-001 — stored in ms, shown in seconds.
+    storedUnit: 'ms',
+    display: 's',
+    min: CAPTURE_INTERVAL_MS.min,
+    max: CAPTURE_INTERVAL_MS.max,
+    step: CAPTURE_INTERVAL_MS.step,
+    minFor: (settings) => minimumIntervalFor(settings.resourceMonitor.historyMs / 60_000) * 1000,
     note: (settings) => {
       const r = resolveResourceMonitorSettings(settings.resourceMonitor);
       return r.intervalRaised
@@ -195,68 +187,98 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     },
   },
   {
-    key: 'resourceMonitor.historyMinutes',
-    label: 'History window (minutes)',
+    key: 'resourceMonitor.historyMs',
+    label: 'History window',
     description:
-      'How many minutes of history the Resource Monitor keeps for each process while it is open. Nothing is kept once it closes.',
+      'How much history the Resource Monitor keeps for each process while it is open. Nothing is kept once it closes.',
     group: 'Resource Monitor',
     control: 'slider',
-    min: 1,
-    max: 30,
-    step: 1,
+    // 077 FR-001 — stored in ms, shown in minutes.
+    storedUnit: 'ms',
+    display: 'min',
+    min: 60_000,
+    max: 1_800_000,
+    step: 60_000,
+    hardMax: 1_800_000,
   },
   {
     key: 'resourceMonitor.cpuWarningPercent',
-    label: 'CPU warning (%)',
+    label: 'CPU warning',
     description:
       'The share of the whole machine\'s CPU at which a figure is shown in the warning colour. Kept below the critical level.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in percent.
+    storedUnit: 'percent',
+    display: 'own',
     min: 1,
     max: 100,
     step: 1,
   },
   {
     key: 'resourceMonitor.cpuCriticalPercent',
-    label: 'CPU critical (%)',
+    label: 'CPU critical',
     description: 'The share of the whole machine\'s CPU at which a figure is shown in the critical colour.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in percent.
+    storedUnit: 'percent',
+    display: 'own',
     min: 1,
     max: 100,
     step: 1,
   },
   {
     key: 'resourceMonitor.memoryWarningPercent',
-    label: 'Memory warning (%)',
+    label: 'Memory warning',
     description:
       'The share of installed memory at which a figure is shown in the warning colour. Kept below the critical level.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in percent.
+    storedUnit: 'percent',
+    display: 'own',
     min: 1,
     max: 100,
     step: 1,
   },
   {
     key: 'resourceMonitor.memoryCriticalPercent',
-    label: 'Memory critical (%)',
+    label: 'Memory critical',
     description: 'The share of installed memory at which a figure is shown in the critical colour.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in percent.
+    storedUnit: 'percent',
+    display: 'own',
     min: 1,
     max: 100,
     step: 1,
   },
   {
     key: 'resourceMonitor.popoverDelayMs',
-    label: 'Popup delay (ms)',
+    label: 'Popup delay',
     description:
       'How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits.',
     group: 'Resource Monitor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    hardMax: 10000,
     min: 0,
-    max: 5000,
-    step: 50,
+    max: 1500,
+    step: 25,
+  },
+  // 055 FR-063b — the one confirmation the Resource Monitor adds. 077 FR-022 (maintainer, 2026-11-21): in the Resource
+  // Monitor group, superseding FR-063b's Confirmations group. The key keeps its `confirmations.` namespace.
+  {
+    ...confirmDescriptor(
+      'confirmations.killProcesses',
+      'Kill processes',
+      'How many confirmations before the Resource Monitor force-ends a process (Kill Process) or everything running beneath a project, tab, panel or process (Kill All Below).',
+    ),
+    group: 'Resource Monitor',
   },
 ];
 
@@ -269,6 +291,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'General',
     subgroup: 'Appearance',
     control: 'select', // options are the themes on disk (populated at runtime)
+    // 077 FR-026 (maintainer, 2026-11-21) — the Themes tab chooses it; the Settings tab draws no row.
+    editedIn: 'themes',
   },
 
   // Confirmations
@@ -291,6 +315,35 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
     onlyOn: 'linux',
   },
+  // 077 FR-023 (maintainer, 2026-11-21): the side panes' widths are window layout, under General › Window.
+  {
+    key: 'panes.projects.maxWidth',
+    label: 'Projects pane max width',
+    description: 'The widest the Projects sidebar pane can be dragged.',
+    group: 'General',
+    subgroup: 'Window',
+    control: 'slider',
+    // 077 FR-001, FR-005 — stored in px.
+    storedUnit: 'px',
+    display: 'own',
+    min: 200,
+    max: 1200,
+    step: 10,
+  },
+  {
+    key: 'panes.fileExplorer.maxWidth',
+    label: 'File Explorer pane max width',
+    description: 'The widest the File Explorer pane can be dragged.',
+    group: 'General',
+    subgroup: 'Window',
+    control: 'slider',
+    // 077 FR-001, FR-005 — stored in px.
+    storedUnit: 'px',
+    display: 'own',
+    min: 200,
+    max: 1200,
+    step: 10,
+  },
   {
     key: 'projects.openFromOutside',
     label: 'Folder opened from outside throng',
@@ -300,6 +353,34 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'select',
     allowedValues: ['switch', 'load'],
     optionLabels: { switch: 'Switch to the project', load: 'Load it without switching' },
+  },
+  {
+    // #695, 077 FR-027 — the project row's popover, beside the tab and File Explorer popovers' own switches.
+    key: 'projects.popoverEnabled',
+    label: 'Project popover',
+    description:
+      'Show a popover when the pointer rests on a project in the Projects pane: its full name, its ID, its full path, its tab and panel counts, and how to rename it.',
+    group: 'General',
+    subgroup: 'Projects',
+    control: 'toggle',
+  },
+  {
+    // #695, 077 FR-027 — the same stops as `tabs.popoverDelayMs` and `explorer.popoverDelayMs`.
+    key: 'projects.popoverDelayMs',
+    label: 'Project popover delay',
+    description:
+      'How long the pointer must rest on a project before its popover appears. Zero shows it as soon as the pointer arrives.',
+    group: 'General',
+    subgroup: 'Projects',
+    control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    // 077 FR-012, R6 — a hover dwell: up to 10 s typed in the box, past the slider's 1.5 s.
+    hardMax: 10000,
+    min: 0,
+    max: 1500,
+    step: 25,
   },
   {
     key: 'projects.unloadTerminalAction',
@@ -329,45 +410,23 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     'Destroy a sub-workspace',
     'How many confirmations before a sub-workspace is destroyed.',
   ),
-  // 055 FR-063 — the one confirmation the Resource Monitor adds; its other actions reuse the rows above.
-  confirmDescriptor(
-    'confirmations.killProcesses',
-    'Kill processes',
-    'How many confirmations before the Resource Monitor force-ends a process (Kill Process) or everything running beneath a project, tab, panel or process (Kill All Below).',
-  ),
-
-  // Panes
-  {
-    key: 'panes.projects.maxWidth',
-    label: 'Projects pane max width',
-    description: 'The widest (px) the Projects sidebar pane can be dragged.',
-    group: 'Panes',
-    control: 'slider',
-    min: 200,
-    max: 1200,
-    step: 10,
-  },
-  {
-    key: 'panes.fileExplorer.maxWidth',
-    label: 'File Explorer pane max width',
-    description: 'The widest (px) the File Explorer pane can be dragged.',
-    group: 'Panes',
-    control: 'slider',
-    min: 200,
-    max: 1200,
-    step: 10,
-  },
+  // 055 FR-063 — the Resource Monitor's own confirmation sits in its group (077 FR-022); its other actions reuse the
+  // rows above.
 
   // Behaviour
   {
     key: 'behaviour.submenuHoverMs',
     label: 'Submenu hover delay',
-    description: 'Dwell time (ms) before a context-menu submenu opens.',
+    description: 'How long the pointer rests on a context-menu item before its submenu opens.',
     group: 'General',
     subgroup: 'Behaviour',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    hardMax: 10000,
     min: 0,
-    max: 2000,
+    max: 1500,
     step: 25,
   },
 
@@ -384,9 +443,12 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.smoothScrollMs',
     label: 'Tab scroll animation',
     description:
-      'How long the tab strip takes to ease to a new position when it scrolls, in milliseconds. Zero scrolls instantly — as does the system "reduce motion" setting, which overrides this without changing it.',
+      'How long the tab strip takes to ease to a new position when it scrolls. Zero scrolls instantly — as does the system "reduce motion" setting, which overrides this without changing it.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
     // US7 / FR-055. Was 3000. Three seconds to ease the strip to a new position is not a preference
     // anyone holds — the original ceiling was invented rather than chosen, and a range whose top
@@ -399,9 +461,12 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.closeArmingDelayMs',
     label: 'Tab close-button delay',
     description:
-      'How long the pointer must rest on a tab before its close button will act, in milliseconds. The delay is what stops a click landing on a tab the pointer was only passing over.',
+      'How long the pointer must rest on a tab before its close button will act. The delay is what stops a click landing on a tab the pointer was only passing over.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
     // US7 / FR-056. Was 2000, narrowed for the same reason as the scroll animation above: a delay
     // measured in seconds is not a guard against a mis-click, it is a broken close button. 50 is
@@ -416,6 +481,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'The most characters a tab or panel name may use. Longer names are shortened for display, with the full name still shown on hover. One limit covers both, because they are the same name in the same strip.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in characters.
+    storedUnit: 'characters',
+    display: 'own',
     min: 10,
     max: 128,
     step: 2,
@@ -429,6 +497,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'The widest a tab may be drawn, in characters. A longer title is ellipsised in the strip and shown in full on hover — the name itself is not shortened, which is what the name limit above does.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in characters.
+    storedUnit: 'characters',
+    display: 'own',
     min: 10,
     max: 128,
     // Two, for the same reason as the name limit: 1 across a 118-wide range is 0.85% and the
@@ -451,11 +522,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.chevronRepeatDelayMs',
     label: 'Chevron repeat delay',
     description:
-      'How long a press-and-hold on a scroll chevron waits before the strip starts scrolling continuously, in milliseconds. Releasing the pointer stops it immediately.',
+      'How long a press-and-hold on a scroll chevron waits before the strip starts scrolling continuously. Releasing the pointer stops it immediately.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    hardMax: 10000,
     min: 100,
-    max: 3000,
+    max: 1500,
     step: 50,
   },
   {
@@ -470,9 +545,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.popoverDelayMs',
     label: 'Tab popover delay',
     description:
-      'How long the pointer must rest on a tab before its information popover appears, in milliseconds. Zero shows it as soon as the pointer arrives; a longer delay keeps it out of the way while you cross the strip.',
+      'How long the pointer must rest on a tab before its information popover appears. Zero shows it as soon as the pointer arrives; a longer delay keeps it out of the way while you cross the strip.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    // 077 FR-012, R6 — a hover dwell: up to 10 s typed in the box, past the slider's 1.5 s.
+    hardMax: 10000,
     min: 0,
     max: 1500,
     step: 25,
@@ -489,12 +569,16 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'behaviour.tabHoverActivateMs',
     label: 'Tab hover-activate delay',
     description:
-      'How long a panel or tab you are DRAGGING must dwell over another tab before that tab comes to the front, in milliseconds. It is what lets you drop onto a tab that is not the one currently showing: hold the drag over that tab, wait, and it switches so you can drop inside it. An ordinary mouse-over does nothing — this delay applies only while a drag is in progress.',
+      'How long a panel or tab you are DRAGGING must dwell over another tab before that tab comes to the front. It is what lets you drop onto a tab that is not the one currently showing: hold the drag over that tab, wait, and it switches so you can drop inside it. An ordinary mouse-over does nothing — this delay applies only while a drag is in progress.',
     group: 'Tabs',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    hardMax: 10000,
     min: 0,
-    max: 5000,
-    step: 50,
+    max: 1500,
+    step: 25,
   },
 
   // File Explorer
@@ -614,23 +698,73 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.popoverDelayMs',
     label: 'File Explorer popover delay',
     description:
-      'How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path, in milliseconds. Zero shows it as soon as the pointer arrives.',
+      'How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path. Zero shows it as soon as the pointer arrives.',
     group: 'File Explorer',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    // 077 FR-012, R6 — a hover dwell: up to 10 s typed in the box, past the slider's 1.5 s.
+    hardMax: 10000,
     min: 0,
     max: EXPLORER_POPOVER_DELAY_MAX_MS,
     step: 25,
   },
 
-  // Terminals
-  //
-  // The three terminal-flavour controls (`terminals.flavours`, `terminals.disabledBuiltins`,
-  // `terminals.defaultShellArguments`) are WITHHELD from the Settings UI for v1.0.0 pending #67's proper
-  // implementation — see SETTINGS_INTERNAL_KEYS above. Their descriptors are kept intact
-  // in HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS below (this is a hide, not a revert); the rendered
-  // registry must not carry them, or the completeness rule flags them as descriptors for keys that
-  // are no longer configurable. Re-expose with #67 by spreading that array in here and dropping the
-  // three keys from SETTINGS_INTERNAL_KEYS.
+  // Terminal flavours (#67, 2026-11-21) — custom flavours as an ordered records table, their shell arguments as a
+  // keyed table, both edited in the list-editor modal (077 FR-025); the hidden built-ins as a picker over every
+  // built-in this machine detected, the hidden ones included, so hiding one can be undone.
+  {
+    key: 'terminals.flavours',
+    label: 'Custom terminal flavours',
+    description:
+      'User-defined shells shown in the Flavour dropdown (id, label, file, args, default shell arguments).',
+    group: 'Terminal',
+    // A structured RECORD table — one row per flavour, one cell per field (019, FR-018/#67).
+    //
+    // It was `control: 'array'` over items that are OBJECTS, so it fell to the JSON-textarea
+    // fallback: hand-editing raw JSON inside the visual editor, with no per-field validation. And
+    // the control FLIPPED WITH THE VALUE — an empty list rendered as a string-array editor whose
+    // Add appended `''`, which the tolerant parser then dropped. The mode is declared now.
+    control: 'records',
+    idKey: 'id',
+    itemNoun: 'flavour',
+    columns: [
+      { key: 'label', label: 'Label', control: 'text' },
+      { key: 'file', label: 'Executable', control: 'text' },
+      { key: 'args', label: 'Arguments', control: 'text' }, // string[] ↔ space-separated
+      { key: 'defaultShellArguments', label: 'Shell arguments', control: 'text' },
+    ],
+    clearable: true, // no custom flavours is a perfectly good answer — and it is what it ships as
+  },
+  {
+    key: 'terminals.disabledBuiltins',
+    label: 'Hidden built-in flavours',
+    description: 'Built-in flavour ids to hide from the Flavour dropdown.',
+    group: 'Terminal',
+    // A MULTI-SELECT over the built-ins this machine actually detected (019, FR-016/FR-017).
+    //
+    // It was `array` + `itemControl: 'text'`, which asked the user to free-type an id from a set
+    // the app detected at startup and already knows: typo it and the setting silently does nothing,
+    // because nothing is there to say the id is not real (007 FR-029). The options are DYNAMIC —
+    // see contracts/terminal-flavours-ipc.md; the catalogue is the DETECTED set, never the visible
+    // one, or hiding a built-in would be a one-way door.
+    control: 'multiselect',
+    clearable: true, // empty = hide nothing, which is also what it ships as
+  },
+  {
+    // The descriptor this setting has ALWAYS lacked (016, F5). It ships as an empty map, so it
+    // yielded zero leaves and slipped past the completeness rule — a JSON-only setting of exactly
+    // the kind the constitution forbids. The `map` control closes it rather than stepping around it.
+    key: 'terminals.defaultShellArguments',
+    label: 'Default shell arguments',
+    description:
+      'Shell arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).',
+    group: 'Terminal',
+    control: 'map',
+    columns: [{ label: 'Arguments', control: 'text' }],
+    clearable: true, // ships empty; empty means "pass nothing extra", a perfectly good answer
+  },
 
   // Editor
   //
@@ -654,11 +788,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.autoSaveDebounceMs',
     label: 'Auto-save delay',
-    description: 'Debounce (ms) after typing stops before an auto-save writes.',
+    description: 'How long after typing stops an auto-save writes.',
     group: 'Editor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: 0,
-    max: 10000,
+    // 077 FR-005 — the maintainer's ruling (2026-11-21): at most 3 s. A stored value above it clamps to 3 s on load.
+    max: 3000,
     // 018: WIDENED from 50. A step must be at least 1% of the range (FR-035), and 50 across
     // 0–10000 is 0.5% — a slider with two hundred indistinguishable positions, which is no more
     // usable than no slider at all. Every other numeric already satisfied the rule; this was the
@@ -708,9 +846,13 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // there beside it, still typed, still digit-grouped, for anyone who wants an exact number.
     label: 'Max open file size',
     description:
-      'Files larger than this report "too large" instead of opening. Measured in bytes; the slider moves in 5 MB steps.',
+      'Files larger than this report "too large" instead of opening.',
     group: 'Editor',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in bytes, shown in MB.
+    storedUnit: 'bytes',
+    display: 'MB',
+    hardMax: 2147483648,
     min: 5242880,
     max: 262144000,
     step: 5242880,
@@ -720,7 +862,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
      * The 5 MiB minimum exists so the 5 MiB step is a sane place for the control to start, not
      * because a smaller cap is invalid: "refuse anything over 1 MB" is a perfectly reasonable thing
      * to ask for, and hand-editing was always how you asked. Enforcing the slider's minimum would
-     * have silently RAISED every such user's cap to 5 MiB — the same trap `diagnostics.maxFileSizeKb`
+     * have silently RAISED every such user's cap to 5 MiB — the same trap `diagnostics.maxFileBytes`
      * set from the other direction, and found the same way, by the guard changing a behaviour a test
      * depended on (os-drop.e2e.ts lowers this to make its fixture cheap).
      *
@@ -921,10 +1063,13 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.existenceCheckTimeoutMs',
     label: 'Link resolution timeout',
     description:
-      'How long throng waits, in milliseconds, for a link to resolve when you follow it or open its Link menu — in total, however many places it looks. Raise it for a slow network share. It applies to the next check, with no restart.',
+      'How long throng waits for a link to resolve when you follow it or open its Link menu — in total, however many places it looks. Raise it for a slow network share. It applies to the next check, with no restart.',
     group: 'Editor',
     subgroup: 'Links',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: 250,
     max: 25_000,
     step: 250,
@@ -1012,6 +1157,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     subgroup: 'Navigation',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'entries',
     min: 1,
     max: 100,
     step: 1,
@@ -1105,6 +1254,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description: 'How many values each field keeps per terminal type. Lowering this trims every list to its newest entries.',
     group: 'Terminal',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'entries',
     min: 1,
     max: 50,
     step: 1,
@@ -1116,13 +1269,16 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.commandPollMs',
     label: 'Command tracking interval',
     description:
-      'How often throng checks which command a terminal is running, in milliseconds, while it has input or output. A quiet terminal is checked ten times less often. Lower notices a new command sooner; higher does less work. A command you start and leave running for longer than one interval is always remembered.',
+      'How often throng checks which command a terminal is running, while it has input or output. A quiet terminal is checked ten times less often. Lower notices a new command sooner; higher does less work. A command you start and leave running for longer than one interval is always remembered.',
     group: 'Terminal',
     // Bounded numerics render a slider in this app (018 FR-034), and the step must be at least 1%
     // of the range so the control can actually be aimed. 250ms-5s is also the range this knob is
     // useful over: below that the observation cost stops being negligible, above it a command
     // started shortly before an unclean kill would routinely be missed (FR-019d).
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: 250,
     max: 5000,
     step: 250,
@@ -1158,6 +1314,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How many characters of the running command a terminal panel’s name shows before it is cut short with an ellipsis.',
     group: 'Terminal',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in characters.
+    storedUnit: 'characters',
+    display: 'own',
     min: 10,
     max: 200,
     step: 5,
@@ -1169,6 +1328,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How many characters of the working directory a terminal panel’s name shows. A longer one keeps its drive and last folder and drops folders from the middle.',
     group: 'Terminal',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in characters.
+    storedUnit: 'characters',
+    display: 'own',
     min: 10,
     max: 200,
     step: 5,
@@ -1256,35 +1418,27 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     enabledWhen: { key: 'terminals.attention.enabled', is: true },
   },
   {
-    key: 'terminals.attention.quietSeconds',
+    key: 'terminals.attention.quietMs',
     label: 'Quiet time',
-    description:
-      'How many seconds a terminal must stay silent after activity before Output went quiet marks it.',
+    description: 'How long a terminal must stay silent after activity before Output went quiet marks it.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'slider',
     // Spec says 5-600 step 5, but slider-descriptors.test.ts requires a step of at least 1% of the
-    // range (0.84% here). 10-600 step 10 keeps the default of 10 on the grid and passes.
-    min: 10,
-    max: 600,
-    step: 10,
+    // range (0.84% here). 10-600 s step 10 s keeps the default of 10 s on the grid and passes.
+    // 077 FR-001 — stored in ms, shown in seconds; any value from 1 s to an hour can be typed.
+    storedUnit: 'ms',
+    display: 's',
+    min: 10_000,
+    max: 600_000,
+    step: 10_000,
+    hardMin: 1000,
+    hardMax: 3_600_000,
     enabledWhen: { key: 'terminals.attention.enabled', is: true },
   },
 
-  // Attention (057, FR-095/FR-039): how a raised mark clears, and the taskbar badge. How it is announced is
-  // the Attention row under Notifications (FR-111).
-  {
-    key: 'attention.clearDelayMs',
-    label: 'Clear delay',
-    description:
-      'How long, in milliseconds, you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
-    group: 'General',
-    subgroup: 'Attention',
-    control: 'slider',
-    min: 0,
-    max: 10000,
-    step: 100,
-  },
+  // Attention (057, FR-039): the taskbar badge. How a mark clears is Notifications › Attention (077 FR-021); how it is
+  // announced is the Attention row under Notifications (FR-111).
   {
     // 062 FR-008: the badge is an overlay icon, which Electron offers on Windows alone.
     onlyOn: 'windows',
@@ -1320,6 +1474,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     subgroup: 'Indentation',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'columns',
     min: 1,
     max: 16,
     step: 1,
@@ -1332,6 +1490,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     subgroup: 'Indentation',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'columns',
     min: 1,
     max: 16,
     step: 1,
@@ -1348,8 +1510,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     keyKind: 'language',
     columns: [
       { key: 'style', label: 'Indent with', control: 'select', allowedValues: ['spaces', 'tabs'] },
-      { key: 'indentWidth', label: 'Width', control: 'number', min: 1, max: 16 },
-      { key: 'tabWidth', label: 'Tab width', control: 'number', min: 1, max: 16 },
+      // 077 FR-012 — whole columns, a step of 1.
+      { key: 'indentWidth', label: 'Width', control: 'number', min: 1, max: 16, step: 1 },
+      { key: 'tabWidth', label: 'Tab width', control: 'number', min: 1, max: 16, step: 1 },
     ],
     // NOT clearable. Emptying it would not "turn off per-language indentation" — it would silently
     // indent Go with spaces and Python with two. There is no valid empty state here, and offering a
@@ -1406,9 +1569,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Search',
     subgroup: 'Find Bar',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
-    max: 1000,
-    step: 10,
+    max: 2000,
+    // 077 research R6 — any debounce up to 10,000 ms can be typed.
+    hardMax: 10_000,
+    step: 25,
   },
   /*
    * Find in Files (043, FR-059). Six leaves, in a section of their OWN (FR-076) — and two more at
@@ -1487,9 +1655,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
     min: 0,
     max: 2000,
-    step: 50,
+    // 077 research R6 — any debounce up to 10,000 ms can be typed.
+    hardMax: 10_000,
+    step: 25,
   },
   {
     key: 'search.inFiles.defaultGrouping',
@@ -1616,12 +1789,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.toastDurationMs',
     label: 'Toast duration',
     description:
-      'How long every toast stays on screen, in milliseconds. A toast stays while the pointer is over it or keyboard focus is inside it, and leaves the full duration after both have gone. A notice kept in the Notifications panel stays there until you dismiss it.',
+      'How long every toast stays on screen. A toast stays while the pointer is over it or keyboard focus is inside it, and leaves the full duration after both have gone. A notice kept in the Notifications panel stays there until you dismiss it.',
     group: 'Notifications',
     // Bounded numeric, so a slider (018). The 500 ms step is at least 1% of the 29000 range (FR-091), divides
     // it exactly so the maximum is reachable, and lands on the shipped 3000. It constrains DRAGGING
     // only: the field beside it takes any integer in the bounds.
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s.
+    storedUnit: 'ms',
+    display: 's',
     min: TOAST_DURATION_MIN_MS,
     max: TOAST_DURATION_MAX_MS,
     step: 500,
@@ -1631,12 +1807,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.toastWidthPx',
     label: 'Toast width',
     description:
-      'How wide every toast is, in pixels. A toast is never wider than half the window, and shows at most three lines of text: a longer one is cut off with an ellipsis, and hovering it shows all of its text. The Notifications panel always shows a notification whole.',
+      'How wide every toast is. A toast is never wider than half the window, and shows at most three lines of text: a longer one is cut off with an ellipsis, and hovering it shows all of its text. The Notifications panel always shows a notification whole.',
     group: 'Notifications',
     // Bounded numeric, so a slider (018). The 10 px step is at least 1% of the 500 range (5, FR-090), divides it exactly so
     // the maximum is reachable, and lands on the shipped 520. It constrains DRAGGING only: the field beside it takes any
     // integer in the bounds.
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in px.
+    storedUnit: 'px',
+    display: 'own',
     min: TOAST_WIDTH_MIN_PX,
     max: TOAST_WIDTH_MAX_PX,
     step: 10,
@@ -1649,9 +1828,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.hoverDelayMs',
     label: 'Notification hover delay',
     description:
-      'How long the pointer must rest on a notification before it shows more, in milliseconds: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. Zero shows it as soon as the pointer arrives; a longer delay keeps the notifications still while you move the pointer across them. Keyboard focus never waits.',
+      'How long the pointer must rest on a notification before it shows more: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. Zero shows it as soon as the pointer arrives; a longer delay keeps the notifications still while you move the pointer across them. Keyboard focus never waits.',
     group: 'Notifications',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in ms.
+    storedUnit: 'ms',
+    display: 'ms',
+    // 077 FR-012, R6 — a hover dwell: up to 10 s typed in the box, past the slider's 1.5 s.
+    hardMax: 10000,
     min: NOTICE_HOVER_DELAY_MIN_MS,
     max: NOTICE_HOVER_DELAY_MAX_MS,
     step: 25,
@@ -1673,6 +1857,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'The most notifications the Notifications panel keeps. Past the limit the oldest are dropped and you are warned once that unattended notifications can affect performance.',
     group: 'Notifications',
     control: 'slider',
+    // 077 FR-001, FR-005 — stored in count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'notifications',
     min: PANEL_LIMIT_MIN,
     max: PANEL_LIMIT_MAX,
     step: 10,
@@ -1699,6 +1887,24 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     'Attention',
     'These announce a terminal that needs you, Attention and Failed marks alike. The mark itself is raised whatever you choose.',
   ),
+  {
+    // 057 FR-095 — how a raised mark clears. 077 FR-021 (maintainer, 2026-11-21): under Notifications, beside the
+    // Attention row that announces the mark, superseding 057 FR-108's and 069 FR-068's place for it under General.
+    key: 'attention.clearDelayMs',
+    label: 'Clear delay',
+    description:
+      'How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
+    group: 'Notifications',
+    subgroup: 'Attention',
+    control: 'slider',
+    // 077 FR-001, FR-005 — stored in ms, shown in s, in half seconds (the shipped 1 s is a stop); any value from 0 to
+    // 10,000 ms can still be typed.
+    storedUnit: 'ms',
+    display: 's',
+    min: 0,
+    max: 10000,
+    step: 500,
+  },
 
   {
     // #123 — the one diagnostics knob a user needs, and the reason it is a setting at all: the
@@ -1713,18 +1919,21 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     allowedValues: [...LOG_LEVELS],
   },
   {
-    key: 'diagnostics.maxFileSizeKb',
-    label: 'Log file size (KB)',
+    key: 'diagnostics.maxFileBytes',
+    label: 'Log file size',
     description:
       'How large a single log file may grow before throng starts a new one. Older files are kept for the days set below, up to the folder limit.',
     group: 'Logging',
     control: 'slider',
-    min: 64,
+    // 077 FR-001 — stored in bytes, shown in MB, a quarter of a megabyte a step.
+    storedUnit: 'bytes',
+    display: 'MB',
+    min: 262_144,
     // 4 MB a file rather than 8: the step has to stay aimable (the slider guard wants one step to
     // be at least 1% of the range), and 4 MB × the retention limit is already far more log than any
     // report needs.
-    max: 4096,
-    step: 64,
+    max: 4_194_304,
+    step: 262_144,
     /*
      * 031 (#227) — a larger cap really is settable by hand, and now SAYS so.
      *
@@ -1734,7 +1943,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
      * capability revoked by a change meant to be a safety net. The slider's ceiling constrains the
      * CONTROL; this constrains the FILE.
      */
-    hardMax: 65_536,
+    hardMin: 1024,
+    hardMax: 67_108_864,
   },
   {
     // 066 FR-019 — supersedes 031 FR-015's `diagnostics.keepFiles` (066 FR-020). Days throng actually
@@ -1745,89 +1955,31 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'How many days of logs to keep, counting only days throng was running. Older logs are deleted.',
     group: 'Logging',
     control: 'slider',
+    // 077 — a COUNT of the days throng ran (066 FR-019), not a span of time, so it stays a count.
+    storedUnit: 'count',
+    display: 'own',
+    unitLabel: 'days',
     min: 1,
     max: 30,
     step: 1,
   },
   {
     // 066 FR-019a — the backstop for a crash loop, which can fill a day's worth of files in minutes.
-    key: 'diagnostics.maxTotalMb',
-    label: 'Log folder limit (MB)',
+    key: 'diagnostics.maxTotalBytes',
+    label: 'Log folder limit',
     description:
       'The most space all of throng’s logs may take. When the folder grows past it, the oldest logs are deleted first.',
     group: 'Logging',
     control: 'slider',
-    // Steps of 50: the slider guard wants a step of at least 1% of the range.
-    min: 50,
-    max: 2000,
-    step: 50,
+    // Steps of 50 MB: the slider guard wants a step of at least 1% of the range. 077 FR-001 — stored in bytes.
+    storedUnit: 'bytes',
+    display: 'MB',
+    min: 52_428_800,
+    max: 2_097_152_000,
+    step: 52_428_800,
     // A larger cap is settable by hand, as for the file size above.
-    hardMax: 65_536,
+    hardMin: 1_048_576,
+    hardMax: 68_719_476_736,
   },
   ...RESOURCE_MONITOR_DESCRIPTORS,
-];
-
-/**
- * The three terminal-flavour descriptors, WITHHELD from {@link SETTINGS_METADATA} for v1.0.0
- * pending #67's proper implementation (see {@link SETTINGS_INTERNAL_KEYS}).
- *
- * These are kept verbatim rather than deleted so #67 can re-expose the controls by simply
- * spreading this array back into the rendered registry and dropping the three keys from
- * SETTINGS_INTERNAL_KEYS — a hide, not a revert. They are NOT part of the rendered registry, so
- * the completeness rule (FR-047) neither demands nor rejects them; that is the whole point of
- * marking the keys internal. The underlying record/multiselect/map controls they drive (and the
- * tolerant parser that reads the settings from a hand-edited settings.json) remain live.
- */
-export const HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS: MetadataRegistry = [
-  {
-    key: 'terminals.flavours',
-    label: 'Custom terminal flavours',
-    description:
-      'User-defined shells shown in the Flavour dropdown (id, label, file, args, default shell arguments).',
-    group: 'Terminals',
-    // A structured RECORD table — one row per flavour, one cell per field (019, FR-018/#67).
-    //
-    // It was `control: 'array'` over items that are OBJECTS, so it fell to the JSON-textarea
-    // fallback: hand-editing raw JSON inside the visual editor, with no per-field validation. And
-    // the control FLIPPED WITH THE VALUE — an empty list rendered as a string-array editor whose
-    // Add appended `''`, which the tolerant parser then dropped. The mode is declared now.
-    control: 'records',
-    idKey: 'id',
-    itemNoun: 'flavour',
-    columns: [
-      { key: 'label', label: 'Label', control: 'text' },
-      { key: 'file', label: 'Executable', control: 'text' },
-      { key: 'args', label: 'Arguments', control: 'text' }, // string[] ↔ space-separated
-      { key: 'defaultShellArguments', label: 'Shell arguments', control: 'text' },
-    ],
-    clearable: true, // no custom flavours is a perfectly good answer — and it is what it ships as
-  },
-  {
-    key: 'terminals.disabledBuiltins',
-    label: 'Hidden built-in flavours',
-    description: 'Built-in flavour ids to hide from the Flavour dropdown.',
-    group: 'Terminals',
-    // A MULTI-SELECT over the built-ins this machine actually detected (019, FR-016/FR-017).
-    //
-    // It was `array` + `itemControl: 'text'`, which asked the user to free-type an id from a set
-    // the app detected at startup and already knows: typo it and the setting silently does nothing,
-    // because nothing is there to say the id is not real (007 FR-029). The options are DYNAMIC —
-    // see contracts/terminal-flavours-ipc.md; the catalogue is the DETECTED set, never the visible
-    // one, or hiding a built-in would be a one-way door.
-    control: 'multiselect',
-    clearable: true, // empty = hide nothing, which is also what it ships as
-  },
-  {
-    // The descriptor this setting has ALWAYS lacked (016, F5). It ships as an empty map, so it
-    // yielded zero leaves and slipped past the completeness rule — a JSON-only setting of exactly
-    // the kind the constitution forbids. The `map` control closes it rather than stepping around it.
-    key: 'terminals.defaultShellArguments',
-    label: 'Default shell arguments',
-    description:
-      'Shell arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).',
-    group: 'Terminal',
-    control: 'map',
-    columns: [{ label: 'Arguments', control: 'text' }],
-    clearable: true, // ships empty; empty means "pass nothing extra", a perfectly good answer
-  },
 ];

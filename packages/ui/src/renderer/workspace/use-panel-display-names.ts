@@ -25,11 +25,19 @@ import {
   activeContextLabel,
   defaultPanelTypeRegistry,
   panelDisplayTitle,
+  previewIconOf,
+  previewPanelTypeLabel,
+  previewProviderIdOf,
+  PREVIEW_KIND,
   type Panel,
   type PanelTitleSources,
+  type PreviewPanelConfig,
+  type PreviewProviderDescriptor,
+  type PreviewProviderRegistry,
   type WorkspaceLayout,
   type IconKey,
 } from '@throng/core';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { getEditorState, useEditorStateVersion } from '../editor/editor-state.js';
 import { useTerminalCommandVersion } from '../terminal/command-store.js';
 import { useTerminalCwdVersion } from '../terminal/cwd-store.js';
@@ -105,11 +113,28 @@ export interface PanelListEntry {
  * It has no type — the "Select Panel Type" form is what it is showing — and its NAME is already the
  * bare placeholder, so the row is just `Panel 4` with no icon, and that absence is the information.
  */
-function panelType(panel: Panel): { icon: IconKey | null; typeLabel: string | null } {
+function panelType(
+  panel: Panel,
+  previews: PreviewProviderRegistry,
+): { icon: IconKey | null; typeLabel: string | null } {
   if (panel.kind === undefined) return { icon: null, typeLabel: null };
   const desc = defaultPanelTypeRegistry.get(panel.kind);
   if (desc === undefined) return { icon: null, typeLabel: null };
+  /*
+   * 054 FR-005, 074 FR-103 — a preview's type is its provider's, as the panel header names it: "Markdown
+   * Preview", drawn with that provider's own preview icon (the generic one where it declares none).
+   */
+  if (panel.kind === PREVIEW_KIND) {
+    const provider = previewProviderOf(panel, previews);
+    if (provider !== undefined) return { icon: previewIconOf(provider), typeLabel: previewPanelTypeLabel(provider) };
+  }
   return { icon: desc.icon ?? null, typeLabel: desc.label };
+}
+
+/** The provider a preview panel shows a file of — its persisted provider, else its file's (`previewProviderIdOf`). */
+function previewProviderOf(panel: Panel, previews: PreviewProviderRegistry): PreviewProviderDescriptor | undefined {
+  const id = previewProviderIdOf(panel.config as PreviewPanelConfig | undefined, previews);
+  return id === undefined ? undefined : previews.get(id);
 }
 
 /**
@@ -128,11 +153,23 @@ export function usePanelDisplayNames(panels: Panel[], maxNameLength?: number): P
   useTerminalCommandVersion();
   useTerminalCwdVersion();
   useTerminalTitleContextVersion();
+  const { registry: previews } = usePreviewProviders();
 
-  return panels.map((panel) => ({
-    name: panelDisplayTitle(panel, panelTitleSources(panel), maxNameLength),
-    ...panelType(panel),
-  }));
+  return panels.map((panel) => {
+    const type = panelType(panel, previews);
+    // 074 FR-104 — a preview's name carries the type this window's registry gives it, as its header's does;
+    // with no provider known, nothing is handed in and the rule's own fallback stands.
+    const provider = panel.kind === PREVIEW_KIND ? previewProviderOf(panel, previews) : undefined;
+    const previewTypeLabel = provider === undefined ? null : previewPanelTypeLabel(provider);
+    return {
+      name: panelDisplayTitle(
+        panel,
+        { ...panelTitleSources(panel), ...(previewTypeLabel === null ? {} : { previewTypeLabel }) },
+        maxNameLength,
+      ),
+      ...type,
+    };
+  });
 }
 
 /**

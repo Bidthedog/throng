@@ -14,6 +14,7 @@ import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { MouseZoomHandler } from './workspace/mouse-zoom.js';
+import { ModalBlocker } from './common/modal-blocker.js';
 import { FocusReporter } from './attention/focus-reporter.js';
 import { AttentionNavigation } from './attention/attention-navigation.js';
 import { EditorChrome } from './editor/editor-chrome.js';
@@ -192,6 +193,7 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
               a sub-workspace window is its own renderer realm, so the gesture would be dead here
               otherwise (Assumption 6). */}
           <MouseZoomHandler />
+          <ModalBlocker />
           <EditorChrome isSubWorkspace />
           {/* 043 — the second of this registration's two mounts, for the reason below: a chord live
               only in the main window would be dead in a sub-workspace. */}

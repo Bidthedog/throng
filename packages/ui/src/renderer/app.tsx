@@ -17,6 +17,7 @@ import { TabGroup } from './workspace/tab-group.js';
 import { requestPanelFocus } from './workspace/panel-focus.js';
 import { consumeProjectSwitchPendingFor, setActivePane } from './workspace/active-pane.js';
 import { MouseZoomHandler } from './workspace/mouse-zoom.js';
+import { ModalBlocker } from './common/modal-blocker.js';
 import { FocusReporter } from './attention/focus-reporter.js';
 import { AttentionNavigation } from './attention/attention-navigation.js';
 import { DetachProvider } from './workspace/detach-context.js';
@@ -593,6 +594,7 @@ export function App(): ReactElement {
                 panel under the pointer. A sub-workspace window is its own renderer realm and
                 mounts its own copy (`subworkspace-app.tsx`). */}
             <MouseZoomHandler />
+            <ModalBlocker />
             <WorkspacePane />
             <section
               {...rightHover}

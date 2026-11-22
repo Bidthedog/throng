@@ -13,6 +13,7 @@ import { getEditorState } from './editor-state.js';
 import { getLastActiveEditor } from './last-active-editor.js';
 import type { OpenInFacts, OpenInTarget } from './open-in-targets.js';
 import type { RevealRange } from './reveal-range.js';
+import { currentPanelTitle } from '../workspace/use-panel-display-names.js';
 
 /** The workspace slice this needs — whatever `openFileInTab` takes, and nothing more. */
 export type OpenInWorkspace = Parameters<typeof openFileInTab>[0];
@@ -50,7 +51,8 @@ export function readOpenInFacts(
   return {
     activeTabId: activeTabId ?? undefined,
     otherTabs: tabs.filter((t) => t.id !== activeTabId).map((t) => ({ id: t.id, title: t.title })),
-    lastActiveEditorTitle: panel?.title,
+    // The name its header shows (048 FR-032), never the stored fallback (MT-11 walk-through: "Blank Panel 4").
+    lastActiveEditorTitle: panel === undefined ? undefined : currentPanelTitle(panel),
     // `normaliseFolder` on BOTH sides: one path came out of a store and the other was built by
     // string concatenation from a project root, so on Windows they genuinely differ in separator
     // and case while naming the same file. There is a test that pins exactly that.

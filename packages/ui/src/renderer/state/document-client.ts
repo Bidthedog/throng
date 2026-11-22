@@ -2,6 +2,7 @@ import type {
   DocumentGetStateResult,
   DocumentMovePathResult,
   DocumentPruneResult,
+  DocumentSetGridColumnWidthsResult,
   DocumentSetStateResult,
   DocumentStateDto,
 } from '@throng/ipc-contract';
@@ -74,5 +75,19 @@ export class DocumentClient {
       projectId,
     });
     return result.pruned;
+  }
+
+  /** 073 FR-040 — set a CSV's column widths (column index → px), or clear them with `null`. */
+  async setGridColumnWidths(
+    projectId: string,
+    relPath: string,
+    widths: Readonly<Record<number, number>> | null,
+  ): Promise<DocumentStateDto> {
+    const result = await this.bridge.invoke<DocumentSetGridColumnWidthsResult>('document.setGridColumnWidths', {
+      projectId,
+      relPath,
+      widths,
+    });
+    return result.state;
   }
 }

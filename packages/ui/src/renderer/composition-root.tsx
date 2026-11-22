@@ -13,6 +13,7 @@ import { ConfirmProvider } from './confirm-dialog.js';
 import { ReplaceAllPrompt } from './search/replace-all-prompt.js';
 import { TerminalTitleContextFeeder } from './terminal/title-context.js';
 import { NotificationProvider } from './common/notification.js';
+import { PrintSavedNotice } from './print/print-saved-notice.js';
 import { ContextMenuProvider } from './context-menu-provider.js';
 import { ConfigProvider } from './config/config-store.js';
 import { LinkHint } from './links/link-hint.js';
@@ -104,6 +105,8 @@ export function CompositionRoot(): ReactElement {
               <ProjectsProvider client={services.projects}>
                 <SubWorkspacesProvider client={services.subWorkspaces}>
                   <ReplaceAllPrompt />
+                  {/* 075 FR-082 — where a PDF this window asked for was saved; every window mounts its own. */}
+                  <PrintSavedNotice />
                   {/* 053 — the template, limits and names a terminal panel's title is rendered from. */}
                   <TerminalTitleContextFeeder />
                   <App />
@@ -159,6 +162,7 @@ export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElemen
                   projects list is needed here too. */}
               <ProjectsProvider client={services.projects}>
                 <ReplaceAllPrompt />
+                <PrintSavedNotice />
                 <SubWorkspaceApp subWorkspaceId={id} />
                 <LinkHint />
               </ProjectsProvider>

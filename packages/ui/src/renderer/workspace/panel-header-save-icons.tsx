@@ -12,18 +12,17 @@
  * Save As hides first, then Save together with the separator, and widening restores them. The width is
  * the header's own, measured with a ResizeObserver; before it has been measured everything shows, so a
  * header that never reports a width (a test, a first paint) is not left without its controls. Both
- * actions stay on the panel menu and on their chords whatever the width.
+ * actions stay on the panel menu and on their chords whatever the width. The steps, and the rest of the
+ * header's (FR-069b), are `panel-header-fit.ts`'s.
  */
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react';
+import { useRef, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react';
 import { firstBinding, type Keybindings } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { chordTitled } from '../navigation/back-forward-buttons.js';
 import { getEditorActions } from '../editor/editor-actions.js';
+import { headerControlsFit, useHeaderWidth } from './panel-header-fit.js';
 
-/** Below this header width Save As is hidden. */
-export const SAVE_AS_MIN_HEADER_WIDTH = 360;
-/** Below this header width Save and the separator are hidden too. */
-export const SAVE_MIN_HEADER_WIDTH = 280;
+export { SAVE_AS_MIN_HEADER_WIDTH, SAVE_MIN_HEADER_WIDTH } from './panel-header-fit.js';
 
 export interface SaveIconsFit {
   save: boolean;
@@ -33,26 +32,8 @@ export interface SaveIconsFit {
 
 /** Which of the controls fit a header `width` pixels wide. `0` means "not measured yet": all of them. */
 export function saveIconsFit(width: number): SaveIconsFit {
-  if (width <= 0) return { save: true, saveAs: true, separator: true };
-  const saveAs = width >= SAVE_AS_MIN_HEADER_WIDTH;
-  const save = width >= SAVE_MIN_HEADER_WIDTH;
-  return { save, saveAs, separator: save };
-}
-
-/** The width of the title bar this element sits in, kept current while it is mounted. */
-function useHeaderWidth(anchor: React.RefObject<HTMLElement | null>): number {
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const header = anchor.current?.closest<HTMLElement>('.panel-box__header');
-    if (!header || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver((entries) => {
-      const w = entries.find((e) => e.target === header)?.contentRect.width ?? entries[0]?.contentRect.width;
-      if (w !== undefined) setWidth(Math.floor(w));
-    });
-    observer.observe(header);
-    return () => observer.disconnect();
-  }, [anchor]);
-  return width;
+  const { save, saveAs, separator } = headerControlsFit(width);
+  return { save, saveAs, separator };
 }
 
 const stopDrag = (e: ReactPointerEvent): void => {

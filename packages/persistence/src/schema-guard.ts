@@ -78,6 +78,17 @@ const GUARDED_TABLES: readonly GuardedTable[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_attention_flag_project ON attention_flag(project_id);`,
   },
+  // v15 — the daemon's attention ledger (#692, 057 FR-091a). Read at every daemon start, so a drifted store must
+  // regain the table rather than lose every mark.
+  {
+    table: 'attention_ledger',
+    ddl: `
+      CREATE TABLE IF NOT EXISTS attention_ledger (
+        panel_id TEXT PRIMARY KEY,
+        seq      INTEGER NOT NULL,
+        entry    TEXT NOT NULL
+      );`,
+  },
 ];
 
 interface AdditiveColumn {
@@ -137,6 +148,19 @@ const ADDITIVE_COLUMNS: readonly AdditiveColumn[] = [
     table: 'projects',
     column: 'search_exclude_globs',
     ddl: `ALTER TABLE projects ADD COLUMN search_exclude_globs TEXT NOT NULL DEFAULT '[]'`,
+  },
+  // v13 — 073: a CSV's column widths in the CSV Preview Editor, per file ('' = none).
+  {
+    table: 'document_state',
+    column: 'grid_column_widths',
+    ddl: `ALTER TABLE document_state ADD COLUMN grid_column_widths TEXT NOT NULL DEFAULT ''`,
+  },
+  // v14 — a project's own safe HTML preview sources (074 FR-072a), a JSON string array. A healed
+  // column reads `[]`: the project adds nothing to the global list.
+  {
+    table: 'projects',
+    column: 'html_safe_sources',
+    ddl: `ALTER TABLE projects ADD COLUMN html_safe_sources TEXT NOT NULL DEFAULT '[]'`,
   },
 ];
 

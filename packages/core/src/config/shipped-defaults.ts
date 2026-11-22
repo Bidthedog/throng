@@ -376,7 +376,36 @@ import { setAtPath } from './metadata.js';
 // Bumped by 069 again (34 → 35): a THEMES payload, additive. FR-064's `fileIconOther` reached every theme's record after 34
 // was already on disk, and theme files take a new token ONLY through the upgrade this version gates — so an install at 34
 // painted no Other File Icons colour of its own in any theme, and the colour did not change with the theme (FR-070).
-export const SHIPPED_DEFAULTS_VERSION = 35;
+//
+// Bumped by 075 (35 → 36): a THEMES payload, additive. Seven colour tokens, the callout roles `calloutNeutral`,
+// `calloutInfo`, `calloutAccent`, `calloutSuccess`, `calloutQuestion`, `calloutWarning` and `calloutDanger` (FR-020 –
+// FR-022). Every payload arrives, no existing value moves. The `typesetMath` provider leaf and the `preview.print`
+// binding need no bump (044's 7 → 8 reasoning: an absent key is filled with its shipped default on every read).
+//
+// Bumped by 077 (36 → 37): a SETTINGS payload, and the first that renames keys. Every size is stored in bytes and every
+// duration in ms (FR-001), so the six keys v1.0.0-beta1 shipped in another unit move to their new names, converted
+// exactly ({@link V37_SETTINGS_RENAMES}); the old keys are removed and a second pass finds nothing.
+//
+// Bumped by #105 (37 → 38): existing VALUES move — the editor selection of throng, Snake, Windows Terminal, Bash, VSCode,
+// Claude and Ubuntu, walked toward the editor body until every syntax colour reads on it, and with it the inactive
+// selection derived from it. Version 37 wrote both into every theme file, so this is 049 round 2's guarded value
+// rewrite: {@link V37_MOVED_COLOURS} records what 37 wrote and {@link planThemeValueUpgrade} moves a token only where
+// the file still holds exactly that. 37 is not edited to carry it: the maintainer's hand-testing install holds a 37 marker.
+export const SHIPPED_DEFAULTS_VERSION = 38;
+
+/**
+ * The selection colours shipped-defaults version 37 wrote for the themes #105 recoloured, and only those tokens. A
+ * frozen literal copy for {@link V19_MOVED_COLOURS}' reason: the live values are the new ones.
+ */
+export const V37_MOVED_COLOURS: Readonly<Record<string, Readonly<Record<string, string>>>> = deepFreeze({
+  throng: { editorSelection: '#2a3a57' },
+  Snake: { editorSelection: '#3a4426', editorSelectionInactive: '#313512' },
+  'Windows Terminal': { editorSelection: '#264f78', editorSelectionInactive: '#202730' },
+  Bash: { editorSelection: '#264f4a', editorSelectionInactive: '#1a2523' },
+  VSCode: { editorSelection: '#264f78', editorSelectionInactive: '#27333d' },
+  Claude: { editorSelection: '#3d3020', editorSelectionInactive: '#36271d' },
+  Ubuntu: { editorSelection: '#5c1a44', editorSelectionInactive: '#52122b' },
+});
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved
@@ -593,6 +622,36 @@ export const V6_SEARCH_IN_FILES_SETTINGS: Readonly<V6FindInFilesLeaves> = deepFr
 export interface SettingsLeafUpgrade {
   path: string;
   value: unknown;
+  /** 077 FR-002 — the key this leaf replaces, removed when the leaf is written. */
+  from?: string;
+}
+
+/**
+ * 077 FR-002 — the released keys stored in a unit 077 retired, their new names and the exact factor to the new unit.
+ * Keys that never shipped in a release (`editor.previews.syncHighlightSeconds`,
+ * `editor.previews.providers.spreadsheet.maxPreviewMb`) were renamed with no migration.
+ */
+export const V37_SETTINGS_RENAMES: readonly { from: string; to: string; factor: number }[] = Object.freeze([
+  { from: 'terminals.attention.quietSeconds', to: 'terminals.attention.quietMs', factor: 1000 },
+  { from: 'resourceMonitor.captureIntervalSeconds', to: 'resourceMonitor.captureIntervalMs', factor: 1000 },
+  { from: 'resourceMonitor.historyMinutes', to: 'resourceMonitor.historyMs', factor: 60_000 },
+  { from: 'diagnostics.maxFileSizeKb', to: 'diagnostics.maxFileBytes', factor: 1024 },
+  { from: 'diagnostics.maxTotalMb', to: 'diagnostics.maxTotalBytes', factor: 1024 * 1024 },
+]);
+
+/** A copy of `obj` without the leaf at `path`; `obj` itself is untouched. */
+function deleteAtPath<T>(obj: T, path: string): T {
+  const segs = path.split('.');
+  const root: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
+  let cur = root;
+  for (let i = 0; i < segs.length - 1; i += 1) {
+    const child = cur[segs[i]!];
+    if (child === null || typeof child !== 'object' || Array.isArray(child)) return obj;
+    cur[segs[i]!] = { ...(child as Record<string, unknown>) };
+    cur = cur[segs[i]!] as Record<string, unknown>;
+  }
+  delete cur[segs[segs.length - 1]!];
+  return root as T;
 }
 
 function sameStringList(value: unknown, expected: readonly string[]): boolean {
@@ -680,6 +739,21 @@ export function planSettingsUpgrade(
     }
   }
 
+  // 077 FR-002 — the unit renames. Guarded by the old key's presence alone, so a second run finds nothing to move. A
+  // new key already present wins (the user set it since); an old value that is no number takes the shipped one.
+  for (const { from, to, factor } of V37_SETTINGS_RENAMES) {
+    const old = ownAtPath(document, from);
+    if (old === undefined) continue;
+    const current = ownAtPath(document, to);
+    const value =
+      current !== undefined
+        ? current
+        : typeof old === 'number' && Number.isFinite(old)
+          ? Math.round(old * factor)
+          : ownAtPath(d.settings, to);
+    leaves.push({ path: to, value, from });
+  }
+
   return leaves;
 }
 
@@ -697,6 +771,7 @@ export function applySettingsUpgrade(
   let next = document;
   for (const leaf of planSettingsUpgrade(document, d)) {
     next = setAtPath(next as Record<string, unknown>, leaf.path, leaf.value);
+    if (leaf.from !== undefined) next = deleteAtPath(next, leaf.from);
   }
   return next;
 }
@@ -1315,6 +1390,13 @@ export function planThemeValueUpgrade(args: {
     // 049 round 2 (19 → 20): the same guard against version 19's record.
     if (v19) {
       for (const [token, was] of Object.entries(v19)) {
+        moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
+      }
+    }
+    // #105 (37 → 38): the same guard against version 37's record.
+    const v37 = V37_MOVED_COLOURS[name];
+    if (v37) {
+      for (const [token, was] of Object.entries(v37)) {
         moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
       }
     }

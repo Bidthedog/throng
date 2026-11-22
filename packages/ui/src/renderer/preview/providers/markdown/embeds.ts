@@ -115,11 +115,12 @@ export function installEmbeds(md: MarkdownItInstance): void {
  * `src`): the file it resolved to inside the project draws from the asset route exactly as a standard
  * image does; no file, or one outside the project (Principle I), is marked for the alt-text fallback.
  * `resolved` is the batch `applyWikiResolution` also reads. Returns the images marked, for the body to
- * replace with their alt text.
+ * replace with their alt text. An `undefined` answer is one not known yet (074 R8a — the body applies the answers
+ * it already holds to a draw before claiming its framed images): that image stays held.
  */
 export function applyImageEmbedResolution(
-  root: HTMLElement,
-  resolved: readonly (string | null)[],
+  root: ParentNode,
+  resolved: readonly (string | null | undefined)[],
   projectRoot: string,
   panelId: string,
 ): HTMLImageElement[] {
@@ -127,7 +128,8 @@ export function applyImageEmbedResolution(
   for (const img of root.querySelectorAll<HTMLImageElement>(`img[${WIKI_INDEX_ATTRIBUTE}]`)) {
     const index = Number(img.getAttribute(WIKI_INDEX_ATTRIBUTE));
     const found = Number.isInteger(index) && index >= 0 && index < resolved.length ? resolved[index] : null;
-    const relPath = found === null || found === undefined || projectRoot.length === 0 ? null : relPathUnderRoot(projectRoot, found);
+    if (found === undefined) continue;
+    const relPath = found === null || projectRoot.length === 0 ? null : relPathUnderRoot(projectRoot, found);
     if (relPath === null) {
       img.setAttribute(BLOCKED_IMAGE_ATTRIBUTE, '');
       refused.push(img);
