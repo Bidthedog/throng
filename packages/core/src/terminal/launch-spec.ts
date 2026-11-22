@@ -214,9 +214,13 @@ export function resolveLaunchSpec(
   );
 }
 
-/** Shells that take `-l` alongside other flags to start as a login shell, by flavour id. */
-const LOGIN_SWITCH_SHELLS: ReadonlySet<string> = new Set(['bash', 'zsh', 'fish', 'sh', 'dash', 'ksh']);
-const LOGIN_SWITCHES: ReadonlySet<string> = new Set(['-l', '--login']);
+/**
+ * Shells that take `-l` alongside other flags to start as a login shell, by flavour id. pwsh takes it only as its
+ * FIRST flag, where {@link loginSwitch} puts it, and then runs the POSIX login profiles through /bin/sh.
+ */
+const LOGIN_SWITCH_SHELLS: ReadonlySet<string> = new Set(['bash', 'zsh', 'fish', 'sh', 'dash', 'ksh', 'pwsh']);
+/** Compared lower-cased: pwsh's parameters are case-insensitive (`-Login`). */
+const LOGIN_SWITCHES: ReadonlySet<string> = new Set(['-l', '--login', '-login']);
 /** tcsh honours `-l` only as its sole flag (tcsh(1)), so it cannot be added beside `-c` or the user's own flags. */
 const SOLE_FLAG_LOGIN_SHELL = 'tcsh';
 
@@ -231,7 +235,7 @@ function loginSwitch(flavourId: string | undefined, given: readonly string[], ha
   if (hostTraits().os !== 'macos') return [];
   if (flavourId === SOLE_FLAG_LOGIN_SHELL) return given.length === 0 && !hasCommand ? ['-l'] : [];
   if (!LOGIN_SWITCH_SHELLS.has(flavourId ?? '')) return [];
-  return given.some((arg) => LOGIN_SWITCHES.has(arg)) ? [] : ['-l'];
+  return given.some((arg) => LOGIN_SWITCHES.has(arg.toLowerCase())) ? [] : ['-l'];
 }
 
 /** A shipped recipe's closing re-exec, and the login form macOS uses instead. fish's recipe has no re-exec. */
