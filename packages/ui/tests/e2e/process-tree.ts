@@ -88,6 +88,49 @@ export function stdioHolders(identities: readonly string[]): string[] {
 }
 
 /**
+ * {@link stdioHolders}, but read as root where `sudo -n` works (the hosted runners), so a process whose descriptors
+ * this user cannot list is still found: Chromium marks its sandboxed children non-dumpable, which hides their
+ * `/proc/<pid>/fd` from the user scan. #700's stalls reported "(nobody)" while `close` still waited, so the user scan
+ * alone cannot be trusted to have seen every holder. Falls back to the user scan where sudo needs a password.
+ */
+export function stdioHoldersAsRoot(identities: readonly string[]): string[] {
+  if (process.platform !== 'linux' || identities.length === 0) return [];
+  const names = identities.map((id) => id.replace(/[[\]*?\\]/g, (c) => `\\${c}`));
+  const match = names.flatMap((name, i) => (i === 0 ? ['-lname', name] : ['-o', '-lname', name]));
+  let out: string;
+  try {
+    out = execFileSync('sudo', ['-n', 'find', '/proc', '-mindepth', '3', '-maxdepth', '3', '-path', '/proc/[0-9]*/fd/*', '(', ...match, ')', '-printf', '%h %f %l\\n'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch (error) {
+    // find exits non-zero when a process vanishes mid-walk; what it printed before that still counts.
+    const partial = (error as { stdout?: string }).stdout;
+    if (typeof partial !== 'string') return stdioHolders(identities).map((line) => `${line} (user scan: sudo unavailable)`);
+    out = partial;
+  }
+  const byPid = new Map<string, string[]>();
+  for (const line of out.split('\n')) {
+    const [dir, fd, target] = line.trim().split(' ');
+    const pid = dir?.split('/')[2];
+    if (!pid || !fd || !target) continue;
+    byPid.set(pid, [...(byPid.get(pid) ?? []), `fd${fd}=${target}`]);
+  }
+  return [...byPid].map(([pid, held]) => {
+    let detail = '';
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      const [state, ppid, pgid, sid] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      detail = `state=${state} ppid=${ppid} pgid=${pgid} sid=${sid} ${readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').join(' ').slice(0, 200)}`;
+    } catch {
+      /* exited since the walk */
+    }
+    return `${pid} ${held.join(',')} ${detail}`.replace(/\s+/g, ' ').trim();
+  });
+}
+
+/**
  * Force-kill an OS process and its entire child tree, best-effort and BOUNDED.
  *
  * On Windows this is `taskkill /T /F` (whole tree, unconditional) — the only reliable way to reap
