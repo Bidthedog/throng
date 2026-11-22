@@ -215,7 +215,7 @@ box and clipped by it, against FR-092 — the glyph takes the dot's place and bo
 - Q: Where do the notification preferences live? → A: **All under Notifications, one row per type** —
   Error, Warning, Info, Success and Attention — each row holding the display mode, its duration and
   whether it is also announced in the OS, with one global switch for the OS. Taskbar badge and clear
-  delay stay under Attention. (FR-108, FR-109)
+  delay stay under Attention. (FR-108, FR-109) *(The clear delay moved to Notifications › Attention: 077 FR-021.)*
 - Q: Should ordinary notices reach the OS too? → A: **Yes, per type, in this branch.** (FR-110,
   superseding 030's "Out of Scope: operating-system-level or background notifications")
 - Q: When? → A: **Only while no throng window is focused**, the rule attention already used. (FR-110)
@@ -418,7 +418,8 @@ within a second of the bell. Switch to A, click into the terminal, and check tha
 20. *(2026-10-19, round 4)* **Given** Preferences → Notifications, **Then** it shows one row each for
     Error, Warning, Info, Success and Attention, each with its display mode, its duration (usable only
     under Display for) and an "Also in the OS" switch, and above them one switch for OS notifications.
-    Preferences → Attention keeps the clear delay and the taskbar badge only. (FR-108, FR-109)
+    Preferences → Attention keeps the clear delay and the taskbar badge only. (FR-108, FR-109) *(The clear delay
+    is now under Notifications › Attention: 077 FR-021.)*
 21. *(2026-10-19, round 4)* **Given** Error's "Also in the OS" is on and throng is in the background,
     **When** a file fails to save, **Then** a Windows notification names the failure; clicking it brings
     throng forward. With throng focused, only the toast shows. With the global switch off, nothing
@@ -1138,7 +1139,16 @@ lands on a marked panel and clears it.
   (Principle X). Each has a shipped default, appears in the Preferences editor with a description, and
   is documented with the rest of the preferences.
 - **FR-091**: Marks MUST survive switching projects, unloading a project with Keep Terminals Running, and
-  reopening throng while terminals keep running (FR-066). A mark MUST NOT outlive its panel.
+  reopening throng while terminals keep running (FR-066). A mark MUST NOT outlive its panel. *(Widened by FR-091a,
+  2026-11-21: a mark also survives a reopen whose terminals did not keep running.)*
+- **FR-091a** *(maintainer, 2026-11-21, #692; supersedes FR-091's "while terminals keep running")*: A mark MUST also
+  survive throng closing and reopening when its terminal does not keep running — Terminate all on close, the machine
+  powered off, a new version installed and started. Every panel that showed a mark before shows it again afterwards,
+  matching the notifications still listed (068 FR-031), and restoring it MUST NOT announce it (FR-038). Ending a terminal
+  MUST NOT clear its mark: a mark goes when its panel is attended (FR-095), its panel is destroyed, its project is
+  deleted or its producer withdraws it (FR-007). *(The daemon kept the marks in memory and forgot each one as it ended a terminal, so any restart lost them
+  while their Notifications entries came back from disk, and the next mark's reconcile (FR-025) then dismissed those
+  entries unread.)*
 
 ### Key Entities
 

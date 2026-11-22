@@ -330,6 +330,14 @@ interface DocumentLifecycleListener {
   coming back empty changed no text, so nothing cleared. Narrowed the same day (fix round 1 ruling): the
   first cut keyed on `unloadable` and covered a read document's buffer with `deleted` too, against
   FR-022.)*
+  *(Amended 2026-11-20 (#696, maintainer): **supersedes the fix round 1 ruling.** A preview shows a FILE: once
+  the file a parented run's document was read from is gone — `getContent().fileMissing` (deleted, or moved away
+  outside throng, 052) or `unloadable` (a verify found its path unreadable) — the run carries FR-026's notice
+  instead of the document's text, exactly as it does while the document is `contentless`. The editor keeps its
+  buffer and its own banner (**006 FR-099**), so nothing typed is lost; the run shows that buffer again the moment
+  the file exists again (restored on disk, or saved from the editor). `changed` fires once per flip of the file
+  being gone too, text or no text. **Excepted**: the CSV Preview Editor's own grid document (073, *A file deleted
+  under an open panel*) — that panel is the editor of its file and keeps its buffer, as an editor does.)*
 - **Isolation.** Each listener call is made after the coordinator's own state and relays have settled,
   inside a try/catch that logs; a throwing listener never aborts a save, move, load, destroy or relay.
 - **Save As onto a file a standalone preview shows.** `registered(to)` (unpathed source) or

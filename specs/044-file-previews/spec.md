@@ -531,7 +531,8 @@ open in an editor.
 5. **Given** a preview already open for a file, **When** the user opens that file's Files & Folders
    menu, **Then** Open In → Preview is shown disabled. *(FR-012)*
 6. **Given** a standalone preview, **When** the file is deleted on disk, **Then** the preview shows
-   a single inline notice saying the file no longer exists, and nothing else. *(FR-026)*
+   a single inline notice saying the file no longer exists, and nothing else. *(FR-026)* — *and the same
+   for a parented preview, or a file whose folder is renamed or removed outside throng (FR-026a, #696).*
 
 ---
 
@@ -903,7 +904,9 @@ restart; Back again. Repeat in a preview by following links.
     menu, in the Navigate section — the same sections Open Preview occupies on an editor.
   - **FR-015c**: On a **standalone** preview the item and button are **Open in Editor**: they open
     the file in an editor panel placed beside the preview — splitting the preview's slot, with the
-    editor on the left — and the preview becomes parented to it in place (FR-013a).
+    editor on the left — and the preview becomes parented to it in place (FR-013a). *(Amended 2026-11-20 by
+    075 FR-093b: under **Open files in: Last Active Editor** the tab's last active editor takes the file; the
+    placement above holds under New Editor, or when the tab holds no editor.)*
   - **FR-015d**: On a **parented** preview the item and button are **Go to Editor**: the button shows
     pressed, and both focus the parent editor, bringing its tab to the front and focusing its window
     if needed (the mirror of FR-014).
@@ -938,6 +941,18 @@ restart; Back again. Repeat in a preview by following links.
   notification is raised for these conditions, the banner's pointer line MUST NOT mention one — it
   offers only "Copy the details here." (**refines 030 FR-041** for banners with no notification
   behind them). *(Amended 2026-09-15 (US2 review).)*
+  - **FR-026a** *(Amended 2026-11-20, #696, maintainer)*: When the previewed file **no longer exists** —
+    deleted, moved away outside throng (052), or its folder renamed or removed — the preview **unloads**: it
+    drops the rendered content and everything it holds of the file (images, a PDF document, a workbook, an
+    HTML frame, a diagram filling the middle section) and shows FR-026's notice "This file no longer exists."
+    in the panel itself. The panel is **not closed**, and its Close control stays. The notice has **no
+    dismiss control** — it offers Try again, Copy details and Clear panel type (030 FR-042), none of which
+    hides it while the file is gone — and it stands until a preview of a file that exists is loaded into the
+    panel (Last Active reuse, a link, Back or Forward, a drop) or the same file exists again, which loads it
+    where the reader was (FR-024). This holds for a **parented** preview too, **superseding** the fix round 1
+    ruling in `contracts/preview-ipc.md` §3 that kept it following its editor's buffer: the editor keeps that
+    buffer (006 FR-099), and the preview shows it again once the file exists. **Excepted**: the CSV Preview
+    Editor (073), which is the editor of its file and keeps its buffer as an editor does.
 - **FR-027**: When a parented preview's file stops matching its provider (the parent saves it as a
   different type), the preview MUST show one inline notice saying the file type has no preview, with
   Close as its action. This **supersedes 030 FR-042** (Try again and Clear panel type on every banner)
@@ -967,6 +982,12 @@ restart; Back again. Repeat in a preview by following links.
   marker, it MUST mark the shortened name part (`name… - Preview`), never follow the suffix.
   *(Amended 2026-09-14 (implementation): u1 review found the ≤ 10 case and the marker placement
   unstated.)*
+  The same holds for the header's WIDTH: where the header is too narrow to draw the whole title, the
+  name part MUST be ellipsised first, and the type suffix (" - Preview", " - CSV Preview", and every
+  provider's own) MUST stay whole until the name part is down to its ellipsis.
+  *(Amended 2026-11-21 (orchestrator decision, maintainer away; overrulable): the CSV walk-through found
+  the title's own ellipsis cutting the suffix off with the name in a narrow panel. Additive: the
+  length rule above is unchanged.)*
 - **FR-033**: A preview panel's header menu MUST offer, in its sections: **Close Panel** (Destroy
   section — "Close", per Finding 2 and **011 FR-030**); **Reveal File in Files & Folders** and
   **Open in OS Explorer** (Navigate — the exact labels **033 FR-053** keeps, through the platform
