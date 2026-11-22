@@ -13,6 +13,10 @@
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
+    },
+    "./csv": {
+      "types": "./dist/csv/index.d.ts",
+      "default": "./dist/csv/index.js"
     }
   },
   "scripts": {
