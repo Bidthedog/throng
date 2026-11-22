@@ -197,7 +197,7 @@ export { rescopeWatch } from './abstractions/file-watcher.js';
 // File Explorer tree (004): OS seams + pure domain.
 export type { IFileSystem, DirEntry } from './abstractions/file-system.js';
 export type { IShellIntegration, ShellActionResult } from './abstractions/shell-integration.js';
-export type { FileNode, NodeKind, RenameResult, DedupeStyle, DragModifiers, DragEffect, ClickAction, ExpandNode, TargetNode } from './explorer/index.js';
+export type { FileNode, NodeKind, DedupeStyle, DragModifiers, DragEffect, ClickAction, ExpandNode, TargetNode } from './explorer/index.js';
 
 // Path identity (019, FR-007): is this the same file, is this file under that folder — asked of
 // paths spelled by different producers (the tree's `/`, `node:path.join`'s `\`). Pure rules.
@@ -343,7 +343,6 @@ export {
   isRoot,
   relPathUnderRoot,
   resolveTarget,
-  validateRename,
   dedupeName,
   nameProblem,
   // 050 R3 — paste/drag planning rules.

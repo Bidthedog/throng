@@ -1,5 +1,5 @@
 /**
- * Rename validation + non-clobbering name de-duplication (004, FR-016/FR-024/
+ * Name rules + non-clobbering name de-duplication (004, FR-016/FR-024/
  * FR-033, research D5). Pure. Sibling comparison is case-insensitive (Windows).
  * No OS/DOM.
  */
@@ -24,48 +24,6 @@ export function nameProblem(name: string): string | null {
   if (/[. ]$/.test(name)) return 'A name cannot end with a dot or a space.';
   if (WINDOWS_RESERVED.test(name)) return `"${name}" is a name Windows reserves for a device.`;
   return null;
-}
-
-export interface RenameResult {
-  ok: boolean;
-  error?: string;
-}
-
-const INVALID_NAME_CHARS = /[\\/:*?"<>|]/;
-
-/**
- * Validate a rename against existing sibling names (case-insensitive).
- *
- * `currentName` is the name of the item BEING RENAMED, when the caller knows it. Supplying it is
- * what lets a case-only rename through (026 / #194): an item is always one of its own siblings, so
- * a case-insensitive comparison makes every case-only change collide with itself. Excluding the one
- * sibling that IS this item asks the right question — "is something ELSE already called that?" —
- * while a genuine collision with a different sibling is still refused in any casing.
- *
- * Omitting it preserves the original two-argument behaviour exactly, so existing callers are
- * unaffected.
- */
-export function validateRename(
-  name: string,
-  siblings: readonly string[],
-  currentName?: string,
-): RenameResult {
-  const n = name.trim();
-  if (n.length === 0) return { ok: false, error: 'Name cannot be empty.' };
-  if (n === '.' || n === '..') return { ok: false, error: 'Invalid name.' };
-  if (INVALID_NAME_CHARS.test(n)) return { ok: false, error: 'Name contains invalid characters.' };
-  const lower = n.toLowerCase();
-  // Drop ONE occurrence of the item's own name — not every sibling matching it — so a directory that
-  // somehow holds two entries differing only by case cannot smuggle a real collision past the guard.
-  const others = [...siblings];
-  if (currentName !== undefined) {
-    const self = others.findIndex((s) => s.toLowerCase() === currentName.toLowerCase());
-    if (self >= 0) others.splice(self, 1);
-  }
-  if (others.some((s) => s.toLowerCase() === lower)) {
-    return { ok: false, error: 'A file or folder with this name already exists.' };
-  }
-  return { ok: true };
 }
 
 /** De-dup style: copy/paste uses "name copy"; a fresh name uses "name (2)". */

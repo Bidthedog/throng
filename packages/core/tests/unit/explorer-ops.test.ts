@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveTarget,
-  validateRename,
+  nameProblem,
   dedupeName,
   resolveDragEffect,
   type FileNode,
 } from '@throng/core';
+import { withHostTraits } from '@throng/core/testing';
 
 const node = (relPath: string, kind: 'file' | 'folder'): FileNode => ({
   id: relPath,
@@ -25,46 +26,31 @@ describe('explorer target resolution (004 T036/T041)', () => {
   });
 });
 
-describe('explorer rename validation (004 T036/T042)', () => {
-  it('rejects empty, dotted, invalid-char, and colliding names', () => {
-    expect(validateRename('  ', []).ok).toBe(false);
-    expect(validateRename('..', []).ok).toBe(false);
-    expect(validateRename('a/b', []).ok).toBe(false);
-    expect(validateRename('a:b', []).ok).toBe(false);
-    expect(validateRename('Existing', ['existing']).ok).toBe(false); // case-insensitive
+describe('names a file cannot have (004 T036/T042)', () => {
+  it('refuses an empty name and the dot names everywhere, and a slash where it separates', () => {
+    for (const os of ['windows', 'linux', 'macos'] as const) {
+      withHostTraits(os, () => {
+        expect(nameProblem('')).not.toBeNull();
+        expect(nameProblem('.')).not.toBeNull();
+        expect(nameProblem('..')).not.toBeNull();
+        expect(nameProblem('a/b')).not.toBeNull();
+        expect(nameProblem('new-name.ts')).toBeNull();
+      });
+    }
   });
-  it('accepts a fresh valid name', () => {
-    expect(validateRename('new-name.ts', ['other.ts']).ok).toBe(true);
+
+  it('refuses under Windows rules what Windows would reject or rename behind our back', () => {
+    withHostTraits('windows', () => {
+      for (const name of ['a\\b', 'a:b', 'a*b', 'a?b', 'a"b', 'a<b', 'a>b', 'a|b', 'a\u0001b', 'trailing.', 'trailing ', 'CON', 'prn.txt', 'com1', 'LPT9.log']) {
+        expect(nameProblem(name), name).not.toBeNull();
+      }
+      for (const name of ['console.ts', 'nullable', 'com10', '.gitignore', 'a b.c']) expect(nameProblem(name), name).toBeNull();
+    });
   });
 
-  // 026 / #194 — an item is not a collision with ITSELF.
-  //
-  // The sibling comparison is case-insensitive, which is right for Windows and wrong for the item
-  // being renamed: an item is always one of its own siblings, so a case-only change always
-  // self-collided. Callers that know which sibling is the one being renamed pass its current name,
-  // and it is excluded from the comparison.
-  //
-  // This helper has no callers today (the tree renames through the files bridge, which carries its
-  // own guard), so the rule was never actually reachable — but two collision rules that disagree is
-  // one waiting to be picked up by the next caller. 026 FR-005 makes them agree.
-  describe('an item does not collide with itself (026 / #194)', () => {
-    it('permits a case-only change when the item’s current name is known', () => {
-      expect(validateRename('Job Specs', ['Job specs', 'other'], 'Job specs').ok).toBe(true);
-      expect(validateRename('README.md', ['readme.md'], 'readme.md').ok).toBe(true);
-    });
-
-    it('still rejects a collision with a DIFFERENT sibling, in any casing', () => {
-      expect(validateRename('two.txt', ['one.txt', 'two.txt'], 'one.txt').ok).toBe(false);
-      expect(validateRename('TWO.TXT', ['one.txt', 'two.txt'], 'one.txt').ok).toBe(false);
-    });
-
-    it('permits renaming to the item’s own name unchanged', () => {
-      expect(validateRename('same.txt', ['same.txt'], 'same.txt').ok).toBe(true);
-    });
-
-    it('keeps the original behaviour when no current name is given', () => {
-      // Existing callers pass two arguments and must be unaffected.
-      expect(validateRename('Existing', ['existing']).ok).toBe(false);
+  it('allows under Linux rules what Linux allows', () => {
+    withHostTraits('linux', () => {
+      for (const name of ['a\\b', 'a:b', 'trailing.', 'CON']) expect(nameProblem(name), name).toBeNull();
     });
   });
 });

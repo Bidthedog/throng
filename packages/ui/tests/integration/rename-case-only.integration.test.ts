@@ -14,13 +14,10 @@ import { FilesService, type MovePair } from '../../src/main/files-service.js';
  * as unchanged — and then the very next `fs.exists(dest)` probe resolves case-INSENSITIVELY on
  * NTFS, finds the item itself, and reports a collision with itself.
  *
- * NOTE ON THE ISSUE'S OTHER SUSPECT. #194 also names `validateRename`
- * (`packages/core/src/explorer/naming.ts:20`) as a renderer-side cause. It is not one on this
- * branch: nothing in `packages/ui` or `packages/daemon` calls it (the tree's `onRename` goes
- * straight to `window.throng.files.rename`), so the only live rejection is the one asserted here.
- * That does not make the core helper harmless — it is exported public API with the same
- * case-insensitive self-collision — but a test asserting it is the cause would be asserting a
- * fiction. Left to the fix to decide whether to correct or retire it.
+ * NOTE ON THE ISSUE'S OTHER SUSPECT. #194 also named core's `validateRename` as a renderer-side
+ * cause. Nothing ever called it (the tree's `onRename` goes straight to
+ * `window.throng.files.rename`), so the only live rejection is the one asserted here; the helper has
+ * since been retired, and main's name rule is core's `nameProblem`.
  *
  * These cases run against the REAL filesystem deliberately. The defect only exists because NTFS
  * is case-insensitive; a fake fs with a case-sensitive map would pass while the app stays broken.
