@@ -345,6 +345,7 @@ export {
   resolveTarget,
   validateRename,
   dedupeName,
+  nameProblem,
   // 050 R3 — paste/drag planning rules.
   classifyTopLevel,
   clashKind,
