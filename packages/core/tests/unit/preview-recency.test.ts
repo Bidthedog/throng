@@ -19,12 +19,14 @@ const tab = (extra: Partial<Tab>): Tab => ({
 });
 
 describe('initialPreviewRecency', () => {
-  it('uses the persisted order, dropping ids no longer in the tab or no longer previews', () => {
-    expect(initialPreviewRecency(tab({ previewRecency: ['v3', 'gone', 'e1', 'v1'] }), isPreview)).toEqual(['v3', 'v1']);
+  // Every restored preview stays a candidate (FR-001): Last Active is per type (FR-007), so one left out could
+  // never be reused for a file of its type (maintainer, 2026-11-22).
+  it('leads with the persisted order, dropping ids no longer in the tab or no longer previews, then the rest', () => {
+    expect(initialPreviewRecency(tab({ previewRecency: ['v3', 'gone', 'e1', 'v1'] }), isPreview)).toEqual(['v3', 'v1', 'v2']);
   });
 
-  it('without one, starts from the focused preview alone', () => {
-    expect(initialPreviewRecency(tab({ activePanelId: 'v2' }), isPreview)).toEqual(['v2']);
+  it('without one, leads with the focused preview, then the rest in layout order', () => {
+    expect(initialPreviewRecency(tab({ activePanelId: 'v2' }), isPreview)).toEqual(['v2', 'v1', 'v3']);
   });
 
   it('without one and with a non-preview focused, lists the tab’s previews in layout order', () => {
@@ -33,6 +35,6 @@ describe('initialPreviewRecency', () => {
   });
 
   it('an empty persisted list is treated as absent', () => {
-    expect(initialPreviewRecency(tab({ previewRecency: [], activePanelId: 'v3' }), isPreview)).toEqual(['v3']);
+    expect(initialPreviewRecency(tab({ previewRecency: [], activePanelId: 'v3' }), isPreview)).toEqual(['v3', 'v1', 'v2']);
   });
 });

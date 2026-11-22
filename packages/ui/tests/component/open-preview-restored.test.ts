@@ -70,6 +70,22 @@ describe('a restored layout and Last Active (FR-001)', () => {
     expect(await openAnother()).toEqual({ mode: 'lastActive', reusePanelId: 'pv2' });
   });
 
+  // Maintainer, 2026-11-22: "If I open a project that already has an image preview open from the last throng
+  // session, then open another image, the new image opens up in a new image preview panel." Last Active is per type
+  // (054 FR-007), so a restored preview of the opened file's type is the candidate even when the tab's recency (or
+  // its active panel) names only a preview of another type.
+  it.each([
+    ['the persisted recency names only another type', { previewRecency: ['pv1'] }],
+    ['the active panel is a preview of another type', { activePanelId: 'pv1' }],
+    ['it is the only preview', {}],
+  ])('a restored image preview is reused for another image when %s (054 FR-007)', async (_, extra) => {
+    const others = Object.keys(extra).length === 0 ? [plain('pv1')] : [preview('pv1', 'README.md')];
+    await mount(restored({ root: split(...others, preview('img', 'a.png')), ...extra }));
+    await act(() => requestPreviewOpen({ absPath: `${ROOT}/b.png`, projectId: PROJECT }));
+    const calls = pv!.preview.open.mock.calls as [{ target: { reusePanelId: string | null } }][];
+    expect(calls.at(-1)![0].target.reusePanelId).toBe('img');
+  });
+
   it('New Preview Panel is unaffected: it never names a panel to reuse', async () => {
     await mount(restored({ root: split(plain('term'), preview('pv1', 'README.md')) }));
     expect(await openAnother({ mode: 'new' })).toEqual({ mode: 'new', reusePanelId: null });
