@@ -29,24 +29,28 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-beta2 — 2026-11-23
+
 ### Added
 
-- A CSV opens in the CSV Preview Editor, a grid you edit and save like a document; a save changes only
-  the fields you edited. Choose Throng Editor, Throng Preview Editor or your OS program in **Open CSVs in**.
-- Excel, LibreOffice and Numbers workbooks preview read-only, every sheet, with no office suite installed.
+- A CSV opens in the CSV Preview Editor, a grid you edit and save like a document; a save changes only the fields you
+  edited. Choose Throng Editor, Throng Preview Editor or your OS program in **Open CSVs in**. ([#323](https://github.com/Bidthedog/throng/issues/323), [#605](https://github.com/Bidthedog/throng/issues/605))
+- Excel, LibreOffice and Numbers workbooks preview read-only, every sheet, with no office suite installed. ([#604](https://github.com/Bidthedog/throng/issues/604))
 - Images, SVG files, PDFs and HTML pages open in previews of their own. Pictures fit, zoom and pan; an SVG preview
   follows its editor as you type; a PDF pages, finds text and goes to a page; an HTML page renders with its scripts
   off and reloads in place when the file changes. Choose Throng Editor, Throng Preview or your OS program for each type
-  in **Open … in**.
+  in **Open … in**. ([#441](https://github.com/Bidthedog/throng/issues/441), [#631](https://github.com/Bidthedog/throng/issues/631), [#388](https://github.com/Bidthedog/throng/issues/388), [#508](https://github.com/Bidthedog/throng/issues/508))
 - HTML previews load images, styles and fonts only from sources you allow: **HTML: Safe preview sources** in
   Preferences, plus a list of the project's own in Project Settings. A page that asks for anything else says what was
-  left out, with **Allow this source** beside it.
+  left out, with **Allow this source** beside it. ([#508](https://github.com/Bidthedog/throng/issues/508))
 - Each type of preview has its own icon, and its title names the type: `notes.md - Markdown Preview`.
 - Markdown previews draw Obsidian-style callouts (`> [!note]`, `> [!warning]-` and the rest), each with its icon and
-  theme colour, and fold the ones marked to fold.
-- Maths in a Markdown preview is typeset: `$…$` inline, `$$…$$` and `math` blocks on their own lines.
-- **Print…** (**Ctrl+P**) prints a Markdown or Mermaid preview, or an editor, through a Print Preview that shows each
-  page as it will print and sends the printer exactly those pages.
+  theme colour, and fold the ones marked to fold. ([#672](https://github.com/Bidthedog/throng/issues/672))
+- Maths in a Markdown preview is typeset: `$…$` inline, `$$…$$` and `math` blocks on their own lines. ([#393](https://github.com/Bidthedog/throng/issues/393))
+- **Print…** (**Ctrl+P**) prints a preview or an editor through a Print Preview that shows each page as it will print
+  and sends the printer exactly those pages, or saves them as a PDF. **Fit** sets how a picture or PDF meets the page,
+  and a header or footer can print the file's path, page numbers and `{timeStamp}`. ([#484](https://github.com/Bidthedog/throng/issues/484))
+- The terminal's right-click menu draws its three toggles with their status-bar icons, struck through while off.
 
 ### Changed
 
@@ -60,6 +64,26 @@ What changed in each release of throng, written for someone deciding whether to 
 - The Resource Monitor's interval menu offers every interval its Preferences slider does.
 - Print Preview's margin, scale and copies boxes say what is wrong with a value, and store the nearest limit when you
   leave the box.
+- A project click is acknowledged at once, with a spinner while the project opens. ([#702](https://github.com/Bidthedog/throng/issues/702))
+- Project rows use their full width until hovered, with one popover per row. ([#695](https://github.com/Bidthedog/throng/issues/695))
+- Each project root is watched once, and ignored folders are not watched at all. ([#274](https://github.com/Bidthedog/throng/issues/274))
+
+### Fixed
+
+- Preferences edits terminal flavours, their shell arguments and the hidden built-in flavours. ([#67](https://github.com/Bidthedog/throng/issues/67))
+- Selected code stays readable on the editor's selection colour in every theme. ([#105](https://github.com/Bidthedog/throng/issues/105))
+- View Whitespace keeps every line at its height in every theme. ([#683](https://github.com/Bidthedog/throng/issues/683))
+- The notice about another throng's daemon clears itself once the daemon is replaced. ([#685](https://github.com/Bidthedog/throng/issues/685))
+- Attention marks survive a restart, matching their notifications. ([#692](https://github.com/Bidthedog/throng/issues/692))
+- A preview of a file that no longer exists unloads and says so. ([#696](https://github.com/Bidthedog/throng/issues/696))
+- A preview made standalone says so before it reads its file again. ([#698](https://github.com/Bidthedog/throng/issues/698))
+- A quit from the system (logout, power-off) closes throng without waiting on the running-terminals warning. ([#699](https://github.com/Bidthedog/throng/issues/699))
+- A terminal ended at any cost no longer keeps its folder locked when its host never reports the exit. ([#701](https://github.com/Bidthedog/throng/issues/701))
+- A restored image preview is reused for the next image you open, instead of a new panel opening beside it.
+
+### Known issues
+
+- Shift+Enter at a PowerShell prompt needs Windows 11; on Windows 10 it submits the line. ([#100](https://github.com/Bidthedog/throng/issues/100))
 
 ## 1.0.0-beta1 — 2026-11-19
 
