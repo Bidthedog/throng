@@ -12,6 +12,9 @@ CodeMirror 6 in `packages/ui/src/renderer/editor/`, the document domain in
 
 ## One document, one state (Principle XI) — the rule this area exists to protect
 
+The binding text is [references/constitution-document-state.md](references/constitution-document-state.md)
+(binding: constitution Principle XI); what follows is the working summary.
+
 A Panel is a **view**; the artefact it presents is a **document**. When one artefact is shown by more
 than one Panel — same Tab, different Tabs, different windows — it is ONE document in every respect:
 

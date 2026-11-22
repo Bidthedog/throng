@@ -63,6 +63,10 @@ about it but which elements to emit. The renderer's own: `notice-models`, `notic
 
 ## Rules
 
+Every failure leaving a trace in the diagnostic log has its binding text in
+[references/constitution-failure-trace.md](references/constitution-failure-trace.md) (binding:
+constitution Principle XIII).
+
 - **A failure is never silent.** An unexpected terminal exit shows its output and exit code
   (Principle III); a dead daemon is reported **once**, not as a cascade of unrelated errors; a
   partially-failed batch reports per item.
