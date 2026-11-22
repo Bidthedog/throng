@@ -105,7 +105,8 @@ export class DocumentStateRepository {
    * folder's own path never has a row — and every caller hands over the moved item's own path, so
    * matching only that path left the files inside a renamed folder keyed to paths that no longer
    * exist. The prefix is matched with `substr`, not `LIKE`: a name holding `%` or `_` must not
-   * widen the match, and the trailing `/` keeps a sibling such as `folder-old/` out of it.
+   * widen the match, and the trailing `/` keeps a sibling such as `folder-old/` out of it. Its length
+   * is SQLite's `length()`, in characters as `substr` counts — JS's `.length` counts an emoji twice.
    *
    * `toProjectId` moves the rows into another project (050 FR-016) — the same file, now owned by
    * the project it was moved to (Principle I). It defaults to `projectId`.
@@ -129,9 +130,9 @@ export class DocumentStateRepository {
         .prepare(
           `SELECT rel_path FROM document_state
             WHERE owner_user = ? AND project_id = ?
-              AND (rel_path = ? OR substr(rel_path, 1, ?) = ?)`,
+              AND (rel_path = ? OR substr(rel_path, 1, length(?)) = ?)`,
         )
-        .all(ownerUser, projectId, fromRelPath, prefix.length, prefix) as { rel_path: string }[];
+        .all(ownerUser, projectId, fromRelPath, prefix, prefix) as { rel_path: string }[];
       if (rows.length === 0) return 0;
       const clear = this.db.prepare(
         `DELETE FROM document_state WHERE owner_user = ? AND project_id = ? AND rel_path = ?`,
