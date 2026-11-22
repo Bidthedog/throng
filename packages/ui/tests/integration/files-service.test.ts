@@ -65,14 +65,6 @@ describe('FilesService mutations confined to the project root (004 T038/T046)', 
     expect(await svc.move(['tree'], 'tree/inner')).toMatchObject({ error: expect.any(String) });
   });
 
-  it('copies with a non-clobbering name on collision', async () => {
-    await write('r.txt');
-    await mkdir(join(root, 'dest'));
-    await writeFile(join(root, 'dest', 'r.txt'), 'existing');
-    expect(await svc.copy(['r.txt'], 'dest')).toEqual({ ok: true });
-    expect(await names('dest')).toEqual(['r copy.txt', 'r.txt']);
-  });
-
   it('deletes via recycle (default) and permanent', async () => {
     await write('bin.txt');
     await write('gone.txt');

@@ -373,27 +373,6 @@ export class FilesService {
     }
   }
 
-  async copy(srcRelPaths: readonly string[], destRelDir: string): Promise<OkOrError> {
-    if (!this.root) return { error: NO_ROOT };
-    try {
-      const destAbs = this.absOf(destRelDir);
-      if (!(await this.within(destAbs))) return { error: OUTSIDE };
-      const siblings = (await this.fs.list(destAbs)).map((e) => e.name);
-      for (const rel of srcRelPaths) {
-        if (rel === '') return { error: 'The project root cannot be copied.' };
-        const srcAbs = this.absOf(rel);
-        if (!(await this.within(srcAbs))) return { error: OUTSIDE };
-        const name = dedupeName(basename(srcAbs), siblings, 'copy');
-        await this.fs.copy(srcAbs, destAbs, name);
-        siblings.push(name);
-      }
-      return { ok: true };
-    } catch (e) {
-      logExpected('files-service: copy', 'failed() logs the raw error and the explorer reports the cause', e);
-      return this.failed(e, 'lock');
-    }
-  }
-
   async delete(relPaths: readonly string[], mode: DeleteMode): Promise<OkOrError> {
     if (!this.root) return { error: NO_ROOT };
     // Delete EVERY item independently: one failure (a locked file, or an item
