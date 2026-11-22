@@ -3,7 +3,12 @@ import { clearStaleSocket } from '@throng/platform-node';
 import 'reflect-metadata';
 import { createServer, type Server, type Socket } from 'node:net';
 import { injectable, inject } from 'inversify';
-import { TERMINAL_SUBSCRIBE_METHOD, type JsonRpcRequest, type TerminalSubscribeParams } from '@throng/ipc-contract';
+import {
+  RPC_MAX_LINE_CHARS,
+  TERMINAL_SUBSCRIBE_METHOD,
+  type JsonRpcRequest,
+  type TerminalSubscribeParams,
+} from '@throng/ipc-contract';
 import type { IDaemonSettings } from '@throng/core';
 import { DAEMON_TYPES } from './tokens.js';
 import type { RpcRouter } from './rpc-router.js';
@@ -16,8 +21,6 @@ import { TerminalEvents } from './terminal-events.js';
  * touching this class (SRP/OCP). The pipe name is injected configuration; a
  * pipe-name-in-use conflict is surfaced explicitly (spec Edge Case).
  */
-/** Guard against an unbounded read buffer from a client that never sends a newline. */
-const MAX_LINE_BYTES = 1_000_000;
 
 @injectable()
 export class IpcServer {
@@ -92,7 +95,7 @@ export class IpcServer {
     let buffer = '';
     socket.on('data', (chunk: string) => {
       buffer += chunk;
-      if (buffer.length > MAX_LINE_BYTES) {
+      if (buffer.length > RPC_MAX_LINE_CHARS) {
         socket.destroy();
         return;
       }

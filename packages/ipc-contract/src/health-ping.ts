@@ -4,6 +4,12 @@
 
 export const HEALTH_PING_METHOD = 'health.ping';
 
+/**
+ * The longest request line the daemon accepts, in UTF-16 units — a guard against a client that never
+ * sends a newline. A request that could exceed it (a terminal paste) is split by the sender.
+ */
+export const RPC_MAX_LINE_CHARS = 1_000_000;
+
 /** JSON-RPC standard error code for an unknown method. */
 export const JSON_RPC_METHOD_NOT_FOUND = -32601;
 

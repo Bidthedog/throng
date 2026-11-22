@@ -28,6 +28,7 @@ import type {
 import { RpcTimeoutError, type DaemonClient } from './daemon-client.js';
 import type { ShellDetectionService } from './shell-detection-service.js';
 import { createSerializer } from './attach-serializer.js';
+import { writeToTerminal } from './terminal-write.js';
 
 /** What the renderer sends to (re)attach a Terminal Panel. */
 interface AttachRequest {
@@ -483,12 +484,7 @@ export function registerTerminalIpc(deps: {
      * delivering the keystroke — a refused grant must not fail, delay or alter the write.
      */
     if (submitsCommand(data)) foregroundHandoff.allow();
-    return serializeWrite(panelId)(() =>
-      daemonClient.call('terminal.write', { panelId, data, answerFrom }).catch((error: unknown) => {
-        logCaught('terminal-ipc: write', error);
-        return { ok: false };
-      }),
-    );
+    return serializeWrite(panelId)(() => writeToTerminal(daemonClient, panelId, data, answerFrom));
   });
   ipcMain.handle(
     'throng:terminal:resize',
