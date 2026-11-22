@@ -73,11 +73,11 @@ contributor to delete the section or write a spec after the fact. Step 4's test-
 not waived by that route; for a reported defect it is stricter, because the first commit is a test
 that reproduces the bug.
 
-**Constitution check** — every plan must pass the Constitution Check gate (11 principles).
+**Constitution check** — every plan must pass the Constitution Check gate (13 principles).
 Watch especially project-first isolation (I), platform-abstracted core behind contract-tested
-seams (II), daemon-owned terminals with no orphaned processes (III), test-first + UI-needs-E2E
-+ `@admin` gating (V), SOLID/DRY/YAGNI (VIII), one composition root per boundary (IX), and
-injected config (X). Violations must be revised, or justified in the plan's Complexity Tracking.
+seams (II), daemon-owned terminals with no orphaned processes (III), test-first at the lowest
+layer that can prove it + `@admin` gating (V), SOLID/DRY/YAGNI (VIII), one composition root
+per boundary (IX), and injected config (X). Violations must be revised, or justified in the plan's Complexity Tracking.
 
 **Intent & outcomes** — both spec and PR must let a reviewer who has never seen the code
 restate, in plain language, *what a user needs and why* (intent) and *what changed and how we

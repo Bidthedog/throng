@@ -175,14 +175,23 @@ can keep browsing or press **F2** to rename the file.
 - The same file open in two places is **one document**, with one undo history, and unsaved edits
   survive a crash.
 - **Preview** a Markdown file beside its editor from the status bar's preview button; it follows your
-  typing and scrolls with the editor. With **Default open action** set to Preview, clicking notes in
+  typing and scrolls with the editor. Previewing another file reuses that preview rather than opening a second;
+  with **Open Markdown files in** set to Throng Preview, clicking notes in
   the tree reuses the preview you already have ([Open previews in](preferences.md#previews)), and you
   can drop a `.md` file onto a preview to show it there — or onto an empty panel, which opens it the
-  way **Default open action** says. Right-click a note — in the tree or in Find in Files' results — and
+  way **Open Markdown files in** says. Right-click a note — in the tree or in Find in Files' results — and
   choose **Open In › Last Preview Panel** to show it in the preview named beside the item, or **New
   Preview Panel** for a fresh one; once the note has its preview open, **Current Preview** goes to it.
   A preview's status bar counts the document's lines, characters and words, and while you select text it
   shows how much and which source lines.
+- **Look at images, SVGs, PDFs and HTML pages** by clicking them in the tree: each opens in its own
+  preview, whose icon and title name its type (`logo.png - Image Preview`). Pictures zoom and pan like a
+  Mermaid diagram; a PDF has the same zoom controls, selectable text and `Ctrl+G` to go to a page; drag
+  with the middle mouse button to move around any preview. An SVG or HTML preview beside its editor
+  follows your typing, and `Ctrl+F` finds text in an HTML page or a PDF. Nothing in a previewed file
+  runs, and an HTML page reaches only the [safe sources](preferences.md#previews) you allow — the
+  panel lists whatever it left out. **Open … in** for each
+  type ([Previews](preferences.md#previews)) sends its files to your system's own program instead.
 - **Fold** a Markdown document's sections from the gutter beside each heading, the right-click menu's
   **Outlining** submenu, or **Ctrl+M** chords ([Markdown bindings](key-bindings.md#markdown)); an editor
   and its preview fold together. **Collapse All Inside This Section** folds just one branch.
@@ -197,6 +206,38 @@ can keep browsing or press **F2** to rename the file.
   enter Focus Mode with it. Embed a diagram file in a Markdown document with
   `![[flow.mmd]]` or `![Flow](flow.mmd)`; a plain link to it stays a link. Give an inline diagram a
   fixed height with ```` ```mermaid height=300 ```` or `![[flow.mmd|300]]`.
+- **CSV files** open in the **CSV Preview Editor**, a grid over the file: arrow keys move, Enter, F2 or
+  a double-click edits a cell, double-clicking a column letter or row number fits it to its content, and the row and column right-click menus insert and delete. It is the same document as
+  the text editor, with the same unsaved marker, Save, Undo and Auto Save, and a save rewrites only the
+  fields you changed. A file whose quotes do not balance opens a notice naming the line, with **Open in
+  Editor**. Choose where CSVs open with [Open CSVs in](preferences.md#csv).
+- **Workbooks** — `.xlsx`, `.xls`, `.ods`, `.numbers` and their relatives — preview read-only, every sheet
+  in a switcher along the bottom, formula cells showing their stored values. The limit on how large a
+  workbook loads is [a setting of its own](preferences.md#spreadsheet).
+- **Callouts**: a blockquote that opens with `[!note]`, `[!tip]`, `[!warning]` or another Obsidian type
+  draws as a coloured box with its icon and title. `[!type]-` starts it folded and `[!type]+` makes it
+  foldable: click its title, or Tab to it and press Enter. Their colours are the theme's
+  ([Markdown preview › Callouts](preferences.md#themes-and-icon-sets)).
+- **Maths**: `$…$` inline, `$$…$$` on its own lines, or a `math` code block typesets as an equation, by
+  GitHub's rules — `$5 and $10` stays prose. A malformed expression shows its source, with the error in its
+  hover. **Typeset math** in [Settings](preferences.md) turns it off.
+- **Print…** (**Ctrl+P** in an editor or a Markdown, Mermaid, Image, SVG, PDF, CSV or workbook preview, or their
+  menus) opens **Print Preview**: pick the printer, paper (each size shown in mm for the orientation),
+  orientation, margins, **Fit** (a picture or PDF can fit, stretch, fill, crop, print at actual size or scale;
+  a document fits the page width or scales), a **Header** and **Footer** (each off until ticked, its text with `{fileName}`,
+  `{fileExt}`, `{path}`, `{page}`, `{totalPages}` and `{timeStamp}` filled in, aligned left, centre or right),
+  **Centre on page**, pages and copies, see each page as it will print, stepping
+  through them with **Back** and **Forward**, the mouse wheel or the arrow keys (**Home** and **End** for the
+  first and last), then **Print**, or **Save as PDF…** to write those pages to a PDF file (no printer needed; a
+  notice then opens it, or reveals it in the File Explorer when it is in the project). What prints is exactly the
+  pages shown, on white paper in any theme, with the margins outlined in dashes on screen. A number that is out of range is outlined red, a brief message at the
+  foot of the window says why, and Print waits until it is put right. Print Preview opens at the size, and
+  maximised or not, as it last closed, and keeps its settings between sessions.
+  Folded sections, callouts and `<details>` blocks print open, in fixed print colours whatever the theme. A picture prints fitted to
+  the page and never larger than its own size; a PDF prints its own pages, one per sheet, and starts on its own
+  paper size (**Custom** when it is none of the listed ones); a CSV or a workbook's
+  sheet prints as a table of every row, its header row repeated on each page. An HTML preview shows
+  **Print…** greyed: it does not print yet.
 - In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and
   Obsidian-style `[[wikilinks]]` follow like any other link, including vault-root ones such as
   `[[Docs/Guide]]`; hover one to see its target. Images embed with `![[diagram.png]]`, with
@@ -220,7 +261,7 @@ Right-click a file for **Open in OS Default Program**, and any item for
   you are on is filled more strongly.
 - **Ctrl+Shift+F** searches every file in the project as you type; **Ctrl+Shift+H** adds replace,
   one match, one file or everything at once. Right-click a folder in the tree to search just there.
-  A Markdown result opens its preview, scrolled to the match, when **Default open action** is Preview.
+  A Markdown result opens its preview, scrolled to the match, when **Open Markdown files in** is Throng Preview.
 - **Ctrl+Shift+T** is **Quick Open**: type any part of a name or path to jump to a file.
 - **Ctrl+G** goes to a line in the active editor.
 - Right-click a folder in the tree to open a terminal there, or to expand or collapse its children.

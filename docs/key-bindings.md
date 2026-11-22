@@ -135,13 +135,14 @@ four splits are on every panel's **+** button and in its **Split** menu.
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|
 | Quick Open | `navigate.quickOpen` | `Ctrl+Shift+T` | Everywhere | Open any file in the current project by typing part of its name or path; **Enter** opens it. |
-| Go To Line | `navigate.gotoLine` | `Ctrl+G` | Editor | Jump to a line number in the focused editor. A terminal keeps its own `Ctrl+G`. |
+| Go To Line | `navigate.gotoLine` | `Ctrl+G` | Editor | Open the Go to dialog in the focused editor: it reads "Line 3 of 120", takes only a line that exists, and Enter goes there. A terminal keeps its own `Ctrl+G`. |
 | Go to next flagged panel | `focus.nextMarkedPanel` | `Ctrl+Shift+Alt+G` | Everywhere | Focus the next panel marked as needing you, switching project if it is in another. Does nothing when no panel is marked. Works from a focused terminal. Also in the right-click menu of a project that has a marked panel, where it goes to that project's next marked panel. |
 | Open Preview | `preview.open` | *(unbound)* | Editor · File Explorer | Open a rendered preview of the focused editor's file, or of the file selected in File Explorer. |
 | Back | `navigate.back` | `Alt+ArrowLeft` | Editor · Preview | Show the previous file in the focused editor or preview's history. In an editor this takes the key from moving by syntax. |
 | Forward | `navigate.forward` | `Alt+ArrowRight` | Editor · Preview | Show the next file in the focused editor or preview's history, after going Back. |
 | Open Link | `preview.followLink` | `Ctrl+Enter` | Editor · Preview | Open the link under the caret in an editor, or the focused link in a preview, exactly as Ctrl+click does. In an editor with no link under the caret it keeps the editor's own meaning. |
-| Go to Heading | `preview.goToHeading` | `Ctrl+G` | Preview | Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. |
+| Go to Heading, Page or Row | `preview.goToHeading` | `Ctrl+G` | Preview | Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. In a CSV or workbook grid it is Go to Row: it opens the Go to dialog for rows (also **Go to Row…** on the panel header menu and the cell and row-number menus): Enter makes that row the active cell in the active column and scrolls it to the top. In a PDF preview, Go to Page: type a page number (the dialog names the current page and how many there are, and takes only a page that exists) and press Enter. |
+| Print… | `preview.print` | `Ctrl+P` | Preview | Open Print Preview for the active preview (every type but HTML): choose a printer, paper, orientation, margins, scale, centring, pages and copies, see the pages as they will print, then print them or save them as a PDF. It never prints without showing Print Preview first. |
 
 The mouse's own back and forward buttons do the same as **Back** and **Forward** over an editor or
 preview panel; they are not a rebindable chord.
@@ -172,6 +173,7 @@ Live only while the File Explorer pane has focus.
 | Save | `editor.save` | `Ctrl+S` | Editor · Terminal | Save the active editor document. Inert in a terminal. |
 | Save all | `editor.saveAll` | `Ctrl+Shift+S` | Editor · Terminal | Save all open editor documents in scope — see [Save-All scope](preferences.md#editor). |
 | Save as | `editor.saveAs` | `Ctrl+Alt+S` | Editor · Terminal | Save the active document to a new location. |
+| Print… | `editor.print` | `Ctrl+P` | Editor | Open Print Preview for the active editor's document, unsaved changes included: its text in the editor's font, syntax-highlighted in print colours, long lines wrapped. It never prints without showing Print Preview first. Never live in a terminal, where `Ctrl+P` is the shell's. |
 | Cut line | `editor.cutLine` | `Ctrl+X` | Editor | Cut the whole line the cursor sits on when nothing is selected, or just the selection when there is one. |
 | Indent | `editor.indentLines` | `Tab` | Editor | Indent every line the selection touches, or insert one level of indentation at the cursor. |
 | Outdent | `editor.outdentLines` | `Shift+Tab` | Editor | Remove one level of indentation from every line the selection touches. |
@@ -216,6 +218,33 @@ view. Collapsing a section keeps the state of the sections inside it.
 In an editor of any other language `Ctrl+M` keeps the editor's own meaning. Whether a document opens
 with its sections expanded or collapsed is [Markdown sections open](preferences.md#editor).
 
+## CSV grid
+
+Inserting rows and columns in the CSV Preview Editor, at its active cell. Each is also on the grid's row
+or column right-click menu. Inside the grid, the arrow keys, Page Up/Down, Home/End and Ctrl+Home/End
+move (with Shift to extend), Enter, F2 or a double-click edits a cell (a double-click selects its text;
+while a cell is being edited those keys move the caret in it), Delete clears, Ctrl+C, Ctrl+X and Ctrl+V copy, cut
+and paste tab-separated cells, Ctrl+Z and Ctrl+Y undo and redo as in the text editor, and
+[`editor.save`](#editor) saves. Double-clicking a column letter fits the column to its widest value (double-click again to undo); a row number does nothing, since rows are not resized. The **Lock first row** and **Lock first column** toggles beside it (or the **Lock First Row** and **Lock First Column** menu items) hold the first row under the column letters and the first column beside the row numbers while the rest scrolls. The **Wrap** toggle on a CSV preview's status bar (or its **Wrap** menu item) shows every cell in full, wrapped to its column, each row as tall as its tallest cell. Clicking the corner
+above the row numbers selects every row and column. Every
+right-click menu in the grid — cell, selection, row number, column letter — offers Cut, Copy and Paste; a
+paste overwrites the selection from its top-left cell, and one value pasted onto several cells fills them.
+**Reset Column Width** on a column letter puts it back to its default width. With whole rows or
+columns copied from a grid, the row and column menus also offer **Insert Copied Rows Above/Below** and
+**Insert Copied Columns Left/Right**. [`editor.saveAs`](#editor) and the Save As icon in the title bar save
+the CSV under a new name, as in the text editor. A cell longer than the
+[Long cell threshold](preferences.md#csv) opens in a dialog on double-click, F2 or Enter — a JSON value
+pretty-printed — and **Edit in Dialog…** on the cell menu opens any cell there; Ctrl+Enter saves it as one
+line and Esc cancels. The cell-dialog toggle at the bottom right of the status bar turns this on or off for
+one panel. **Edit in Dialog…** is greyed while more than one cell is selected. Opening another CSV in a preview that holds unsaved edits asks first — Save & open, Discard & open, Open in new preview or Cancel. Each file keeps its own selection while the preview moves between files, and the pointer over a row number, column letter or the corner shows a select arrow.
+
+| Command | Action id | Default | Scope | What it does |
+|---|---|---|---|---|
+| Insert Row Above | `grid.insertRowAbove` | *(unbound)* | Preview | Insert an empty row above the active cell. |
+| Insert Row Below | `grid.insertRowBelow` | *(unbound)* | Preview | Insert an empty row below the active cell. |
+| Insert Column Left | `grid.insertColumnLeft` | *(unbound)* | Preview | Insert an empty column left of the active cell. |
+| Insert Column Right | `grid.insertColumnRight` | *(unbound)* | Preview | Insert an empty column right of the active cell. |
+
 ## Search
 
 The find bar is one control routed to the active panel: in an editor it finds and replaces in the
@@ -259,6 +288,13 @@ for enhanced key reporting: see [macOS](macos.md#terminals).
 | Terminal notifications | `terminal.toggleNotifications` | *(unbound)* | Terminal | Turn on or off whether the focused terminal can raise attention marks, pop-ups and desktop notifications. |
 
 The last three are the toggles at the right of a terminal's status bar, which are also in its right-click menu.
+
+**Shift+Enter and Ctrl+Enter at a PowerShell prompt need Windows 11 or later (build 22000 and up).** They
+insert a line break and move to the `>> ` continuation line only where the Windows console host asks for
+Windows key events (win32-input-mode), which those builds' consoles do. The console of Windows 10 and Windows
+Server 2022 never asks, and a terminal has no other way to tell PowerShell that Enter was modified. There, the line break
+is inserted, but the next characters you type can land on the wrong line. Finish a multi-line command with
+a backtick (`` ` ``) at the end of each line instead.
 
 ## On macOS
 
