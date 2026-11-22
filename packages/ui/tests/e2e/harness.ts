@@ -1115,6 +1115,17 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
   }
   // Read now, while the app is alive: once it has gone, nothing says which pipes `close` is waiting on.
   const stdio = pid === undefined ? [] : stdioIdentities(pid);
+  // Listened for before anything is asked of the app, so an exit during the destroys below is not missed. Never settles
+  // for an app whose process could not be read: the graceful path then rests on `app.close()` alone, as before.
+  const processClosed = new Promise<void>((resolve) => {
+    try {
+      const child = app.process();
+      if (child.exitCode !== null || child.signalCode !== null) resolve();
+      else child.once('close', () => resolve());
+    } catch {
+      /* already gone: `app.close()` settles at once */
+    }
+  });
   // The graceful path: destroy detached sub-workspace windows first (the child windows), settle,
   // then destroy whatever remains (the main window) — mirrors the manual "switch focus, close both
   // windows with a beat between" that avoids the handshake hang — then finalise with app.close().
@@ -1149,7 +1160,11 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
       .catch(() => {});
     await new Promise((r) => setTimeout(r, 50));
     step('app.close');
-    await app.close().catch(() => {});
+    // #700: the app's own process ending — exited, and every copy of its stdio closed — IS the graceful close. Playwright's
+    // `close()` asks main to quit over the inspector and waits for that call too; when main has already quit on its own
+    // (destroying the last window ends it), the call can go unanswered for the whole grace. The Linux lane measured it:
+    // main gone, nothing holding its stdio as root at +2 s, and `close()` still pending at 15 s, 13 rounds in 30.
+    await Promise.race([app.close().catch(() => {}), processClosed.then(() => step('process closed'))]);
   })();
 
   /*
