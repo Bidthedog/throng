@@ -2510,6 +2510,9 @@ export class EditorCoordinator {
       if (result.reason === 'unrepresentable') this.refuseSave(doc, result.unrepresentable);
       return result; // keep the buffer unsaved
     }
+    // The panel was closed while the write was awaited: the file is written, but there is no document
+    // left to claim it, watch it or relay to — doing so left a claim no panel answers.
+    if (this.docs.get(doc.panelId) !== doc) return result;
     this.adoptSavedFormat(doc, payload.encoding);
 
     // Success: record the (possibly new) path, mark clean, drop the recovery temp.
@@ -2603,6 +2606,7 @@ export class EditorCoordinator {
         ? refused('This file can only be saved inside the project it moved to.')
         : result;
     }
+    if (this.docs.get(doc.panelId) !== doc) return result;
     this.adoptSavedFormat(doc);
     const pathChanged = doc.absPath !== target;
     doc.absPath = target;
