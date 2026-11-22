@@ -1,6 +1,6 @@
 {
   "name": "throng",
-  "version": "1.0.0-beta1",
+  "version": "1.0.0-beta2",
   "private": true,
   "description": "throng — project-first terminal & agent workspace",
   "author": "Christopher Sebok",
