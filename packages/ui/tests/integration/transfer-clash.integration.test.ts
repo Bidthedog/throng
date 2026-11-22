@@ -116,6 +116,22 @@ describe('the answers (FR-018a, FR-018b, FR-018f)', () => {
     expect(r.undo).toBeNull();
   });
 
+  // A file `foo/foo` cut and pasted beside its folder clashes with that folder — which holds the file itself. Replace
+  // disposed of the folder, the file inside it with it, and then had nothing to land.
+  it('Replace never disposes of a folder that holds the incoming item', async () => {
+    await setup();
+    replaceMode = 'permanent';
+    await put(join(h.rootB, 'dest', 'foo', 'foo'), 'the only copy');
+    answers = [{ choice: 'replace', applyToAll: false }];
+    const r = await h.svc.paste(1, join(h.rootB, 'dest'), {
+      mode: 'cut',
+      items: [{ absPath: join(h.rootB, 'dest', 'foo', 'foo'), projectId: 'B', projectRoot: h.rootB }],
+    }).result;
+    expect(await snapshotTree(join(h.rootB, 'dest', 'foo'))).toEqual({ foo: 'the only copy' });
+    expect(r.failures).toHaveLength(1);
+    expect(r.failures[0]!.message).toMatch(/inside the folder it would replace/);
+  });
+
   it('Skip leaves both items untouched and the source on the clipboard', async () => {
     await setup();
     answers = [{ choice: 'skip', applyToAll: false }];
