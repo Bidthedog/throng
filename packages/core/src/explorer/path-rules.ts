@@ -31,7 +31,9 @@ export function relPathUnderRoot(root: string, abs: string): string | null {
   const absTidy = toForwardSlashes(abs.trim()).replace(/\/+/g, '/').replace(/\/$/, '');
   const r = normaliseFolder(root);
   if (!r || !absTidy || !pathCompareKey(absTidy).startsWith(`${r}/`)) return null;
-  return absTidy.slice(r.length + 1);
+  // By segments, never by `r.length`: lower-casing is not length-preserving ('İ' becomes two units),
+  // and the tidy-ups never add or remove a separator — the same cut as `remainderUnder`.
+  return absTidy.split('/').slice(r.split('/').length).join('/');
 }
 
 /**

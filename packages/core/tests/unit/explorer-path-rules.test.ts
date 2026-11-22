@@ -26,6 +26,12 @@ describe('explorer path-rules confinement (004 T035/T040)', () => {
     expect(relPathUnderRoot('C:/proj/', 'C:/proj//src/Index.ts')).toBe('src/Index.ts');
   });
 
+  it('cuts a root whose name lower-cases longer than it is spelled by segments, not length', () => {
+    // 'İ'.toLowerCase() is two UTF-16 units: a length cut ate the first letter of every name below it.
+    expect(relPathUnderRoot('C:/İx', 'C:/İx/a.png')).toBe('a.png');
+    expect(relPathUnderRoot('C:/İx', 'C:\\İx\\img\\a.png')).toBe('img/a.png');
+  });
+
   it('returns null for the root itself and for anything outside it (#188)', () => {
     // The root row is a folder, never a file a reveal could mean.
     expect(relPathUnderRoot(ROOT, 'C:/proj')).toBeNull();
