@@ -21,7 +21,9 @@ Under native Wayland, Preferences and About can go behind the main window when y
 
 The defaults are the same as on Windows. GNOME keeps `Ctrl+Shift+Alt` with the arrow keys, so move focus between panels with the keypad instead: `Ctrl+Shift+Alt` with 8, 2, 4 or 6, for up, down, left or right. The preferences list these as `Ctrl+Shift+Alt+ArrowUp` and so on, because that is what those keys report. A keyboard with no keypad needs [its own chords](key-bindings.md).
 
-The keypad's `+` and `-` do nothing with `Ctrl+Alt`, because those presses never reach throng. Zoom a panel with `Ctrl+Alt+=` and `Ctrl+Alt+-` on the main row, or `Ctrl+wheel`.
+Under XWayland, the keypad's `+` and `-` do nothing with `Ctrl+Alt`: the standard Linux keyboard layout makes those presses the X server's own video-mode switch, so XWayland keeps them and throng never sees them. Zoom a panel with `Ctrl+Alt+=` and `Ctrl+Alt+-` on the main row, or `Ctrl+wheel`. The keypad works for zoom under [native Wayland](preferences.md), or under XWayland once the layout's server keys are turned off: `gsettings set org.gnome.desktop.input-sources xkb-options "['srvrkeys:none']"` (on GNOME; add it to any options already set there).
+
+The middle mouse button pastes nothing anywhere in throng, terminals included, unlike most Linux programs. Paste with `Ctrl+V` or the right-click menu. `Ctrl+MiddleClick` still resets a panel's zoom, and dragging with the middle button still moves around a preview. A program in a terminal that reads the mouse, such as tmux or vim, never receives the middle button, so it cannot paste its own buffer on a middle click either.
 
 ## Terminals
 
@@ -40,8 +42,9 @@ The keypad's `+` and `-` do nothing with `Ctrl+Alt`, because those presses never
 - Deleted files go to the Trash. Undo restores them from your home Trash or the Trash of the disk they were on.
 - An open folder is not protected from being renamed or deleted by another program, because Linux has no way to hold one.
   throng notices and reports it instead.
-- A project past the machine's limit on watched folders stops updating live, and the notice says so. To raise the limit:
-  `sudo sysctl fs.inotify.max_user_watches=524288`.
+- A project past the machine's limit on watched folders stops updating live, and the notice says so. Folders the
+  explorer and Find in Files both ignore, such as `node_modules` and `.git`, are not watched and do not count towards
+  it. To raise the limit: `sudo sysctl fs.inotify.max_user_watches=524288`.
 - **Open as throng project** is a folder menu item in Nemo and Dolphin. GNOME Files lists it under **Open With** instead.
 - The Properties dialog has no button for the operating system's own Properties, because Linux has no standard one. It shows the owner, group and permissions instead.
 - A file is treated as a program by its extension, as on Windows, so running a file with no extension is not warned about.
