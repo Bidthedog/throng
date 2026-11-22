@@ -586,7 +586,7 @@ export function TerminalPanel({
     chord: firstBinding(keybindings, t.command),
     onToggle: () => flipToggle(t.id),
   }));
-  menuTogglesRef.current = statusToggles.map((t) => ({ label: t.label, on: t.on, chord: t.chord, toggle: t.onToggle }));
+  menuTogglesRef.current = statusToggles.map((t) => ({ label: t.label, icon: t.icon, on: t.on, chord: t.chord, toggle: t.onToggle }));
 
   // 025 FR-019 — resolve a STRANDED observation during render, before the launch reads it.
   //

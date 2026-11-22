@@ -21,6 +21,7 @@
  * entirely — never both, never one leading the other. The call site (`terminal-panel.tsx`) decides
  * which menu to open; this builder only ever draws the ordinary one.
  */
+import type { IconKey } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 
@@ -36,6 +37,8 @@ export interface TerminalContentMenuActions {
 /** 076 FR-005 — one status-bar toggle as its menu item: the label, the resolved value, the chord and the flip. */
 export interface TerminalMenuToggle {
   label: string;
+  /** The icon its status-bar toggle draws (076 FR-002), struck through on the menu row while off. */
+  icon: IconKey;
   on: boolean;
   chord?: string;
   toggle: () => void;
@@ -101,7 +104,9 @@ export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[]
   for (const t of args.toggles ?? []) {
     items.push({
       label: t.label,
+      icon: t.icon,
       checked: t.on,
+      settingToggle: true,
       testId: `menu-item-${t.label}`,
       section: 'viewState',
       shortcut: t.chord,
