@@ -513,7 +513,17 @@ jobs:
           path: |
             test-results/
             e2e-results/
+            !test-results/**/app-logs/**
           if-no-files-found: ignore
+      # The app's main.log and daemon.log from a failed test or a stalled shutdown (harness.ts, app-logs.ts): logs only.
+      - name: Upload the app logs of failed tests
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: app-logs-e2e-windows-${{ matrix.shard }}
+          path: test-results/**/app-logs/**
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Fail fast, cancel the run
         if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
         uses: ./.github/actions/fail-fast-cancel
@@ -573,7 +583,17 @@ jobs:
           path: |
             test-results/
             e2e-results/
+            !test-results/**/app-logs/**
           if-no-files-found: ignore
+      # The app's main.log and daemon.log from a failed test or a stalled shutdown (harness.ts, app-logs.ts): logs only.
+      - name: Upload the app logs of failed tests
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: app-logs-e2e-linux-${{ matrix.shard }}
+          path: test-results/**/app-logs/**
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Fail fast, cancel the run
         if: (failure() || cancelled()) && needs.plan.outputs.fail_fast == 'true'
         uses: ./.github/actions/fail-fast-cancel
@@ -634,7 +654,17 @@ jobs:
           path: |
             test-results/
             e2e-results/
+            !test-results/**/app-logs/**
           if-no-files-found: ignore
+      # The app's main.log and daemon.log from a failed test or a stalled shutdown (harness.ts, app-logs.ts): logs only.
+      - name: Upload the app logs of failed tests
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: app-logs-e2e-macos-${{ matrix.runner }}-${{ matrix.shard }}
+          path: test-results/**/app-logs/**
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Clear what the run left behind
         if: always()
         run: node scripts/clear-dev-state.mjs
