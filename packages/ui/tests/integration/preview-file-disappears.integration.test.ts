@@ -61,10 +61,36 @@ afterEach(async () => {
   await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
-async function shown(file: string): Promise<void> {
+/** Writes `body` to `file`, shows it in a standalone preview, and returns once the preview's watch is heard to work. */
+async function shown(file: string, body: string | Buffer): Promise<void> {
+  await writeFile(file, body);
   const res = await previews.attach(3, { panelId: 'v1', projectId: 'P', filePath: file });
   if (!res.ok) throw new Error(`attach refused: ${res.reason}`);
   expect(res.update.notice).toBeNull();
+  await watchHeard(file, body);
+}
+
+/**
+ * Waits until the preview's watch reports a change, so the removal that follows cannot fall before the watch is live.
+ *
+ * On macOS the watch is FSEvents, which libuv starts on its own thread after `fs.watch` has returned and restarts
+ * whenever another watch is added; a change made before the stream is running is never reported. The first test in
+ * this file removed its file inside that gap and no event ever came: no re-read, nothing logged, `saysGone` empty after
+ * its full 4 s (pipeline 45121055096, macos-26). Linux and Windows arm their watch before `fs.watch` returns.
+ *
+ * So the file is rewritten until the preview re-reads it. Each re-read pushes an update: a text preview's text has
+ * changed, and a binary preview's resource URL carries a new revision on every read. A rewrite lost to the gap is
+ * followed by another. Each is given 250 ms — the 20 ms debounce, libuv's 50 ms FSEvents latency and a read, with
+ * room under load — inside the same 4 s bound `saysGone` uses.
+ */
+async function watchHeard(file: string, body: string | Buffer): Promise<void> {
+  const before = updatesFor('v1').length;
+  const deadline = Date.now() + 4000;
+  for (let i = 1; Date.now() < deadline; i++) {
+    await writeFile(file, typeof body === 'string' ? `${body}${' '.repeat(i)}` : body);
+    if (await until(() => (updatesFor('v1').length > before ? true : undefined), 250)) return;
+  }
+  throw new Error(`the preview's watch on ${file} never reported a change`);
 }
 
 const saysGone = (): Promise<PreviewUpdate | undefined> => until(() => updatesFor('v1').find((u) => u.notice?.kind === 'deleted'));
@@ -82,8 +108,7 @@ describe('a previewed file that disappears says so (#696)', () => {
   for (const [name, body] of FILES) {
     it(`${name}: deleted`, async () => {
       const file = join(root, name);
-      await writeFile(file, body);
-      await shown(file);
+      await shown(file, body);
       await unlink(file);
       expect(await saysGone()).toBeDefined();
     });
@@ -91,8 +116,7 @@ describe('a previewed file that disappears says so (#696)', () => {
 
   it('notes.md: moved away outside throng', async () => {
     const file = join(root, 'notes.md');
-    await writeFile(file, '# Notes\n');
-    await shown(file);
+    await shown(file, '# Notes\n');
     await mkdir(join(root, 'elsewhere'));
     await rename(file, join(root, 'elsewhere', 'notes.md'));
     expect(await saysGone()).toBeDefined();
@@ -102,8 +126,7 @@ describe('a previewed file that disappears says so (#696)', () => {
     const dir = join(root, 'docs');
     await mkdir(dir);
     const file = join(dir, 'notes.md');
-    await writeFile(file, '# Notes\n');
-    await shown(file);
+    await shown(file, '# Notes\n');
     await rm(dir, { recursive: true, force: true });
     expect(await saysGone()).toBeDefined();
   });
@@ -112,8 +135,7 @@ describe('a previewed file that disappears says so (#696)', () => {
     const dir = join(root, 'docs');
     await mkdir(dir);
     const file = join(dir, 'notes.md');
-    await writeFile(file, '# Notes\n');
-    await shown(file);
+    await shown(file, '# Notes\n');
     await rename(dir, join(root, 'docs-old'));
     expect(await saysGone()).toBeDefined();
   });
@@ -144,6 +166,7 @@ describe('a parented preview whose file disappears says so (#696)', () => {
     const res = await previews.attach(3, { panelId: 'v1', projectId: 'P', filePath: file });
     if (!res.ok) throw new Error(`attach refused: ${res.reason}`);
     expect(res.update.parent).toMatchObject({ panelId: 'ed1' });
+    await watchHeard(file, '# Notes\n'); // the editor's watch, which the preview hears through its document
     await unlink(file);
     expect(await saysGone()).toBeDefined();
   });
