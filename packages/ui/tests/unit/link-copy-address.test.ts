@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResolvedLink } from '@throng/core';
 import { copyLinkAddress } from '../../src/renderer/links/link-actions.js';
 
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
+
 /**
  * 045 FR-032 — what Copy Link to Clipboard puts on the clipboard (T082).
  *

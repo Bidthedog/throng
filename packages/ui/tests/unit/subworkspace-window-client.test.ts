@@ -8,6 +8,10 @@ import { createDefaultLayout, type SubWorkspace } from '@throng/core';
 import type { ThrongBridge } from '../../src/renderer/state/bridge.js';
 import { SubWorkspaceWorkspaceClient } from '../../src/renderer/state/subworkspace-window-client.js';
 
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
+
 const sub = (id: string, name: string): SubWorkspace => ({
   id,
   ownerUser: 'local',

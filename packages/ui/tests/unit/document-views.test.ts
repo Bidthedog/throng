@@ -7,16 +7,27 @@
  * `editor-replace-open.e2e.ts:243` waited for `dirty-close-dialog` closing one of 054's replaced pair, and it never
  * came (Windows and Linux).
  *
- * Layer: component — the decision reads the live editor and preview stores; what the close then shows is
- * `preview-header-actions.test.ts`'s and the E2E's.
+ * Layer: unit — the decision reads the editor and preview stores, plain modules that need no DOM; what the close then
+ * shows is `preview-header-actions.test.ts`'s and the E2E's.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDefaultLayout, type Panel, type WorkspaceLayout } from '@throng/core';
+import { createDefaultLayout, type Panel, type PreviewUpdate, type WorkspaceLayout } from '@throng/core';
 import { anotherPanelShowsFile } from '../../src/renderer/editor/document-views.js';
 import { removeEditorState, setEditorState } from '../../src/renderer/editor/editor-state.js';
 import { __resetPreviewStore, applyPreviewUpdate } from '../../src/renderer/preview/preview-store.js';
-import { previewUpdate } from './helpers/mount-preview-panel.js';
 
+/** The component layer's `previewUpdate` builder, inlined: that helper's module mounts React and cannot load in node. */
+const previewUpdate = (over: Partial<PreviewUpdate> & { revision: number }): PreviewUpdate => ({
+  panelId: 'p1',
+  filePath: 'D:/proj/README.md',
+  providerId: 'markdown',
+  content: { kind: 'text', text: '# Readme\n' },
+  dirty: false,
+  parent: null,
+  notice: null,
+  navigationSeq: 0,
+  ...over,
+});
 const FILE = 'D:/proj/shared.csv';
 
 function layoutOf(panels: Panel[]): WorkspaceLayout {

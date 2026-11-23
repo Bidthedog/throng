@@ -31,6 +31,10 @@ import { linkScanOptions } from '../../src/renderer/links/link-scan-options.js';
 import { __resetRefusedSchemesForTests } from '../../src/renderer/links/refused-schemes-client.js';
 import { createLinkViewMarks, terminalViewScan } from '../../src/renderer/terminal/link-view-marks.js';
 
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
+
 /**
  * 045 T108 → T157, SC-008 (amended 2026-09-18) — **either detection switch, or the existence-check
  * timeout**, applies to the next gesture in both panel types, with nothing remounted.

@@ -1,6 +1,6 @@
 import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { vi, beforeEach, describe, expect, it } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import {
   SHIPPED_PREVIEW_PROVIDERS,
@@ -27,6 +27,10 @@ import {
   type EditorLinkAt,
   type EditorLinkDeps,
 } from '../../src/renderer/editor/link-decorations.js';
+
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
 
 /**
  * 045 T110, FR-055 / SC-007 — **nothing outside the owning project opens in a throng editor or

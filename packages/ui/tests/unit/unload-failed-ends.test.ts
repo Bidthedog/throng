@@ -3,11 +3,15 @@
  * notice the Unload already raises ("one condition, one notice"), naming how many are still running
  * and that they reattach — because a failed end leaves an ordinary running terminal.
  *
- * Layer: component — the orchestrator runs in jsdom over a mocked bridge; no daemon is needed to
+ * Layer: unit — the orchestrator is plain logic over a mocked bridge; no DOM and no daemon are needed to
  * decide what the notice says about a `killAll` result.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { unloadProject, type UnloadCollaborators } from '../../src/renderer/sidebar/unload-project.js';
+
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
 
 const PROJECT_ID = 'proj-1';
 const PROJECT_NAME = 'Widgets';

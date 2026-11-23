@@ -30,6 +30,10 @@ import {
 } from '../../src/renderer/search/search-store.js';
 import { registerPanelSearch, unregisterPanelSearch } from '../../src/renderer/search/search-controller.js';
 
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
+
 const EDITOR = { selection: { ranges: [{ anchor: 3, head: 9 }], main: 0 }, scrollAnchor: 120 };
 const TERMINAL = { offsetFromBottom: 40, selection: { start: { x: 1, y: 2 }, end: { x: 5, y: 2 } } };
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { vi, beforeEach, describe, expect, it } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import {
   createPreviewProviderRegistry,
@@ -17,6 +17,10 @@ import {
   followLinkAtCaret,
   type EditorLinkDeps,
 } from '../../src/renderer/editor/link-decorations.js';
+
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
 
 /**
  * 045 T157 (rewritten from T104, as the 2026-09-18 supersessions permit) — **the click rule**, wired

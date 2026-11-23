@@ -387,12 +387,9 @@ describe('the header restores a minimised panel (FR-067)', () => {
     expect(onToggleMinimise).toHaveBeenCalledTimes(1);
     fireEvent.click(header);
     expect(onToggleMinimise).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not double-fire when the restore button itself is clicked', async () => {
-    const { onToggleMinimise } = await mount({ minimised: true });
+    // The restore button sits inside the header: its own click must not double-fire through the header's.
     fireEvent.click(screen.getByTestId('notifications-restore'));
-    expect(onToggleMinimise).toHaveBeenCalledTimes(1);
+    expect(onToggleMinimise).toHaveBeenCalledTimes(3);
   });
 
   it('does NOT minimise on a click on an open panel\'s header; only its control does', async () => {
