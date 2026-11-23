@@ -311,6 +311,10 @@ test('a program that titles itself is named `app: title`, across a project switc
       // never left at `node | …`.
       await win.locator('.project-item', { hasText: 'TitleApp' }).click({ button: 'right' });
       await win.getByTestId('menu-item-Unload Project and End Terminals').click();
+      // The unload releases the project only after `settleLayoutSaves()` (unload-project.ts), so until the row reads
+      // unloaded TitleApp is still the open project: a click on it then is a no-op that settles at once, the OLD
+      // terminal still reads `titler running`, and the release that lands afterwards empties the workspace (#705).
+      await expect(win.locator('.project-item', { hasText: 'TitleApp' })).toHaveAttribute('data-loaded', 'false');
       await switchProject(win, 'TitleApp');
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText('titler running', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
       await expectName(win, pid, titled());
