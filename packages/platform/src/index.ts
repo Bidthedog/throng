@@ -153,7 +153,7 @@ export interface PlatformServices {
   readonly executableExtensions: () => IExecutableExtensions;
   readonly refusedUriSchemes: () => IRefusedUriSchemes;
   /** `restoreFromRecycleBin` is the caller's on Windows (UI main owns that script); ignored elsewhere. */
-  readonly trashRestore: (windowsRestore?: (originalPath: string) => Promise<void>) => ITrashRestore;
+  readonly trashRestore: (windowsRestore?: (originalPath: string, deletedAt: number) => Promise<void>) => ITrashRestore;
   /** Whether a window can carry a taskbar overlay. Electron documents `setOverlayIcon` for Windows only (062 FR-008). */
   readonly hasTaskbarOverlay: boolean;
   readonly volumeRoots: () => IVolumeRoots;

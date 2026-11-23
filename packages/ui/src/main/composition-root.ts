@@ -264,7 +264,7 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
    * RESTORE is per-platform (062 FR-024): PowerShell `Shell.Application` on Windows, the freedesktop
    * trash on Linux.
    */
-  const trashRestore = platform.trashRestore((originalPath) => restoreFromRecycleBin(originalPath));
+  const trashRestore = platform.trashRestore((originalPath, deletedAt) => restoreFromRecycleBin(originalPath, deletedAt));
   // 070 R6: macOS trashes through the platform, which records where the item went so undo can put it back.
   const trash = trashRestore.trash?.bind(trashRestore) ?? ((p: string) => shell.trashItem(p));
   container
