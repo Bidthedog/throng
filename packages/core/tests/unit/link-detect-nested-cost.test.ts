@@ -9,12 +9,15 @@ import { detectPathCandidates } from '../../src/links/detect.js';
  * them, because each bracket pair re-scanned its whole contents for FR-188f's quoted-sentence rule — before asking
  * whether the contents read as a path at all, which a JSON object never does.
  *
- * Layer: unit — detection is a pure function of the line. The bound is a RATIO of two scans timed the same way, so a
- * busy machine slows both sides alike: each side is this thread's CPU time, the fastest of three passes.
+ * Layer: unit — detection is a pure function of the line. The bound is a RATIO of two scans timed the same way: each
+ * side is this thread's CPU time, the fastest of six passes. The passes ALTERNATE nested and flat, so a slow spell on a
+ * shared runner lands on both sides alike. Timed one side after the other, it can land on one side only: CI read 2.12
+ * (PR #709's ready run, 0.536 ms nested against 0.252 ms flat) where this machine reads 1.25 to 1.27 every time
+ * interleaved and 1.13 to 1.34 back to back. The defect this guards read 7.7.
  *
  * Each pass runs scans until the clock has moved SAMPLE_MS, never a fixed count: Windows reports thread CPU time in
  * ~15.6 ms ticks, so a fixed 40 flat scans (about 1 ms of work) read as 0 ms there and the ratio as Infinity
- * (pipeline 44889368543). Measured over at least 200 ms, a tick is under 8% of either side.
+ * (pipeline 44889368543). Measured over at least 200 ms, a tick is under 8% of one pass.
  */
 const record = (i: number): string =>
   `{ ""k"": ${i}, ""v"": ""quokka dolor aliqua labore ${i}"", ""n"": 0.${(i * 7919) % 10_000}, ""tags"": [ ""a"", ""b"" ] }`;
@@ -28,30 +31,36 @@ const cpuMs = (): number => {
   return u ? (u.user + u.system) / 1000 : performance.now();
 };
 const SAMPLE_MS = 200;
-function msPerScan(line: string): number {
-  let best = Number.POSITIVE_INFINITY;
-  for (let sample = 0; sample < 3; sample += 1) {
-    const started = cpuMs();
-    let runs = 0;
-    let elapsed = 0;
-    while (elapsed < SAMPLE_MS) {
-      for (let r = 0; r < 20; r += 1) detectPathCandidates(line, []);
-      runs += 20;
-      elapsed = cpuMs() - started;
-    }
-    best = Math.min(best, elapsed / runs);
+const PASSES = 6;
+function onePass(line: string): number {
+  const started = cpuMs();
+  let runs = 0;
+  let elapsed = 0;
+  while (elapsed < SAMPLE_MS) {
+    for (let r = 0; r < 20; r += 1) detectPathCandidates(line, []);
+    runs += 20;
+    elapsed = cpuMs() - started;
   }
-  return best;
+  return elapsed / runs;
+}
+/** The fastest pass of each line, the two lines' passes alternating. */
+function msPerScan(): { nested: number; flat: number } {
+  let nested = Number.POSITIVE_INFINITY;
+  let flat = Number.POSITIVE_INFINITY;
+  for (let pass = 0; pass < PASSES; pass += 1) {
+    nested = Math.min(nested, onePass(NESTED));
+    flat = Math.min(flat, onePass(FLAT));
+  }
+  return { nested, flat };
 }
 
 describe('path detection on a line of nested brackets (045 FR-188f, Principle XII)', () => {
   it('finds no path in a JSON document, and costs no more than twice the same characters without brackets', () => {
     expect(NESTED.length).toBeGreaterThan(1500);
     expect(detectPathCandidates(NESTED, [])).toEqual([]);
-    msPerScan(NESTED); // warm the JIT
-    msPerScan(FLAT);
-    const nested = msPerScan(NESTED);
-    const flat = msPerScan(FLAT);
+    onePass(NESTED); // warm the JIT
+    onePass(FLAT);
+    const { nested, flat } = msPerScan();
     // A zero would make the ratio Infinity (or NaN), whatever the scan cost: the clock, not the code.
     expect(flat, 'the flat scan measured as no time at all').toBeGreaterThan(0);
     expect(nested / flat, `nested ${nested.toFixed(3)} ms, flat ${flat.toFixed(3)} ms per scan`).toBeLessThanOrEqual(2);
