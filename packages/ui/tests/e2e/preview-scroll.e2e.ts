@@ -633,13 +633,14 @@ const frames = (win: Page, n: number): Promise<void> =>
  * The editor's top line is the gutter row under the scroller's top edge — where the relay's `posAtCoords`
  * reads it — and the preview's top block is chosen exactly as `topBlockLine` chooses it. After each step both
  * are read until they stop moving, and then five consecutive animation frames must show the same two offsets.
- * The toggle's negative half waits thirty frames — a report, a request and CodeMirror's measure pass each
- * take one — and is only meaningful because the same gestures moved the other side while sync was on.
+ * "Synchronise Scrolling off stops both" was TRIMMED (suite audit): `component/preview-scroll-sync.test.ts`
+ * "(2) does nothing while the setting is off", "(2b) ... turned off, the preview stops following" and "(7b) drives
+ * nothing while the setting is off" cover both directions (one `syncing` flag gates them).
  *
  * The toggle is the editor's status-bar button off and the preview's back on, so both buttons are seen to
  * flip the one setting; the four menu items are component-tested. The shared app ends with sync on again.
  */
-test('scrolling either side of a parented preview moves the other, a caret move moves the preview, and Synchronise Scrolling off stops both (FR-121, FR-122)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+test('scrolling either side of a parented preview moves the other, a caret move moves the preview, and both Synchronise Scrolling buttons flip the one setting (FR-121, FR-122)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const { app, win } = shared;
   const root = mkdtempSync(join(tmpdir(), 'throng-preview-sync-'));
   cpSync(join(FIXTURES, 'sync-two-way.md'), join(root, 'sync-two-way.md'));
@@ -820,22 +821,6 @@ test('scrolling either side of a parented preview moves the other, a caret move 
     await editorToggle.click();
     await expect(editorToggle).toHaveAttribute('aria-pressed', 'false');
     await expect(previewToggle).toHaveAttribute('aria-pressed', 'false');
-
-    // The editor moves; the preview does not.
-    await clickVisibleEditorLine(win, editorId);
-    await win.keyboard.press('ControlOrMeta+Home');
-    await expect.poll(async () => (await readSync(win, editorId, previewId)).editorScrollTop).toBe(0);
-    await frames(win, 30);
-    const editorMoved = await settledSync(win, editorId, previewId);
-    expect(editorMoved.previewScrollTop, 'with sync off, Ctrl+Home in the editor moved the preview').toBe(ended.previewScrollTop);
-
-    // The preview moves; the editor does not.
-    await wheelHeadingToTop(win, previewId, 'Charlie');
-    await frames(win, 30);
-    const previewMoved = await settledSync(win, editorId, previewId);
-    expect(previewMoved.previewScrollTop, 'the wheel really moved the preview').not.toBe(ended.previewScrollTop);
-    expect(previewMoved.editorScrollTop, 'with sync off, wheeling the preview moved the editor').toBe(0);
-    expect(previewMoved.editorTop).toBe(0);
 
     // (4) Back ON, from the preview's status bar — which also leaves the shared app as it was found.
     await previewToggle.click();

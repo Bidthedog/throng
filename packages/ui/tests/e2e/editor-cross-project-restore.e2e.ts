@@ -12,16 +12,15 @@
  *     second tab too. Switch to project B and its editor flashes its own file, then loads the LAST
  *     file project A loaded. Where that path does not exist under B, the "Cannot open file" notice
  *     appears; where it does, B's panel is silently pointed at A's file.
- *  2. **A dirty buffer re-pointed at the wrong project.** With B's editor left dirty at close, open
- *     A first and then switch to B: the panel names a project-A path while the buffer still holds
- *     project B's unsaved content. Only the save-confinement guard stops that becoming data loss,
- *     and it stops firing the moment the two projects share a relative path.
+ *  2. **A dirty buffer re-pointed at the wrong project.** MOVED to
+ *     `component/editor-project-switch-identity.test.ts`: the same-shaped-layout reuse it needs is a
+ *     React reconciliation fact, shown in jsdom without a second Electron launch.
  *
  * The controls the report calls "what works" (two editors in one tab; a second tab's editors) are
  * asserted in test 1 rather than in their own test: they are the same restart, they cost nothing
  * extra there, and if the fix ever narrows to "reload everything on switch" they are what notices.
  */
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -79,23 +78,6 @@ async function expectLayoutSaved(
 /** Tabs in a persisted layout. */
 const savedTabCount = (json: string): number =>
   ((JSON.parse(json) as { tabs?: unknown[] }).tabs ?? []).length;
-
-/**
- * The dirty-buffer recovery snapshot's persisted text for a panel, or null while it has not
- * (yet) been written — `EditorRecovery.write` (packages/ui/src/main/editor-recovery.ts), on the
- * same 400ms debounce, to `<userDataDir>/recovery/<encoded panelId>`. This is the OTHER deferred
- * write a restart depends on: the layout says which file a panel has open, this says what its
- * unsaved buffer holds.
- */
-function recoveredText(userDataDir: string, panelId: string): string | null {
-  try {
-    const raw = readFileSync(join(userDataDir, 'recovery', encodeURIComponent(panelId)), 'utf8');
-    const parsed = JSON.parse(raw) as { text?: string };
-    return typeof parsed.text === 'string' ? parsed.text : null;
-  } catch {
-    return null; // not written yet, or a transient read of a mid-write file
-  }
-}
 
 /**
  * Open a project from the sidebar and wait for ITS OWN workspace to be on screen.
@@ -246,85 +228,6 @@ test('switching to a second project restores ITS files, not the one the last pro
          * future rename cannot quietly retire this line without going red somewhere loud first.
          */
         await expect(win.getByTestId(`panel-failure-${pid}`)).toHaveCount(0);
-      },
-      { dataDir, userDataDir },
-    );
-  } finally {
-    for (const d of [rootA, rootB, dataDir, userDataDir]) cleanupTemp(d);
-  }
-});
-
-test('a dirty buffer restored in another project keeps ITS OWN path (#228)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
-  test.setTimeout(240_000);
-  const rootA = makeProject('throng-x228d-alpha-', { 'alpha-only.txt': 'ALPHA-ONLY\n' });
-  const rootB = makeProject('throng-x228d-beta-', { 'beta-only.txt': 'BETA-ONLY\n' });
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-x228d-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-x228d-ud-'));
-  let betaPanel = ''; // captured in launch 1; see `enterProject`
-  try {
-    // ── Launch 1: A clean, B dirty ──
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'DirtyAlpha', rootA);
-        const a1 = await firstPanelId(win);
-        await openFileInPanel(win, a1, 'alpha-only.txt');
-
-        await createProject(win, 'DirtyBeta', rootB);
-        betaPanel = await firstPanelId(win);
-        await openFileInPanel(win, betaPanel, 'beta-only.txt');
-
-        // Unsaved work in B — the only copy of it, which is what makes this the worse half.
-        const content = win.getByTestId(`editor-${betaPanel}`).locator('.cm-content');
-        await content.click();
-        await win.keyboard.type('BETA-UNSAVED-EDIT');
-        await expect(win.getByTestId(`panel-unsaved-${betaPanel}`)).toBeVisible({ timeout: 15_000 });
-
-        await expectLayoutSaved(dataDir, 'DirtyAlpha', (json) => json.includes('alpha-only.txt'));
-        await expectLayoutSaved(dataDir, 'DirtyBeta', (json) => json.includes('beta-only.txt'));
-        await expect
-          .poll(() => (recoveredText(userDataDir, betaPanel) ?? '').includes('BETA-UNSAVED-EDIT'), {
-            timeout: 15_000,
-            message: `the dirty buffer's recovery snapshot for "${betaPanel}" was never written to disk`,
-          })
-          .toBe(true);
-      },
-      { dataDir, userDataDir },
-    );
-
-    // ── Launch 2: open the CLEAN project first, then switch to the dirty one ──
-    await runApp(
-      async (_app, win) => {
-        await enterProject(win, 'DirtyAlpha');
-        await expect
-          .poll(async () => await openFileNames(win), { timeout: 20_000 })
-          .toEqual(['alpha-only.txt']);
-
-        await enterProject(win, 'DirtyBeta', betaPanel);
-        const pid = betaPanel;
-        await expect(win.getByTestId(`editor-${pid}`)).toBeVisible({ timeout: 20_000 });
-        await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-          'BETA-UNSAVED-EDIT',
-          { timeout: 20_000 },
-        );
-        await quiesced(win.getByTestId(`panel-title-${pid}`), {
-          what: 'beta panel title after the project switch',
-        });
-
-        // The recovered buffer stays attached to the file it was edited FROM. A dirty document
-        // wearing another project's path is unsaveable by the confinement guard — and saveable, over
-        // the wrong file, the moment two projects share a relative path.
-        expect(await openFileNames(win)).toEqual(['beta-only.txt']);
-        await expect(win.getByTestId(`panel-title-${pid}`)).toHaveText('beta-only');
-        await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-          'BETA-UNSAVED-EDIT',
-        );
-        // 030 US4 / T060a — see the note on the first of these: the editor's own banner id is gone,
-        // and a negative left pointing at it would have passed by matching nothing.
-        await expect(win.getByTestId(`panel-failure-${pid}`)).toHaveCount(0);
-        await expect(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
-        // 030 US3 / T052 — see the note on the first of these: the dialog alone no longer covers the
-        // missing-file path, so the consolidated notice is asserted absent too.
-        await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
       },
       { dataDir, userDataDir },
     );

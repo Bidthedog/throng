@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { openApp, runApp as runOwnApp, createProject as newProject, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, focusEditor, pressAction } from './harness.js';
+import { openApp, createProject as newProject, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, focusEditor, pressAction } from './harness.js';
 import { expectWithinSla } from './helpers/sla.js';
 
 /*
@@ -80,8 +80,6 @@ async function docText(win: Page, pid: string): Promise<string> {
 
 const matches = (win: Page, pid: string) =>
   win.getByTestId(`editor-${pid}`).locator('.throng-search-match');
-const currentMatch = (win: Page, pid: string) =>
-  win.getByTestId(`editor-${pid}`).locator('.throng-search-match--current');
 
 /*
  * ── THE CONTROLLER MOVED (035 T055) ──
@@ -116,6 +114,15 @@ const currentMatch = (win: Page, pid: string) =>
  *        the document. The component test can only say `view.focus()` was called.
  *   :158, :209, :248, :334, :357 — selection-seeded input, the SC-007 budget on 10k lines, control
  *        geometry, and block selection. All already reserve-tagged.
+ */
+/*
+ * DELETED (suite audit): "finds as you type, and is a no-op on an untyped panel" and "a ONE-ROW block
+ * seeds the find input; a MULTI-ROW block seeds nothing (FR-025i)". Typing/counting/case-insensitivity
+ * and the seed rules are `unit/editor-search-controller.test.ts` ("finds every case-insensitive match",
+ * "reads EVERY range of a rectangular block", "seeds from a single range even when ... empty ones
+ * beside it", "refuses a multi-line fragment"). The painted-span witness stays in "closing find clears
+ * the highlights" (count 1 before Escape). The untyped-panel half asserted only the render tree's
+ * shape (no FindBar is ever rendered for an untyped panel) and could not fail.
  */
 /*
  * DELETED (034 FR-045): "find next / previous step through matches and wrap at both ends".
@@ -157,84 +164,6 @@ test('seeds the term from the selection, and shows a no-results state for a miss
       await expect(win.getByTestId('find-count')).toHaveText('No results');
       await expect(matches(win, pid)).toHaveCount(0);
       expect(await docText(win, pid)).toContain('needle in haystack');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-/**
- * VERDICT DECLINED (035 T055/FR-022) — this stays, and the reason took two wrong answers to reach.
- *
- * The census said `component`: "no-active-panel is a routing/logic no-op, no OS feature involved".
- * That is true about the CODE and false about what can be proved.
- *
- * ── FIRST WRONG ANSWER: that the test is fine as it is ──
- *
- * It is not. Its assertion — `find-bar-<pid>` has count 0 — cannot fail. `FindBar` is rendered by
- * `EditorPanel` and `TerminalPanel` and by nothing else, and an untyped panel renders the
- * type-selection form instead of either. The absence is a fact about the render tree's SHAPE. Delete
- * the guard this test is named after and it still passes.
- *
- * ── SECOND WRONG ANSWER: that asserting on the STORE fixes it ──
- *
- * It looks like it should. `search-keybindings.tsx:108` has a real guard —
- * `if (!activePanelId || !findKind) return;` — so a component test could mount `SearchKeybindings`
- * on an untyped layout, press Ctrl+F, and assert `getFindState().panelId` stays null.
- *
- * That test was written, it passed, and BOTH of its mutations passed too: removing the kind guard,
- * and forcing every panel to `'editor'`. It was deleted rather than kept.
- *
- * ── WHY, AND THIS IS THE PART WORTH KEEPING ──
- *
- * Two lines down there is a second, independent guard:
- *
- *     const controller = getPanelSearch(activePanelId);
- *     if (!controller) return;
- *
- * An untyped panel never registers a search controller, so the handler returns there whatever the
- * kind guard does. The absence is OVER-DETERMINED, and isolating either guard means constructing an
- * untyped panel that has a registered controller — a state the application cannot produce. A test
- * that has to fabricate an impossible state is asserting about its own fixture.
- *
- * So this test stays as the weak thing it is, honestly labelled, rather than being replaced by a
- * component test that would pass under its own mutation. What would genuinely improve it is a
- * production change — one guard instead of two — and that is not this spec's to make.
- *
- * MERGED (pass 2) into the test below: it runs FIRST there, on the still-untyped panel, so it costs
- * no project and no app run of its own.
- */
-/*
- * MERGED (pass 2): 'finds as you type: highlights every match, marks the current one, counts them'
- * and 'find is a no-op when no panel is active' now run inside this one test, which already needs
- * a project, an editor and the find bar. Each assertion is labelled so a failure names its claim.
- * The closing-find half is split back out (one @reserve per test, 035 FR-016b): it claims focus, the
- * first claims the painted decorations.
- */
-test('finds as you type, and is a no-op on an untyped panel', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'FindProj', root);
-
-      // (merged) find is a no-op while the panel has no type — nothing to search.
-      const untyped = await firstPanelId(win);
-      await pressAction(win, 'search.find');
-      await expect(win.getByTestId(`find-bar-${untyped}`), 'Ctrl+F on an untyped panel opens no find bar').toHaveCount(0);
-
-      const pid = await newEditor(win);
-      await typeInto(win, pid, 'alpha beta\nalpha gamma\nALPHA delta\n');
-
-      await pressAction(win, 'search.find');
-      await expect(win.getByTestId(`find-bar-${pid}`), 'Ctrl+F opens the find bar on an editor').toBeVisible();
-      await win.getByTestId('find-input').fill('alpha');
-
-      // (merged) Case-insensitive by default => all three, highlighted incrementally.
-      await expect(matches(win, pid), 'every case-insensitive match is painted as a span').toHaveCount(3);
-      await expect(currentMatch(win, pid), 'exactly one match is marked current').toHaveCount(1);
-      await expect(win.getByTestId('find-count'), 'the bar counts the matches').toHaveText('1 of 3');
-      // Searching never edits the file (SC-001).
-      expect(await docText(win, pid), 'searching leaves the document untouched').toContain('alpha beta');
     });
   } finally {
     cleanupTemp(root);
@@ -354,79 +283,6 @@ test('every find-bar action control is the same size, and the match toggles draw
           h: first.h,
         });
       }
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-/**
- * 016 FR-025i · T082 — seed-from-selection meets the new selection kinds.
- *
- * The failure these guard against is a silent one: seeding from `selection.main` pre-fills the find
- * input with SOMETHING that plainly came from the selection, so it looks like it worked — while
- * actually searching for one arbitrary row of the user's block.
- */
-
-test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-025i)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
-  try {
-    /*
-     * Its OWN app, not the file's shared one.
-     *
-     * 013 deliberately keeps the find term across a re-open on the same panel, so this test's
-     * subject IS persistent find state — and a shared app carries the previous tests' term and
-     * selection into it. It passes alone and fails in file order, which is the signature of leaked
-     * state rather than a broken feature.
-     */
-    await runOwnApp(async (_app, win) => {
-      await createProject(win, 'SeedProj', root);
-      const pid = await newEditor(win);
-      await typeInto(win, pid, 'alpha\nbeta\ngamma\n');
-
-      // Establish a term, so "seeds nothing" is distinguishable from "seeds empty". The bar stays
-      // OPEN throughout: 013 keeps the term across a re-open on the same panel, and clears it on a
-      // close — so a close here would destroy the very thing this asserts is preserved.
-      await pressAction(win, 'search.find');
-      await win.getByTestId('find-input').fill('gamma');
-      /*
-       * Wait for the term to reach the STORE, not just the input.
-       *
-       * `find-bar.tsx` commits the typed value with a debounce — `setTimeout(() => setTerm(input),
-       * debounceMs)` — and the effect's cleanup CANCELS that timer. The bar also unmounts when it
-       * closes (`if (!open) return null`). So a bar that closes inside the debounce window never
-       * commits the term at all: the input showed "gamma" the whole time, the store still holds "",
-       * and the re-open below reads back "".
-       *
-       * That is what CI failed on (runs 31029008160 and 31030655886, shard 2): `Expected "gamma",
-       * Received ""` at the re-open. Asserting the INPUT's value here proves nothing — it is local
-       * component state, and it is the state that is about to be thrown away. `find-count` is
-       * rendered from `state.term`, so it only reads "1 of 1" once `setTerm` has actually run, which
-       * is the precondition this test's subject depends on.
-       */
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 1');
-
-      // A MULTI-ROW block seeds NOTHING — find keeps the term it had, exactly as 013 already does
-      // for a multi-line selection. It must never pick one row of the block.
-      await focusEditor(win, pid);
-      await win.keyboard.press('ControlOrMeta+Home');
-      await pressAction(win, 'editor.columnSelectDown');
-      await pressAction(win, 'editor.columnSelectDown');
-      await pressAction(win, 'editor.columnSelectRight');
-      await pressAction(win, 'editor.columnSelectRight');
-      await pressAction(win, 'search.find');
-      await expect(win.getByTestId('find-input')).toHaveValue('gamma');
-
-      // A ONE-ROW block — indistinguishable from an ordinary selection, so it DOES seed.
-      await focusEditor(win, pid);
-      await win.keyboard.press('ControlOrMeta+Home');
-      await pressAction(win, 'editor.columnSelectRight');
-      await pressAction(win, 'editor.columnSelectRight');
-      await pressAction(win, 'search.find');
-      await expect(win.getByTestId('find-input')).toHaveValue('al');
-
-      // …and the document is untouched by any of it (013 FR-003).
-      expect(await docText(win, pid)).toContain('alpha');
     });
   } finally {
     cleanupTemp(root);
