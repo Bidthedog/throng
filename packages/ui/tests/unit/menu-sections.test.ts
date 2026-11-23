@@ -2312,7 +2312,8 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
 
     expect(row?.icon).toBe(explorerCopy?.icon);
     expect(row?.section).toBe(explorerCopy?.section);
-    expect(shapeOf(row?.submenu ?? [])).toEqual(['Absolute (Windows)', 'Absolute (POSIX)']);
+    // The unit layer's host traits are Windows', so the Windows form leads and a divider follows it (#713).
+    expect(shapeOf(row?.submenu ?? [])).toEqual(['Absolute (Windows)', '—', 'Absolute (POSIX)']);
     // The explorer's leaves, minus the relative pair — same labels, same glyphs, same order.
     const explorerAbsolute = (explorerCopy?.submenu ?? []).filter((i) => i.label?.startsWith('Absolute'));
     expect((row?.submenu ?? []).map((i) => [i.label, i.icon, i.section])).toEqual(

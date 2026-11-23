@@ -23,7 +23,10 @@
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { DEFAULT_KEYBINDINGS, pathForms, type TargetNode } from '@throng/core';
+import { withHostTraits } from '@throng/core/testing';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
+import { withDividers } from '../../src/renderer/workspace/menu-dividers.js';
+import { copyAbsolutePathSubmenu, copyPathSubmenu as buildCopyPath } from '../../src/renderer/common/copy-path-menu.js';
 import {
   buildContextMenuItems,
   type ContextMenuOps,
@@ -108,11 +111,12 @@ const ROOT = 'D:/proj';
 
 describe('the Copy Path submenu offers four forms and hands each to the clipboard (US9, #156)', () => {
   it('offers exactly the four absolute/relative × slash forms, in the shipped order, each writing its own', () => {
-    const submenu = copyPathSubmenu(ROOT, FILE);
+    // On a Windows host, the Windows forms first (#713); the other hosts are pinned by the #713 block below.
+    const submenu = withHostTraits('windows', () => copyPathSubmenu(ROOT, FILE));
     expect(submenu.map((i) => i.label)).toEqual([
       'Absolute (Windows)',
-      'Absolute (POSIX)',
       'Relative (Windows)',
+      'Absolute (POSIX)',
       'Relative (POSIX)',
     ]);
     // Click them in the order they are drawn. The written texts must come back in the SAME order —
@@ -122,15 +126,15 @@ describe('the Copy Path submenu offers four forms and hands each to the clipboar
     const forms = pathForms(ROOT, FILE.relPath);
     expect(written.map((e) => e.text)).toEqual([
       forms.absWin,
-      forms.absPosix,
       forms.relWin,
+      forms.absPosix,
       forms.relPosix,
     ]);
     // And by literal value, so this test does not merely restate `pathForms` back to itself.
     expect(written.map((e) => e.text)).toEqual([
       'D:\\proj\\src\\b.txt',
-      '/d/proj/src/b.txt',
       'src\\b.txt',
+      '/d/proj/src/b.txt',
       'src/b.txt',
     ]);
   });
@@ -180,5 +184,47 @@ describe('the Copy Path submenu offers four forms and hands each to the clipboar
     const mixed = 'C:\\git/proj\\';
     expect(copyForm(mixed, FILE, 'Absolute (Windows)')).toBe('C:\\git\\proj\\src\\b.txt');
     expect(copyForm(mixed, FILE, 'Absolute (POSIX)')).toBe('/c/git/proj/src/b.txt');
+  });
+});
+
+/**
+ * #713 — the host OS's path forms come first: POSIX on Linux and macOS, Windows on Windows, with a divider between
+ * the two groups. Driven through the pure builder with the host injected, so all three hosts run on any machine.
+ */
+describe('the Copy Path submenu lists the host OS’s forms first (#713)', () => {
+  const FORMS = pathForms(ROOT, FILE.relPath);
+  /** The level as drawn: a label per row, `'—'` for a derived divider. */
+  const drawn = (submenu: MenuAction[] | undefined): string[] =>
+    withDividers(submenu ?? []).map((item) => ('section' in item ? (item.label ?? '') : '—'));
+
+  it.each([
+    ['linux', ['Absolute (POSIX)', 'Relative (POSIX)', '—', 'Absolute (Windows)', 'Relative (Windows)']],
+    ['macos', ['Absolute (POSIX)', 'Relative (POSIX)', '—', 'Absolute (Windows)', 'Relative (Windows)']],
+    ['windows', ['Absolute (Windows)', 'Relative (Windows)', '—', 'Absolute (POSIX)', 'Relative (POSIX)']],
+  ] as const)('on a %s host the full submenu is %j', (os, expected) => {
+    const copy = vi.fn();
+    const menu = buildCopyPath(FORMS, 'navigate', copy, os);
+    expect(menu.label).toBe('Copy Path');
+    expect(drawn(menu.submenu)).toEqual(expected);
+    // Each leaf still copies its own form, and keeps the shared glyph and section.
+    const byLabel: Record<string, string> = {
+      'Absolute (Windows)': FORMS.absWin,
+      'Absolute (POSIX)': FORMS.absPosix,
+      'Relative (Windows)': FORMS.relWin,
+      'Relative (POSIX)': FORMS.relPosix,
+    };
+    for (const leaf of menu.submenu ?? []) {
+      expect([leaf.icon, leaf.section]).toEqual(['copy', 'navigate']);
+      leaf.onClick?.();
+      expect(copy).toHaveBeenLastCalledWith(byLabel[leaf.label ?? '']);
+    }
+  });
+
+  it.each([
+    ['linux', ['Absolute (POSIX)', '—', 'Absolute (Windows)']],
+    ['macos', ['Absolute (POSIX)', '—', 'Absolute (Windows)']],
+    ['windows', ['Absolute (Windows)', '—', 'Absolute (POSIX)']],
+  ] as const)('on a %s host the absolute-only submenu is %j', (os, expected) => {
+    expect(drawn(copyAbsolutePathSubmenu(FORMS, 'navigate', vi.fn(), os).submenu)).toEqual(expected);
   });
 });
