@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import {
   cleanupTemp,
@@ -35,10 +35,10 @@ import { skipIfElevated } from './admin.js';
  *
  * ══ ANTI-VACUITY CONTROL ══
  *
- * The Automatic half runs FIRST and asserts the terminal really does start and really does own a
- * conhost. Without it, the Manual assertion — "no conhosts appeared" — would pass on a machine
- * where terminals were broken for some unrelated reason, or where the flavour never launched. The
- * first half proves the measurement can see a shell; the second proves there is not one.
+ * The Manual test first polls `conhostChildren(daemon)` until it is above zero, after the panel it just created is
+ * visible. That proves the measurement can see a shell on this machine; the later "no new conhosts" assertion then
+ * proves there is not one. (A separate "Automatic starts a real shell" test used to carry this control and was
+ * removed as a duplicate of that poll; the default mode is pinned in `terminal-reload-mode.test.ts`.)
  *
  * Seeds `settings.json` before launch, so it takes its own app (`runOwnApp`) rather than sharing.
  */
@@ -82,51 +82,6 @@ async function makeTerminal(win: import('@playwright/test').Page): Promise<strin
  * ratchet then silently under-counts, which is the one thing a ratchet must not do. Caught by the
  * gate: 99 @terminal against a budget of 101.
  */
-test('Automatic starts a real shell — the control that proves this test can SEE one (039 FR-021)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-    /*
-     * BOTH measurements below are unavailable on an elevated daemon, and they are two separate
-     * assumptions rather than one — which is why this comment names them individually (#112: guard
-     * per assumption, not per file).
-     *
-     *   • the header title's `title` (:96) — the working directory is read back from the shell the
-     *     daemon started. Under the de-elevated agent that readback never reaches the panel, so the
-     *     directory does not appear in the title at all and the poll burns its full 30s.
-     *   • `conhostChildren(daemon)` (:104) — an elevated daemon routes terminals through the agent,
-     *     so the conhosts are the AGENT's children and the daemon's count is 0.
-     *
-     * The first is the one that actually fires, thirty seconds before the second is reached, and it
-     * is the one #316's own diagnosis missed. Every sibling spec asserting either fact already
-     * guards it: `terminal-no-orphans.e2e.ts` for the conhost count, and `terminal-command-memory`,
-     * `terminal-directory-memory` and `open-in-terminal` for the CWD readback.
-     */
-    skipIfElevated();
-    test.setTimeout(120_000);
-    const cfg = freshCfgRoot({ terminals: { reloadMode: 'automatic' } });
-    const root = freshRoot();
-    await runOwnApp(
-      async (_app, win, ctx) => {
-        await createProject(win, 'AutoReload', root);
-        const pid = await makeTerminal(win);
-
-        await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
-        // A real shell, in the project's directory — not merely a rendered surface. `basename`
-        // rather than the whole path, matching the idiom the other terminal specs use: the status
-        // bar shows a display path, not necessarily the absolute one.
-        await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', new RegExp(basename(root).replace(/\W/g, '.')), {
-          timeout: 30_000,
-        });
-
-        // And the daemon owns a conhost for it. This is the measurement the Manual test relies on
-        // being able to make; if it is ever zero here, that test's "no conhosts" proves nothing.
-        const daemon = await daemonPid(ctx.pipeName);
-        await expect
-          .poll(() => conhostChildren(daemon).length, { timeout: 30_000 })
-          .toBeGreaterThan(0);
-      },
-      { env: { ...process.env, THRONG_CONFIG_ROOT: cfg } },
-    );
-});
-
 test('Manual starts NO shell and no conhost, and offers Reload on each panel (039 FR-022/FR-023/FR-026)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     /*
      * Guarded for the daemon-owned-conhost assumption only — this test never reads the directory from the header title.

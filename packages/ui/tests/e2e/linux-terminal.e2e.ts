@@ -26,7 +26,9 @@ async function startShell(win: Page, panelId: string, flavour: string): Promise<
   return term;
 }
 
-for (const flavour of ['bash', 'zsh', 'fish']) {
+// No `bash` case: `terminal.e2e.ts` ('confirms Terminal → a live inline shell…') already drives bash on Linux through
+// the same `pwd` / `echo` steps and then exits it back to the form. Only the shells it does not cover are listed.
+for (const flavour of ['zsh', 'fish']) {
   test(`${flavour}: keystrokes reach the shell, and it starts at the project root`, { tag: ['@linux', '@extended', '@terminal', '@reserve:input'] }, async () => {
     // CI installs all three (scripts/ci-linux-setup.sh), so a shell missing there is a failure, not a skip.
     test.skip(!process.env.CI && !installed(flavour), `${flavour} is not installed on this machine`);

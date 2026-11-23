@@ -234,32 +234,12 @@ test('Ctrl+Backspace and a modified Enter reach a kitty program in the encoding 
  *
  * Worse since the replay was suppressed on the alternate screen (rightly — it was a flash): the
  * negotiation can no longer even be re-learned from the replayed tail.
+ *
+ * DELETED: 'a rebuilt view still knows the program negotiated the keyboard'. It asserted Ctrl+Backspace after
+ * the rebuild, whose encoding is the legacy byte either way, so it could not fail on the fault above. The test
+ * below uses the same alternate-screen fixture and `switchAwayAndBack`, and asserts Ctrl+End, which only
+ * reaches the program while throng still believes it negotiated the keyboard.
  */
-test('a rebuilt view still knows the program negotiated the keyboard', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  test.setTimeout(120_000);
-  const root = mkdtempSync(join(tmpdir(), 'throng-kitty-rebuild-'));
-  // The ALTERNATE-screen variant deliberately: on the normal screen a rebuilt view re-learns the
-  // negotiation from the replayed tail, which hides the fault entirely.
-  copyFileSync(KITTY_ALT, join(root, 'k.mjs'));
-  try {
-    await runApp(async (_app, win) => {
-      await runKittyFixture(win, root, 'KITTY_ALT_READY');
-
-      // Switch away and back: the panel is unmounted and rebuilt, exactly as in normal use.
-      await switchAwayAndBack(win, root);
-
-      await win.keyboard.type('a', { delay: 40 });
-      await win.keyboard.press('Control+Backspace');
-      await win.keyboard.type('b', { delay: 40 });
-
-      const seq = await captured(root, 'a', 'b');
-      // Stability across the rebuild is the subject: the negotiated encoding must not revert.
-      expect(seq).toBe(String.fromCharCode(8));
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 /**
  * The reported sequence, exactly: Ctrl+End works, then you switch to another tab and back, and it
