@@ -189,7 +189,7 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back; undo works from the pan
  * The claim in the title — that undo fires with focus on the PANE rather than on a tree row — is
  * membership of one set: `WINDOW_HANDLED_ACTIONS` in `app.tsx`, intercepted in the capture phase so
  * those actions fire wherever focus is. It is now
- * `packages/ui/tests/component/window-handled-actions.test.ts`.
+ * `packages/ui/tests/unit/window-handled-actions.test.ts`.
  *
  * That set was a `const` inside a `useEffect` until this migration, which is why the only way to
  * ask the question was to launch the application. Hoisting it exported the rule and changed no

@@ -6,7 +6,7 @@
  *
  * A second `BrowserWindow` has its own renderer and none of the first one's module state, so the claim is about what
  * a renderer that has never seen the panel ends up showing. Below this layer the pieces are pinned one by one —
- * `component/panel-state-capture.test.ts` (what is captured and sent), `component/editor-handoff-capture.test.ts` and
+ * `unit/panel-state-capture.test.ts` (what is captured and sent), `component/editor-handoff-capture.test.ts` and
  * `component/terminal-handoff-capture.test.ts` (what a view reports and restores), `detach-handoff-order.test.ts`
  * (the stash lands before the window opens) — and none of them can make the window exist and then ask it.
  *
