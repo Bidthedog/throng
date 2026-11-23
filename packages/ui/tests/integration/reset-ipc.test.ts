@@ -197,6 +197,8 @@ describe('throng:config:resetSettings / :resetKeybindings (per-editor)', () => {
       version: DEFAULT_KEYBINDINGS.version,
       bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'zoom.in': ['Ctrl+Q'] },
     });
+    const editedTheme = { ...SHIPPED.themes.throng, colours: { ...SHIPPED.themes.throng.colours, accent: '#abcdef' } };
+    await store.write({ kind: 'theme', name: 'throng' }, editedTheme);
 
     const res = await invoke<{ ok: boolean }>('throng:config:resetSettings');
 
@@ -205,6 +207,8 @@ describe('throng:config:resetSettings / :resetKeybindings (per-editor)', () => {
     const bindings = await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
     expect(settings).toEqual(SHIPPED.settings);
     expect(bindings.bindings['zoom.in']).toEqual(['Ctrl+Q']); // other editor untouched
+    const themeAfter = JSON.parse(await store.readRaw({ kind: 'theme', name: 'throng' })) as Theme;
+    expect(themeAfter.colours.accent).toBe('#abcdef'); // themes untouched
   });
 
   it('resetKeybindings restores the keybindings document only', async () => {

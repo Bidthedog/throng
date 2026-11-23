@@ -114,20 +114,7 @@ describe('a cut of test/test.md and test.md pasted on test2 (FR-033)', () => {
     expect(r.undo).toMatchObject({ kind: 'move', projects: { source: 'A', target: 'B' } });
   });
 
-  it('the selection order does not matter: test.md first lands the same', async () => {
-    await setup();
-    await cutInA('test.md', 'test/test.md');
-    show('B');
-    const r = await pasteOnTest2();
-
-    expect(r.failures).toEqual([]);
-    expect(await snapshotTree(join(h.rootB, 'test2'))).toEqual({
-      'test/': '',
-      'test/test.md': 'nested',
-      'test.md': 'top',
-    });
-  });
-
+  // The selection order not mattering is landingPlan's property: core/tests/unit/transfer-plan.test.ts.
   // A copy of the same selection landing the same way is transfer-structure.integration.test.ts's
   // `it.each` (within a project, across projects).
 });
