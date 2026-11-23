@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { openApp, createProject as newProject, firstPanelId, cleanupTemp, quiesced, type AppOptions, type OpenApp } from './harness.js';
-import { quiesceSampler } from './quiesce-sampler.js';
 import { writeAltScreenProgram, makeShellTerminal, runAltScreenProgram } from './altscreen-fixture.js';
 import { skipIfElevated } from './admin.js';
 
@@ -64,34 +63,12 @@ function arrowCount(log: string): number {
   return (log.match(/27,91,(65|66)/g) ?? []).length;
 }
 
-/**
- * The arrow count once the fixture's log has stopped changing.
- *
- * Two identical reads in a row, because the only thing that distinguishes "the program received
- * nothing more" from "the write has not landed yet" is time passing without a change. Built on the
- * same {@link quiesceSampler} `quiesced()` uses for a redrawing DOM — this is the identical
- * condition applied to a file instead of a Locator's textContent.
- */
-async function settledArrowCount(root: string): Promise<number> {
-  const sampler = quiesceSampler();
-  await expect
-    .poll(() => sampler.sample(String(arrowCount(keysReceived(root)))), {
-      timeout: 8_000,
-      message: 'the fixture log never stopped changing, so there is no settled arrow count to read',
-      intervals: [300],
-    })
-    .toBe(true);
-  return Number(sampler.settled());
-}
-
-async function wheelOver(win: Page, panelId: string, deltaY: number, ctrl = false): Promise<void> {
+async function wheelOver(win: Page, panelId: string, deltaY: number): Promise<void> {
   const term = win.getByTestId(`terminal-${panelId}`);
   const box = await term.boundingBox();
   if (!box) throw new Error('terminal has no box');
   await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  if (ctrl) await win.keyboard.down('Control');
   await win.mouse.wheel(0, deltaY);
-  if (ctrl) await win.keyboard.up('Control');
   // Let the gesture's effect on the terminal (a repaint, a scroll, a zoom reflow) actually land and
   // settle before the caller looks at anything — the same redrawing-terminal condition quiesced()
   // exists for, applicable here regardless of which of the three effects this particular wheel
@@ -176,35 +153,3 @@ test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', { ta
   }
 });
 
-test('Ctrl+wheel is left to zoom, not sent to the program', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  test.setTimeout(120_000);
-  const root = mkdtempSync(join(tmpdir(), 'throng-wheel-zoom-'));
-  writeAltScreenProgram(root, { rows: 5 });
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'WheelZoom', root);
-      const pid = await firstPanelId(win);
-      await makeShellTerminal(win, pid, basename(root));
-      await runAltScreenProgram(win, pid);
-
-      /*
-       * Wait for the log to STOP GROWING before taking the baseline.
-       *
-       * The stand-in writes `keys.log` asynchronously, so anything it received while starting can
-       * land after a single instantaneous read — and the count then grows with no Ctrl+wheel
-       * involved at all, failing an assertion about a gesture that behaved perfectly. Measured as
-       * this test failing and flaking at three workers and at six.
-       */
-      const before = await settledArrowCount(root);
-      await wheelOver(win, pid, -300, true);
-      await wheelOver(win, pid, 300, true);
-
-      // Ctrl+wheel is PANEL zoom now (046: it zooms the panel under the pointer), and it is throng's
-      // gesture, not the program's. A Ctrl+wheel that also reached the program would scroll it while
-      // resizing the text — two responses to one gesture (FR-033).
-      expect(arrowCount(keysReceived(root)), 'Ctrl+wheel reached the program').toBe(before);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});

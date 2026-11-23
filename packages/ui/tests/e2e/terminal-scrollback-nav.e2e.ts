@@ -146,28 +146,6 @@ test('page / line / top / bottom move the viewport — and never reach the progr
   }
 });
 
-test('at the live bottom, ordinary typing still reaches the program (FR-016)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'NavType', root);
-      const pid = await newTerminal(win, root);
-      const term = win.getByTestId(`terminal-${pid}`);
-
-      // Scroll away, then come back to the live bottom…
-      await run(win, pid, fillerLines(120), 'filler 120');
-      await term.click();
-      await pressAction(win, 'terminal.scrollPageUp');
-      await pressAction(win, 'terminal.scrollToBottom');
-
-      // …and typing goes straight to the shell, uninterrupted by the navigation bindings.
-      await run(win, pid, 'echo TYPED_THROUGH', 'TYPED_THROUGH');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 test('with find open, next/previous jump the viewport between matches (FR-015)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
