@@ -101,10 +101,6 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-function readSettings(cfg: string): Record<string, never> & { editor: { maxOpenFileBytes: number } } {
-  return JSON.parse(readFileSync(join(cfg, 'settings.json'), 'utf8')) as never;
-}
-
 function readTheme(cfg: string, name: string): { typography?: Record<string, Record<string, unknown>> } {
   const file = join(cfg, 'themes', `${name}.json`);
   return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as never) : {};
@@ -129,25 +125,13 @@ function readTheme(cfg: string, name: string): { typography?: Record<string, Rec
  * The Escape at the end went too. It existed because this file shares one app and a menu left
  * standing would be dismissed by the NEXT test's first click, silently swallowing it. That hazard is
  * a property of a shared app and does not exist one layer down.
+ *
+ * ── ONE DELETED (test-suite audit) ── "the max open file size is a slider that moves in 5 MB steps": its
+ * step, minimum and commit-on-release are the shared NumberControl's, asserted in
+ * `component/preferences-number-control.test.ts` ("un-greys the slider when it is moved, storing that stop";
+ * "shows a dragged value immediately but writes it only when the drag ends"). Red with `onPointerUp` removed
+ * from NumberControl's slider. A real drag reaching disk stays below, on the role-weight slider.
  */
-test('the max open file size is a slider that moves in 5 MB steps', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'settings');
-      const slider = prefs.getByTestId('control-editor.maxOpenFileBytes-slider');
-      await expect(slider).toBeVisible();
-      const MiB = 1024 * 1024;
-      // The step and minimum themselves are asserted on the shared control at the component layer
-      // (`tests/component/preferences-number-control.test.ts`, "carries the descriptor bounds on the
-      // slider"). What is left here is the half that layer cannot see: a real drag reaching disk.
-
-      // Drag it, and the value that lands on disk is a whole number of 5 MB steps.
-      await setSlider(slider, String(25 * MiB));
-      await expect.poll(() => readSettings(cfg).editor.maxOpenFileBytes, { timeout: FILE_OP_TIMEOUT_MS }).toBe(25 * MiB);
-    },
-  );
-});
-
 /*
  * MOVED to `packages/ui/tests/component/preferences-number-control.test.ts` (034 FR-045):
  * "a slider writes when you LET GO — not on every pixel, and not on a timer".

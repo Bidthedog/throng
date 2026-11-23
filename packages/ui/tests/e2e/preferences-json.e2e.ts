@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { FILE_OP_TIMEOUT_MS, NATIVE_WINDOW_CONTROLS, runApp as runOwnApp, openApp, cleanupTemp, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, NATIVE_WINDOW_CONTROLS, openApp, cleanupTemp, type OpenApp } from './harness.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
 
 /**
@@ -151,6 +151,16 @@ async function setEditorText(prefs: Page, kind: string, content: string): Promis
   await editor.pressSequentially(content);
 }
 
+/** The distinct computed colours of the syntax spans in one JSON editor. */
+async function jsonEditorColours(prefs: Page, kind: string): Promise<string[]> {
+  return prefs.evaluate((k) => {
+    const spans = document.querySelectorAll(`[data-testid="json-editor-${k}"] .cm-line span`);
+    const out = new Set<string>();
+    spans.forEach((s) => out.add(getComputedStyle(s).color));
+    return [...out];
+  }, kind);
+}
+
 test('the toggle flips all tabs to JSON, the code editor is selectable, and the toggle stays visible', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await seedSettings({ appearance: { theme: 'throng' } });
   await sharedApp(
@@ -169,9 +179,18 @@ test('the toggle flips all tabs to JSON, the code editor is selectable, and the 
           .locator('.cm-content')
           .evaluate((el) => getComputedStyle(el).userSelect),
       ).toBe('text');
+      // 016 FR-001a / T030 (merged from "the preferences JSON editors are syntax-highlighted"): the JSON tabs are a
+      // SECOND CodeMirror view — exactly where a feature added to "the editor" silently fails to arrive. Distinct
+      // token colours: a key, a string and a number are not all one colour, which is what plain text would be.
+      await expect.poll(() => jsonEditorColours(prefs, 'settings').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
       // Switch to Key Bindings — it too is JSON (global toggle, FR-020).
       await prefs.getByTestId('prefs-tab-keybindings').click();
       await expect(prefs.getByTestId('json-tab-keybindings')).toBeVisible();
+      await expect.poll(() => jsonEditorColours(prefs, 'keybindings').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
+      // …and the Themes document.
+      await prefs.getByTestId('prefs-tab-themes').click();
+      await expect(prefs.getByTestId('json-tab-theme')).toBeVisible();
+      await expect.poll(() => jsonEditorColours(prefs, 'theme').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
       await prefs.getByTestId('prefs-tab-settings').click();
 
       // The toggle stays visible at the minimum window size (FR-019).
@@ -379,42 +398,11 @@ test('closing the Preferences window applies the JSON buffer (FR-017)', { tag: [
  *
  * Red-proven by removing `checkActiveTheme` from `settings-validity.ts:210`: three fail.
  *
- * The test BELOW stays, and its own comment says why: it reaches the trap directly, because deleting
- * or corrupting a theme FILE gets there without this validation ever being involved.
+ * The trap reached directly (a theme FILE deleted or corrupted, so the Themes JSON tab opens on an empty,
+ * unparseable CLEAN buffer) is also below E2E now: `component/preferences-app.test.ts` "a document that is
+ * absent or unreadable through no edit of the user’s never traps them". Red-proven by dropping the
+ * `!dirtyRef.current ||` clause of `isValid` in `json-tab.tsx`.
  */
-
-test('a document that is absent or unreadable through no edit of the user’s never traps them', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
-  // The trap itself, reached directly rather than through the theme name — because deleting a theme
-  // file, or corrupting one, gets here without the validation above ever being involved.
-  const cfgRoot = freshCfgRoot({
-    'settings.json': '{"appearance":{"theme":"Ghost"}}\n',
-  });
-  await runOwnApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      await prefs.getByTestId('prefs-mode-toggle').click();
-      await prefs.getByTestId('prefs-tab-themes').click();
-
-      // The Themes JSON tab is open on a theme with no file behind it: an empty, unparseable buffer
-      // the user never typed a character into.
-      await expect(prefs.getByTestId('json-tab-theme')).toBeVisible();
-
-      // ── They can still leave. Nothing of theirs is at risk, so there is nothing to protect.
-      await prefs.getByTestId('prefs-tab-settings').click();
-      await expect(
-        prefs.getByTestId('json-tab-settings'),
-        'a buffer the user never edited must never block an exit',
-      ).toBeVisible();
-
-      // ── And the window still closes.
-      await Promise.all([
-        prefs.waitForEvent('close'),
-        closeFromTitleBar(app, prefs),
-      ]);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
 
 /*
  * ONE TEST REMOVED (035) — "an invalid document blocks every exit, and says which values are wrong",
@@ -510,43 +498,6 @@ test('a refused close is answered by Discard and close, from the notice (FR-018/
  * defaults-merged form without crashing" — both seed a malformed file BEFORE launch, so one app serves both.
  */
 
-// 016 FR-001a / T030: throng's OWN configuration files are JSON, and they are among the files a
-// user is most likely to be looking at. The preferences JSON tabs are a SECOND CodeMirror view —
-// exactly the place a feature added to "the editor" silently fails to arrive.
-test('the preferences JSON editors are syntax-highlighted (FR-001a)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  await seedSettings({ appearance: { theme: 'throng' } });
-  await sharedApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      await prefs.getByTestId('prefs-mode-toggle').click();
-      await expect(prefs.getByTestId('json-tab-settings')).toBeVisible();
-
-      // Distinct token colours — a key, a string and a number are not all the same colour, which
-      // is what plain text would look like.
-      const colours = async (kind: string): Promise<string[]> =>
-        prefs.evaluate((k) => {
-          const spans = document.querySelectorAll(
-            `[data-testid="json-editor-${k}"] .cm-line span`,
-          );
-          const out = new Set<string>();
-          spans.forEach((s) => out.add(getComputedStyle(s).color));
-          return [...out];
-        }, kind);
-
-      await expect.poll(() => colours('settings').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
-
-      // …and the same for the Key Bindings and Themes documents.
-      await prefs.getByTestId('prefs-tab-keybindings').click();
-      await expect(prefs.getByTestId('json-tab-keybindings')).toBeVisible();
-      await expect.poll(() => colours('keybindings').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
-
-      await prefs.getByTestId('prefs-tab-themes').click();
-      await expect(prefs.getByTestId('json-tab-theme')).toBeVisible();
-      await expect.poll(() => colours('theme').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
-    },
-  );
-});
-
 /**
  * The JSON editor must not move the user's caret, and must not adopt a document under them.
  *
@@ -601,47 +552,18 @@ test('the preferences JSON editors are syntax-highlighted (FR-001a)', { tag: ['@
  * The fix annotates the programmatic sync with `Transaction.addToHistory.of(false)`: loading a
  * document is not an edit, so it does not belong in the history of edits.
  */
-test('Ctrl+Z with no user edits leaves the document alone (#264)', { tag: ['@extended', '@prefs'] }, async () => {
-  await seedSettings({ appearance: { theme: 'Matrix' } });
-
-  await sharedApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      await prefs.getByTestId('prefs-mode-toggle').click();
-      await expect(prefs.getByTestId('json-tab-settings')).toBeVisible();
-
-      const editor = prefs.getByTestId('json-editor-settings').locator('.cm-content');
-      await expect(editor).toContainText('Matrix', { timeout: 20_000 });
-      const loaded = await editor.innerText();
-
-      // Focus the editor and undo, having typed NOTHING.
-      await editor.click();
-      await prefs.keyboard.press('ControlOrMeta+z');
-
-      // The document is still there. On master the buffer is emptied by undoing its own load.
-      await expect(editor, 'undo must not reach past the user\'s own edits').toContainText('Matrix');
-      expect(await editor.innerText()).toBe(loaded);
-
-      // And no banner, because nothing invalid was ever applied.
-      await expect(
-        prefs.getByTestId('json-invalid'),
-        'an untouched document must not be reported as invalid JSON',
-      ).toHaveCount(0);
-    },
-  );
-});
-
 /*
  * MERGED (pass 2): two tests that each paid a Preferences window and a CodeMirror mount now ride in this one.
- *   - "Ctrl+Z with no user edits leaves the document alone (#264)" is the first step: the document loads
- *     asynchronously, so the undo stack must not hold the load itself. It needs a real caret and CodeMirror
- *     history, which the component test (`preferences-json-tab.test.ts`) fakes.
+ *   - The #264 step (Ctrl+Z with no user edits) is first: the document loads asynchronously, so the undo
+ *     stack must not hold the load itself. It needs a real caret and CodeMirror history, which the
+ *     component test (`preferences-json-tab.test.ts`) fakes. (The standalone copy of it was deleted as a
+ *     duplicate of this step.)
  *   - "Overwrite With These Changes keeps the buffer and puts it on disk" is the last step: after Reload, a
  *     second unsaved edit meets a second external change, and Overwrite writes the user's version.
  */
 test('an untouched document survives Ctrl+Z (#264); an external change does not move the caret or replace the buffer; Overwrite puts the buffer on disk', { tag: ['@extended', '@prefs', '@reserve:input'] }, async () => {
   // SHARED APP (test-suite audit, pass 1): the seed only decides what the JSON tab shows when it mounts, so it is
-  // written into the shared root before the window opens, as the Ctrl+Z test above does.
+  // written into the shared root before the window opens, as the other tests here do.
   await seedSettings({ appearance: { theme: 'Matrix' }, editor: { autoSave: false } });
 
   await sharedApp(

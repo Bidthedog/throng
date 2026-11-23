@@ -33,9 +33,9 @@
  * `settings.json`. That is the config-write path, not the control, and it is covered at the
  * integration layer (`packages/ui/tests/integration/config-write*.test.ts`). The seam — a real
  * preferences window whose control is bound to the real config store, driven with the SAME
- * fill-then-Enter gesture — is the one test deliberately kept in
- * `packages/ui/tests/e2e/preferences-slider.e2e.ts:74`, which types `1200`, presses Enter, and
- * requires the value to come back out of the store. This file does not claim to replace that.
+ * fill-then-Enter gesture — was once the one test kept in the deleted `preferences-slider.e2e.ts:74`, which
+ * typed `1200`, pressed Enter, and required the value to come back out of the store. The control's own
+ * commit behaviour is now `packages/ui/tests/component/preferences-number-control.test.ts`.
  *
  * ══ ANTI-VACUITY CONTROL ══
  *

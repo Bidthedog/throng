@@ -347,7 +347,7 @@ test('Never display shows nothing at all, and Toast and keep in panel shows it a
  *   - "Display for N takes an ERROR notice away after N, and NOT before (FR-004, FR-012)" — the timer is
  *     `component/notice-display-override.test.ts` (a fake clock: still present short of N, gone once N elapses),
  *     the mode reaching the provider and gating a real notice is the test above, and a Preferences slider
- *     persisting a bounded numeric is `preferences-slider.e2e.ts` (FR-033).
+ *     persisting a bounded numeric is `component/preferences-number-control.test.ts` (FR-033).
  *   - "a pre-030 settings file opens with its preferences intact and no configuration error (FR-014, SC-014)" —
  *     MOVED DOWN to `integration/config-store.integration.test.ts` ("a settings file with no notifications section
  *     resolves to the shipped defaults and keeps the user’s own values"), which reads a real seeded config root
