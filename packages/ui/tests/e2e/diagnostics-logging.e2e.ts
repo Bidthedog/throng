@@ -23,12 +23,16 @@
  * that accumulates across the tests that share it (which is why the last test reads its TAIL rather
  * than demanding the whole array).
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import {
   openApp,
   runApp as runOwnApp,
+  createProject,
+  reloadWindow,
+  cleanupTemp,
   FILE_OP_TIMEOUT_MS,
   type AppOptions,
   type OpenApp,
@@ -126,6 +130,8 @@ test('the daemon writes its own durable log beside the UI’s', { tag: ['@extend
   // `skipDaemon` so the APP spawns its own daemon through `ensureDaemon` — which is the path that
   // gives it a log directory at all. A daemon the harness pre-spawned was never told where to write.
   // This is the one test in the file that seeds the LAUNCH, so it keeps its own app.
+  const root = mkdtempSync(join(tmpdir(), 'throng-selfspawn-'));
+  try {
   await runOwnApp(async (_app, win, ctx) => {
     await expect(win.getByTestId('title-bar-cog')).toBeVisible({ timeout: 15000 });
     const dir = logsIn(ctx.userDataDir);
@@ -144,6 +150,22 @@ test('the daemon writes its own durable log beside the UI’s', { tag: ['@extend
       .map((f) => readFileSync(join(dir, f), 'utf8'))
       .join('\n');
     expect(contents).toMatch(/throng-daemon|\[daemon\]/);
+
+    // Regression (T064/T066), folded from the former daemon-selfspawn spec: the app-spawned daemon
+    // must be started with host `node`, not the Electron binary — its native modules (better-sqlite3)
+    // are built for host Node, and an Electron-run daemon dies on a NODE_MODULE_VERSION mismatch,
+    // leaving the project list empty. Creating a project round-trips RPC + SQLite through it …
+    await createProject(win, 'SelfSpawn', root);
+
+    // … and a reload re-fetches the list from the daemon (projects.list), proving it opened its DB
+    // and persisted the project rather than the UI updating optimistically.
+    await reloadWindow(win);
+    await expect(win.locator('.project-item', { hasText: 'SelfSpawn' })).toBeVisible({
+      timeout: 15000,
+    });
   }, { skipDaemon: true });
+  } finally {
+    cleanupTemp(root);
+  }
 });
 
