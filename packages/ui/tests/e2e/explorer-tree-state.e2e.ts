@@ -129,60 +129,10 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('(1) dragging an EXPANDED folder into another folder keeps it expanded, icon and all', { tag: ['@extended', '@explorer', '@reserve:osdrag'] }, async () => {
-  const projectRoot = own(makeProjectFolder());
-  try {
-    await runApp(async (_app, win) => {
-      const errors: string[] = [];
-      win.on('pageerror', (e) => errors.push(String(e)));
-      win.on('console', (m) => {
-        if (m.type() === 'error') errors.push(m.text());
-      });
-
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Expand `movable` via its chevron — the name only selects now (#121). Its
-      // child is visible, chevron + glyph both read OPEN.
-      await rowFor(tree, 'movable').locator('.tree-twisty').click();
-      await expect(tree.getByText('child.txt', { exact: true })).toBeVisible();
-      expect(await folderState(tree, 'movable')).toEqual({ twistyOpen: true, icon: 'open' });
-
-      // Drag the EXPANDED `movable` onto `box`.
-      await tree
-        .getByText('movable', { exact: true })
-        .dragTo(tree.getByText('box', { exact: true }));
-
-      // The move landed on disk (deterministic; the tree lags behind the watcher).
-      await expect
-        .poll(() => existsSync(join(projectRoot, 'box', 'movable', 'child.txt')), { timeout: FILE_OP_TIMEOUT_MS })
-        .toBe(true);
-      expect(existsSync(join(projectRoot, 'movable'))).toBe(false);
-
-      // Let the watcher-driven re-read settle so we measure the FINAL state — poll for it rather
-      // than sleep, so a failure still names the actual settled discrepancy, not a mid-transition
-      // read.
-      await expect(tree.getByText('keep.txt', { exact: true })).toBeVisible(); // box auto-opened
-      await expect
-        .poll(
-          async () => {
-            const state = await folderState(tree, 'movable');
-            const childVisible = await tree.getByText('child.txt', { exact: true }).isVisible();
-            return { ...state, childVisible };
-          },
-          { timeout: 5000 },
-        )
-        // REQUIRED: the folder stays open — children visible, chevron open, glyph open.
-        .toEqual({ twistyOpen: true, icon: 'open', childVisible: true });
-
-      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
-    });
-  } finally {
-    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
-    // remove a folder the explorer is still watching.
-  }
-});
+/*
+ * (1) "dragging an EXPANDED folder into another folder keeps it expanded, icon and all" was folded into (5) below, which
+ * runs the same fixture and drag (test-suite audit): its folderState check and renderer-error probe live there now.
+ */
 
 /**
  * (1b) The ORPHANED open-map entry from (1) is never cleaned up: react-arborist
@@ -260,7 +210,7 @@ test('(1b) dragging a folder BACK to a previously-expanded path: icon open, no c
  * is vacuous) and drops the second Electron app the premise used to cost: `openOnClick: ‘single’`
  * is the shipped default, so no `THRONG_CONFIG_ROOT` and no `runOwnApp` are needed to reach it.
  *
- * WHAT STAYS, AND WHY IT IS NOT NEGOTIABLE: (1), (1b) and (5) all DRAG a row onto another row.
+ * WHAT STAYS, AND WHY IT IS NOT NEGOTIABLE: (1b) and (5) all DRAG a row onto another row.
  * react-arborist’s drop maths is the one part of it that measures the DOM
  * (`dnd/compute-drop.js` calls `getBoundingClientRect`), and jsdom reports 0×0 for every element,
  * so a component-layer drag would resolve every drop to the same place. Constitution v5.1.0
@@ -283,6 +233,12 @@ test('(5) a MOVE-migrated expansion is persisted immediately (survives an instan
   const projectRoot = makeProjectFolder();
   try {
     await runOwnApp(async (_app, win) => {
+      const errors: string[] = [];
+      win.on('pageerror', (e) => errors.push(String(e)));
+      win.on('console', (m) => {
+        if (m.type() === 'error') errors.push(m.text());
+      });
+
       await createProject(win, 'Demo', projectRoot);
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
@@ -290,6 +246,7 @@ test('(5) a MOVE-migrated expansion is persisted immediately (survives an instan
       // Expand `movable` via its chevron (the name only selects, #121).
       await rowFor(tree, 'movable').locator('.tree-twisty').click();
       await expect(tree.getByText('child.txt', { exact: true })).toBeVisible();
+      expect(await folderState(tree, 'movable')).toEqual({ twistyOpen: true, icon: 'open' });
 
       // Drag the EXPANDED `movable` onto `box`: the expansion migrates to box/movable
       // (#120) and `box` auto-opens to reveal the drop.
@@ -302,6 +259,18 @@ test('(5) a MOVE-migrated expansion is persisted immediately (survives an instan
       await expect(tree.getByText('keep.txt', { exact: true })).toBeVisible(); // box opened
       // The migrated expansion is applied live — movable is open at its new path.
       await expect(tree.getByText('child.txt', { exact: true })).toBeVisible();
+      // Folded in from the deleted (1): the moved folder stays open, icon and all — chevron, glyph and
+      // children agree once the watcher-driven re-read settles.
+      await expect
+        .poll(
+          async () => {
+            const state = await folderState(tree, 'movable');
+            const childVisible = await tree.getByText('child.txt', { exact: true }).isVisible();
+            return { ...state, childVisible };
+          },
+          { timeout: 5000 },
+        )
+        .toEqual({ twistyOpen: true, icon: 'open', childVisible: true });
 
       // The persist runs in a separate passive effect keyed on the same data change as the DOM
       // update above, so it can still be pending once the DOM already shows the migration. Poll the
@@ -338,6 +307,8 @@ test('(5) a MOVE-migrated expansion is persisted immediately (survives an instan
       // visible again with NO manual expansion.
       await expect(treeAfter.getByText('keep.txt', { exact: true })).toBeVisible();
       await expect(treeAfter.getByText('child.txt', { exact: true })).toBeVisible();
+
+      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });
   } finally {
     cleanupTemp(projectRoot);
