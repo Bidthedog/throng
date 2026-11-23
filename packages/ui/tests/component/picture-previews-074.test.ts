@@ -55,6 +55,10 @@ describe('an SVG Preview (FR-030, FR-031, FR-040)', () => {
     const spinner = await screen.findByTestId(`diagram-loading-${pv.id}-diagram-0`, {}, COLD);
     expect(spinner).toHaveClass('preview-loading');
     expect(within(spinner).getByRole('status', { name: /Drawing SVG/ })).toBeInTheDocument();
+    // The spinner is up from the start, while the SVG renderer is still being imported, before the picture is asked for
+    // (#712, macOS): wait for the draw to begin, and the spinner must still be up while it runs.
+    await waitFor(() => expect(browserPictureLoader.load).toHaveBeenCalled(), COLD);
+    expect(screen.getByTestId(`diagram-loading-${pv.id}-diagram-0`)).toBe(spinner);
     await act(async () => finish({ width: 20, height: 10 }));
     await waitFor(() => expect(frame()?.querySelector('image')).toBeTruthy());
     expect(screen.queryByTestId(`diagram-loading-${pv.id}-diagram-0`)).toBeNull();
