@@ -649,14 +649,26 @@ describe('Expand steps one level at a time (004 FR-031/032, migrated from explor
      * which collapsed the ROOT would look like — and the root is required to stay open (FR-004),
      * which is a different bug with the same symptom. So the surviving rows are asserted whole.
      */
-    const { tree, user } = await mount();
+    const { tree, user, listed } = await mount();
 
     await user.click(screen.getByRole('button', { name: 'Expand' }));
     await waitFor(() => expect(rowLabels(tree)).toContain('index.ts'));
+    await user.click(screen.getByRole('button', { name: 'Expand' }));
+    await waitFor(() => expect(rowLabels(tree)).toContain('deep.ts'));
 
     await user.click(screen.getByRole('button', { name: 'Collapse all' }));
 
     await waitFor(() => expect(rowLabels(tree)).toEqual(['demo', 'src', 'a.txt', 'README.md']));
+
+    /*
+     * Migrated from explorer.e2e.ts "collapsing the tree raises no error (no bogus internal-root
+     * path)". The bug was Collapse all asking the filesystem to list the tree's synthetic root id
+     * (`ROOT_ID`) as though it were a folder. `fakeFiles.list` answers an unknown directory with an
+     * error, which the tree raises as `explorer-error`, so both halves are asserted: no notice, and
+     * every directory ever listed is a real one in the fixture.
+     */
+    expect(screen.queryByTestId('explorer-error')).toBeNull();
+    for (const dir of listed) expect(Object.keys(PROJECT)).toContain(dir);
   });
 });
 

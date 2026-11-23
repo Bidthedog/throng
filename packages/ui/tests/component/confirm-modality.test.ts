@@ -21,10 +21,10 @@
  *
  * The migrated test also asserted two things that are not modality at all: that the File Explorer
  * Delete action raises this dialog, and that cancelling leaves the file on disk. Both are covered by
- * `packages/ui/tests/e2e/explorer.e2e.ts:413` ("delete confirmation can be cancelled; the toolbar
+ * `packages/ui/tests/component/explorer-root-menu.test.ts` ("Delete asks first" — it was `explorer.e2e.ts`: "delete confirmation can be cancelled; the toolbar
  * Delete button works"), which right-clicks `a.txt`, clicks Delete, asserts `confirm-dialog` is
  * visible, clicks `confirm-cancel` and then asserts the row is still there. That is the same claim,
- * in a test that stays. 034 FR-047: every assertion of a deleted test is accounted for.
+ * in a component test. 034 FR-047: every assertion of a deleted test is accounted for.
  *
  * ══ IT LANDS STRONGER THAN THE E2E DID, IN TWO PLACES ══
  *

@@ -6,10 +6,6 @@
  */
 import { test, expect } from '@playwright/test';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
-
-/** react-dnd's empty drag-preview image trips the app's CSP harmlessly; ignore it. */
-const realErrors = (errors: string[]): string[] =>
-  errors.filter((e) => !e.includes('Content Security Policy') && !e.includes('data:image'));
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openApp,
@@ -118,8 +114,7 @@ function makeProjectFolder(): string {
  *   "subfolders start collapsed; the chevron expands lazily" → `file-tree.test.ts:414` asserts the
  *     FETCH CALL LOG as well as the rows, so a tree that read every folder eagerly and kept them
  *     shut reddens there and passed here.
- *   "no renderer errors"                    → the `realErrors` probe is unchanged and still run by
- *     "collapsing the tree raises no error" below, on this same shared app and window.
+ *   "no renderer errors"                    → covered by the `explorer-error` absence in `file-tree.test.ts` (Collapse all).
  *
  * Nothing is lost by the fixture being a fake `files.list` rather than a real temp folder: every
  * other test in this file still creates a real project on a real root and waits for the tree to
@@ -187,41 +182,10 @@ function makeProjectFolder(): string {
  * followed the selection would vanish several files from a single click, with nothing on screen to
  * say which. Red-proven as `hide-follows-the-selection`.
  */
-test('collapsing the tree raises no error (no bogus internal-root path)', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      const errors: string[] = [];
-      win.on('pageerror', (e) => errors.push(String(e)));
-      win.on('console', (m) => {
-        if (m.type() === 'error') errors.push(m.text());
-      });
-
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Expand two levels, then Collapse all (the action that triggered the bug).
-      await win.getByRole('button', { name: 'Expand' }).click();
-      await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
-      await win.getByRole('button', { name: 'Expand' }).click();
-      await expect(tree.getByText('deep.ts', { exact: true })).toBeVisible();
-      await win.getByRole('button', { name: 'Collapse all' }).click();
-      await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
-
-      // No error banner and no realpath/internal-root error must appear.
-      // sleep-justified: "Collapse all" itself is synchronous, but the bug this guards against was
-      // sleep-justified: a stray error raised from a later, unrelated data-reload reacting to the
-      // sleep-justified: root/open-state change — there is no single named async op to await, only
-      // sleep-justified: time for a delayed error to have had the chance to surface.
-      await win.waitForTimeout(500);
-      await expect(tree.locator('.explorer__error')).toHaveCount(0);
-      expect(realErrors(errors), `errors:\n${errors.join('\n')}`).toEqual([]);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
+/*
+ * DELETED (test-suite audit): "collapsing the tree raises no error (no bogus internal-root path)" -> `component/file-tree.test.ts`
+ * "Collapse all returns to the root and its own children" (no `explorer-error`, every listed directory is a real one).
+ */
 
 test('reflects external filesystem changes live, preserving expansion (US2)', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
   const projectRoot = makeProjectFolder();
@@ -364,32 +328,9 @@ test('file operations via context menu + toolbar (US3): delete, copy/paste, new 
 });
 
 /*
- * NARROWED (test-suite audit, pass 1): the Delete-key half moved out — `delete-mixed.e2e.ts` "file-first selection
- * (opens an editor) then Delete key removes ALL selected" presses the real Delete key on a file-first selection
- * with an editor open, which is the same claim with more in it. F2 rename stays.
+ * DELETED (test-suite audit): "keyboard shortcuts operate on the tree: F2 renames (US3)" -> `component/explorer-tree-interaction.test.ts`
+ * (F2 opens the inline rename; committing renames the path). Real F2 on disk stays in `fileop-undo.e2e.ts`.
  */
-test('keyboard shortcuts operate on the tree: F2 renames (US3)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Select README.md, press F2 → inline rename; commit a new name.
-      await tree.getByText('README.md', { exact: true }).click();
-      await win.keyboard.press('F2');
-      const rename = tree.locator('input.tree-rename');
-      await expect(rename).toBeVisible();
-      await rename.fill('readme2.md');
-      await rename.press('Enter');
-      await expect(tree.getByText('readme2.md', { exact: true })).toBeVisible();
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
 
 /*
  * MERGED (test-suite audit, pass 2): "copy/paste duplicates with a non-clobbering name; open-in-explorer raises no error"
@@ -405,65 +346,11 @@ test('keyboard shortcuts operate on the tree: F2 renames (US3)', { tag: ['@exten
  *     selection (opens an editor) then Delete key removes ALL selected" (Ctrl-click selection, Delete key, one
  *     confirm, every selected row gone).
  */
-test('delete confirmation can be cancelled; the toolbar Delete button works (US3 polish)', { tag: ['@extended', '@explorer', '@reserve:native'] }, async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Cancel the confirmation → the file stays.
-      await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-      await win.locator('.context-menu__item', { hasText: 'Delete' }).click();
-      await expect(win.getByTestId('confirm-dialog')).toBeVisible();
-      await win.getByTestId('confirm-cancel').click();
-      await expect(tree.getByText('a.txt', { exact: true })).toBeVisible();
-
-      // Toolbar Delete button → confirm → gone.
-      await tree.getByText('a.txt', { exact: true }).click();
-      await win.getByRole('button', { name: 'Delete' }).click();
-      await win.getByTestId('confirm-accept').click();
-      await expect(tree.getByText('a.txt', { exact: true })).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('New folder in a collapsed folder expands it and overwrites the selected name (US3 polish)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Select `src` (name click, #121) then expand + collapse it via its chevron,
-      // leaving it selected but minimised.
-      await tree.getByText('src', { exact: true }).click(); // select
-      await expect(tree.locator('.tree-row--selected', { hasText: 'src' })).toBeVisible();
-      await toggleFolder(tree, 'src'); // expand
-      await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
-      await toggleFolder(tree, 'src'); // collapse
-      await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
-
-      // New folder → src expands and the new folder is in rename mode.
-      await win.getByRole('button', { name: 'New folder' }).click();
-      await expect(tree.getByText('index.ts', { exact: true })).toBeVisible(); // src re-expanded
-      const rename = tree.locator('input.tree-rename');
-      await expect(rename).toBeVisible();
-
-      // The default name is fully selected → typing overwrites it entirely.
-      await win.keyboard.type('models');
-      await rename.press('Enter');
-      await expect(tree.getByText('models', { exact: true })).toBeVisible();
-      await expect(tree.getByText('New folder', { exact: true })).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
+/*
+ * DELETED (test-suite audit): "delete confirmation can be cancelled; the toolbar Delete button works" and "New folder in a
+ * collapsed folder expands it and overwrites the selected name" -> `component/explorer-root-menu.test.ts` (confirm
+ * cancel / accept via row menu and toolbar; toolbar New folder expands the folder and selects the whole default name).
+ */
 
 test('a large folder stays responsive — virtualised rows (polish T061)', { tag: ['@extended', '@explorer', '@reserve:layout'] }, async () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'throng-big-'));

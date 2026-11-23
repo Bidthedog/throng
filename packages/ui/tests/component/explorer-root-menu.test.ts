@@ -155,6 +155,7 @@ function fakeFiles(listing: Record<string, FileTreeEntry[]>) {
     newFile: vi.fn((dest: string) => Promise.resolve(add(dest, 'New file.txt', 'file'))),
     newFolder: vi.fn((dest: string) => Promise.resolve(add(dest, 'New folder', 'folder'))),
     reveal: vi.fn(() => Promise.resolve({})),
+    delete: vi.fn((_items: string[], _mode: string) => Promise.resolve({})),
     onChange: vi.fn((cb: () => void) => {
       changed = cb;
       return () => {
@@ -460,5 +461,77 @@ describe('New Folder on a subfolder row creates inside THAT folder (FR-086)', ()
     const subRow = within(tree).getByText('sub').closest<HTMLElement>('[role="treeitem"]');
     const newRow = tree.querySelector('input.tree-rename')!.closest<HTMLElement>('[role="treeitem"]');
     expect(Number(newRow?.getAttribute('aria-level'))).toBe(Number(subRow?.getAttribute('aria-level')) + 1);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * Delete confirmation, and the toolbar's Delete / New folder — migrated from explorer.e2e.ts
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * Layer: component — the confirm question is `ConfirmProvider`'s DOM and the delete call is a
+ * bridge call; no window, native dialog or disk is needed to see either. `files-service` owns the
+ * bytes (integration).
+ */
+describe('Delete asks first, and only a confirmed Delete reaches the filesystem (migrated from explorer.e2e.ts "delete confirmation can be cancelled; the toolbar Delete button works")', () => {
+  it('a row menu Delete raises the confirm dialog, and Cancel deletes nothing', async () => {
+    const { user, tree, files } = await mount();
+
+    await user.pointer({ keys: '[MouseRight]', target: within(tree).getByText('a.txt') });
+    await user.click(await screen.findByTestId('menu-item-Delete'));
+
+    await screen.findByTestId('confirm-dialog');
+    await user.click(screen.getByTestId('confirm-cancel'));
+
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+    expect(files.delete).not.toHaveBeenCalled();
+    expect(within(tree).getByText('a.txt')).toBeInTheDocument();
+  });
+
+  it('the toolbar Delete button, once confirmed, deletes the selected item', async () => {
+    const { user, tree, files } = await mount();
+
+    await user.click(within(tree).getByText('a.txt'));
+    await waitFor(() =>
+      expect(tree.querySelector('.tree-row--selected .tree-label')).toHaveTextContent('a.txt'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await screen.findByTestId('confirm-dialog');
+    expect(files.delete).not.toHaveBeenCalled(); // asked, not yet done
+    await user.click(screen.getByTestId('confirm-accept'));
+
+    await waitFor(() => expect(files.delete).toHaveBeenCalledTimes(1));
+    expect(files.delete.mock.calls[0]![0]).toEqual(['a.txt']);
+  });
+});
+
+describe('toolbar New folder in a collapsed folder expands it and replaces the default name (migrated from explorer.e2e.ts)', () => {
+  it('opens the folder, and the rename box has its whole default name selected so typing overwrites it', async () => {
+    const { user, tree, files, notifyChange } = await mount();
+
+    await user.click(within(tree).getByText('sub')); // select, without expanding
+    await waitFor(() =>
+      expect(tree.querySelector('.tree-row--selected .tree-label')).toHaveTextContent('sub'),
+    );
+    expect(within(tree).queryByText('keep.txt')).toBeNull(); // still collapsed
+
+    await user.click(screen.getByRole('button', { name: 'New folder' }));
+    await waitFor(() => expect(files.newFolder).toHaveBeenCalledWith('sub'));
+    notifyChange();
+
+    await waitFor(
+      () => {
+        expect(tree.querySelector('input.tree-rename'), 'no rename box').not.toBeNull();
+      },
+      { timeout: 3000 },
+    );
+    expect(within(tree).getByText('keep.txt')).toBeInTheDocument(); // sub expanded
+    const input = tree.querySelector<HTMLInputElement>('input.tree-rename')!;
+    expect(input.value).toBe('New folder');
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 'New folder'.length]);
+
+    await user.keyboard('models');
+    expect(input.value).toBe('models');
   });
 });
