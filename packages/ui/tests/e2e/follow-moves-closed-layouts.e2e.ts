@@ -41,7 +41,6 @@ import {
   settle,
   switchProject,
   firstPanelId,
-  focusEditor,
   commitTabRename,
   FILE_OP_TIMEOUT_MS,
   pressAction,
@@ -51,7 +50,6 @@ import { openQuickOpen, quickOpenRows, chooseQuickOpenRow } from './helpers/navi
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 const BODY = 'FOLLOW-CLOSED-BODY';
-const OTHER = 'OTHER-FILE-BODY';
 
 // ── The shared app ──────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -216,38 +214,14 @@ test('two renames and an undo reach a closed sub-workspace, which reopens on the
   }
 });
 
-test('a closed sub-workspace’s navigation history follows two renames: Back never leads to an old name (FR-003)', { tag: ['@extended', '@persistence', '@reserve:window'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-closed-history-'));
-  writeFileSync(join(root, 'a.md'), `${BODY}\n`);
-  writeFileSync(join(root, 'other.md'), `${OTHER}\n`);
-  const PANEL = 'swhist';
-  try {
-    await runApp(async (app, win, { pipeName }) => {
-      await projectWithSubs(win, 'ClosedHistory', root, [{ id: 'sw1', panel: PANEL }]);
-      let child = await openSub(app, win, 'sw1');
-      // History: a.md, then other.md — so a.md is the entry Back returns to.
-      await openInSub(child, PANEL, 'a.md', BODY, true);
-      await openInSub(child, PANEL, 'other.md', OTHER, false);
-      await expect.poll(() => swRecord(pipeName, 'sw1'), { timeout: 10_000 }).toContain('other.md');
-      await closeSub(app, child, 'sw1');
-
-      await renameInTree(win, 'a.md', 'b.md');
-      await renameInTree(win, 'b.md', 'c.md');
-      await expect.poll(() => swRecord(pipeName, 'sw1'), { timeout: 10_000 }).toContain('c.md');
-      expect(await swRecord(pipeName, 'sw1')).not.toMatch(/[\\/]a\.md|[\\/]b\.md/);
-
-      child = await openSub(app, win, 'sw1');
-      await expect(child.getByTestId(`panel-title-${PANEL}`)).toHaveText('other', { timeout: 10_000 });
-      await focusEditor(child, PANEL);
-      await pressAction(child, 'navigate.back');
-      await expect(child.getByTestId(`panel-title-${PANEL}`)).toHaveText('c', { timeout: 10_000 });
-      await expect(child.getByTestId(`editor-${PANEL}`).locator('.cm-content')).toContainText(BODY, { timeout: 10_000 });
-      await expectNoMissingReport(child, PANEL);
-    });
-  } finally {
-    sharedTemps.push(root);
-  }
-});
+/*
+ * DELETED (test-suite audit) — "a closed sub-workspace’s navigation history follows two renames: Back never
+ * leads to an old name (FR-003)". The daemon rewrite of every history entry, across rename, undo and redo, is
+ * `daemon/tests/integration/workspace-follow-moves.integration.test.ts` ("rewrites editor, preview and history
+ * paths…", "ends at the path the file actually has across rename, undo and redo"; core's
+ * `moved-paths.test.ts` has the multi-entry history); Back loading the history entry it names is
+ * `component/navigate-history.test.ts`.
+ */
 
 test('a sub-workspace edited while another is closed keeps its edits through a rename (FR-001, negative)', { tag: ['@extended', '@persistence', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-closed-edited-'));

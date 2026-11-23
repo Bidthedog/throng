@@ -192,44 +192,10 @@ test('restores each project’s own layout after a restart (SC-006)', { tag: ['@
   }
 });
 
-test('falls back to the default workspace and notifies on a corrupt layout (SC-011)', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
-  const h = await startHarness();
-  let app: ElectronApplication | undefined;
-  try {
-    app = await launchApp(h.pipeName);
-    let win = await app.firstWindow();
-
-    await createProject(win, 'Gamma');
-    await win.getByTestId('tab-add').click();
-    await expect(win.locator('.tab-chip')).toHaveCount(2);
-    // Settle on the layout being REALLY saved before corrupting it: corrupting a row that
-    // was never written would make this test pass for the wrong reason (there would be no
-    // layout to fail to restore), which is exactly the false green FR-013 exists to stop.
-    await expectLayoutSaved(h.dataDir, 'Gamma', (json) => savedTabs(json) === 2);
-
-    await app.close();
-    app = undefined;
-    await stopDaemon(h.daemon);
-
-    // Corrupt the saved layout document directly in the store.
-    const db = new Database(dbPath(h.dataDir));
-    db.prepare('UPDATE workspace_layout SET layout_json = ?').run('{ not json');
-    db.close();
-
-    h.daemon = await startDaemon(h.pipeName, h.dataDir);
-    app = await launchApp(h.pipeName);
-    win = await app.firstWindow();
-
-    // Lazy: open Gamma to trigger loading its (now corrupt) layout.
-    await projectItem(win, 'Gamma').locator('[data-testid^="project-switch-"]').click();
-
-    // Default empty workspace (one Tab) + the "could not restore" notice.
-    await expect(win.getByTestId('restore-notice')).toBeVisible();
-    await expect(win.locator('.tab-chip')).toHaveCount(1);
-    await expect(win.locator('.panel-box')).toHaveCount(1);
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(h.daemon);
-    cleanupTemp(h.dataDir);
-  }
-});
+/*
+ * DELETED (test-suite audit) — "falls back to the default workspace and notifies on a corrupt layout
+ * (SC-011)". The repository half (a corrupt document yields a default layout and reason `corrupt`) is
+ * `packages/persistence/tests/integration/workspace-persistence.integration.test.ts`; the renderer half
+ * (`restore-notice` beside one Tab and one Panel) is
+ * `component/workspace-restore-corrupt-notice.test.ts`.
+ */

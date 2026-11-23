@@ -236,43 +236,10 @@ test.describe('the two tests that only need an app', () => {
  */
 
 /*
- * OWN APP AND OWN DAEMON — by construction (034 FR-045).
- *
- * Two app launches and a daemon restart against the same database ARE the requirement here (SQLite
- * durability), so there is nothing to share. Its `Alpha` / `Beta` at `C:/code/alpha` and
- * `C:/code/beta` also duplicate the shared test 2 exactly; FR-029 refuses identical roots, so even a
- * relaunch-free version of this test could not be folded in without renaming its fixtures.
+ * DELETED (test-suite audit) — "restores the project list and active project after a restart". The
+ * restart half is `persistence-restore.e2e.ts` "restores each project’s own layout after a restart
+ * (SC-006)", which restarts the daemon against the same database and reopens both projects from the
+ * restored list; the repository half is
+ * `packages/persistence/tests/integration/workspace-persistence.integration.test.ts`. Its own
+ * `data-active` assertion followed a click, so it could not fail on restore.
  */
-test('restores the project list and active project after a restart', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
-  const harness = await startHarness();
-  let app: ElectronApplication | undefined;
-  try {
-    // Session 1: create two projects, leave Beta active.
-    app = await launchApp(harness.pipeName);
-    let win = await app.firstWindow();
-    await createProject(win, 'Alpha', 'C:/code/alpha');
-    await createProject(win, 'Beta', 'C:/code/beta');
-    await projectItem(win, 'Beta').locator('[data-testid^="project-switch-"]').click();
-    await expect(projectItem(win, 'Beta')).toHaveAttribute('data-active', 'true');
-    await app.close();
-    app = undefined;
-
-    // Restart the daemon against the SAME database to prove SQLite durability.
-    await stopDaemon(harness.daemon);
-    harness.daemon = await startDaemon(harness.pipeName, harness.dataDir);
-
-    // Session 2: relaunch the app; both projects + active Beta restored.
-    app = await launchApp(harness.pipeName);
-    win = await app.firstWindow();
-    await expect(projectItem(win, 'Alpha')).toBeVisible();
-    await expect(projectItem(win, 'Beta')).toBeVisible();
-    // Lazy loading: nothing is opened at startup; open Beta on demand.
-    await expect(win.getByTestId('workspace-no-project')).toBeVisible();
-    await projectItem(win, 'Beta').locator('[data-testid^="project-switch-"]').click();
-    await expect(projectItem(win, 'Beta')).toHaveAttribute('data-active', 'true');
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(harness.daemon);
-    cleanupTemp(harness.dataDir);
-  }
-});

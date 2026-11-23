@@ -634,78 +634,13 @@ test.afterAll(async () => {
  * label-drift (2 red).
  */
 
-/**
- * FR-042c × FR-045 — A RETRY FROM THE **MENU** REPORTS ITS FAILURE, IN BOTH PANEL TYPES.
- *
- * ══ THE DEFECT ══
- *
- * FR-042c makes the menu item the SAME command as the banner's control; FR-045 requires a failed
- * retry to remain and say so. Each menu ran the underlying operation directly instead — the editor's
- * `getEditorActions(id).reloadFromDisk()`, the terminal's `retryStart()` — so neither ever reached
- * the banner's retry state. The re-attempt really happened and the banner said nothing about it: the
- * user is left with a banner that has not moved and no way to tell a retry that failed from a click
- * that never landed. `terminal-panel.tsx` records that exact "did my click do anything?" failure as
- * the reason the design exists, so the requirement held on the button and nowhere else.
- *
- * The test above asserts the menu items EXIST. Existence is what was already true; this asserts they
- * are the same command.
- *
- * ══ WHY EACH HALF STARTS BY SWITCHING PROJECTS ══
- *
- * NOT to reach the panel — to REMOUNT it. The retry-failure sentence is the banner's own state, and
- * two earlier tests in this serial file leave it showing on the editor's banner. Asserting it after a
- * menu click would then pass against a banner that ignored the click completely, which is the same
- * vacuous green this whole file is written to avoid. Throng mounts one project's workspace at a
- * time, so `terminalPanel` → `editorPanel` unmounts and rebuilds the banner, and the assertion that
- * the sentence is ABSENT first is what makes its later presence mean something.
+/*
+ * DELETED (test-suite audit) — "Try again from the panel MENU reports a failed retry, in both panel types"
+ * (FR-042c × FR-045). The menu item runs the MOUNTED BANNER's retry (`retryPanelFailure`), not the operation
+ * directly (`reloadFromDisk()` / `retryStart()`), which is what lets a failed retry reach the banner's
+ * "That did not work" sentence. `component/panel-menu-try-again.test.ts` pins it for both panel types, red
+ * against each of those direct calls.
  */
-test('Try again from the panel MENU reports a failed retry, in both panel types', { tag: ['@extended', '@window'] }, async () => {
-  test.setTimeout(240_000);
-  const win = h.win;
-  // The fixed wording (FR-040b), asserted verbatim rather than as /still|failed/: the whole point is
-  // that the menu reaches the BANNER'S state, and only the banner writes this sentence.
-  const RETRY_FAILED = 'That did not work — the condition is still there.';
-
-  // ── Editor: right-click the panel HANDLE, where its own menu lives. ─────────────────────────
-  await terminalPanel(win); // leave `Real`, so entering it below rebuilds the editor's banner
-  const editorPid = await editorPanel(win);
-  await inFailureState(win, editorPid, 'editor');
-  await expect(
-    banner(win, editorPid),
-    'the banner came back already reporting a failed retry — this test cannot prove anything',
-  ).not.toContainText(RETRY_FAILED);
-
-  await win.getByTestId(`panel-handle-${editorPid}`).click({ button: 'right' });
-  await expect(win.getByTestId('context-menu')).toBeVisible();
-  await win.getByTestId('menu-item-Try again').click();
-  await expect(win.getByTestId('context-menu')).toHaveCount(0);
-
-  // The folder is still gone, so the re-read fails — and the banner has to SAY so, exactly as it
-  // does when its own icon is pressed.
-  await expect(banner(win, editorPid)).toBeVisible();
-  await expect(
-    banner(win, editorPid),
-    'a menu retry that failed left the banner standing in silence (FR-042c/FR-045)',
-  ).toContainText(RETRY_FAILED, { timeout: 20_000 });
-
-  // ── Terminal: right-click the panel BODY, the route 029 established. ────────────────────────
-  // Coming from `Real`, so this switch IS the terminal panel's remount — its banner is new, and the
-  // absence assertion below is a fact about it rather than about whatever the last test left behind.
-  const termPid = await terminalPanel(win);
-  await inFailureState(win, termPid, 'terminal');
-  await expect(banner(win, termPid)).not.toContainText(RETRY_FAILED);
-
-  await win.locator('.panel-box').first().click({ button: 'right', position: { x: 20, y: 120 } });
-  await expect(win.getByTestId('context-menu')).toBeVisible();
-  await win.getByTestId('menu-item-Try again').click();
-  await expect(win.getByTestId('context-menu')).toHaveCount(0);
-
-  await expect(banner(win, termPid)).toBeVisible();
-  await expect(
-    banner(win, termPid),
-    'a menu retry that failed left the banner standing in silence (FR-042c/FR-045)',
-  ).toContainText(RETRY_FAILED, { timeout: 60_000 });
-});
 
 /**
  * T054 — CANCEL, in both panel types. Runs LAST of the shared-app tests: it clears both.
