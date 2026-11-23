@@ -398,109 +398,18 @@ test('Replace onto a dirty open file keeps the changes under one notice; Ctrl+S 
   });
 });
 
-test('Discard on the replaced notice gives up the changes and shares the moved file (FR-012, FR-010)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
-  const root = makeProject('dirty-discard');
-  await runApp(async (_app, win) => {
-    const [owner, linked] = await openBoth(win, root, 'ReplDirtyDiscard');
-    await dirtyB(win, linked);
-    await replaceAOntoB(win, root);
-    await expectReplacedNotice(win, linked);
-
-    // Step 5: Discard — the panel shows the moved file, shared with A's panel as in MT-08.
-    await notice(win, linked).getByRole('button', { name: 'Discard' }).click();
-    await expect(notice(win, linked)).toHaveCount(0);
-    await expect(content(win, linked)).not.toContainText(MINE);
-    await expect(win.getByTestId(`panel-unsaved-${linked}`)).toHaveCount(0);
-    await expectShared(win, owner, linked, 'AFTERDISCARDZ');
-    await expectNoOpenFailure(win);
-  });
-});
-
-test('unloading with a replaced dirty file and choosing Save asks where to keep its changes (FR-012)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
-  const root = makeProject('dirty-unload');
-  await runApp(async (app, win) => {
-    const [, linked] = await openBoth(win, root, 'ReplDirtyUnload');
-    await dirtyB(win, linked);
-    await replaceAOntoB(win, root);
-    await expectReplacedNotice(win, linked);
-
-    // Step 6: Unload, Save — the replaced document cannot Save onto its path, so it asks where, and keeps the text.
-    const kept = join(root, 'kept.md');
-    await stubSaveDialog(app, kept);
-    await win.locator('.project-item', { hasText: 'ReplDirtyUnload' }).click({ button: 'right' });
-    await win.getByTestId('menu-item-Unload Project').click();
-    await expect(win.getByTestId('dirty-close-dialog')).toBeVisible();
-    await win.getByTestId('dirty-close-save').click();
-    await expect.poll(() => saveAsked(app), { timeout: FILE_OP_TIMEOUT_MS }).toBe(1);
-    await expect.poll(() => textOf(kept), { timeout: FILE_OP_TIMEOUT_MS }).toContain(MINE);
-    expect(textOf(join(root, 'dest', 'note.md'))).not.toContain(MINE); // never written onto the moved file
-  });
-});
-
-test('undoing the Replace gives the dirty panel its file back, still unsaved (FR-013)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
-  const root = makeProject('dirty-undo');
-  await runApp(async (_app, win) => {
-    const [owner, linked] = await openBoth(win, root, 'ReplDirtyUndo');
-    await dirtyB(win, linked);
-    await replaceAOntoB(win, root);
-    await expectReplacedNotice(win, linked);
-
-    // Step 7: undo the paste from the File Explorer.
-    await tree(win).getByRole('treeitem').first().click();
-    await pressAction(win, 'file.undo');
-    await expect.poll(() => existsSync(join(root, 'note.md')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
-    await expect.poll(() => textOf(join(root, 'dest', 'note.md')), { timeout: FILE_OP_TIMEOUT_MS }).toContain(B_BODY);
-
-    await expect(notice(win, linked)).toHaveCount(0, { timeout: FILE_OP_TIMEOUT_MS });
-    await expect(content(win, linked)).toContainText(MINE);
-    await expect(win.getByTestId(`panel-unsaved-${linked}`)).toHaveCount(1);
-    await expect(content(win, owner)).toContainText(A_BODY);
-    await expect(content(win, owner)).not.toContainText(MINE);
-    await expectNoOpenFailure(win);
-  });
-});
-
-// ── MT-10: Replace onto an open file whose source is NOT open (FR-011, FR-012) ────────────────────────────────────
-
-/** Only B is open, in a single editor. */
-async function openOnlyB(win: Page, root: string, project: string): Promise<string> {
-  await createProject(win, project, root);
-  const pid = await firstPanelId(win);
-  await toEditor(win, pid);
-  await tree(win).getByTestId('tree-twisty-dest').click();
-  await expect(tree(win).getByText('note.md', { exact: true })).toHaveCount(2);
-  await openInto(win, pid, noteRow(win, 'B'), B_BODY);
-  return pid;
-}
-
-test('Replace onto a clean open file whose source is not open reloads it, clean, with no notice (FR-011)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
-  const root = makeProject('only-clean');
-  await runApp(async (_app, win) => {
-    const pid = await openOnlyB(win, root, 'ReplOnlyClean');
-    await replaceAOntoB(win, root);
-    await expect(content(win, pid)).toContainText(A_BODY, { timeout: FILE_OP_TIMEOUT_MS });
-    await expect(content(win, pid)).not.toContainText(B_BODY);
-    // Negative: not left unsaved or missing once the paste has finished.
-    await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0);
-    await expect(notice(win, pid)).toHaveCount(0);
-    await expectNoOpenFailure(win);
-  });
-});
-
-test('Replace onto a dirty open file whose source is not open keeps the changes under the replaced notice (FR-012)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
-  const root = makeProject('only-dirty');
-  await runApp(async (app, win) => {
-    const pid = await openOnlyB(win, root, 'ReplOnlyDirty');
-    await dirtyB(win, pid);
-    await replaceAOntoB(win, root);
-    await expectReplacedNotice(win, pid);
-
-    await stubSaveDialog(app, join(root, 'never.md'));
-    await focusEditor(win, pid);
-    await pressAction(win, 'editor.save');
-    await expect.poll(async () => Number((await notice(win, pid).getAttribute('data-flash')) ?? '0')).toBeGreaterThan(0);
-    expect(textOf(join(root, 'dest', 'note.md'))).not.toContain(MINE);
-    expect(await saveAsked(app)).toBe(0);
-    await expectNoSecondSurface(win);
-  });
-});
+/*
+ * DELETED (suite audit) — each re-proved a rule an integration or component test owns and mutation-checked:
+ *   - "Discard on the replaced notice ... shares the moved file": component/editor-replaced-notice.test.ts
+ *     ("Discard calls discardReplaced for this panel"), integration/editor-one-buffer.integration.test.ts
+ *     ("discardReplaced drops the buffer and its recovery temp, and links B to A").
+ *   - "unloading with a replaced dirty file and choosing Save asks where": component/unload-project.test.ts
+ *     ("asks where to save the replaced file's changes, then unloads") plus component/editor-replaced-notice.test.ts
+ *     ("closing it with \"Save\" routes to Save As").
+ *   - "undoing the Replace gives the dirty panel its file back, still unsaved": integration/transfer-clash
+ *     ("undo after a dirty Replace: A goes back to src, and B re-claims dest still dirty") plus
+ *     component/editor-replaced-notice.test.ts ("is gone once the authority clears the replaced state").
+ *   - MT-10 "Replace onto a clean / dirty open file whose source is not open": integration/transfer-clash
+ *     ("only dest open and clean ...", "only dest open and dirty ...") plus component/editor-replaced-notice.test.ts.
+ * The dirty-path wiring case above (notice, refused Ctrl+S, Save As) stays.
+ */
