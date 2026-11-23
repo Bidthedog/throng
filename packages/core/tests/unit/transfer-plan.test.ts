@@ -60,6 +60,13 @@ describe('landingPlan (050 FR-033, SC-010)', () => {
     ]);
   });
 
+  it('does not depend on the selection order: the shallower item first lands the same', () => {
+    expect(landingPlan(['C:\\r\\test.md', 'C:\\r\\test\\test.md'], 'C:\\r\\test2')).toEqual([
+      { src: 'C:\\r\\test.md', destDir: 'C:\\r\\test2' },
+      { src: 'C:\\r\\test\\test.md', destDir: 'C:\\r\\test2\\test' },
+    ]);
+  });
+
   it('lands every item directly in the target when they share one folder, as before', () => {
     expect(landingPlan(['C:/a/x.md', 'C:/a/y.md'], 'D:/b/dst')).toEqual([
       { src: 'C:/a/x.md', destDir: 'D:/b/dst' },

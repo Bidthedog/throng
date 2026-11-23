@@ -8,7 +8,7 @@
  * reset resolved defaults from a SECOND source (theme-reset.ts's DEFAULT_* constants),
  * which had already drifted from the record once.
  *
- * "Restores the whole document" and "leaves the other editor's document alone" for both operations are
+ * "Restores the whole document" and "leaves the other documents (key bindings, themes) alone" for both operations are
  * proven through the channel in reset-ipc.test.ts (`resetSettings` / `resetKeybindings`).
  */
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -17,11 +17,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_APP_SETTINGS,
-  DEFAULT_KEYBINDINGS,
   buildShippedDefaults,
   parseAppSettings,
-  parseKeybindings,
-  type Theme,
 } from '@throng/core';
 import { FileConfigStore } from '../../src/main/config-store.js';
 import { ShippedDefaultsService } from '../../src/main/shipped-defaults-service.js';
@@ -43,25 +40,6 @@ function makeService(root: string): { store: FileConfigStore; service: ShippedDe
 }
 
 describe('ShippedDefaultsService.resetSettings', () => {
-  it('leaves key bindings and themes untouched', async () => {
-    const root = freshRoot();
-    const { store, service } = makeService(root);
-    const customBindings = {
-      version: DEFAULT_KEYBINDINGS.version,
-      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'zoom.in': ['Ctrl+Q'] },
-    };
-    await store.write({ kind: 'keybindings' }, customBindings);
-    const editedTheme = { ...SHIPPED.themes.throng, colours: { ...SHIPPED.themes.throng.colours, accent: '#abcdef' } };
-    await store.write({ kind: 'theme', name: 'throng' }, editedTheme);
-
-    await service.resetSettings();
-
-    const bindingsAfter = await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
-    expect(bindingsAfter.bindings['zoom.in']).toEqual(['Ctrl+Q']);
-    const themeAfter = JSON.parse(await store.readRaw({ kind: 'theme', name: 'throng' })) as Theme;
-    expect(themeAfter.colours.accent).toBe('#abcdef');
-  });
-
   it('is idempotent on a config already at its shipped values', async () => {
     const root = freshRoot();
     const { store, service } = makeService(root);
