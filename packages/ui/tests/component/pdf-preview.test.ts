@@ -823,11 +823,16 @@ describe('smooth scrolling and resizing (FR-065a – FR-065c)', () => {
     mount(props());
     await waitFor(() => expect(pages()).toHaveLength(2));
     act(() => show(pages()[0]!));
-    await waitFor(() => expect(releases.has(1)).toBe(true));
-    await sleep(PDF_PAGE_SPINNER_DELAY_MS / 2);
+    // The delay runs from when the page is queued, which is this `show`, not from when its render starts: the page has
+    // to load first. Timed from the render, a page that took half the delay to load showed its spinner "early" (Windows
+    // CI). So: none at once, and the first sighting no sooner than the delay after the show (a timer never fires early;
+    // the 2 ms allow for the clocks' rounding).
+    const shownAt = performance.now();
     expect(screen.queryByTestId('pdf-page-loading-p1-1')).toBeNull();
     const spinner = await screen.findByTestId('pdf-page-loading-p1-1');
+    expect(performance.now() - shownAt).toBeGreaterThanOrEqual(PDF_PAGE_SPINNER_DELAY_MS - 2);
     expect(pages()[0]!.contains(spinner)).toBe(true);
+    await waitFor(() => expect(releases.has(1)).toBe(true));
     expect(spinner.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('Loading page 1');
     act(() => releases.get(1)!());
     await waitFor(() => expect(screen.queryByTestId('pdf-page-loading-p1-1')).toBeNull());
