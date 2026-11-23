@@ -89,6 +89,9 @@ const closeGate: {
 /** Extra members for the bridge, for the test that needs one (the file manager item, 069 FR-067). */
 let bridgeExtras: Record<string, unknown> = {};
 
+/** A document's raw text where a test wants the file to say something else (undefined = the default). */
+let readRawOverride: ((id?: { kind?: string }) => string | undefined) | null = null;
+
 /** Read a dotted path out of a settings-shaped record — what the shipped record holds there. */
 function getAtDottedPath(source: Record<string, unknown>, path: string): unknown {
   let cursor: unknown = source;
@@ -200,7 +203,10 @@ function mount(
         push?.({ settings, theme, keybindings: DEFAULT_KEYBINDINGS });
         return Promise.resolve({ ok: true });
       },
-      readRaw: () => Promise.resolve(JSON.stringify(settings, null, 2)),
+      readRaw: (id?: { kind?: string }) => {
+        const override = readRawOverride?.(id);
+        return Promise.resolve(override ?? JSON.stringify(settings, null, 2));
+      },
       listThemes: () => Promise.resolve(themeList),
       listFonts: () => Promise.resolve([]),
     },
@@ -271,6 +277,7 @@ function setJson(text: string): void {
  */
 afterEach(async () => {
   bridgeExtras = {};
+  readRawOverride = null;
   closeGate.holdWrites = false;
   for (const release of closeGate.held.splice(0)) release();
   closeGate.replies.length = 0;
@@ -399,6 +406,35 @@ describe('an invalid JSON document blocks every exit, says so ONCE, and writes n
     await user.click(screen.getByTestId('prefs-tab-keybindings'));
 
     await waitFor(() => expect(screen.getByTestId('json-tab-keybindings')).toBeInTheDocument());
+  });
+});
+
+describe('a document that is absent or unreadable through no edit of the user’s never traps them', () => {
+  it('lets a clean, empty Themes JSON buffer (the active theme has no file) be left for another tab', async () => {
+    /*
+     * Migrated from preferences-json.e2e.ts "a document that is absent or unreadable through no edit of the
+     * user’s never traps them". The active theme names a file that does not exist, so the Themes JSON tab opens
+     * on an empty, unparseable buffer the user never typed into. `isValid` must treat that CLEAN buffer as
+     * leavable (`json-tab.tsx`, `!dirtyRef.current ||`). The window-close half stays covered by the neighbouring
+     * E2E "a refused close …" and the close-gate test below; a BrowserWindow refusing to close is E2E-only.
+     */
+    readRawOverride = (id) => (id?.kind === 'theme' ? '' : undefined);
+    const { user } = mount('settings', { appearance: { theme: 'Ghost' } }, {}, ['throng', 'Ghost']);
+    await ready();
+    await intoJson(user);
+
+    await user.click(screen.getByTestId('prefs-tab-themes'));
+    await waitFor(() => expect(screen.getByTestId('json-tab-theme')).toBeVisible());
+    // The buffer really is empty — otherwise leaving proves nothing about an unparseable document.
+    await waitFor(() => expect(screen.getByTestId('json-editor-theme')).toBeInTheDocument());
+    expect((screen.getByTestId('json-editor-theme') as HTMLTextAreaElement).value).toBe('');
+
+    await user.click(screen.getByTestId('prefs-tab-settings'));
+    await waitFor(
+      () => expect(screen.getByTestId('json-tab-settings')).toBeVisible(),
+      { timeout: 3000 },
+    );
+    expect(screen.queryByTestId('json-tab-theme')).toBeNull();
   });
 });
 

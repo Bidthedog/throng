@@ -109,37 +109,6 @@ function readTheme(cfgRoot: string, name = 'throng'): Record<string, string> | u
   return doc.colours;
 }
 
-test('the picker card takes its surface from the THEME, not a system colour (FR-020)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-
-      // The swatch is a real button now, not an <input type="color"> whose popup we cannot reach.
-      /*
-       * That the swatch is a BUTTON, that clicking it draws a picker with a saturation-value area
-       * and a hue strip, and that no native `<input type="color">` exists in either state — all of
-       * that is asserted at the component layer now (034 FR-045), in
-       * `tests/component/colour-field.test.ts`, where it costs no window.
-       *
-       * What is left is the half jsdom structurally cannot have: the picker's card takes its surface
-       * from the THEME, read back through `getComputedStyle`. That is an inherited, cascaded value,
-       * and jsdom applies no real cascade — asserting it there would be asserting about jsdom
-       * (034 FR-049).
-       */
-      const swatch = prefs.getByTestId('control-colours.accent');
-      await expect(swatch).toBeVisible();
-      await swatch.click();
-      const picker = prefs.getByTestId('control-colours.accent-picker');
-      await expect(picker).toBeVisible();
-
-      // Its card takes the dialog surface from the theme, not a system colour.
-      await expect
-        .poll(() => picker.evaluate((el) => getComputedStyle(el).backgroundColor))
-        .toMatch(/rgb/);
-    },
-  );
-});
-
 /*
  * MOVED to `packages/ui/tests/component/colour-field.test.ts` (034 FR-045):
  * "an INVALID colour is rejected, the last valid one stands, and the row says so (FR-026)", plus the
@@ -161,8 +130,8 @@ test('the picker card takes its surface from the THEME, not a system colour (FR-
  *     the element's own `type` win. Aimed at the real attributes: hex field 4 failed, hue strip 1.
  *     That second one only reddens because the test was strengthened to check the OPEN picker too.
  *
- * WHAT STAYS: the two viewport tests, which read `boundingBox()` and require the picker to land
- * fully on screen at the right and bottom edges. `clamp-to-viewport.test.ts` proves the FUNCTION
+ * WHAT STAYS (now inside the keyboard test below): the viewport checks, which read `boundingBox()` and
+ * require the picker to land fully on screen at the right and bottom edges. `clamp-to-viewport.test.ts` proves the FUNCTION
  * clamps; only a real window proves the RENDERED picker, at its real measured size against a real
  * viewport, actually fits — the v5.1.0 real-layout reserve. This migration was nearly over-claimed on
  * exactly that point. Also staying: the live-apply-and-persist test, including that rapid edits
@@ -172,7 +141,48 @@ test('the picker is fully keyboard-operable, with a visible focus indicator (FR-
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
-      await prefs.getByTestId('control-colours.accent').click();
+
+      /*
+       * MERGED (test-suite audit) from three tests that each opened this same Themes window and the same
+       * `colours.accent` picker: the THEME-sourced surface (FR-020), the RIGHT-edge fit and the BOTTOM-edge fit
+       * (021/FR-036). Only a real window has a cascade and a measured picker against a real viewport, so they stay
+       * at E2E — but in one launch. The layout checks run first, while the window is untouched; the arrow keys,
+       * which write the theme, come last.
+       */
+      // The swatch sits near the right edge of the window (right-aligned in its row), so this is also the
+      // RIGHT-edge fit: a picker opening straight down from `left: 0` used to run off the right side.
+      const swatch = prefs.getByTestId('control-colours.accent');
+      await swatch.scrollIntoViewIfNeeded();
+      await swatch.click();
+      const picker = prefs.getByTestId('control-colours.accent-picker');
+      await expect(picker).toBeVisible();
+      await expectWithinViewport(prefs, await picker.boundingBox());
+
+      // FR-020: its card takes the dialog surface from the theme. A real value, and not a transparent one — an
+      // unset surface computes to `rgba(0, 0, 0, 0)`, which the old `/rgb/` match let through.
+      await expect
+        .poll(() => picker.evaluate((el) => getComputedStyle(el).backgroundColor))
+        .toMatch(/^rgba?\((?!0,\s*0,\s*0,\s*0\))/);
+      await prefs.keyboard.press('Escape');
+      await expect(picker).toBeHidden();
+
+      // BOTTOM edge: scroll the Themes panel to the bottom and open the LAST swatch — its picker would open off
+      // the bottom of the window unless it flips above.
+      await prefs.getByTestId('prefs-panel-themes').evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      const last = prefs.locator('.ctl__colour-swatch').last();
+      await last.scrollIntoViewIfNeeded();
+      await last.click();
+      const bottomPicker = prefs.locator('.colour-picker');
+      await expect(bottomPicker).toBeVisible();
+      await expectWithinViewport(prefs, await bottomPicker.boundingBox());
+      await prefs.keyboard.press('Escape');
+      await expect(bottomPicker).toBeHidden();
+
+      // FR-024, from the top again.
+      await swatch.scrollIntoViewIfNeeded();
+      await swatch.click();
 
       // It opens with focus in the saturation area, so a keyboard user can begin at once.
       const sv = prefs.getByTestId('control-colours.accent-sv');
@@ -206,45 +216,6 @@ async function expectWithinViewport(page: Page, box: { x: number; y: number; wid
   expect(box!.x + box!.width).toBeLessThanOrEqual(vp.width + 0.5);
   expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height + 0.5);
 }
-
-test('the picker opens fully on-screen near the RIGHT edge (021/FR-036)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-
-      // Colour controls are right-aligned in their row (`justify-content: flex-end`, min-width 180px),
-      // so a swatch sits near the right edge of the ~780px window. A picker that opened straight down
-      // from `left: 0` used to run off the right side; it must now clamp/flip to stay on-screen.
-      const swatch = prefs.getByTestId('control-colours.accent');
-      await swatch.scrollIntoViewIfNeeded();
-      await swatch.click();
-      const picker = prefs.getByTestId('control-colours.accent-picker');
-      await expect(picker).toBeVisible();
-      await expectWithinViewport(prefs, await picker.boundingBox());
-    },
-  );
-});
-
-test('the picker opens fully on-screen near the BOTTOM edge (021/FR-036)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-
-      // Scroll the Themes panel to the bottom and open the LAST colour swatch — its picker would open
-      // off the bottom of the window unless it flips above.
-      await prefs.getByTestId('prefs-panel-themes').evaluate((el) => {
-        el.scrollTop = el.scrollHeight;
-      });
-      const swatches = prefs.locator('.ctl__colour-swatch');
-      const last = swatches.last();
-      await last.scrollIntoViewIfNeeded();
-      await last.click();
-      const picker = prefs.locator('.colour-picker');
-      await expect(picker).toBeVisible();
-      await expectWithinViewport(prefs, await picker.boundingBox());
-    },
-  );
-});
 
 test('the colour applies LIVE and persists — and rapid edits compound into one write (FR-022, FR-023)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
