@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { vi, beforeEach, describe, expect, it } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import type { LinkResolution, LinkResolutionRequest, ResolvedLink } from '@throng/core';
 import { createFileLinkProvider } from '../../src/renderer/terminal/file-link-provider.js';
@@ -19,6 +19,10 @@ import {
   type EditorLinkDeps,
 } from '../../src/renderer/editor/link-decorations.js';
 import { terminalViewScan } from '../../src/renderer/terminal/link-view-marks.js';
+
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
 
 /**
  * 045 T112, FR-060 / SC-008 — the two detection switches, and **exactly** what each one stops.

@@ -7,6 +7,10 @@ import {
   type LinkFollowDeps,
 } from '../../src/renderer/links/link-actions.js';
 
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
+
 /**
  * 045 FR-054, FR-055 — the ONE router both surfaces call.
  *

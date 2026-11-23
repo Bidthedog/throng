@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { WINDOW_HANDLED_ACTIONS } from '../../src/renderer/keybindings/window-dispatcher.js';
+
+// The unit layer runs in `environment: 'node'`, which has no `window`; something the dispatcher imports reads it as the
+// module loads (`workspace-store` reads `window.location.search`), so the stub is hoisted above the imports.
+vi.hoisted(() => {
+  vi.stubGlobal('window', { location: { search: '' } });
+});
 
 /**
  * Which actions the WINDOW owns, and which are left to whatever has focus.

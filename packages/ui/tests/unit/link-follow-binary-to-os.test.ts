@@ -12,6 +12,10 @@ import type { LinkResolutionRequest, OpenDecision, ResolvedLink } from '@throng/
 import { followLink, type LinkFollowDeps } from '../../src/renderer/links/link-actions.js';
 import { refusedAsBinaryToOs } from '../../src/renderer/links/open-unsupported-in-os.js';
 
+// The unit layer runs in `environment: 'node'`, which has no `window`; production reads `window.throng`, so
+// alias `window` to the global object (the same stub `copy-path-menu.test.ts` uses, in its simplest form).
+vi.stubGlobal('window', globalThis);
+
 const ROOT = '/p';
 const BIN = `${ROOT}/img/logo.png`;
 const TS = `${ROOT}/src/a.ts`;

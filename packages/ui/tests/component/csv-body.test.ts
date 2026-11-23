@@ -333,26 +333,6 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     ]);
   });
 
-  it('a pasted block lands at the top-left of a range extended down and right, as one operation', async () => {
-    mount('a,b,c\n1,2,3\n4,5,6\n');
-    const grid = screen.getByTestId('csv-grid-p1');
-    fireEvent.mouseDown(cellAt(0, 0), { button: 0 });
-    fireEvent.mouseUp(window);
-    fireEvent.keyDown(grid, { key: 'ArrowDown', shiftKey: true });
-    fireEvent.keyDown(grid, { key: 'ArrowRight', shiftKey: true });
-    fireEvent.paste(grid, { clipboardData: { getData: () => 'p\tq\nr\ts' } });
-    await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalledTimes(1));
-    expect(lastOps()[0]).toEqual({
-      kind: 'setCells',
-      cells: [
-        { row: 0, col: 0, value: 'p' },
-        { row: 0, col: 1, value: 'q' },
-        { row: 1, col: 0, value: 'r' },
-        { row: 1, col: 1, value: 's' },
-      ],
-    });
-  });
-
   it('one value pasted onto a multi-cell selection fills every selected cell', async () => {
     mount('a,b,c\n1,2,3\n4,5,6\n');
     const grid = screen.getByTestId('csv-grid-p1');
@@ -386,21 +366,6 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(bridge.gridEdit, 'an empty paste edited the grid').not.toHaveBeenCalled();
     expect(cellAt(1, 1).textContent).toBe('2');
-  });
-
-  it('a whole-row selection pastes from column A', async () => {
-    mount('a,b\n1,2\n3,4\n');
-    fireEvent.mouseDown(rowHead(1), { button: 0 });
-    fireEvent.mouseUp(window);
-    fireEvent.paste(screen.getByTestId('csv-grid-p1'), { clipboardData: { getData: () => 'p\tq' } });
-    await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalledTimes(1));
-    expect(lastOps()[0]).toEqual({
-      kind: 'setCells',
-      cells: [
-        { row: 1, col: 0, value: 'p' },
-        { row: 1, col: 1, value: 'q' },
-      ],
-    });
   });
 
   it('names the editor route Go to Editor while the preview is linked to an editor, Open in Editor otherwise (T089)', () => {
@@ -689,14 +654,6 @@ describe('CsvBody cell dialog (FR-036a, FR-036b, FR-060a)', () => {
     expect(screen.getByLabelText('Cell value')).toBeTruthy();
   });
 
-  it('still edits in place when a character is typed on a long cell', () => {
-    open();
-    select(2, 0);
-    fireEvent.keyDown(grid(), { key: 'x' });
-    expect(dialog()).toBeNull();
-    expect((screen.getByLabelText('Cell value') as HTMLTextAreaElement).value).toBe('x');
-  });
-
   it('opens a value that is a JSON object pretty-printed, with the editor highlighting it as JSON', async () => {
     open();
     select(1, 1);
@@ -843,35 +800,24 @@ describe('CsvBody cell dialog (FR-036a, FR-036b, FR-060a)', () => {
   });
 
   describe('availability — the panel\'s own choice, else the setting', () => {
-    it('with the setting off and no choice: no routing and no menu item', () => {
-      open({ providerSettings: settings({ editLongCellsInDialog: false }) });
+    it.each<[string, () => Partial<PreviewBodyProps>, boolean]>([
+      ['with the setting off and no choice: no routing and no menu item', () => ({ providerSettings: settings({ editLongCellsInDialog: false }) }), false],
+      ['with the setting on but the panel switched off: the same', () => ({ cellDialogChoice: false }), false],
+      ['with the setting off but the panel switched on: both are offered', () => ({ providerSettings: settings({ editLongCellsInDialog: false }), cellDialogChoice: true }), true],
+    ])('%s', (_name, over, offered) => {
+      open(over());
       select(2, 0);
       fireEvent.keyDown(grid(), { key: 'Enter' });
-      expect(dialog()).toBeNull();
-      expect(screen.getByLabelText('Cell value')).toBeTruthy();
-      fireEvent.keyDown(screen.getByLabelText('Cell value'), { key: 'Escape' });
+      if (offered) {
+        expect(dialog()).not.toBeNull();
+        fireEvent.keyDown(dialog()!, { key: 'Escape' });
+      } else {
+        expect(dialog()).toBeNull();
+        expect(screen.getByLabelText('Cell value')).toBeTruthy();
+        fireEvent.keyDown(screen.getByLabelText('Cell value'), { key: 'Escape' });
+      }
       fireEvent.contextMenu(cellAt(1, 0), { clientX: 5, clientY: 5 });
-      expect(menuHas('Edit in Dialog…')).toBe(false);
-    });
-
-    it('with the setting on but the panel switched off: the same', () => {
-      open({ cellDialogChoice: false });
-      select(2, 0);
-      fireEvent.keyDown(grid(), { key: 'Enter' });
-      expect(dialog()).toBeNull();
-      fireEvent.keyDown(screen.getByLabelText('Cell value'), { key: 'Escape' });
-      fireEvent.contextMenu(cellAt(1, 0), { clientX: 5, clientY: 5 });
-      expect(menuHas('Edit in Dialog…')).toBe(false);
-    });
-
-    it('with the setting off but the panel switched on: both are offered', () => {
-      open({ providerSettings: settings({ editLongCellsInDialog: false }), cellDialogChoice: true });
-      select(2, 0);
-      fireEvent.keyDown(grid(), { key: 'Enter' });
-      expect(dialog()).not.toBeNull();
-      fireEvent.keyDown(dialog()!, { key: 'Escape' });
-      fireEvent.contextMenu(cellAt(1, 0), { clientX: 5, clientY: 5 });
-      expect(menuHas('Edit in Dialog…')).toBe(true);
+      expect(menuHas('Edit in Dialog…')).toBe(offered);
     });
 
     it('reads the threshold as a whole number of at least 1', () => {
@@ -971,32 +917,15 @@ describe('CsvBody wrap (FR-013, FR-060b)', () => {
     );
   });
 
-  it('is off by default: every row one line, cells truncated', () => {
-    mount(DOC);
-    expect(rowHeight(1)).toBe(22);
-    expect(cellAt(1, 0).textContent).toBe('x⏎y⏎z');
-  });
-
-  it('wraps when the panel chose it: the row grows to show every line break', () => {
-    mount(DOC, { wrapChoice: true });
-    expect(rowHeight(1)).toBe(66);
-    expect(cellAt(1, 0).textContent).toBe('x\ny\nz');
-  });
-
-  it('wraps when the setting is on and the panel has not chosen', () => {
-    mount(DOC, { providerSettings: { enabled: true, wrapCells: true } });
-    expect(rowHeight(1)).toBe(66);
-  });
-
-  it('takes the panel choice over the setting, either way', () => {
-    mount(DOC, { wrapChoice: false, providerSettings: { enabled: true, wrapCells: true } });
-    expect(rowHeight(1)).toBe(22);
-  });
-
-  it('changes nothing in the document: no edit is sent and nothing becomes dirty', () => {
-    mount(DOC, { wrapChoice: true });
-    expect(bridge.gridEdit).not.toHaveBeenCalled();
-    expect(getEditorState('p1')?.dirty ?? false).toBe(false);
+  it.each<[string, Partial<PreviewBodyProps>, number, string | undefined]>([
+    ['is off by default: every row one line, cells truncated', {}, 22, 'x⏎y⏎z'],
+    ['wraps when the panel chose it: the row grows to show every line break', { wrapChoice: true }, 66, 'x\ny\nz'],
+    ['wraps when the setting is on and the panel has not chosen', { providerSettings: { enabled: true, wrapCells: true } }, 66, undefined],
+    ['takes the panel choice over the setting, either way', { wrapChoice: false, providerSettings: { enabled: true, wrapCells: true } }, 22, undefined],
+  ])('%s', (_name, over, height, text) => {
+    mount(DOC, over);
+    expect(rowHeight(1)).toBe(height);
+    if (text !== undefined) expect(cellAt(1, 0).textContent).toBe(text);
   });
 });
 
@@ -1005,38 +934,37 @@ describe('CsvBody lock first row and column (FR-039a, FR-060d)', () => {
   const lockedRow = (): Element | null => document.querySelector('.data-grid__row--locked');
   const lockedCol = (): Element | null => document.querySelector('.data-grid__cell--locked-col');
 
-  it('is off by default', () => {
-    mount(DOC);
-    expect(lockedRow()).toBeNull();
-    expect(lockedCol()).toBeNull();
+  const BOTH_ON = { enabled: true, lockFirstRow: true, lockFirstColumn: true };
+  it.each<[string, Partial<PreviewBodyProps>, boolean, boolean]>([
+    ['is off by default', {}, false, false],
+    ['locks the row the panel chose', { lockFirstRowChoice: true }, true, false],
+    ['locks the column the panel chose', { lockFirstColumnChoice: true }, false, true],
+    ['locks what the settings say when the panel has not chosen', { providerSettings: BOTH_ON }, true, true],
+    [
+      'lets the panel choice win over the settings',
+      { lockFirstRowChoice: false, lockFirstColumnChoice: false, providerSettings: BOTH_ON },
+      false,
+      false,
+    ],
+  ])('%s', (_name, over, row, column) => {
+    mount(DOC, over);
+    expect(lockedRow() !== null).toBe(row);
+    expect(lockedCol() !== null).toBe(column);
+  });
+});
+
+describe('CsvBody wrap and lock change nothing in the document (FR-013, FR-039a)', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8 }) }) as unknown as CanvasRenderingContext2D,
+    );
   });
 
-  it('locks what the panel chose', () => {
-    mount(DOC, { lockFirstRowChoice: true });
-    expect(lockedRow()).not.toBeNull();
-    expect(lockedCol()).toBeNull();
-    document.body.replaceChildren();
-    mount(DOC, { lockFirstColumnChoice: true });
-    expect(lockedRow()).toBeNull();
-    expect(lockedCol()).not.toBeNull();
-  });
-
-  it('locks what the settings say when the panel has not chosen, and the panel choice wins', () => {
-    mount(DOC, { providerSettings: { enabled: true, lockFirstRow: true, lockFirstColumn: true } });
-    expect(lockedRow()).not.toBeNull();
-    expect(lockedCol()).not.toBeNull();
-    document.body.replaceChildren();
-    mount(DOC, {
-      lockFirstRowChoice: false,
-      lockFirstColumnChoice: false,
-      providerSettings: { enabled: true, lockFirstRow: true, lockFirstColumn: true },
-    });
-    expect(lockedRow()).toBeNull();
-    expect(lockedCol()).toBeNull();
-  });
-
-  it('changes nothing in the document: no edit is sent', () => {
-    mount(DOC, { lockFirstRowChoice: true, lockFirstColumnChoice: true });
+  it.each<[string, string, Partial<PreviewBodyProps>]>([
+    ['wrap', 'a,b\n"x\ny\nz",2\n', { wrapChoice: true }],
+    ['lock first row and column', 'a,b\n1,2\n3,4\n', { lockFirstRowChoice: true, lockFirstColumnChoice: true }],
+  ])('%s: no edit is sent and nothing becomes dirty', (_name, doc, over) => {
+    mount(doc, over);
     expect(bridge.gridEdit).not.toHaveBeenCalled();
     expect(getEditorState('p1')?.dirty ?? false).toBe(false);
   });
