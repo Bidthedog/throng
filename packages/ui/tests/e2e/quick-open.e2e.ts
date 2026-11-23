@@ -24,7 +24,7 @@
  *                        in `quick-open-target.e2e.ts`, which owns its behaviour. This file asserts
  *                        only its ABSENCE (FR-011), which is the half nothing else covers.
  */
-import { TEST_SHELL, markdownOpensInEditor } from './harness.js';
+import { TEST_SHELL } from './harness.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -35,7 +35,6 @@ import {
   QUICK_OPEN_CHORD,
   openQuickOpen,
   quickOpenRows,
-  chooseQuickOpenRow,
 } from './helpers/navigation.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
@@ -294,7 +293,7 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
  * WHAT STAYS, and why it is not the same claim: "clicking a row opens that file" below. The
  * component test can only see that `onChoose` fired with the right entry. That a file then opens
  * — the right one, in the right panel — is the wiring between the picker and the workspace, and
- * it is what SC-004 turns on. One witness of that seam is kept rather than four.
+ * it is what SC-004 turned on. The first test above witnesses that seam once.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -302,10 +301,11 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
 /*
- * `clicking a row opens that file and closes the modal (AS-4)` MERGED into the SC-004 test below
- * (test-suite audit): its Quick Open leg now CHOOSES BY CLICK (`chooseQuickOpenRow`), so the one test
- * proves both that the click is a way to choose (and closes the modal, Q5) and that the file lands as
- * it does from the tree.
+ * `clicking a row opens that file and closes the modal (AS-4)` and the SC-004 "same outcome as the tree"
+ * test are GONE as E2E: the click is `component/picker.test.ts` ("chooses the row that was clicked"), the
+ * absolute path and target handed to the open route are `component/quick-open-header.test.ts` and
+ * `component/editor-open-router.test.ts` (red-proved by passing a relative path from `openFromQuickOpen`),
+ * and the first test above opens a file by Quick Open and checks the panel it lands in.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -341,14 +341,10 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
  * at launch and had to be on disk before the window existed. A component test hands it through
  * `ConfigProvider` in one line.
  *
- * ══ WHAT PROVES THE INHERITANCE, AND WHY IT IS ENOUGH ══
+ * ══ WHAT PROVES THE INHERITANCE ══
  *
- * `:616` (SC-004, Q7) drives BOTH routes against identical fixtures and compares three things —
- * panel count, the header's file name, and the document body. That is the equivalence claim itself,
- * and it is stronger than any single route test: four route tests prove the routing four times,
- * where one equivalence test proves Quick Open is on the same path.
- *
- * The click gesture (AS-4) is the same SC-004 test: its Quick Open leg chooses by clicking a row.
+ * The SC-004 "same outcome as the tree" E2E is GONE: the router tests above pin the path and target handed
+ * to the open route, `picker.test.ts` pins the row click, and the first E2E opens a file by Quick Open.
  */
 
 
@@ -415,64 +411,6 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
  * match everything, so "empty input" and "empty list" are two different claims and FR-057
  * states only the first. Asserting the second would pin a behaviour no requirement asks for.
  */
-
-/* ────────────────────────────────────────────────────────────────────────────────────────────────
- * SC-004 — the same outcome as the route from the tree
- * ──────────────────────────────────────────────────────────────────────────────────────────────── */
-
-test('a file opened by Quick Open produces the same outcome as the same file opened from the tree (SC-004, Q7)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
-  const viaTree = createDeepTree('throng-qo-sc4-tree-');
-  const viaQuickOpen = createDeepTree('throng-qo-sc4-qo-');
-  try {
-    await runApp(async (_app, win) => {
-      await markdownOpensInEditor(win); // a .md opens its editor here (074 FR-016, amended)
-      await settle(win);
-
-      /**
-       * Both routes are DRIVEN and compared, rather than one being assumed.
-       *
-       * The outcome of an open is three things: how many editor panels exist afterwards, which file
-       * the panel header names, and what the document holds. Two identical fixtures in two projects
-       * keep the routes from interfering — creating a project swaps the whole workspace.
-       */
-      const outcome = async (): Promise<{ panels: number; file: string; body: string }> => {
-        const pid = (await win.locator('.editor-panel').first().evaluate(
-          (el) => (el as HTMLElement).closest('.panel-box')?.getAttribute('data-panel-id') ?? '',
-        )) as string;
-        return {
-          panels: await editors(win).count(),
-          file: (await win.getByTestId(`panel-file-${pid}`).textContent()) ?? '',
-          body: (await win.getByTestId(`editor-${pid}`).locator('.cm-content').textContent()) ?? '',
-        };
-      };
-
-      await createProject(win, 'QOSc4Tree', viaTree.root);
-      await win.getByTestId('file-explorer-tree').getByText('README.md', { exact: true }).click();
-      await expect(editors(win).locator('.cm-content')).toContainText('// README.md', {
-        timeout: 8000,
-      });
-      const fromTree = await outcome();
-
-      await createProject(win, 'QOSc4QuickOpen', viaQuickOpen.root);
-      await expect(editors(win)).toHaveCount(0);
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      // By CLICK, not Enter: this leg is also the only test here that clicks a row (AS-4), and
-      // `chooseQuickOpenRow` waits for the modal to detach (Q5).
-      expect(await chooseQuickOpenRow(win, 0)).toBe('README.md');
-      await expect(editors(win).locator('.cm-content')).toContainText('// README.md', {
-        timeout: 8000,
-      });
-      const fromQuickOpen = await outcome();
-
-      expect(fromQuickOpen).toEqual(fromTree);
-    });
-  } finally {
-    cleanupDeepTree(viaTree);
-    cleanupDeepTree(viaQuickOpen);
-  }
-});
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * FR-017 / Assumption 6 — a sub-workspace window searches ITS OWN root
