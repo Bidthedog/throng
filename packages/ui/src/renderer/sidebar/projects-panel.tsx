@@ -727,6 +727,13 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
       onRename: () => setRenamingId(project.id),
       onRemove: () => void confirmDelete(project.id, project.name),
       onUnload: (variant) => runUnloadProject(project, variant),
+      // #681 — by ID: main looks the root up, because `files.reveal('')` resolves against the ACTIVE
+      // project's root. A failure is the File Explorer reveal's ("reveal"), told about this project.
+      rootFolder: project.rootFolder,
+      onOpenInOsExplorer: () =>
+        void window.throng?.files?.revealProjectRoot?.(project.id).then((res) => {
+          if (res && 'error' in res) reportFailure(res.error, project.name, 'reveal');
+        }),
       categories: categories
         .filter((c) => c.id !== project.categoryId)
         .map((c) => ({ id: c.id, name: c.name })),

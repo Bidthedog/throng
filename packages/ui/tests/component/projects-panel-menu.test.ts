@@ -138,20 +138,35 @@ function fakeTerminal() {
   };
 }
 
+/** #681 — the files-service route Open in OS Explorer reaches, and the clipboard Copy Path writes to. */
+type RevealResult = { ok: true } | { error: string };
+function fakeFiles(result: RevealResult) {
+  return { revealProjectRoot: vi.fn((_projectId: string) => Promise.resolve(result)) };
+}
+function fakeClipboard() {
+  return { write: vi.fn((_req: { text: string; mode: string }) => Promise.resolve()) };
+}
+
 interface Mounted {
   /** Deliver a settings change the way a Preferences edit reaches this window (`config.onChange`). */
   setUnloadTerminalAction(action: UnloadAction): Promise<void>;
   terminal: ReturnType<typeof fakeTerminal>;
+  files: ReturnType<typeof fakeFiles>;
+  clipboard: ReturnType<typeof fakeClipboard>;
 }
 
-async function mount(opts: { unloadTerminalAction?: UnloadAction } = {}): Promise<Mounted> {
+async function mount(opts: { unloadTerminalAction?: UnloadAction; reveal?: RevealResult } = {}): Promise<Mounted> {
   const projectsClient = client();
   const services = fakeServices();
   const payload = (action: UnloadAction) => ({ settings: { projects: { unloadTerminalAction: action } } });
   let onChange: ((p: unknown) => void) | undefined;
   let configRead: Promise<unknown> = Promise.resolve();
   const terminal = fakeTerminal();
+  const files = fakeFiles(opts.reveal ?? { ok: true });
+  const clipboard = fakeClipboard();
   Reflect.set(window, 'throng', {
+    files,
+    clipboard,
     editor: {
       isOpen: () => Promise.resolve(false),
       saveAll: () => Promise.resolve({ saved: [], skippedUnpathed: [], failed: [] }),
@@ -206,6 +221,8 @@ async function mount(opts: { unloadTerminalAction?: UnloadAction } = {}): Promis
       });
     },
     terminal,
+    files,
+    clipboard,
   };
 }
 
@@ -428,5 +445,73 @@ describe('T126 — exactly two Unload rows, following projects.unloadTerminalAct
     await waitFor(() => expect(screen.getByTestId('project-item-p1')).toHaveAttribute('data-loaded', 'false'));
     expect(app.terminal.killAll).not.toHaveBeenCalled();
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+  });
+});
+
+/**
+ * #681 — Open in OS Explorer and Copy Path ▸ on a project row, wired to the real routes.
+ *
+ * Open in OS Explorer names the project by ID to the files service (`files.revealProjectRoot`), which
+ * looks the root up itself: the main-process `files.reveal('')` resolves against the ACTIVE project's
+ * root, so it would open the wrong folder for any other row. Copy Path writes the root verbatim.
+ * p2 is never loaded in these tests — both items work on an unloaded project.
+ */
+describe('#681 — Open in OS Explorer and Copy Path on a project row', () => {
+  it('Open in OS Explorer asks the files service to reveal THAT project’s root, by id, on an unloaded project', async () => {
+    const app = await mount();
+    await openMenuOn('p2');
+
+    fireEvent.click(screen.getByTestId('menu-item-Open in OS Explorer'));
+
+    await waitFor(() => expect(app.files.revealProjectRoot).toHaveBeenCalledWith('p2'));
+    expect(app.files.revealProjectRoot).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('project-error')).toBeNull();
+  });
+
+  it('a failed reveal (the root folder is gone) reports through the project failure notice, naming the project', async () => {
+    await mount({ reveal: { error: "ENOENT: no such file or directory, stat 'C:/projects/p2'" } });
+    await openMenuOn('p2');
+
+    fireEvent.click(screen.getByTestId('menu-item-Open in OS Explorer'));
+
+    // The File Explorer's reveal reports with the action "reveal"; the subject here is the project.
+    const notice = await screen.findByTestId('project-error');
+    expect(notice).toHaveTextContent(/couldn.?t reveal/i);
+    expect(notice).toHaveTextContent(/p2/);
+  });
+
+  it.each([
+    ['Absolute (Windows)', 'C:\\projects\\p2'],
+    ['Absolute (POSIX)', '/c/projects/p2'],
+  ])('Copy Path ▸ %s writes %s to the clipboard, verbatim', async (leaf, expected) => {
+    const app = await mount();
+    await openMenuOn('p2');
+
+    fireEvent.click(screen.getByTestId('menu-item-Copy Path'));
+    fireEvent.click(await screen.findByTestId(`menu-item-${leaf}`));
+
+    await waitFor(() => expect(app.clipboard.write).toHaveBeenCalledWith({ text: expected, mode: 'verbatim' }));
+  });
+
+  it('Copy Path offers no relative forms — a project root’s relative path is always "."', async () => {
+    await mount();
+    await openMenuOn('p1');
+
+    fireEvent.click(screen.getByTestId('menu-item-Copy Path'));
+    await screen.findByTestId('menu-item-Absolute (Windows)');
+
+    expect(screen.queryByTestId('menu-item-Relative (Windows)')).toBeNull();
+    expect(screen.queryByTestId('menu-item-Relative (POSIX)')).toBeNull();
+  });
+
+  it('both rows are reachable from the keyboard route (Shift+F10 on a focused row)', async () => {
+    await mount();
+    screen.getByTestId('project-item-p1').focus();
+
+    press('F10', { shiftKey: true });
+
+    await screen.findByTestId('context-menu');
+    expect(screen.getByTestId('menu-item-Open in OS Explorer')).toBeInTheDocument();
+    expect(screen.getByTestId('menu-item-Copy Path')).toBeInTheDocument();
   });
 });

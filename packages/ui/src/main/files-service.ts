@@ -56,6 +56,7 @@ export type DeleteMode = 'recycle' | 'permanent';
 
 const NO_ROOT = 'No active project.';
 const OUTSIDE = 'Target is outside the project root.';
+const UNKNOWN_PROJECT = 'Unknown project.';
 
 export class FilesService {
   private root: string | null = null;
@@ -138,6 +139,17 @@ export class FilesService {
 
   setOpenDocumentCheck(isOpen: (absPath: string) => boolean): void {
     this.isDocumentOpen = isOpen;
+  }
+
+  /**
+   * A project's absolute root folder, by id, or null for an unknown project — the bound on
+   * {@link revealProjectRoot} (#681). Injected for the reason the two seams above are: this service
+   * knows about a filesystem, not about the daemon's project list.
+   */
+  private projectRootOf: ((projectId: string) => Promise<string | null>) | null = null;
+
+  setProjectRootResolver(resolve: (projectId: string) => Promise<string | null>): void {
+    this.projectRootOf = resolve;
   }
 
   /**
@@ -543,6 +555,30 @@ export class FilesService {
       return { ok: true };
     } catch (e) {
       logExpected('files-service: reveal document', 'failed() logs the raw error and the explorer reports the cause', e);
+      return this.failed(e);
+    }
+  }
+
+  /**
+   * Open a project's ROOT folder in the OS file manager, by project id (#681 — the project list's
+   * Open in OS Explorer).
+   *
+   * Not `reveal('')`: that resolves against the root the main window's explorer last set, which is
+   * the ACTIVE project's, and the project list offers this on every row, loaded or not. The id is
+   * resolved here rather than trusting a path from the renderer, so nothing but a registered project
+   * root is reachable. Unresolvable (or no resolver wired) is a refusal — a lookup that fails open
+   * would open whatever path it was handed. A root that no longer exists fails through `failed`, the
+   * same path the explorer's reveal reports through.
+   */
+  async revealProjectRoot(projectId: string): Promise<OkOrError> {
+    const root = projectId && this.projectRootOf ? await this.projectRootOf(projectId) : null;
+    if (!root) return { error: UNKNOWN_PROJECT };
+    try {
+      await this.fs.stat(root);
+      await this.shell.openFolder(root);
+      return { ok: true };
+    } catch (e) {
+      logExpected('files-service: reveal project root', 'failed() logs the raw error and the project list reports the cause', e);
       return this.failed(e);
     }
   }
