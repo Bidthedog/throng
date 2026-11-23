@@ -19,7 +19,7 @@ import { skipIfElevated } from './admin.js';
 
 /** This platform's built-in shells: Windows' four, or the POSIX shells CI installs (scripts/ci-linux-setup.sh). */
 const FLAVOURS: readonly string[] =
-  process.platform === 'win32' ? ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] : ['bash', 'zsh', 'fish'];
+  process.platform === 'win32' ? ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] : ['bash']; // zsh and fish: terminal-shell-flavours.integration.test.ts
 
 /**
  * Flavours whose live cwd the daemon does not currently report.

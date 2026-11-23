@@ -20,7 +20,9 @@ import { skipIfElevated } from './admin.js';
 
 const WINDOWS = process.platform === 'win32';
 /** This platform's built-in shells, each handed a startup command by its own recipe (`command-recipe.ts`). */
-const FLAVOURS: readonly string[] = WINDOWS ? ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] : ['bash', 'zsh', 'fish', 'sh'];
+// POSIX: bash only. zsh, fish and sh, and the quoted-path case per shell, are driven against the real shells in
+// packages/daemon/tests/integration/terminal-shell-flavours.integration.test.ts; bash stays as the one wiring case.
+const FLAVOURS: readonly string[] = WINDOWS ? ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] : ['bash'];
 
 /**
  * A QUOTED absolute executable with a DASH argument, and what it prints when it really ran — never text its own
@@ -81,47 +83,51 @@ for (const flavour of FLAVOURS) {
     }
   });
 
-  test(`[${flavour}] a QUOTED executable path runs, and reports no parse error`, { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
-  // daemon routes terminals through the de-elevated agent, a different process tree these
-  // assertions do not describe — the condition this guard exists for.
-  skipIfElevated();
-    test.setTimeout(120_000);
-    const root = mkdtempSync(join(tmpdir(), `throng-sucq-${flavour}-`));
-    let present = true;
-    try {
-      await runApp(async (_app, win) => {
-        await createProject(win, 'StartupCmdQuoted', root);
-        const pid = await firstPanelId(win);
-        await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        if (!(await flavourAvailable(win, flavour))) {
-          present = false;
-          return;
-        }
-        await win.getByTestId('terminal-flavour').selectOption(flavour);
-        // A quoted absolute path with an argument — what you get from copying a path that has
-        // spaces in it. The DASH argument matters: PowerShell only mis-parses when a `-` token
-        // follows the quoted string. A `/`-style switch does not reproduce it at all, so an
-        // earlier version of this test passed against the very bug it was written for.
-        await win.getByTestId('terminal-startup-command').fill(QUOTED_COMMAND);
-        await win.getByTestId(`panel-type-confirm-${pid}`).click();
+  // POSIX: the quoted-path case runs per shell in terminal-shell-flavours.integration.test.ts; bash's wiring through
+  // the app is the startup-command case above. Only Windows keeps it here (PowerShell's call operator is the bug it caught).
+  if (WINDOWS) {
+    test(`[${flavour}] a QUOTED executable path runs, and reports no parse error`, { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+    // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+    // daemon routes terminals through the de-elevated agent, a different process tree these
+    // assertions do not describe — the condition this guard exists for.
+    skipIfElevated();
+      test.setTimeout(120_000);
+      const root = mkdtempSync(join(tmpdir(), `throng-sucq-${flavour}-`));
+      let present = true;
+      try {
+        await runApp(async (_app, win) => {
+          await createProject(win, 'StartupCmdQuoted', root);
+          const pid = await firstPanelId(win);
+          await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+          if (!(await flavourAvailable(win, flavour))) {
+            present = false;
+            return;
+          }
+          await win.getByTestId('terminal-flavour').selectOption(flavour);
+          // A quoted absolute path with an argument — what you get from copying a path that has
+          // spaces in it. The DASH argument matters: PowerShell only mis-parses when a `-` token
+          // follows the quoted string. A `/`-style switch does not reproduce it at all, so an
+          // earlier version of this test passed against the very bug it was written for.
+          await win.getByTestId('terminal-startup-command').fill(QUOTED_COMMAND);
+          await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
-        const term = win.getByTestId(`terminal-${pid}`);
-        await expect(term).toBeVisible();
-        // The shell survived...
-        await expect(win.getByTestId(`panel-type-select-${pid}`)).toHaveCount(0);
-        // ...and did not complain. This is the assertion that catches the PowerShell defect: it
-        // reported "Unexpected token" and "ParserError" rather than running the command.
-        // Assert POSITIVELY that the command RAN. A negative assertion on the error text is
-        // unreliable: xterm wraps long lines, so 'Unexpected token' can be split across rows and
-        // silently never match — an earlier version of this test passed against the real bug
-        // for exactly that reason. The program's own output is unambiguous and cannot be faked by an
-        // echo of the command line.
-        await expect(term).toContainText(QUOTED_OUTPUT, { timeout: 30_000 });
-      });
-      test.skip(!present, `${flavour} is not installed on this machine`);
-    } finally {
-      cleanupTemp(root);
-    }
-  });
+          const term = win.getByTestId(`terminal-${pid}`);
+          await expect(term).toBeVisible();
+          // The shell survived...
+          await expect(win.getByTestId(`panel-type-select-${pid}`)).toHaveCount(0);
+          // ...and did not complain. This is the assertion that catches the PowerShell defect: it
+          // reported "Unexpected token" and "ParserError" rather than running the command.
+          // Assert POSITIVELY that the command RAN. A negative assertion on the error text is
+          // unreliable: xterm wraps long lines, so 'Unexpected token' can be split across rows and
+          // silently never match — an earlier version of this test passed against the real bug
+          // for exactly that reason. The program's own output is unambiguous and cannot be faked by an
+          // echo of the command line.
+          await expect(term).toContainText(QUOTED_OUTPUT, { timeout: 30_000 });
+        });
+        test.skip(!present, `${flavour} is not installed on this machine`);
+      } finally {
+        cleanupTemp(root);
+      }
+    });
+  }
 }

@@ -153,24 +153,12 @@ async function runInTerminal(
   await expect(term).toContainText(evidence, { timeout: 25_000 });
 }
 
-test('memory ON: a command started IN the terminal is observed and persisted (US2 row 2)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
-  // daemon routes terminals through the de-elevated agent, a different process tree these
-  // assertions do not describe — the condition this guard exists for.
-  skipIfElevated();
-  test.setTimeout(120_000);
-  await withTerminal('MemRow2', { remember: true }, async ({ win, data, term }) => {
-    await runInTerminal(win, term, LONG_RUNNING, LONG_RUNNING_OUTPUT);
-    // The raw observation must reach the persisted layout while it is still running — this is what
-    // survives an end that never runs teardown code.
-    await expectLayout(
-      data,
-      'MemRow2',
-      (j) => /"observedCommand":"[^"]*ping[^"]*"/i.test(j),
-      'the running command was never observed into the persisted layout',
-    );
-  });
-});
+/*
+ * DELETED: 'memory ON: a command started IN the terminal is observed and persisted (US2 row 2)'. The 'takes over' test
+ * below types `TAKEOVER` into the terminal with memory ON and asserts the same observation reaches the persisted
+ * layout (`observedCommand` matching the typed program's name) — the identical typed-in-terminal -> daemon observation
+ * -> renderer -> layout path, plus the interrupt and replacement.
+ */
 
 /*
  * DELETED: 'memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 4)'. Rows 3 and 4 are
