@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openDatabase, runMigrations, LATEST_VERSION, FileOpUndoRepository } from '@throng/persistence';
+import { openDatabase, runMigrations, FileOpUndoRepository } from '@throng/persistence';
 import { applyMigrationV8 } from '../../src/migrations/v8-fileop-undo.js';
 
 /**
@@ -32,21 +32,6 @@ function seedProject(db: ReturnType<typeof openDatabase>, id: string): void {
 }
 
 describe('migration v8', () => {
-  it('brings the chain up to v8 and creates the fileop_undo table', { tags: ['regression'] }, () => {
-    const db = freshDb();
-    try {
-      // At least v8: the exact latest version is pinned once, in user-version-pin, so a later
-      // migration does not have to edit every per-version file.
-      expect(LATEST_VERSION).toBeGreaterThanOrEqual(8);
-      const t = db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='fileop_undo'")
-        .get();
-      expect(t).toBeTruthy();
-    } finally {
-      db.close();
-    }
-  });
-
   it('round-trips a per-project stack blob and upserts it', () => {
     const db = freshDb();
     try {

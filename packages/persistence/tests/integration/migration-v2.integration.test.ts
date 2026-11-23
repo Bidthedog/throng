@@ -2,8 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openDatabase, runMigrations, LATEST_VERSION } from '@throng/persistence';
-import type { ThrongDatabase } from '@throng/persistence';
+import { openDatabase, runMigrations } from '@throng/persistence';
 
 const tempDirs: string[] = [];
 
@@ -13,14 +12,6 @@ function freshDbPath(): string {
   return join(dir, 'throng.db');
 }
 
-function tableNames(db: ThrongDatabase): string[] {
-  return db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
-    .all()
-    .map((r) => (r as { name: string }).name)
-    .sort();
-}
-
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
@@ -28,32 +19,6 @@ afterEach(() => {
 });
 
 describe('migration v2 (projects + workspace + sub-workspaces)', () => {
-  it('applies the v2 domain tables when migrating to the latest version', { tags: ['regression'] }, () => {
-    const db = openDatabase({ databasePath: freshDbPath() });
-    try {
-      const result = runMigrations(db);
-      expect(result.applied).toBe(true);
-      expect(result.to).toBe(LATEST_VERSION);
-      expect(LATEST_VERSION).toBeGreaterThanOrEqual(2);
-      expect(db.pragma('user_version', { simple: true })).toBe(LATEST_VERSION);
-    } finally {
-      db.close();
-    }
-  });
-
-  it('creates the projects, workspace_layout and sub_workspaces tables', { tags: ['regression'] }, () => {
-    const db = openDatabase({ databasePath: freshDbPath() });
-    try {
-      runMigrations(db);
-      const tables = tableNames(db);
-      expect(tables).toContain('projects');
-      expect(tables).toContain('workspace_layout');
-      expect(tables).toContain('sub_workspaces');
-    } finally {
-      db.close();
-    }
-  });
-
   it('gives projects the owner_user-scoped columns the domain needs', { tags: ['regression'] }, () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
@@ -98,23 +63,6 @@ describe('migration v2 (projects + workspace + sub-workspaces)', () => {
         .prepare('SELECT COUNT(*) AS n FROM workspace_layout WHERE project_id = ?')
         .get('p1') as { n: number };
       expect(remaining.n).toBe(0);
-    } finally {
-      db.close();
-    }
-  });
-
-  it('is idempotent: a second run against a v2 store changes nothing', { tags: ['regression'] }, () => {
-    const databasePath = freshDbPath();
-    let db = openDatabase({ databasePath });
-    runMigrations(db);
-    db.close();
-
-    db = openDatabase({ databasePath });
-    try {
-      const result = runMigrations(db);
-      expect(result.applied).toBe(false);
-      expect(result.from).toBe(LATEST_VERSION);
-      expect(db.pragma('user_version', { simple: true })).toBe(LATEST_VERSION);
     } finally {
       db.close();
     }

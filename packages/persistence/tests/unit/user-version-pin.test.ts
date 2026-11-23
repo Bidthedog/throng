@@ -12,13 +12,11 @@ import { LATEST_VERSION } from '@throng/persistence';
  * The pin is the number below: a migration added without the version being bumped, or bumped without the
  * migration, is caught by migration-runner.integration.test.ts, which asserts that a fresh store reaches
  * LATEST_VERSION.
+ *
+ * Re-layered from integration: it reads a constant and opens no database.
  */
 describe('the schema version and the migration chain agree', () => {
   it('LATEST_VERSION is 15 — 073 adds a CSV\'s per-file grid column widths (v13), 074 a project\'s safe HTML preview sources (v14), #692 the attention ledger (v15)', () => {
     expect(LATEST_VERSION).toBe(15);
   });
-
-  // DELETED: 'a freshly migrated store actually REACHES LATEST_VERSION'. migration-runner.integration.test.ts
-  // ('creates the database file and migrates a fresh directory to the latest version') asserts the same
-  // result.to and user_version against LATEST_VERSION.
 });
