@@ -40,6 +40,8 @@ const signals: Array<{ page: number; signal: AbortSignal | undefined }> = [];
 let slowPages = new Set<number>();
 const releases = new Map<number, () => void>();
 const texts: Array<{ page: number; scale: number; container: HTMLElement }> = [];
+/** When each render began (`performance.now()`), in the order of `renders`. */
+const renderTimes: number[] = [];
 
 function fakeDoc(pageCount: number, links: Record<number, PdfLink[]> = {}): PdfDocument {
   return {
@@ -50,6 +52,7 @@ function fakeDoc(pageCount: number, links: Record<number, PdfLink[]> = {}): PdfD
         height: 800,
         render: (_canvas: HTMLCanvasElement, scale: number, _ratio: number, signal?: AbortSignal) => {
           renders.push({ page: n, scale });
+          renderTimes.push(performance.now());
           signals.push({ page: n, signal });
           if (!slowPages.has(n)) return Promise.resolve();
           return new Promise<void>((resolve, reject) => {
@@ -139,6 +142,7 @@ beforeEach(() => {
   slowPages = new Set();
   releases.clear();
   texts.length = 0;
+  renderTimes.length = 0;
   observers.length = 0;
   shownElements.clear();
   openPdf.mockReset();
@@ -774,14 +778,21 @@ describe('smooth scrolling and resizing (FR-065a – FR-065c)', () => {
     openPdf.mockResolvedValue({ ok: true, doc: fakeDoc(3) });
     mount(props());
     await waitFor(() => expect(pages()).toHaveLength(3));
-    fireEvent.scroll(screen.getByTestId('preview-pdf-p1'));
+    const scrolledAt: number[] = [];
+    const scroll = (): void => {
+      fireEvent.scroll(screen.getByTestId('preview-pdf-p1'));
+      scrolledAt.push(performance.now());
+    };
+    scroll();
     act(() => show(pages()[2]!));
     await sleep(PDF_SCROLL_SETTLE_MS / 2);
-    // Still scrolling, as far as the body knows: nothing is drawn on the scroll path.
-    fireEvent.scroll(screen.getByTestId('preview-pdf-p1'));
-    await sleep(PDF_SCROLL_SETTLE_MS / 2);
-    expect(renders).toEqual([]);
+    scroll();
     await waitFor(() => expect(renders).toEqual([{ page: 3, scale: 1 }]));
+    // Nothing is drawn on the scroll path: the paint began a whole settle after the latest scroll before it. Asserted on
+    // the times rather than on "nothing yet" after a sleep, which a slow runner's overrunning sleep turned into a paint
+    // already made (#712, Windows). A timer never fires early; the 2 ms allow for the clocks' rounding.
+    const latestScroll = Math.max(...scrolledAt.filter((t) => t <= renderTimes[0]!));
+    expect(renderTimes[0]! - latestScroll).toBeGreaterThanOrEqual(PDF_SCROLL_SETTLE_MS - 2);
   });
 
   it('cancels a page’s paint when it leaves the view before it is drawn, and paints it again on its return (FR-065a)', async () => {
