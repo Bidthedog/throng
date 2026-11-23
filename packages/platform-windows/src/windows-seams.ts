@@ -27,10 +27,11 @@ export class WindowsUserDirectories implements IUserDirectories {
  * the script and its history, so this class is only the seam's shape on Windows.
  */
 export class WindowsTrashRestore implements ITrashRestore {
-  constructor(private readonly restoreItem: (originalPath: string) => Promise<void>) {}
+  constructor(private readonly restoreItem: (originalPath: string, deletedAt: number) => Promise<void>) {}
 
-  restore(originalPath: string, _deletedAt: number): Promise<void> {
-    return this.restoreItem(originalPath);
+  /** `deletedAt` goes through: the script picks among several recycled copies of one path by it (#708). */
+  restore(originalPath: string, deletedAt: number): Promise<void> {
+    return this.restoreItem(originalPath, deletedAt);
   }
 }
 
