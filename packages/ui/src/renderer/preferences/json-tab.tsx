@@ -111,8 +111,28 @@ function problemsAsText(problems: readonly JsonProblem[]): string {
   ].join('\n');
 }
 
-export function JsonTab({ docId }: JsonTabProps): ReactElement {
+export function JsonTab({ docId: requested }: JsonTabProps): ReactElement {
+  const requestedKey = keyOf(requested);
+  /**
+   * The document this tab is EDITING — which is not always the one the shell asks for (#707).
+   *
+   * The Themes JSON view is handed the ACTIVE theme, and `appearance.theme` is hot-reloaded: change
+   * it anywhere else and the shell hands this tab another document while it may hold an unsaved
+   * edit of the first. Following at once used to drop that edit silently — the gate was torn down
+   * without committing, and the other theme was loaded over the buffer. FR-017 says nothing is
+   * written until the user leaves, and FR-020a says an edited buffer is never swapped under them.
+   *
+   * So a CLEAN buffer follows the request immediately; a DIRTY one stays on its own document, and
+   * the switch waits in `pending` until the user resolves it — leaving (the edit is written to the
+   * document it was made in), Discard, or one of the two buttons the notice offers.
+   *
+   * Everything below reads `docId` / `docKey`, and both name the document being edited.
+   */
+  const [docId, setEditing] = useState<ConfigDocId>(requested);
   const docKey = keyOf(docId);
+  const [pending, setPending] = useState<ConfigDocId | null>(null);
+  /** The gate's commit and the drain read this at the moment of leaving, so a ref as well. */
+  const pendingRef = useRef<ConfigDocId | null>(null);
   const gate = useJsonEditGate();
   const copy = useCopyToClipboard();
   const [text, setText] = useState('');
@@ -232,8 +252,42 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
     setExternal(null);
   };
 
+  /** Take up the document the shell asked for while the buffer was dirty, if there is one (#707). */
+  const followPending = (): void => {
+    const next = pendingRef.current;
+    if (next === null) return;
+    pendingRef.current = null;
+    setPending(null);
+    setEditing(next);
+  };
+
+  /*
+   * The shell asked for another document. Follow it only when nothing of the user's would be lost;
+   * otherwise hold it as pending and say so (FR-020a). Asked for this one again, the pending switch
+   * is simply withdrawn.
+   */
+  useEffect(() => {
+    if (requestedKey === docKey) {
+      pendingRef.current = null;
+      setPending(null);
+      return;
+    }
+    if (dirtyRef.current) {
+      pendingRef.current = requested;
+      setPending(requested);
+      return;
+    }
+    pendingRef.current = null;
+    setPending(null);
+    setEditing(requested);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedKey]);
+
   /** Throw the buffer away and go back to the document currently in effect (FR-018a). */
-  const discard = (): void => adopt(loadedRef.current);
+  const discard = (): void => {
+    adopt(loadedRef.current);
+    followPending();
+  };
 
   /**
    * Register with the shell's gate, so leaving applies and an invalid buffer refuses.
@@ -249,7 +303,9 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
       if (!dirtyRef.current) return;
       loadedRef.current = textRef.current;
       dirtyRef.current = false;
+      // To the document the edit was MADE in, which a pending switch has not changed (#707).
       void writeConfig(docId, textRef.current);
+      followPending();
     };
 
     gate.register({
@@ -341,10 +397,23 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
   /** Keep the buffer and put it on disk now, replacing what arrived there. */
   const overwriteWithBuffer = (): void => {
     setExternal(null);
-    if (!dirtyRef.current) return;
-    loadedRef.current = textRef.current;
-    dirtyRef.current = false;
-    void writeConfig(docId, textRef.current);
+    if (dirtyRef.current) {
+      loadedRef.current = textRef.current;
+      dirtyRef.current = false;
+      void writeConfig(docId, textRef.current);
+    }
+    followPending();
+  };
+
+  /** Reload From Disk: with a switch pending, "disk" is the document the shell now asks for. */
+  const reloadFromDisk = (raw: string | null): void => {
+    if (pendingRef.current !== null) {
+      dirtyRef.current = false;
+      setExternal(null);
+      followPending();
+      return;
+    }
+    if (raw !== null) adopt(raw);
   };
 
 
@@ -358,12 +427,31 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
         </div>
       ) : null}
 
-      {external !== null ? (
+      {external !== null || pending !== null ? (
         <div className="json-tab__external" data-testid="json-external-change">
-          <p>
-            <strong>{fileNameOf(docId)}</strong> has changed on disk.
-          </p>
-          <button type="button" data-testid="json-external-reload" onClick={() => adopt(external)}>
+          {pending !== null ? (
+            <p>
+              {pending.kind === 'theme' ? (
+                <>
+                  The active theme is now <strong>{pending.name}</strong>.{' '}
+                </>
+              ) : (
+                <>
+                  <strong>{fileNameOf(pending)}</strong> was opened.{' '}
+                </>
+              )}
+              Your unsaved changes to <strong>{fileNameOf(docId)}</strong> are still here.
+            </p>
+          ) : (
+            <p>
+              <strong>{fileNameOf(docId)}</strong> has changed on disk.
+            </p>
+          )}
+          <button
+            type="button"
+            data-testid="json-external-reload"
+            onClick={() => reloadFromDisk(external)}
+          >
             Reload From Disk
           </button>
           <button

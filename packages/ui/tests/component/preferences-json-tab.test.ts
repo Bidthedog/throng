@@ -39,11 +39,11 @@
  * that a silent no-op in production — the tab still mounts, the notice still renders, and every
  * "X is absent" assertion still holds — so it is precisely the vacuity that would otherwise hide
  * here. Every test goes through `mountLoaded()`, which asserts the seeded document actually reached
- * the editor before the test does anything, so withholding it fails **all 11 `it` declarations /
- * 12 cases** in this file — the `it.each` contributes two.
+ * the editor before the test does anything, so withholding it fails **all 15 `it` declarations /
+ * 16 cases** in this file — the `it.each` contributes two.
  *
  * (A second, blunter control: drop `NotificationProvider` from `mountLoaded`. `JsonTab` reaches
- * `useCopyToClipboard` → `useNotify`, which throws outside it, so all 11 fail on the render itself.)
+ * `useCopyToClipboard` → `useNotify`, which throws outside it, so all 15 fail on the render itself.)
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
@@ -164,7 +164,7 @@ async function mountLoaded(docId: ConfigDocId, files: Record<string, string>) {
   const cfg = fakeConfig(files);
   (window as unknown as { throng?: unknown }).throng = { config: cfg.bridge };
 
-  render(
+  const tree = (id: ConfigDocId): ReactElement =>
     createElement(
       NotificationProvider,
       null,
@@ -172,10 +172,10 @@ async function mountLoaded(docId: ConfigDocId, files: Record<string, string>) {
         JsonEditGateProvider,
         null,
         createElement(GateHost),
-        createElement(JsonTab, { docId }),
+        createElement(JsonTab, { docId: id }),
       ),
-    ),
-  );
+    );
+  const { rerender } = render(tree(docId));
 
   const expected = files[keyOf(docId)] ?? '';
   const editor = (await screen.findByTestId(`json-editor-${docId.kind}`)) as HTMLTextAreaElement;
@@ -191,7 +191,21 @@ async function mountLoaded(docId: ConfigDocId, files: Record<string, string>) {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  return { ...cfg, editor };
+  return {
+    ...cfg,
+    editor,
+    /**
+     * The shell hands the tab another document — what `preferences-app.tsx` does on the Themes tab
+     * when `appearance.theme` changes underneath it (#707). Settled like a load, because the tab
+     * answers a switch it accepts with a `readRaw` round trip.
+     */
+    async retarget(id: ConfigDocId): Promise<void> {
+      await act(async () => {
+        rerender(tree(id));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    },
+  };
 }
 
 /** Replace the whole buffer, as select-all-and-retype does in the real editor. */
@@ -428,5 +442,84 @@ describe('an external change (015 FR-013b)', () => {
     expect(external).toHaveTextContent('settings.json');
     expect(external).toHaveTextContent('has changed on disk');
     expect(h.editor.value, 'the document must not be swapped under the user').toContain('throng');
+  });
+});
+
+describe('#707 — the document is switched underneath the editor (032 FR-017 / FR-020a)', () => {
+  /*
+   * The Themes JSON view edits the ACTIVE theme's file, and the shell passes it the active theme's
+   * name — which is hot-reloaded. Change `appearance.theme` anywhere else (a text editor on
+   * settings.json, another window) and the tab is handed another document while it holds an edit of
+   * the first. It used to tear down the gate without committing and load the other theme over the
+   * buffer: the edit vanished, nothing was written, and nothing said so.
+   */
+  const ALPHA: ConfigDocId = { kind: 'theme', name: 'Alpha' };
+  const BETA: ConfigDocId = { kind: 'theme', name: 'Beta' };
+  const THEMES = {
+    'theme:Alpha': '{"name":"Alpha"}\n',
+    'theme:Beta': '{"name":"Beta"}\n',
+  };
+  const EDITED_ALPHA = '{"name":"Alpha","colors":{"background":"#101010"}}';
+  const editorNow = (): HTMLTextAreaElement =>
+    screen.getByTestId('json-editor-theme') as HTMLTextAreaElement;
+
+  it('keeps a DIRTY buffer and says the active theme changed, and leaving writes it to ITS theme', async () => {
+    const h = await mountLoaded(ALPHA, THEMES);
+    typeDocument(h.editor, EDITED_ALPHA);
+
+    await h.retarget(BETA);
+    await settle(20);
+
+    expect(editorNow().value, 'the unsaved edit was replaced by the other theme').toBe(EDITED_ALPHA);
+    const notice = screen.getByTestId('json-external-change');
+    expect(notice).toHaveTextContent('Alpha.json');
+    expect(notice).toHaveTextContent('Beta');
+    expect(h.write, 'nothing is written while the user is still editing (FR-017)').not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('host-leave'));
+    await waitFor(() => expect(h.write).toHaveBeenCalledTimes(1));
+    expect(h.write).toHaveBeenCalledWith(ALPHA, EDITED_ALPHA);
+  });
+
+  it('Overwrite With These Changes saves the edit to its theme, then follows the active one', async () => {
+    const h = await mountLoaded(ALPHA, THEMES);
+    typeDocument(h.editor, EDITED_ALPHA);
+    await h.retarget(BETA);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('json-external-overwrite'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(h.write).toHaveBeenCalledWith(ALPHA, EDITED_ALPHA);
+    await waitFor(() => expect(editorNow().value).toBe(THEMES['theme:Beta']));
+    expect(screen.queryByTestId('json-external-change')).toBeNull();
+  });
+
+  it('Reload From Disk drops the edit, writes nothing, and follows the active theme', async () => {
+    const h = await mountLoaded(ALPHA, THEMES);
+    typeDocument(h.editor, EDITED_ALPHA);
+    await h.retarget(BETA);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('json-external-reload'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => expect(editorNow().value).toBe(THEMES['theme:Beta']));
+    expect(screen.queryByTestId('json-external-change')).toBeNull();
+    fireEvent.click(screen.getByTestId('host-leave'));
+    await settle(20);
+    expect(h.write).not.toHaveBeenCalled();
+  });
+
+  it('a CLEAN buffer follows the new document silently', async () => {
+    // The complement: without it the tests above pass against a tab that never follows at all.
+    const h = await mountLoaded(ALPHA, THEMES);
+    await h.retarget(BETA);
+
+    await waitFor(() => expect(editorNow().value).toBe(THEMES['theme:Beta']));
+    expect(screen.queryByTestId('json-external-change')).toBeNull();
+    expect(h.write).not.toHaveBeenCalled();
   });
 });
