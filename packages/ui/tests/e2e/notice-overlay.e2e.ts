@@ -18,59 +18,18 @@ import { createProject, firstPanelId, mkdtempSync, tmpdir, join, runApp } from '
  * and the notice is drawn over whatever it did. "Nothing happened when I clicked the notice" is
  * legible and recoverable. "The panel I did not ask for was created" is neither.
  *
- * So the assertion below is now `'THE-NOTICE'`, and the same `elementFromPoint` probe that once
+ * So the expectation is now that the notice absorbs the click, and the same hit probe that once
  * proved the click fell through proves it no longer does. Nothing about the mechanism changed, only
  * the expected value — which is the clearest possible record of a superseded decision.
  *
- * ══ WHY THESE TWO STAY AT E2E ══
+ * ══ WHY THIS STAYS AT E2E ══
  *
  * `packages/ui/tests/component/notice-pointer-events.test.ts` covers the cascade — it loads the real
  * `theme.css` into jsdom and proves `.notice` computes `pointer-events: auto`. That is the INPUT to
  * a hit test, and it is all a component test can reach: jsdom has no layout, so it cannot deliver a
- * click to one of two overlapping elements. These two tests are the hit test itself, in a real
+ * click to one of two overlapping elements. This test is the hit test itself, in a real
  * window with real geometry — the constitution's real-layout reserve, exactly.
  */
-
-test('a persistent error notice wins the hit-test over what it covers (#313, superseding 018 US6)', { tag: ['@extended', '@failure', '@reserve:layout'] }, async () => {
-  await runApp(async (_app, win) => {
-    await createProject(win, 'Alpha', 'C:/code/alpha');
-
-    // Raise a real, PERSISTENT error notice — a project on a root that is already taken.
-    await win.getByTestId('project-new').click();
-    await win.getByTestId('project-root-input').fill('C:/code/alpha');
-    await win.getByTestId('project-name-input').fill('Beta');
-    await win.getByTestId('project-save').click();
-
-    const notice = win.getByTestId('project-error');
-    await expect(notice).toBeVisible();
-    /*
-     * It is an ERROR under the shipped default (`panel`): a toast that leaves after the toast duration
-     * (068 FR-021) and stays in the Notifications panel. The harness stretches the duration to 10 s
-     * (`THRONG_E2E_TOAST_MS`), so the card is still up for the hit-test below. The timer and its
-     * pointer/focus pause are proven with a fake clock in
-     * `packages/ui/tests/component/notice-toast-timer.test.ts`; this spec keeps the part only Electron
-     * can prove — the hit-test below.
-     */
-
-    // Whatever the card is sitting on top of, the card is what a click at that point hits.
-    const swallows = await win.evaluate(() => {
-      const card = document.querySelector('[data-testid="project-error"]');
-      if (!card) return 'NO-NOTICE';
-      const r = card.getBoundingClientRect();
-      // The message area, deliberately away from the dismiss control in the top-right corner.
-      const hit = document.elementFromPoint(r.left + 12, r.bottom - 8);
-      return hit === null ? 'NOTHING' : card.contains(hit) ? 'THE-NOTICE' : 'THROUGH';
-    });
-    expect(swallows, 'the click fell through the notice to whatever is beneath it').toBe(
-      'THE-NOTICE',
-    );
-
-    // …and the one thing on the card that was ALWAYS pressable still is. This is the remedy the
-    // supersession rests on: if a notice covers something, it is dismissed, not clicked through.
-    await win.getByTestId('project-error-dismiss').click();
-    await expect(notice).toHaveCount(0);
-  });
-});
 
 /**
  * The 60-click measurement, inverted (#313; acceptance criterion 4).
@@ -84,7 +43,8 @@ test('a persistent error notice wins the hit-test over what it covers (#313, sup
  * window. No z-ordering rule reaches that case; only dismissal does.
  *
  * The claim: a real click, at real coordinates where the two genuinely overlap, must not confirm the
- * panel. `elementFromPoint` above proves the hit test resolves to the notice; this proves the
+ * panel. A real click at the overlap proves the hit test resolves to the notice (the former
+ * `elementFromPoint` probe, folded into this test, asserted the same); this proves the
  * DISPATCH does — that the button beneath does not fire.
  */
 test('a click on a notice parked over the panel-type form does not confirm the panel (#313)', { tag: ['@core', '@failure', '@reserve:layout'] }, async () => {
@@ -135,5 +95,10 @@ test('a click on a notice parked over the panel-type form does not confirm the p
     await expect(win.getByTestId(`terminal-${pid}`)).toHaveCount(0);
     // …and the notice is still there to be dismissed, which is the way past it.
     await expect(win.getByTestId('project-error')).toBeVisible();
+
+    // The one thing on the card that was ALWAYS pressable still is. This is the remedy the
+    // supersession rests on: if a notice covers something, it is dismissed, not clicked through.
+    await win.getByTestId('project-error-dismiss').click();
+    await expect(win.getByTestId('project-error')).toHaveCount(0);
   });
 });
