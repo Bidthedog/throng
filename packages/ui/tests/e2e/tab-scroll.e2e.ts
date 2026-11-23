@@ -7,13 +7,13 @@
  * position. So `scrollLeft` is sampled once per animation frame and the resulting series is what
  * gets asserted (see `helpers/tabs.ts`).
  *
- * Three apps (eased, slow, unanimated), because the scroll DURATION is a launch-time seed and it is the independent variable:
- * an eased one for the ordinary guarantees, a deliberately long one for everything that has to be
- * caught mid-flight, and a zero one for A10. Sharing one app and hot-editing the setting would make
+ * Two apps (eased, slow), because the scroll DURATION is a launch-time seed and it is the independent variable:
+ * an eased one for the ordinary guarantees and a deliberately long one for everything that has to be
+ * caught mid-flight. (A10-A13, the instant path, are `component/tab-scroll.test.ts`.) Sharing one app and hot-editing the setting would make
  * every test depend on a settings round-trip landing before the gesture — a race, in the file whose
  * whole subject is races.
  */
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -34,7 +34,6 @@ import {
   clearView,
   endScrollTrace,
   expectCountsInSync,
-  intermediateSamples,
   isFullyVisible,
   isBroughtIntoView,
   describeReveal,
@@ -499,11 +498,9 @@ const SLOW_MS = 1500;
 test.describe('a slow strip', () => {
   test.describe.configure({ mode: 'serial' });
   let shared: OpenApp;
-  let cfgRoot: string;
 
   test.beforeAll(async () => {
-    cfgRoot = seedConfig({ smoothScrollMs: SLOW_MS, closeArmingDelayMs: 0 });
-    shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+    shared = await openApp({ env: { THRONG_CONFIG_ROOT: seedConfig({ smoothScrollMs: SLOW_MS, closeArmingDelayMs: 0 }) } });
   });
   test.afterAll(async () => {
     await shared?.close();
@@ -514,14 +511,6 @@ test.describe('a slow strip', () => {
   test.beforeEach(async () => {
     await shared.win.emulateMedia({ reducedMotion: 'no-preference' });
   });
-
-  /** What the settings FILE says the scroll duration is — the value A12 forbids anything rewriting. */
-  const storedSmoothScrollMs = (): number | undefined => {
-    const doc = JSON.parse(readFileSync(join(cfgRoot, 'settings.json'), 'utf8')) as {
-      tabs?: { smoothScrollMs?: number };
-    };
-    return doc.tabs?.smoothScrollMs;
-  };
 
   /** Start a full-length ({@link SLOW_MS}) scroll to the far end of the strip, via the picker. */
   async function startLongScrollToLastTab(): Promise<Chip> {
@@ -535,91 +524,10 @@ test.describe('a slow strip', () => {
     return target;
   }
 
-  test('T052 — reduce motion forces an instant scroll, and does not rewrite the setting (A11, A12)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-    await freshProject(shared.win);
-    await seedOverflowingTabs(shared.win, 'scroll-reduce');
-    await setScrollLeft(shared.win, 0);
-    await shared.win.emulateMedia({ reducedMotion: 'reduce' });
-
-    const before = await stripState(shared.win);
-    const anchorBefore = anchorIndex(before);
-    await beginScrollTrace(shared.win);
-    await shared.win.getByTestId('tabstrip-step-right').click();
-
-    // A11 — instant, whatever the setting says. A 1500ms eased scroll is barely half way at 800ms,
-    // so arriving inside a second is only possible if the animation was never run.
-    await expect
-      .poll(async () => anchorIndex(await stripState(shared.win)), {
-        timeout: 1000,
-        message: 'reduce-motion did not force the scroll to be instant',
-      })
-      .toBe(anchorBefore + 1);
-
-    const after = await stripState(shared.win);
-    const trace = await endScrollTrace(shared.win);
-    expect(
-      intermediateSamples(trace, before.scrollLeft, after.scrollLeft),
-      'an instant scroll renders no intermediate positions',
-    ).toEqual([]);
-    expect(Math.abs(clearView(after).left - after.chips[anchorBefore + 1]!.left)).toBeLessThanOrEqual(1);
-
-    // A12 — the OS preference is an override, not an edit. Nothing wrote to the settings file.
-    expect(
-      storedSmoothScrollMs(),
-      'reduce motion must not rewrite the configured duration',
-    ).toBe(SLOW_MS);
-  });
-
-  test('T053 — reduce motion applied MID-FLIGHT settles the scroll immediately (A13)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-    await freshProject(shared.win);
-    await seedOverflowingTabs(shared.win, 'scroll-reduce-live');
-    await setScrollLeft(shared.win, 0);
-
-    const before = await stripState(shared.win);
-    const anchorBefore = anchorIndex(before);
-    await beginScrollTrace(shared.win);
-    await shared.win.getByTestId('tabstrip-step-right').click();
-
-    /*
-     * Wait for the glide to be genuinely UNDER WAY before turning the preference on.
-     *
-     * Without this the test is vacuous in the most misleading way: `emulateMedia` lands within a few
-     * milliseconds, before the first animation frame, so the scroll is instant from the outset and
-     * nothing has been interrupted at all — a pass that proves the instant path (A11) a second time
-     * and says nothing about A13. Waiting on the CONDITION "the strip has moved off its mark" is
-     * what makes the interruption real.
-     */
-    await expect
-      .poll(async () => (await stripState(shared.win)).scrollLeft, {
-        timeout: 2000,
-        message: 'the eased scroll never got under way, so there was nothing to interrupt',
-      })
-      .toBeGreaterThan(before.scrollLeft + 1);
-
-    // The preference turns on while the scroll is running. A user who asks for less motion
-    // mid-glide has asked about THIS glide.
-    await shared.win.emulateMedia({ reducedMotion: 'reduce' });
-
-    await expect
-      .poll(async () => anchorIndex(await stripState(shared.win)), {
-        timeout: 1500,
-        message: 'a scroll in flight did not settle when reduce-motion turned on',
-      })
-      .toBe(anchorBefore + 1);
-
-    const after = await stripState(shared.win);
-    const trace = await endScrollTrace(shared.win);
-    // Non-vacuous: the scroll really was animating when the preference arrived.
-    expect(
-      intermediateSamples(trace, before.scrollLeft, after.scrollLeft).length,
-      'the scroll had not started, so nothing was interrupted',
-    ).toBeGreaterThan(0);
-    // A14 — it settles AT ITS TARGET, not wherever it had got to.
-    expect(
-      Math.abs(clearView(after).left - after.chips[anchorBefore + 1]!.left),
-      'the interrupted scroll finished its journey rather than stopping where it was',
-    ).toBeLessThanOrEqual(1);
-  });
+  // DELETED (test-suite audit) — "T052 - reduce motion forces an instant scroll, and does not rewrite the setting
+  // (A11, A12)" and "T053 - reduce motion applied MID-FLIGHT settles the scroll immediately (A13)". The decision
+  // `instant = reduceMotion || !(durationMs > 0)` and the live settle are `component/tab-scroll.test.ts`; "no
+  // rewrite" is there as "the hook issues no config write".
 
   // MOVED (pass 2) into "an eased strip": "T053 - an instant scroll reaches the same rest position, active tab and
   // counts (A14)". It ran a 1500ms glide only to learn the rest position; the outcome does not depend on the duration.
@@ -737,42 +645,5 @@ test.describe('a slow strip', () => {
 
 });
 
-/* ══════════════════════════════════════════════════════════════════════════════════════════════
- * A strip with the animation switched off (0ms) — A10.
- * ══════════════════════════════════════════════════════════════════════════════════════════════ */
-test.describe('an unanimated strip', () => {
-  test.describe.configure({ mode: 'serial' });
-  let shared: OpenApp;
-
-  test.beforeAll(async () => {
-    shared = await openApp({ env: { THRONG_CONFIG_ROOT: seedConfig({ smoothScrollMs: 0 }) } });
-  });
-  test.afterAll(async () => {
-    await shared?.close();
-  });
-
-  test('T052 — duration 0 is instant: no animation, no easing (A10)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-    await freshProject(shared.win);
-    await seedOverflowingTabs(shared.win, 'scroll-zero');
-    await setScrollLeft(shared.win, 0);
-
-    const before = await stripState(shared.win);
-    const anchorBefore = anchorIndex(before);
-
-    await beginScrollTrace(shared.win);
-    await shared.win.getByTestId('tabstrip-step-right').click();
-    await waitForTraceFrames(shared.win, 20);
-    const trace = await endScrollTrace(shared.win);
-
-    const after = await stripState(shared.win);
-    expect(anchorIndex(after), 'the step still moves exactly one tab').toBe(anchorBefore + 1);
-    expect(
-      Math.abs(clearView(after).left - after.chips[anchorBefore + 1]!.left),
-      'the revealed tab starts where the left fade ends',
-    ).toBeLessThanOrEqual(1);
-    expect(
-      intermediateSamples(trace, before.scrollLeft, after.scrollLeft),
-      'duration 0 rendered intermediate positions — it animated',
-    ).toEqual([]);
-  });
-});
+// DELETED (test-suite audit) — the "an unanimated strip" app and its one test, "T052 - duration 0 is instant: no
+// animation, no easing (A10)". `component/tab-scroll.test.ts` ("duration 0 is instant…") owns it.

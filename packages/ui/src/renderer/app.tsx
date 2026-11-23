@@ -206,7 +206,7 @@ export function AppTitleBar(): ReactElement {
  * The Workspace Pane (Principle XI / FR-010): the active project's tab group of
  * split placeholder Panels, or an empty state when no project is selected.
  */
-function WorkspacePane(): ReactElement {
+export function WorkspacePane(): ReactElement {
   const { layout, restoreFailed } = useWorkspace();
 
   // 018 / FR-051 — the restore notice was the fifth idiom, and the only NON-DISMISSABLE one: a
