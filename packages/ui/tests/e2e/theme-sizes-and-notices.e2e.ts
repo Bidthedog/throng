@@ -251,8 +251,8 @@ test('an ERROR notice has its own background, not the ordinary card colour (acti
  * `settings.json`. That is the config-write path, covered at the integration layer
  * (`packages/ui/tests/integration/config-write*.test.ts`). The SEAM — a real preferences window
  * whose control is bound to the real config store, driven with the same fill-then-Enter gesture —
- * is the one test deliberately kept in `preferences-slider.e2e.ts`, which types `1200`, presses
- * Enter, and requires the value to come back out of the store. That seam is not re-proved here.
+ * is held by `preferences-settings.e2e.ts`, which types a number, presses Enter and reads it back
+ * out of `settings.json`. That seam is not re-proved here.
  *
  * ══ ANTI-VACUITY CONTROL ══
  *

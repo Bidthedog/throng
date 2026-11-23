@@ -115,7 +115,7 @@ async function newTerminal(win: Page, root: string): Promise<string> {
 // letterboxes and both views render byte-for-byte identically. The renderer now only
 // REPORTS its container capacity (proposeDimensions) — the daemon grid is the single
 // source of truth for xterm size. This does NOT touch the attach/viewId path that a prior
-// attempt broke (issue #1), which is separately verified by terminal-mirror-survival.
+// attempt broke (issue #1), which is separately verified by terminal-dual-size.e2e.ts (one running session for the mirrored panel).
 /*
  * QUARANTINED (017, FR-013b) — and this is NOT a flake. It is a deterministically red test that
  * has been hidden by retries, and what it is red about is a REAL PRODUCT BUG.
