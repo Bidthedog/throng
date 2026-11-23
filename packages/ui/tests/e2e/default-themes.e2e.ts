@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, existsSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -16,14 +16,11 @@ import { configRootSeeded, settleConfigRoot, snapshotConfigRoot, type ConfigRoot
 import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
- * US7 (007 Phase E data, SC-007): a fresh install ships all 14 default themes plus
- * `throng` (15 total) in the Themes selector, and a delete → restore cycle brings a
- * default back.
+ * The shared failure banner under the shipped themes (030 US4). The list of fifteen themes a fresh
+ * install ships, and the delete -> Restore All cycle, are covered below the window:
+ * `integration/restore-default-themes.test.ts`, `integration/shipped-defaults-restore.test.ts` and
+ * `component/preferences-themes-tab.test.ts` (Restore All, and the list refreshing after a delete).
  */
-const EXPECTED_15 = [
-  'throng', 'Light', 'Snake', 'Gothic', 'Windows Terminal', 'Bash', 'SUBNET',
-  'VSCode', 'VI-VIM', 'English Garden', 'Matrix', 'Cyberpunk', 'Claude', 'Debian', 'Ubuntu',
-];
 
 const cfgRoots: string[] = [];
 function freshCfgRoot(): string {
@@ -33,26 +30,10 @@ function freshCfgRoot(): string {
 }
 
 /*
- * ONE app for this file, not one per test (034 FR-045, SC-010).
- *
- * Neither test seeds anything before launch — both called `freshCfgRoot()` with no arguments, so the
- * isolated root was write ISOLATION between two tests, never pre-launch state. What they actually
- * need is a config root that LOOKS untouched at the start of each test, and that is what
- * `settleConfigRoot` gives without paying for a second Electron launch.
- *
- * ══ THE ORDER IS LOAD-BEARING ══
- *
- * The first test asserts the list a FRESH INSTALL ships — fifteen options, none deleted, none
- * renamed. The second sweeps every one of those fifteen and leaves the last one active. So the fresh
- * install test runs first, and the `afterEach` restore is what makes that still true if this file
- * ever grows a third test between them.
- *
- * ══ AND THE PREFERENCES WINDOW MUST BE CLOSED BETWEEN THEM ══
- *
- * `openThemes` waits on `app.waitForEvent('window')`. throng allows exactly ONE preferences window,
- * so clicking the cog while the first test's is still standing REUSES it and fires no event at all —
- * the second test would then wait out its whole budget for something that cannot happen. Closing it
- * also re-captures the on-entry snapshot Revert compares against (`helpers/prefs-window.ts`).
+ * ONE app for this file (034 FR-045, SC-010). Nothing is seeded before launch; `settleConfigRoot`
+ * makes the config root look untouched at the start of each test, and `closePrefsWindow` closes the
+ * preferences window between tests: throng allows exactly ONE, so a second cog click would reuse the
+ * standing window and fire no `window` event for `openThemes` to wait on.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -105,39 +86,11 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('a fresh install lists all 14 default themes plus throng (15) and restores after delete', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      const select = prefs.getByTestId('theme-select');
-      await expect.poll(() => select.locator('option').count()).toBe(15);
-      const options = await select.locator('option').allTextContents();
-      for (const name of EXPECTED_15) expect(options).toContain(name);
-
-      // Select Matrix and delete it; the toolbar acts on the selected theme.
-      await select.selectOption('Matrix');
-      await expect(select).toHaveValue('Matrix'); // select = activate; wait for it to land
-      await prefs.getByTestId('theme-delete').click();
-      await prefs.getByTestId('theme-confirm-yes').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Matrix.json'))).toBe(false);
-      // A deleted built-in leaves the list entirely; Restore All is the only way back (FR-005a).
-      await expect
-        .poll(() => select.locator('option').allTextContents())
-        .not.toContain('Matrix');
-
-      await prefs.getByTestId('theme-restore-all').click();
-      await prefs.getByTestId('theme-confirm-yes').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Matrix.json'))).toBe(true);
-    },
-  );
-});
-
 /* ════════════════════════════════════════════════════════════════════════════════════════════════
  * 030 US4 (T056d) — THE SHARED FAILURE BANNER, UNDER ALL 15 SHIPPED THEMES.
  *
  * Here rather than in `panel-failure-banner.e2e.ts` because this file already owns the fact that
- * there are fifteen themes and what they are called: the list, the selector and the restore path all
- * live above, and a second copy of `EXPECTED_15` would be one more thing to keep in step.
+ * there are fifteen themes and what they are called: the selector lives below, and the selector below already asserts the count of fifteen.
  *
  * FR-047 / US4 AC10: the banner carries NO colours of its own and renders legibly in every shipped
  * theme. Three assertions, because each is capable of passing while the other two fail:
