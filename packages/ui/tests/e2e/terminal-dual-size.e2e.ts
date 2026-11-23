@@ -52,6 +52,15 @@ test('one terminal in two different-sized windows renders legibly in both, stabl
       await win.getByTestId('menu-item-T').click();
       await expect(child.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 20000 });
 
+      // Exactly ONE running session for the panel — the program was NOT reaped by the mirror
+      // (folded from terminal-mirror-survival.e2e.ts, 008 SC-001).
+      const listed = (await daemonRpc(pipeName, 'terminal.list', {})) as {
+        sessions: Array<{ panelId: string; status: string }>;
+      };
+      const sessions = listed.sessions.filter((s) => s.panelId === pid);
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].status).toBe('running');
+
       // A distinctive marker must render INTACT (not garbled, wrapped-wrong, or
       // duplicated) in BOTH the large and the small window — the corruption defect.
       await daemonRpc(pipeName, 'terminal.write', { panelId: pid, data: 'echo DUALSIZE_MARKER_42\r\n' });

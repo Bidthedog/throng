@@ -382,6 +382,26 @@ test('a detected path is marked and a look-alike is marked too, a wrapped link i
           .toEqual(joined);
         // At rest, not hovered: the SAME at-rest mark on every row, none in the hover state.
         for (const i of indices) expect(await linkMarkedText(rows.nth(i), { hover: true })).toBe('');
+
+        // Hovered over ONE row (the first, arriving from the line below so xterm re-queries its providers),
+        // the hover state spans EVERY row of that link (FR-131, #326). Folded from terminal-wrapped-link.e2e.ts.
+        const firstBox = (await rows.nth(indices[0]!).boundingBox())!;
+        await win.mouse.move(firstBox.x + firstBox.width / 3, firstBox.y + firstBox.height * 1.5);
+        await win.mouse.move(firstBox.x + firstBox.width / 3, firstBox.y + firstBox.height / 2);
+        await expect
+          .poll(
+            async () => {
+              const got: string[] = [];
+              for (const i of indices) got.push(await linkMarkedText(rows.nth(i), { hover: true }));
+              return got;
+            },
+            {
+              timeout: 20_000,
+              message: `${c.name} hovered on one row is not hover-marked on every row it occupies (FR-131, #326)`,
+            },
+          )
+          .toEqual(joined);
+        await win.mouse.move(2, 2);
       }
 
       /*

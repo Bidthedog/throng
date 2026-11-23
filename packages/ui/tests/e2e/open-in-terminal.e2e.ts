@@ -249,35 +249,9 @@ test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in 
 });
 
 // ---------------------------------------------------------------------------
-// AS-3 / B4 — a FILE starts its terminal in the file's parent folder.
+// AS-3 / B4 — a FILE starts its terminal in the file's parent folder: MOVED DOWN to
+// `component/explorer-open-in-terminal-file.test.ts` (the start directory is built from `resolveTarget`).
 // ---------------------------------------------------------------------------
-
-test('AS-3 — a right-clicked file opens its terminal in the file’s parent folder', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  skipIfElevated();
-  test.setTimeout(180_000);
-  const root = makeProjectFolder('throng-oit-file-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'FileTerminal', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByText('deep', { exact: true }).dblclick();
-      await tree.getByText('nested', { exact: true }).dblclick();
-      await expect(tree.getByText('inside.txt', { exact: true })).toBeVisible();
-
-      const before = await panelIds(win);
-      const level = await openTerminalSubmenu(win, tree.getByText('inside.txt', { exact: true }));
-      // The first flavour the machine offers — which one is irrelevant to the parent-folder rule.
-      await level.locator('.context-menu__item').first().click();
-
-      const pid = await newPanelId(win, before);
-      await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 30_000 });
-      // The FOLDER the file lives in, never the file — a shell cannot have a file as a directory.
-      await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', /nested/, { timeout: 40_000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 // ---------------------------------------------------------------------------
 // B5 — the start directory is persisted, so a restored panel restarts where it was created.
