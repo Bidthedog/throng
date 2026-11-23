@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -9,7 +9,7 @@ import { openApp,
   addPanels,
   cleanupTemp,
   type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS, pressAction } from './harness.js';
+  type OpenApp, pressAction } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -267,45 +267,6 @@ test('a block copied in one panel pastes COLUMN-WISE in another — the mode is 
       await expect.poll(() => docText(win, p2)).toBe('aaone\nbbtwo\nccthree\n');
       // The source document is untouched by a COPY.
       expect(await docText(win, p1)).toBe(GRID);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('a column paste into a TAB-indented file pads with TABS, and lands on the column (FR-025c1)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Column', root);
-      await addPanels(win, 1);
-      const [p1, p2] = await panelIds(win);
-      await openInPanel(win, p2, 'tabs.txt', 'AAAA');
-      await openInPanel(win, p1, 'grid.txt', 'aaaa');
-
-      // Cut a one-column, three-row block out of the SPACE-indented file…
-      await win.getByTestId(`editor-${p1}`).locator('.cm-content').click();
-      await win.keyboard.press('ControlOrMeta+Home');
-      await pressAction(win, 'editor.columnSelectDown');
-      await pressAction(win, 'editor.columnSelectDown');
-      await pressAction(win, 'editor.columnSelectRight');
-      await pressAction(win, 'editor.cutLine');
-      await expect.poll(async () => (await clipboard(win)).text).toBe('a\nb\nc');
-
-      // …and paste it into the TAB-indented one at visual column 6. Line 2 is the short one ("B"),
-      // so it must be padded out to reach column 6 — in the document's OWN whitespace.
-      await win.getByTestId(`editor-${p2}`).locator('.cm-content').click();
-      await win.keyboard.press('ControlOrMeta+Home');
-      for (let i = 0; i < 3; i += 1) await win.keyboard.press('ArrowRight'); // …visual column 6
-      await win.keyboard.press('ControlOrMeta+v');
-      await pressAction(win, 'editor.save');
-
-      // Assert on the BYTES, not the screen: this requirement is about what lands on disk. A tab
-      // carries column 1 → 4, then two spaces land exactly on column 6 — a second tab would have
-      // jumped to column 8 and put the text where the user never pointed.
-      await expect
-        .poll(() => readFileSync(join(root, 'tabs.txt'), 'utf8'), { timeout: FILE_OP_TIMEOUT_MS })
-        .toBe('\tAAaAA\nB\t  b\n\tCCcCC\n');
     });
   } finally {
     cleanupTemp(root);

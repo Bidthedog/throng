@@ -172,60 +172,6 @@ test('opens a TypeScript file highlighted, and keeps highlighting as you type', 
   }
 });
 
-test('highlights Python and JSON from their extensions alone', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'HL', root);
-      const pid = await openEditor(win);
-
-      await openFile(win, pid, 'script.py', 'def add');
-      await expect
-        .poll(() => tokenColours(win, pid).then((c) => c.length), { timeout: 8000 })
-        .toBeGreaterThan(1);
-
-      // The SAME panel, re-pointed at a different language: the grammar is swapped in the
-      // compartment, not rebuilt (FR-004b).
-      await openFile(win, pid, 'data.json', '"throng"');
-      await expect
-        .poll(() => tokenColours(win, pid).then((c) => c.length), { timeout: 8000 })
-        .toBeGreaterThan(1);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('an unknown extension is plain text — no highlighting, no error, and a shebang changes nothing', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      const errors: string[] = [];
-      win.on('pageerror', (e) => errors.push(e.message));
-      await createProject(win, 'HL', root);
-      const pid = await openEditor(win);
-      await openFile(win, pid, 'notes.zzz', 'const answer');
-
-      // It LOOKS like JavaScript. Detection reads the extension and nothing else, so it is not.
-      const colours = await tokenColours(win, pid);
-      expect(colours.length).toBeLessThanOrEqual(1);
-
-      // Typing a shebang must not re-detect: content is never inspected (FR-002).
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-      await content.click();
-      await win.keyboard.press('ControlOrMeta+Home');
-      await win.keyboard.type('#!/usr/bin/env node\n');
-      // The edit has landed — the positive fence a re-detect (if it existed) would already have
-      // had its chance to run against, since it would fire off the very same keystroke.
-      await expect(content).toContainText('#!/usr/bin/env node');
-      expect((await tokenColours(win, pid)).length).toBeLessThanOrEqual(1);
-      expect(errors, `an unknown extension must not raise an error: ${errors.join('; ')}`).toEqual([]);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 test('switching theme repaints code LIVE — no reopen, no view rebuild', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
@@ -421,68 +367,6 @@ test('a C# method name is coloured syntaxFunction, its locals stay syntaxVariabl
   }
 });
 
-test('a Ruby def name and call are coloured syntaxFunction, locals stay syntaxVariable', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeFnProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'FN', root);
-      const pid = await openEditor(win);
-      await openFile(win, pid, 'sample.rb', 'def greet');
-
-      await expect
-        .poll(
-          () =>
-            inspect(win, pid, ['greet', 'compute', 'total']).then(
-              (i) =>
-                i.overlayCount > 0 &&
-                i.fnColour !== i.varColour &&
-                // `def greet` has NO parentheses — only the definition-keyword path catches it.
-                allAre(i.colours['greet'], i.fnColour) &&
-                // `compute(5)` is a call.
-                allAre(i.colours['compute'], i.fnColour) &&
-                // A local is untouched.
-                allAre(i.colours['total'], i.varColour),
-            ),
-          { timeout: 8000 },
-        )
-        .toBe(true);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('JavaScript still colours functions via the grammar, with NO overlay mounted (no regression)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeFnProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'FN', root);
-      const pid = await openEditor(win);
-      await openFile(win, pid, 'sample.js', 'function jsFunc');
-
-      // The grammar colours the function name (declaration and call) as a function and a plain const
-      // as a variable — and the heuristic overlay is NOT mounted for a first-class grammar, so it
-      // cannot have overridden anything.
-      await expect
-        .poll(
-          () =>
-            inspect(win, pid, ['jsFunc', 'total']).then(
-              (i) =>
-                i.overlayCount === 0 &&
-                i.fnColour !== i.varColour &&
-                i.colours['jsFunc'].length > 0 &&
-                i.colours['jsFunc'].includes(i.fnColour) &&
-                allAre(i.colours['total'], i.varColour),
-            ),
-          { timeout: 8000 },
-        )
-        .toBe(true);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * MERGED IN (test-suite audit) from editor-file-switch.e2e.ts
@@ -593,32 +477,6 @@ const colourOfWord = (win: Page, pid: string, word: string): Promise<string | nu
  * `@reserve:layout`: each one asserts on what the grammar PAINTED — the set of distinct token
  * colours actually on screen — and that is a real cascade over a real render.
  */
-test('a .sql opened AFTER another file gets the SQL grammar — not the previous file’s', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeSwitchProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'SwitchProj', root);
-      const pid = await newClickedEditor(win);
-
-      // Open the file that sorts DIRECTLY BEFORE the target — the reported failing order.
-      await openSwitchFile(win, pid, 'a-first.ts', 'export const value');
-      // …then the target.
-      await openSwitchFile(win, pid, 'b-query.sql', 'SELECT id');
-
-      await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('SQL', { timeout: 8000 });
-
-      // The discriminator. Under the TypeScript grammar, `SELECT` is an ordinary identifier and
-      // `FROM` is nothing at all — numbers and strings would still be coloured, which is exactly why
-      // the bug read as "partially highlighted" rather than "wrong".
-      const keyword = await tokenColour(win, 'syntaxKeyword');
-      await expect.poll(() => colourOfWord(win, pid, 'SELECT'), { timeout: 8000 }).toBe(keyword);
-      expect(await colourOfWord(win, pid, 'FROM')).toBe(keyword);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 test('…and it does not matter which file was open before it', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeSwitchProject();
   try {

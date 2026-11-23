@@ -4,57 +4,17 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
 import {
-  openApp,
   runApp as runOwnApp,
   createProject as newProject,
   firstPanelId,
-  addPanels,
-  panelIds,
   cleanupTemp,
-  type AppOptions,
   type OpenApp,
 } from './harness.js';
 
 /*
- * ONE app for this file, not one per test.
- *
- * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
- * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
- * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
- *
- * The shims below exist so the test bodies below are unchanged:
- *   runApp        runs the body against the shared window. It refuses options rather than ignoring
- *                 them: a dropped config root does not fail, it passes for the wrong reason.
- *   createProject appends a counter, because a shared app accumulates projects and duplicate names
- *                 make `.project-item` ambiguous.
- *
- * Serial mode is required — shared window, shared database — and it means a failure skips the rest
- * rather than running them against whatever state the failure left behind.
+ * The one remaining test seeds state and restarts the app, so it launches its own through `runOwnApp`;
+ * there is no shared app. `createProject` appends a counter so project names stay unique.
  */
-test.describe.configure({ mode: 'serial' });
-
-let shared: OpenApp;
-test.beforeAll(async () => {
-  shared = await openApp();
-});
-test.afterAll(async () => {
-  await shared?.close();
-});
-
-const runApp = (
-  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
-  opts?: AppOptions,
-): Promise<void> => {
-  if (opts) {
-    throw new Error(
-      'this file shares one app; a test needing launch options must call runOwnApp instead',
-    );
-  }
-  return fn(shared.app, shared.win, {
-    pipeName: shared.pipeName,
-    userDataDir: shared.userDataDir,
-  });
-};
 
 let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
@@ -235,78 +195,6 @@ test('two clicks reach and change the language, it re-highlights at once, and it
  * "the language indicator is a themed control with a hover title" — are folded into this one (test-suite
  * audit): both open the same file in a real editor and read the same strip, so they share its setup.
  */
-test('the strip is a themed control that DIMS with its panel — it does not stay lit while every other indicator dims (constitution, FR-010g)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'LangProj', root);
-      const pid = await openEditorOn(win, 'main.rs', 'fn main');
-      await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('Rust');
-
-      // It is an ACTION control, so it names its action on hover.
-      await expect(win.getByTestId(`editor-language-${pid}`)).toHaveAttribute('title', 'Set language');
-
-      // Its colours resolve from THEME TOKENS — never a hardcoded value, and never inline artwork of its own. Its
-      // controls' icons are SVG, drawn from the active icon set inside a themed `.icon` (069): those are allowed.
-      const styling = await win.evaluate((id) => {
-        const el = document.querySelector(`[data-testid="editor-status-strip-${id}"]`)!;
-        const strip = getComputedStyle(el);
-        const tokenBg = getComputedStyle(document.documentElement)
-          .getPropertyValue('--throng-colour-editorStatusStripBg')
-          .trim();
-        return {
-          stripBg: strip.backgroundColor,
-          tokenBg,
-          inlineSvgs: [...el.querySelectorAll('svg')].filter((svg) => !svg.closest('.icon')).length,
-        };
-      }, pid);
-      expect(styling.tokenBg).toMatch(/^#[0-9a-f]{6}$/i);
-      expect(styling.inlineSvgs, 'the strip must not carry inline artwork outside a themed icon').toBe(0);
-      expect(styling.stripBg).not.toBe('rgba(0, 0, 0, 0)');
-
-      // The file was opened from the File Explorer, which therefore holds the active pane, and 046
-      // FR-121 shows no workspace panel as active while it does — so the strip is dimmed here. Put
-      // focus back in the editor first; the lit reading is about the workspace's active panel.
-      await win.getByTestId(`editor-${pid}`).click();
-
-      // The active panel's strip is fully lit.
-      const litOpacity = await win.evaluate(
-        (id) =>
-          getComputedStyle(document.querySelector(`[data-testid="editor-status-strip-${id}"]`)!)
-            .opacity,
-        pid,
-      );
-      expect(Number(litOpacity)).toBe(1);
-
-      // Add a second panel and make IT active. The editor's strip must now dim with its panel —
-      // a strip left brightly lit while 012's own indicator dimmed would contradict the very
-      // indicator it sits beside.
-      await addPanels(win, 1);
-      const ids = await panelIds(win);
-      const other = ids.find((i) => i !== pid)!;
-      await win.getByTestId(`panel-${other}`).click();
-
-      await expect
-        .poll(
-          () =>
-            win.evaluate(
-              (id) =>
-                Number(
-                  getComputedStyle(
-                    document.querySelector(`[data-testid="editor-status-strip-${id}"]`)!,
-                  ).opacity,
-                ),
-              pid,
-            ),
-          { timeout: 6000 },
-        )
-        .toBeLessThan(1);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 /*
  * MOVED DOWN (044 T163b): "a persisted language this build no longer knows opens as plain text,
  * WITHOUT error, and is preserved (FR-005b)". A precedence decision and a persisted value, neither

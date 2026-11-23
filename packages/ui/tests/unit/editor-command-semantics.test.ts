@@ -59,11 +59,10 @@
  *
  *   - `editor-cut-line.e2e.ts:176` (Ctrl+X in the File Explorer cuts a FILE) — OS focus routing
  *     between two panel kinds; Principle V's focus reserve.
- *   - `editor-indentation.e2e.ts:101` (a TAB-indented file keeps taking TABS) stays as the WIRING
- *     witness: `useEditor` calls `reinferIndent(state.text)` on load (`use-editor.ts:1153`), and no
- *     layer below E2E exercises that hook. Its two siblings (`:125`, `:146`) differ from it only in
- *     which answer the pure decision returns, and that decision is covered at
- *     `packages/ui/tests/integration/indent-infer.integration.test.ts:132` and `:154`.
+ *   - `editor-indentation.e2e.ts` (a TAB-indented file keeps taking TABS; an unindented Go file takes
+ *     a TAB) was removed once `component/editor-indent-on-switch.test.ts` mounted the editor and
+ *     proved both wiring points: `reinferIndent` on load, and the panel's language reaching
+ *     `effectiveIndent`.
  *   - The undo HALF of the migrated tests. Undo is not CodeMirror's `history()` here — it belongs to
  *     the document authority in UI main (`use-editor.ts:776`), and "one entry per command" is
  *     asserted at `packages/ui/tests/unit/undo-service.test.ts:25`. What is proven below is the
@@ -423,5 +422,33 @@ describe('the keyboard builds a real column block (FR-025)', () => {
     applyPaste(v.view, '1\n2', 'verbatim');
 
     expect(v.text).toBe('1\n2aaa\n1\n2bbb\n1\n2ccc\ndddd\n');
+  });
+});
+
+describe('a column paste pads in the document’s OWN whitespace (FR-025c1)', () => {
+  /*
+   * MIGRATED FROM `editor-column-select.e2e.ts` ("a column paste into a TAB-indented file pads with
+   * TABS"). `core/tests/unit/rect-paste.test.ts` proves `rectPaste` given a pad style; this proves
+   * the paste command derives that style from the document's effective indentation
+   * (`padStyleOf`), which nothing else below E2E did.
+   */
+  it('pads a short line with a TAB then spaces in a tab-indented file, landing on the column', () => {
+    const v = make('\tAAAA\nB\n\tCCCC\n', TABS);
+    v.caret(3); // …visual column 6: a tab carries 0→4, then "AA"
+
+    applyPaste(v.view, 'a\nb\nc', 'rectangular');
+
+    // Line 2 is the short one: a tab carries column 1 → 4, two spaces land exactly on column 6.
+    expect(v.text).toBe('\tAAaAA\nB\t  b\n\tCCcCC\n');
+  });
+
+  it('pads with SPACES only in a space-indented file', () => {
+    const v = make('    AAAA\nB\n    CCCC\n', SPACES4);
+    v.caret(6);
+
+    applyPaste(v.view, 'a\nb\nc', 'rectangular');
+
+    expect(v.text).toBe('    AAaAA\nB     b\n    CCcCC\n');
+    expect(v.text).not.toContain('\t');
   });
 });

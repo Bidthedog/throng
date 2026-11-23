@@ -144,3 +144,24 @@ describe('the file’s own indentation wins on a SECOND open (FR-018a, migrated 
     await waitFor(() => expect(h.view().state.doc.toString()).toBe(TABBED_TS));
   });
 });
+
+describe('an unindented file takes its LANGUAGE’s indent (FR-018, migrated from editor-indentation.e2e.ts)', () => {
+  it('indents an unindented Go file with a TAB, though the global default is spaces', async () => {
+    /*
+     * Layer: component — the panel's language reaching the indent decision is wiring in `useEditor`.
+     *
+     * The file has no indentation to read, so only the panel's DETECTED LANGUAGE can say tabs. That
+     * language reaching `effectiveIndent` (`use-editor.ts` `currentIndent`) is the seam: the
+     * integration file proves the decision for a language id it is handed, never that the panel
+     * hands it one.
+     */
+    const h = mountEditor({
+      doc: { text: 'package main\n', version: 1, absPath: 'C:/proj/blank.go' },
+    });
+    await waitFor(() => expect(h.text()).toContain('package main'));
+
+    pressTabAtStart(h);
+
+    expect(h.view().state.doc.toString().startsWith('\t'), 'Go means tabs').toBe(true);
+  });
+});
