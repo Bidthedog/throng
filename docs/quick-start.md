@@ -37,7 +37,7 @@ pick a folder, and accept or change the suggested name and colour. Projects cann
 - **Switch** by clicking a project, or with **Ctrl+Shift+Alt+PageDown** / **PageUp** from anywhere.
   Choosing from the list keeps focus in the list, so the arrow keys and **Enter** carry on there.
 - **Right-click a project** (or **Shift+F10**) for Edit, Rename, Remove, **Open in OS Explorer**,
-  **Copy Path ▸** (its root folder, Windows or POSIX form), **Move to Category ▸** and **Unload**,
+  **Copy Path ▸** (its root folder, Windows or POSIX form — your OS's form listed first), **Move to Category ▸** and **Unload**,
   which closes its tabs without forgetting them — its terminals keep running, or end, as the row
   says. Open in OS Explorer and Copy Path work whether the project is loaded or not.
 - **Categories** group projects; every project starts in **In Progress**. Create one from Move to
