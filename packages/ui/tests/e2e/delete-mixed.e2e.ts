@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import {
   openApp,
-  runApp as runOwnApp,
   createProject,
   cleanupTemp,
   FILE_OP_TIMEOUT_MS,
@@ -24,20 +23,13 @@ function makeProject(): string {
 }
 
 /*
- * ONE seeded app for the two PERMANENT-delete tests (034 FR-045, SC-027) — 3 launches -> 2.
+ * ONE seeded app for the PERMANENT-delete test (034 FR-045, SC-027).
  *
  * `explorer.deleteMode = permanent` genuinely has to be in settings.json before the app starts,
- * so neither of those tests can run against a default app. But they seeded the SAME document
- * into two temp roots and launched twice, and one seeded app answers for both. (Test 1's
- * document carried an extra empty `confirmations: {}`, which is the defaults written out.)
+ * so this test cannot run against a default app. Its root is removed in `afterAll`, after the shared
+ * app has closed, rather than while the explorer still watches it.
  *
- * The recycle test keeps `runOwnApp`: its subject is the SHIPPED default, which is the one
- * thing a seeded app cannot show.
- *
- * The two projects were both called "DelMix" and are named apart. Their roots move to
- * `afterAll`: each test empties its own tree and then deleted the watched root itself.
- *
- * Opened lazily, so a `--grep` that selects only the recycle test never launches it.
+ * Opened lazily, so a `--grep` that selects nothing here never launches it.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -93,43 +85,11 @@ test.afterAll(async () => {
  *
  * ── WHAT STAYS ──
  *
- * `:113` `@reserve:native` — it recycles through the REAL shell and reads the Recycle Bin back.
- * `:146` `@reserve:input` — it presses a real Delete key with an editor open, which is a claim about
+ * The recycle-mode mixed delete (a file and a folder Ctrl-selected, recycled through the REAL shell) is
+ * folded into `explorer.e2e.ts` "file operations via context menu + toolbar" — no launch of its own.
+ * `file-first selection` `@reserve:input` — it presses a real Delete key with an editor open, which is a claim about
  * where the keystroke lands rather than about what the menu targets.
  */
-test('recycle mode (default): mixed files + folders all get recycled via the real shell', { tag: ['@extended', '@explorer', '@reserve:native'] }, async () => {
-  const root = makeProject();
-  try {
-    await runOwnApp(async (_app, win) => {
-      await createProject(win, 'DelMix', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      await tree.getByText('dir1', { exact: true }).click();
-      await tree.getByText('file1.txt', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
-      await tree.getByText('dir2', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
-      await tree.getByText('file2.txt', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
-      await expect(tree.locator('.tree-row--selected')).toHaveCount(4);
-
-      // Default deleteMode is 'recycle' → real shell.trashItem.
-      await tree.getByText('file2.txt', { exact: true }).click({ button: 'right', modifiers: ['ControlOrMeta'] });
-      await win.getByTestId('menu-item-Delete').click();
-      await win.getByTestId('confirm-accept').click();
-      const wry = win.getByTestId('confirm-accept');
-      if (await wry.isVisible().catch(() => false)) await wry.click();
-
-      await expect
-        .poll(
-          () => ['file1.txt', 'file2.txt', 'dir1', 'dir2'].filter((n) => existsSync(join(root, n))),
-          { timeout: FILE_OP_TIMEOUT_MS },
-        )
-        .toEqual([]);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 test('file-first selection (opens an editor) then Delete key removes ALL selected', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const root = own(makeProject());
   try {

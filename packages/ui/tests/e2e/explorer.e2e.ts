@@ -335,11 +335,28 @@ test('file operations via context menu + toolbar (US3): delete, copy/paste, new 
 
       // A FOLDER deleted inside throng leaves the tree (merged from explorer-live-sync, the only test
       // that deleted a folder through the tree). Recycle Bin path, as for the file above.
-      await tree.getByText('src', { exact: true }).click({ button: 'right' });
+      //
+      // It is deleted as part of a MIXED multi-selection — the folder plus a file, Ctrl-selected —
+      // which is the reported bug (Delete took only the folders) and the only claim that needs the
+      // real shell: the selection is recycled whole through `shell.trashItem` (folded in from
+      // `delete-mixed.e2e.ts`, which launched its own app for it). Targeting the selection is
+      // `unit/explorer-subtree-menu.test.ts`; "all of them go" is `integration/files-delete-mixed`.
+      await tree.getByText('src', { exact: true }).click();
+      await tree.getByText('README copy.md', { exact: true }).click({ modifiers: ['ControlOrMeta'] });
+      await expect(tree.locator('.tree-row--selected')).toHaveCount(2);
+      await tree.getByText('README copy.md', { exact: true }).click({ button: 'right', modifiers: ['ControlOrMeta'] });
       await menuItem('Delete').click();
       await win.getByTestId('confirm-accept').click();
-      await expect.poll(() => existsSync(join(projectRoot, 'src')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
+      const secondConfirm = win.getByTestId('confirm-accept');
+      if (await secondConfirm.isVisible().catch(() => false)) await secondConfirm.click();
+      await expect
+        .poll(
+          () => ['src', 'README copy.md'].filter((n) => existsSync(join(projectRoot, n))),
+          { timeout: FILE_OP_TIMEOUT_MS },
+        )
+        .toEqual([]);
       await expect(tree.getByText('src', { exact: true })).toHaveCount(0, { timeout: 10_000 });
+      await expect(tree.getByText('README copy.md', { exact: true })).toHaveCount(0, { timeout: 10_000 });
     });
   } finally {
     cleanupTemp(projectRoot);

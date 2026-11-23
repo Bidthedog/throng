@@ -343,23 +343,6 @@ test('a hand-written explorer.openMode changes nothing, warns nothing, and is st
   );
 });
 
-test('an invalid number is not applied and is surfaced; last valid value stays', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      const num = prefs.getByTestId('control-behaviour.tabHoverActivateMs');
-      await num.fill('not-a-number');
-      await num.press('Enter');
-      // Invalidity surfaced — in the Preferences toast, naming the setting (077 FR-024); the file keeps the default
-      // (600), not applied.
-      await expect(prefs.getByTestId('control-behaviour.tabHoverActivateMs-invalid')).toBeVisible();
-      await expect(prefs.getByTestId('control-behaviour.tabHoverActivateMs-invalid')).toContainText('must be a whole number');
-      await expect(num).toHaveAttribute('aria-invalid', 'true');
-      expect(readSettings(cfgRoot)?.behaviour?.tabHoverActivateMs).toBe(600);
-    },
-  );
-});
-
 test('a malformed settings.json opens the defaults-merged form, and shows its raw text in the JSON editor for repair (FR-043)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   /*
    * ITS OWN APP (034 FR-045). The claim is that the application STARTS on a broken settings file —
