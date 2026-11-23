@@ -20,8 +20,8 @@ import {
   rename,
   rm,
   stat,
-  writeFile,
 } from 'node:fs/promises';
+import { writeFileAtomic } from './atomic-file-replace.js';
 import { logCaught, logExpected, type DirEntry, type IFileSystem } from '@throng/core';
 
 /** Move a path to the OS Recycle Bin / Trash (Electron `shell.trashItem`). */
@@ -168,8 +168,13 @@ export class NodeFileSystem implements IFileSystem {
     return readFile(path);
   }
 
+  /**
+   * All-or-nothing (#706): staged beside the real target and renamed over it, so a write that fails part-way (a full
+   * disk, a dropped share) leaves the file exactly as it was. A symlink is followed and its target replaced; the mode is
+   * kept. The rename gives the file a new inode, so a hard link to it no longer shares the edit.
+   */
   async writeBytes(path: string, bytes: Uint8Array): Promise<void> {
-    await writeFile(path, bytes);
+    await writeFileAtomic(path, bytes);
   }
 
   async size(path: string): Promise<number> {

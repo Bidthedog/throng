@@ -58,7 +58,10 @@ export interface IFileSystem {
   exists(path: string): Promise<boolean>;
   /** Raw bytes of a file (editor load, 006). Rejects if the path is gone. */
   readBytes(path: string): Promise<Uint8Array>;
-  /** Overwrite `path` with raw bytes (editor save, 006); creates it if absent. */
+  /**
+   * Overwrite `path` with raw bytes (editor save, 006); creates it if absent. A write that fails leaves an existing
+   * file exactly as it was (#706), and a symlink's target is written, not the link.
+   */
   writeBytes(path: string, bytes: Uint8Array): Promise<void>;
   /** File size in bytes (editor large-file guard, 006 FR-062). */
   size(path: string): Promise<number>;

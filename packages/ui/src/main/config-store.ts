@@ -10,65 +10,13 @@
  * untouched on disk so the user can fix their edit; writes are atomic (temp file
  * + rename) and best-effort (a failure is logged, never thrown).
  */
-import { access, chmod, constants, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { isAbsent, keepMode, renameWithRetry, replaceTarget, withTransientRetry } from './atomic-file-replace.js';
 import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type ConfigValidator, type IConfigStore, type ThemeRenameResult, type ValidatedConfig, type WriteOutcome, logCaught, logExpected } from '@throng/core';
 
 /** Result of a transactional multi-file write (010, FR-012/012a). */
 export type WriteAllResult = { ok: true } | { ok: false; failedPath: string; error: string };
-
-/**
- * Rename failures that are worth retrying (issue #75).
- *
- * On Windows a replace-rename fails with EPERM/EACCES/EBUSY while ANOTHER process holds a
- * handle on the target without share-delete — Defender, the search indexer, or our own config
- * watcher reading the file it was just told changed. The handle is released milliseconds later,
- * so the operation is not really failing, it is arriving early. Every other errno (a missing
- * source, a bad path) is a real fault and is reported at once rather than retried into a stall.
- */
-const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
-
-/** Ceiling on the retry window. Comfortably longer than a scanner's handle (tens of ms), and
- *  far short of any caller's patience — a write that has not landed in a second has really failed. */
-const RENAME_RETRY_BUDGET_MS = 1_000;
-const RENAME_RETRY_INTERVAL_MS = 20;
-
-/**
- * `rename`, retried while the target is transiently locked (issue #75).
- *
- * Mirrors the bounded rename-poll `windows-directory-lock` already uses for the same class of
- * Windows handle contention. Bounded so a genuinely stuck handle surfaces as a failure instead
- * of hanging the write.
- */
-async function renameWithRetry(from: string, to: string): Promise<void> {
-  await withTransientRetry(() => rename(from, to));
-}
-
-/**
- * Run `op`, retrying it while it fails with a transient sharing violation, within the same bounded
- * budget the rename has. Any other failure, or one that outlasts the budget, is thrown at once.
- */
-async function withTransientRetry<R>(op: () => Promise<R>): Promise<R> {
-  const deadline = Date.now() + RENAME_RETRY_BUDGET_MS;
-  for (;;) {
-    try {
-      return await op();
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code ?? '';
-      if (!TRANSIENT_RENAME_CODES.has(code) || Date.now() >= deadline) throw err;
-      await delay(RENAME_RETRY_INTERVAL_MS);
-    }
-  }
-}
-
-/** Did this fail because the path does not exist? */
-function isAbsent(err: unknown): boolean {
-  return (err as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /**
  * Normalise either validator shape to the reporting one (031, FR-013).
@@ -97,36 +45,6 @@ interface FileSnapshot {
   existed: boolean;
   original?: Buffer;
   tmp: string;
-}
-
-/**
- * What an atomic replace should rename onto. A rename onto a symlink replaces the link, which on Linux is how a settings
- * file kept in a dotfiles repository would quietly stop being kept there (062 FR-023). So a link is followed, and the
- * temp file is staged beside the real file, because a rename cannot cross filesystems.
- */
-async function replaceTarget(path: string): Promise<string> {
-  const info = await lstat(path).catch((e: unknown) => {
-    if (isAbsent(e)) logExpected('config-store: inspect write target', 'a document written for the first time does not exist yet', e);
-    else logCaught('config-store: inspect write target', e);
-    return null;
-  });
-  return info?.isSymbolicLink() ? realpath(path) : path;
-}
-
-/**
- * A replaced file keeps the permissions it had (062 FR-023), and a read-only one is refused: on Windows the rename fails,
- * but a POSIX rename replaces it without asking (FR-018's "the user's file is untouched"). Windows has no bits to carry.
- */
-async function keepMode(existing: string, staged: string): Promise<void> {
-  if (process.platform === 'win32') return;
-  const info = await stat(existing).catch((e: unknown) => {
-    if (isAbsent(e)) logExpected('config-store: read write target mode', 'a document written for the first time has no mode to keep', e);
-    else logCaught('config-store: read write target mode', e);
-    return null;
-  });
-  if (info === null) return;
-  await access(existing, constants.W_OK);
-  await chmod(staged, info.mode & 0o7777);
 }
 
 /**
