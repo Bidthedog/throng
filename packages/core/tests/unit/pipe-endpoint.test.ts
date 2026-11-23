@@ -37,6 +37,17 @@ describe('per-user pipe endpoint (020 FR-013)', () => {
     expect(sanitisePipeToken('DOMAIN\\User Name.x')).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
+  it('is pure: the derivation ignores THRONG_PIPE_NAME (the override is applied by the settings readers)', () => {
+    const before = process.env.THRONG_PIPE_NAME;
+    try {
+      process.env.THRONG_PIPE_NAME = '\\\\.\\pipe\\something-else';
+      expect(defaultPipeName('alice').includes('something-else')).toBe(false);
+    } finally {
+      if (before === undefined) delete process.env.THRONG_PIPE_NAME;
+      else process.env.THRONG_PIPE_NAME = before;
+    }
+  });
+
   it('falls back to a usable name for an empty token', () => {
     const name = defaultPipeName('');
     expect(name.startsWith(`${PREFIX}throng.`)).toBe(true);
