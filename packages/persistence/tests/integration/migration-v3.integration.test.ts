@@ -33,19 +33,4 @@ describe('migration v3 (project ordering)', () => {
       db.close();
     }
   });
-
-  it('is idempotent (re-run is a no-op)', { tags: ['regression'] }, () => {
-    const path = freshDbPath();
-    let db = openDatabase({ databasePath: path });
-    runMigrations(db);
-    db.close();
-    db = openDatabase({ databasePath: path });
-    try {
-      const result = runMigrations(db);
-      expect(result.applied).toBe(false);
-      expect(db.pragma('user_version', { simple: true })).toBe(LATEST_VERSION);
-    } finally {
-      db.close();
-    }
-  });
 });

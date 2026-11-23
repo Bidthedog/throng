@@ -34,16 +34,15 @@ function seedProject(db: ReturnType<typeof openDatabase>, id: string): void {
 }
 
 describe('migration v7', () => {
-  it('creates document_state and its index', { tags: ['regression'] }, () => {
+  // The table's existence is asserted by no-editor-migration and the repository tests below; the
+  // index is asserted only here.
+  it('creates the idx_docstate_owner_project index', { tags: ['regression'] }, () => {
     const db = freshDb();
     try {
-      const objects = db
-        .prepare("SELECT name, type FROM sqlite_master WHERE name IN ('document_state', 'idx_docstate_owner_project')")
-        .all() as { name: string; type: string }[];
-      expect(objects.map((o) => o.name).sort()).toEqual([
-        'document_state',
-        'idx_docstate_owner_project',
-      ]);
+      const index = db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_docstate_owner_project'")
+        .get();
+      expect(index).toBeTruthy();
     } finally {
       db.close();
     }
