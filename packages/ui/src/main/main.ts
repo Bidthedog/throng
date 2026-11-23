@@ -2453,6 +2453,16 @@ if (isPrimaryInstance)
   // confined by: a path may be revealed exactly while some Panel, in some window, is showing it —
   // an editor OR a preview (044 FR-033: a standalone preview shows a file no editor has open).
   filesService.setOpenDocumentCheck(openInEditorOrPreview(editorCoordinator, previews));
+  // #681 — the project list's Open in OS Explorer names a project by id. Main's own view of the
+  // daemon's projects answers it; a miss re-lists once (a project created since the last refresh).
+  const rootOfProject = (projectId: string): string | null =>
+    [...projectsByRoot.values()].find((p) => p.id === projectId)?.rootFolder ?? null;
+  filesService.setProjectRootResolver(async (projectId) => {
+    const cached = rootOfProject(projectId);
+    if (cached !== null) return cached;
+    await refreshProjectsCache();
+    return rootOfProject(projectId);
+  });
   // 024 US3 (#85): the inverse — undoing a delete lets a stranded editor become clean again.
   filesService.setOnRestored((absPaths) => void editorCoordinator.markRestored(absPaths));
   // Moving one that is open re-points it instead (019, #87): the move is BRACKETED — announced

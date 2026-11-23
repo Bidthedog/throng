@@ -500,6 +500,11 @@ declare global {
          * another project's root or under no root at all.
          */
         revealDocument?: (absPath: string) => Promise<FilesOkOrError>;
+        /**
+         * #681 — open a project's ROOT folder in the OS file manager, by project id, whether or not
+         * it is the active project. Main resolves the root; the renderer never names the path.
+         */
+        revealProjectRoot?: (projectId: string) => Promise<FilesOkOrError>;
         /** 067 US2 — open the file with the OS default program (FR-015); one notice on failure. */
         openInDefaultProgram?: (relPath: string) => Promise<FilesOkOrError>;
         /** 067 FR-114 — hand the paths to the OS as a file drag (copy), mid-press, at the window edge. */

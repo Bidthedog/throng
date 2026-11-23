@@ -2099,6 +2099,10 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
     '—',
     'Remove',
     '—',
+    // #681 — the project root's two location rows, in the File Explorer's Navigate order.
+    'Open in OS Explorer',
+    'Copy Path',
+    '—',
     'Move to Category',
     'Unload Project',
     defaultAction === 'keepRunning'
@@ -2121,10 +2125,16 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
     onMoveToCategory?: (categoryId: string) => void;
     onNewCategory?: () => void;
     nextMarked?: { run: () => void };
+    rootFolder?: string;
+    onOpenInOsExplorer?: () => void;
+    copyPath?: (text: string) => void;
   }): Promise<MenuAction[]> {
     const { projectMenu } = await import('../../src/renderer/sidebar/project-menu.js');
     return projectMenu({
       ...(opts.nextMarked === undefined ? {} : { nextMarked: opts.nextMarked }),
+      ...(opts.copyPath === undefined ? {} : { copyPath: opts.copyPath }),
+      rootFolder: opts.rootFolder ?? 'C:/projects/p1',
+      onOpenInOsExplorer: opts.onOpenInOsExplorer ?? noop,
       loaded: opts.loaded,
       defaultAction: opts.defaultAction ?? 'keepRunning',
       onEdit: opts.onEdit ?? noop,
@@ -2248,6 +2258,83 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
 
     items.find((i) => i.label === 'Remove')?.onClick?.();
     expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+   * #681 — Open in OS Explorer and Copy Path ▸ for the project's ROOT folder, on loaded and unloaded
+   * projects alike. Each row is compared with the File Explorer's own row for the root, built here by
+   * the real `buildContextMenuItems`, so the two menus cannot drift apart: the same action reads the
+   * same everywhere (glyph, section, Copy Path's labels). Copy Path offers the ABSOLUTE forms only —
+   * the relative forms of a project root are always `.`, so they are left out.
+   */
+  const explorerRoot = (): MenuAction[] =>
+    buildContextMenuItems({
+      node: { relPath: '', kind: 'folder' },
+      selectedRelPaths: [],
+      clipboard: null,
+      ops: explorerOps,
+      projectRoot: 'C:/projects/p1',
+    });
+
+  for (const loaded of [true, false]) {
+    it(`#681 — Open in OS Explorer and Copy Path are drawn, enabled, on a ${loaded ? 'loaded' : 'NOT loaded'} project`, async () => {
+      const items = await build({ loaded });
+      for (const label of ['Open in OS Explorer', 'Copy Path']) {
+        const row = items.find((i) => i.label === label);
+        expect(row, label).toBeDefined();
+        expect(row?.disabled ?? false, label).toBe(false);
+      }
+      assertSectioned(items, 'project menu (#681)');
+    });
+  }
+
+  it('#681 — Open in OS Explorer carries the File Explorer OS reveal row’s glyph and section, and runs its own route', async () => {
+    const onOpenInOsExplorer = vi.fn();
+    const items = await build({ loaded: false, onOpenInOsExplorer });
+    const row = items.find((i) => i.label === 'Open in OS Explorer');
+    const explorerOs = explorerRoot()
+      .find((i) => i.label === 'Open In')
+      ?.submenu?.find((i) => i.label === 'OS File Explorer');
+
+    expect(explorerOs, 'the explorer root row still has an OS reveal to compare with').toBeDefined();
+    expect(row?.icon).toBe(explorerOs?.icon);
+    expect(row?.section).toBe(explorerOs?.section);
+    expect(row?.submenu).toBeUndefined();
+    row?.onClick?.();
+    expect(onOpenInOsExplorer).toHaveBeenCalledTimes(1);
+  });
+
+  it('#681 — Copy Path ▸ is the File Explorer’s Copy Path, absolute forms only, for the project root', async () => {
+    const copyPath = vi.fn();
+    const items = await build({ loaded: true, rootFolder: 'C:/projects/p1', copyPath });
+    const row = items.find((i) => i.label === 'Copy Path');
+    const explorerCopy = explorerRoot().find((i) => i.label === 'Copy Path');
+
+    expect(row?.icon).toBe(explorerCopy?.icon);
+    expect(row?.section).toBe(explorerCopy?.section);
+    expect(shapeOf(row?.submenu ?? [])).toEqual(['Absolute (Windows)', 'Absolute (POSIX)']);
+    // The explorer's leaves, minus the relative pair — same labels, same glyphs, same order.
+    const explorerAbsolute = (explorerCopy?.submenu ?? []).filter((i) => i.label?.startsWith('Absolute'));
+    expect((row?.submenu ?? []).map((i) => [i.label, i.icon, i.section])).toEqual(
+      explorerAbsolute.map((i) => [i.label, i.icon, i.section]),
+    );
+    assertSectioned(row?.submenu ?? [], 'project menu → Copy Path');
+
+    row?.submenu?.find((i) => i.label === 'Absolute (Windows)')?.onClick?.();
+    expect(copyPath).toHaveBeenLastCalledWith('C:\\projects\\p1');
+    row?.submenu?.find((i) => i.label === 'Absolute (POSIX)')?.onClick?.();
+    expect(copyPath).toHaveBeenLastCalledWith('/c/projects/p1');
+  });
+
+  it('#681 — Copy Path renders a POSIX root unchanged in POSIX form and backslashed in Windows form', async () => {
+    const copyPath = vi.fn();
+    const items = await build({ loaded: true, rootFolder: '/home/me/projects/p1/', copyPath });
+    const leaves = items.find((i) => i.label === 'Copy Path')?.submenu ?? [];
+
+    leaves.find((i) => i.label === 'Absolute (POSIX)')?.onClick?.();
+    expect(copyPath).toHaveBeenLastCalledWith('/home/me/projects/p1');
+    leaves.find((i) => i.label === 'Absolute (Windows)')?.onClick?.();
+    expect(copyPath).toHaveBeenLastCalledWith('\\home\\me\\projects\\p1');
   });
 });
 

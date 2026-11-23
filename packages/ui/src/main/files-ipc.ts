@@ -57,6 +57,11 @@ export function registerFilesIpc(service: FilesService, watcher: ExplorerWatcher
   ipcMain.handle('throng:files:revealDocument', (_event, absPath: unknown) =>
     service.revealDocument(asStr(absPath)),
   );
+  // #681 — the project list reveals a project's ROOT by id, whichever project is active; the service
+  // resolves the root itself, so the renderer cannot name an arbitrary path through this channel.
+  ipcMain.handle('throng:files:revealProjectRoot', (_event, projectId: unknown) =>
+    service.revealProjectRoot(asStr(projectId)),
+  );
   // 024 US3 (#85): does this path exist inside the project? The undo engine's world-check.
   ipcMain.handle('throng:files:exists', (_event, relPath: unknown) =>
     service.existsInProject(asStr(relPath)),

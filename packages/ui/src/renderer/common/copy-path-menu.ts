@@ -28,3 +28,16 @@ export function copyPathSubmenu(forms: PathForms, section: MenuAction['section']
     ],
   };
 }
+
+/**
+ * The same submenu with the ABSOLUTE forms only (#681), for a project's own root folder — whose relative
+ * forms would always be `.`. Derived from {@link copyPathSubmenu}, so label, glyphs and leaf labels stay its.
+ */
+export function copyAbsolutePathSubmenu(
+  forms: PathForms,
+  section: MenuAction['section'],
+  copy: (text: string) => void = copyPathText,
+): MenuAction {
+  const full = copyPathSubmenu(forms, section, copy);
+  return { ...full, submenu: full.submenu?.filter((leaf) => leaf.label?.startsWith('Absolute')) };
+}

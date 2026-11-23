@@ -681,6 +681,9 @@ contextBridge.exposeInMainWorld('throng', {
     // #273 — a Panel reveals its OWN file, which may be under another project's root or under none.
     revealDocument: (absPath: string) =>
       ipcRenderer.invoke('throng:files:revealDocument', absPath),
+    // #681 — the project list opens a project's ROOT folder, by id; main looks the root up.
+    revealProjectRoot: (projectId: string) =>
+      ipcRenderer.invoke('throng:files:revealProjectRoot', projectId),
     // 024 US3 (#85): the undo engine's world-check — is this path still inside the project?
     exists: (relPath: string): Promise<boolean> =>
       ipcRenderer.invoke('throng:files:exists', relPath),

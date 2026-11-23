@@ -1,7 +1,8 @@
 /**
  * A project row's right-click menu (046 US4/US5, contracts/menus.md §1; T072, T081).
  *
- * Sections: content (Edit, Rename) · destroy (Remove) · viewState (Move to Category, then the two
+ * Sections: content (Edit, Rename) · destroy (Remove) · navigate (Open in OS Explorer, Copy Path ▸ — #681,
+ * then Go to Next Marked Panel) · viewState (Move to Category, then the two
  * Unload rows). contracts/menus.md §6 (FR-081): **Unload Project** runs the live
  * `projects.unloadTerminalAction` preference, and the second row names and runs its OPPOSITE — "Unload
  * Project and End Terminals" under keepRunning, "Unload Project and Keep Terminals Running" under
@@ -19,7 +20,9 @@
  * and `MENU_SECTION_ORDER` places `create` ahead of `navigate`, so giving New Category… its own
  * `create` section would have reordered it to the FRONT instead of leaving it last.
  */
+import { pathForms } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
+import { copyAbsolutePathSubmenu, copyPathText } from '../common/copy-path-menu.js';
 
 export interface ProjectMenuCategoryOption {
   id: string;
@@ -48,11 +51,30 @@ export interface ProjectMenuArgs {
    * action and may stand without a menu item (constitution VI, v5.6.0).
    */
   nextMarked?: { run: () => void };
+  /** #681 — the project's absolute root folder, which Copy Path ▸ renders in its absolute forms. */
+  rootFolder: string;
+  /** #681 — open the project's root folder in the OS file manager (loaded or not). */
+  onOpenInOsExplorer: () => void;
+  /** #681 — where Copy Path writes; the shared verbatim clipboard write unless a test supplies one. */
+  copyPath?: (text: string) => void;
 }
 
 export function projectMenu(args: ProjectMenuArgs): MenuAction[] {
-  const { loaded, defaultAction, onEdit, onRename, onRemove, onUnload, categories, onMoveToCategory, onNewCategory, nextMarked } =
-    args;
+  const {
+    loaded,
+    defaultAction,
+    onEdit,
+    onRename,
+    onRemove,
+    onUnload,
+    categories,
+    onMoveToCategory,
+    onNewCategory,
+    nextMarked,
+    rootFolder,
+    onOpenInOsExplorer,
+    copyPath = copyPathText,
+  } = args;
   const opposite = defaultAction === 'keepRunning' ? 'endTerminals' : 'keepRunning';
   const oppositeLabel =
     opposite === 'endTerminals' ? 'Unload Project and End Terminals' : 'Unload Project and Keep Terminals Running';
@@ -61,6 +83,11 @@ export function projectMenu(args: ProjectMenuArgs): MenuAction[] {
     { label: 'Edit', icon: 'editVisual', section: 'content', onClick: onEdit },
     { label: 'Rename', icon: 'rename', section: 'content', onClick: onRename },
     { label: 'Remove', icon: 'destroy', section: 'destroy', onClick: onRemove },
+    // #681 — the root folder's location rows, in the File Explorer's Navigate order (the OS reveal, then
+    // Copy Path) and with its glyphs: `folderOpen` is the explorer's OS File Explorer row's, and Copy Path
+    // is the shared builder, absolute forms only. Never disabled — neither needs the project loaded.
+    { label: 'Open in OS Explorer', icon: 'folderOpen', section: 'navigate', onClick: onOpenInOsExplorer },
+    copyAbsolutePathSubmenu(pathForms(rootFolder, ''), 'navigate', copyPath),
     // Takes you somewhere, so `navigate`; shown only while the project has a marked panel (FR-106). No
     // glyph: the flag icon was retired by round 13 (FR-139).
     ...(nextMarked === undefined
