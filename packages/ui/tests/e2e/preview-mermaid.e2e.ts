@@ -1,6 +1,6 @@
 /**
  * 054 T068 — Mermaid diagrams in a real window: a ```mermaid fence in a Markdown preview draws a themed SVG
- * under the shipped dark theme, a standalone `.mmd` file draws through its own provider, and a source that
+ * under the shipped dark theme, a standalone `.mmd` file draws through its own provider (MT-05 below), and a source that
  * does not parse shows the inline notice (FR-040, FR-042, FR-044, FR-046; research R5).
  *
  * ══ WHY THIS IS AN E2E (`@reserve:layout`) ══
@@ -126,16 +126,6 @@ test('a mermaid fence in a Markdown preview draws an SVG in the dark theme’s c
   const nodeFill = await svg.locator('.node rect, .node polygon, .node path').first().evaluate((el) => getComputedStyle(el).fill);
   expect(nodeFill).toBe(surface);
   expect(nodeFill).not.toBe('rgb(236, 236, 255)');
-});
-
-test('a standalone .mmd file previews as one diagram through the Mermaid provider', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const win = shared!.win;
-  const id = await previewFromTree(win, 'flow.mmd');
-  await expect(win.getByTestId(`preview-mermaid-${id}`)).toBeVisible();
-  const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('.preview-diagram-frame__layer svg').first();
-  await expect(svg).toBeVisible({ timeout: 15_000 });
-  await expect(svg).toContainText('Begin here');
-  await expect(win.getByTestId(`panel-title-${id}`)).toHaveText('flow.mmd - Mermaid Preview'); // 054 FR-005a; 074 FR-104
 });
 
 test('MT-05: a large real-world flowchart in a folder with a space and capitals previews as a drawing', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
