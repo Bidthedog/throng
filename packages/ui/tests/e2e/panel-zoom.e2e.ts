@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject as newProject, firstPanelId, installResizeProbe, openApp, panelIds, reloadWindow, type AppOptions, type OpenApp, splitPanelViaMenu, TEST_SHELL } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject as newProject, firstPanelId, installResizeProbe, openApp, panelIds, reloadWindow, settleOnActiveProject, type AppOptions, type OpenApp, splitPanelViaMenu, TEST_SHELL } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -68,6 +68,31 @@ function panelZoom(win: Page, pid: string): Promise<number> {
   return win.getByTestId(`panel-${pid}`).evaluate((el) => Number((el as HTMLElement).dataset.zoom));
 }
 
+/**
+ * Every panel in the daemon's copy of a project's layout — what a reload will read — with its zoom.
+ * `zoom` is absent until set, and absent means 0. A project with nothing saved loads as a freshly
+ * synthesised default whose ids match no panel on screen, so it reads as "not there yet".
+ */
+function storedPanels(win: Page, projectId: string): Promise<{ id: string; zoom: number }[]> {
+  return win.evaluate(async (id) => {
+    const env = (await window.throng?.invoke?.('workspace.load', { projectId: id })) as
+      | { result?: { layout?: unknown } }
+      | undefined;
+    const out: { id: string; zoom: number }[] = [];
+    const walk = (node: unknown): void => {
+      if (!node || typeof node !== 'object') return;
+      const o = node as Record<string, unknown>;
+      if (o.type === 'panel' && typeof o.id === 'string') out.push({ id: o.id, zoom: (o.zoom as number | undefined) ?? 0 });
+      for (const v of Object.values(o)) {
+        if (Array.isArray(v)) v.forEach(walk);
+        else if (v && typeof v === 'object') walk(v);
+      }
+    };
+    walk(env?.result?.layout);
+    return out;
+  }, projectId);
+}
+
 async function newEditor(win: Page, pid: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
@@ -79,6 +104,7 @@ test('zooming one editor scales only that editor — its sibling editor and a te
   try {
     await runApp(async (app, win) => {
       await createProject(win, 'ZoomEd', root);
+      const projectId = await settleOnActiveProject(win, 'ZoomEd');
       const p1 = await firstPanelId(win);
       await newEditor(win, p1);
 
@@ -126,12 +152,28 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       await expect(content).toContainText('const answer = 42;');
 
       // SC-003 (merged in from "a panel keeps its own zoom across a reload"): the level survives a reload, and
-      // only p1 carries it. The save is debounced and the reload reads disk once.
+      // only p1 carries it. The save is debounced and the reload reads the daemon's copy once.
       const level = await panelZoom(win, p1);
-      // sleep-justified: the reload below reads whatever is on disk AT THAT MOMENT, once, and
-      // nothing after can correct a reload that ran ahead of the debounced save — the write
-      // itself raises no event this window can observe.
-      await win.waitForTimeout(700);
+      /*
+       * Wait for the daemon to HOLD the zoomed layout, not for a duration. A reload drops a save whose
+       * debounce has not fired, and nothing after it can correct a reload that ran ahead of the write.
+       * This used to be a 700 ms sleep — a verdict deadline, not a wait: on a hosted macOS runner the
+       * reload read no layout at all for the project, the store synthesised a fresh default (one Blank
+       * Panel, new id) and `panel-<p1>` could never appear. Asking the daemon what it holds is the
+       * signal; a save that never lands now fails HERE, under its own name.
+       */
+      await expect
+        .poll(
+          async () => {
+            const stored = await storedPanels(win, projectId);
+            return {
+              p1: stored.find((p) => p.id === p1)?.zoom ?? null,
+              p2: stored.find((p) => p.id === p2)?.zoom ?? null,
+            };
+          },
+          { message: 'the daemon never held the zoomed layout, so a reload could not restore it' },
+        )
+        .toEqual({ p1: level, p2: 0 });
       await reloadWindow(win);
       await win.locator('.project-item', { hasText: 'ZoomEd' }).click();
       await expect(win.getByTestId(`panel-${p1}`)).toBeVisible({ timeout: 15000 });
