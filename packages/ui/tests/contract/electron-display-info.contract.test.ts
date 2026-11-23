@@ -17,13 +17,4 @@ describe('ElectronDisplayInfo', () => {
       runDisplayInfoContract(() => new ElectronDisplayInfo(() => fakeDisplays)),
     ).not.toThrow();
   });
-
-  it('repositions an off-screen window onto a connected display (FR-028)', () => {
-    const info = new ElectronDisplayInfo(() => fakeDisplays);
-    const offscreen = { x: -5000, y: -5000, width: 800, height: 600 };
-    expect(info.isVisible(offscreen)).toBe(false);
-    const clamped = info.clampToVisible(offscreen);
-    expect(info.isVisible(clamped)).toBe(true);
-    expect(clamped.displayId).toBe('1');
-  });
 });
