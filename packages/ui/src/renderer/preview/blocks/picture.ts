@@ -86,9 +86,8 @@ export function pictureWrapper(href: string, width: number, height: number, alt?
   svg.setAttribute('role', 'img');
   if (alt !== undefined && alt.length > 0) {
     svg.setAttribute('aria-label', alt);
-    const title = document.createElementNS(SVG_NS, 'title');
-    title.textContent = alt;
-    svg.appendChild(title);
+    // #718 — a `title` attribute, which the app's popup draws (`title-tooltips.tsx`); an SVG `<title>` the OS draws.
+    svg.setAttribute('title', alt);
   }
   const image = document.createElementNS(SVG_NS, 'image');
   image.setAttribute('href', href);

@@ -17,6 +17,10 @@ import {
   type PictureLoader,
 } from '../../src/renderer/preview/blocks/picture.js';
 import { blockRendererFor } from '../../src/renderer/preview/blocks/block-renderers.js';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { createElement } from 'react';
+import { TITLE_TOOLTIP_DELAY_MS, TitleTooltipHost, installTitleTooltips } from '../../src/renderer/common/title-tooltips.js';
+import { nativeTooltipAt } from './native-tooltip.js';
 
 const HOSTILE = readFileSync(join(__dirname, '..', 'fixtures', 'preview', 'hostile.svg'), 'utf8');
 const ok: PictureLoader = { load: () => Promise.resolve({ width: 10, height: 10 }) };
@@ -91,6 +95,35 @@ describe('drawSvgSource — an isolated picture (FR-040, FR-044, FR-045)', () =>
 
   it('is registered as the ```svg fence renderer (FR-054)', () => {
     expect(blockRendererFor('svg')?.noun).toBe('SVG');
+  });
+});
+
+/*
+ * #718 — hovering a Markdown preview's image showed the OS's own tooltip (black, white border on Linux), not throng's
+ * rounded popup: the wrapper wrote the alt text into an SVG `<title>`, which the OS draws and the app's popup layer
+ * never saw. Constitution UX "One popup style".
+ */
+describe('a picture’s hover text (#718)', () => {
+  it('is drawn in the shared popup, never by the OS, and stays the picture’s accessible name', async () => {
+    vi.useFakeTimers();
+    render(createElement(TitleTooltipHost));
+    const uninstall = installTitleTooltips();
+    try {
+      const renderer = await imageUrlEntry({ loader: ok, alt: () => 'A diagram' }).load();
+      const wrapper = await renderer.render('throng-preview://asset/p/diagram.png', { theme: {} as never });
+      document.body.append(wrapper);
+      const image = wrapper.querySelector('image')!;
+
+      fireEvent.pointerOver(image, { clientX: 20, clientY: 20 });
+      expect(nativeTooltipAt(image) ?? '', 'the OS would draw this tooltip').toBe('');
+      act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+      expect(screen.getByRole('tooltip')).toHaveTextContent('A diagram');
+      expect(wrapper).toHaveAttribute('role', 'img');
+      expect(wrapper).toHaveAttribute('aria-label', 'A diagram');
+      wrapper.remove();
+    } finally {
+      uninstall();
+    }
   });
 });
 
