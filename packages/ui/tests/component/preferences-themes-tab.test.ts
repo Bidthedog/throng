@@ -394,7 +394,7 @@ function mountThemeStore(
 
 const themeOptions = (): string[] =>
   [...screen.getByTestId('theme-select').querySelectorAll('option')].map(
-    (o) => o.textContent?.trim() ?? '',
+    (o) => o.value,
   );
 
 describe('Restore All is confirmed before it destroys anything (FR-004)', () => {

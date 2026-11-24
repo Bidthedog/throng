@@ -314,7 +314,7 @@ test('US3: Clone is the sole creation path — a valid name creates and activate
       await prefs.getByTestId('theme-name-confirm').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'MyTheme.json'))).toBe(true);
       await expect.poll(() => readActiveTheme(cfgRoot), { timeout: FILE_OP_TIMEOUT_MS }).toBe('MyTheme');
-      await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).toContain('MyTheme');
+      await expect.poll(() => prefs.getByTestId('theme-select').locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toContain('MyTheme'); // values: 078 labels a conforming option's text
       // It is a copy of the source, retargeted to the new name.
       expect(readTheme(cfgRoot, 'MyTheme')?.name).toBe('MyTheme');
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   V6_SEARCH_MATCH_COLOURS,
   V6_SEARCH_IN_FILES_SETTINGS,
+  V38_MOVED_COLOURS,
 } from '../../src/config/shipped-defaults.js';
 import { ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
@@ -95,11 +96,14 @@ describe('the frozen version-6 record (R28, D4 step 1)', () => {
     // Stated as an assertion so the test above cannot be satisfied by a wholesale rewrite of the
     // record. FR-067 leaves the accent ray alone: `searchMatchCurrent` is 016 FR-007a's value and
     // `searchMatchCurrentBorder` is derived from it, so both are still byte-identical to version 6.
-    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+    // 078 FR-005c later moved Debian's accent ray; the value it moved from is recorded in V38_MOVED_COLOURS.
+    const before078 = (name: string, token: 'searchMatchCurrent' | 'searchMatchCurrentBorder'): string =>
+      V38_MOVED_COLOURS[name]?.[token] ?? ALL_DEFAULT_THEMES[name]!.colours[token];
+    for (const name of Object.keys(ALL_DEFAULT_THEMES)) {
       const v6 = V6_SEARCH_MATCH_COLOURS[name];
-      expect(v6.searchMatchCurrent, `${name}.searchMatchCurrent`).toBe(theme.colours.searchMatchCurrent);
+      expect(v6.searchMatchCurrent, `${name}.searchMatchCurrent`).toBe(before078(name, 'searchMatchCurrent'));
       expect(v6.searchMatchCurrentBorder, `${name}.searchMatchCurrentBorder`).toBe(
-        theme.colours.searchMatchCurrentBorder,
+        before078(name, 'searchMatchCurrentBorder'),
       );
     }
   });

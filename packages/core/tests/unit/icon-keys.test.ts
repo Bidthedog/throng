@@ -40,6 +40,8 @@ const EXPECTED_KEYS = [
   'calloutWarning', 'calloutFailure', 'calloutDanger', 'calloutBug', 'calloutExample', 'calloutQuote',
   // 075 — Print… and Print Preview's Print button, and FR-068a's Back and Forward through its pages.
   'print', 'pagePrevious', 'pageNext',
+  // 078 FR-013 — the Themes picker's WCAG AA mark.
+  'wcagConformant',
 ];
 
 describe('icon keys (069 FR-010 to FR-012)', () => {
@@ -49,9 +51,10 @@ describe('icon keys (069 FR-010 to FR-012)', () => {
   // 074 FR-062c added a PDF preview's three page layouts: `pageLayoutSingle`, `pageLayoutTwo`, `pageLayoutWrap`.
   // 074 FR-103 added a preview icon per shipped preview type, beside `preview`.
   // 075 FR-024 added the thirteen callout icons, FR-063 `print`, and FR-068a `pagePrevious` and `pageNext`.
-  it('is the 192 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076, thirteen from 073 (the CSV cell dialog toggle, the grid menu icons, the CSV and Spreadsheet preview icons and the workbook Read-only marker), nine from 074 and sixteen from 075', () => {
+  // 078 FR-013 added `wcagConformant`, the Themes picker's mark for a theme that meets WCAG AA.
+  it('is the 193 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076, thirteen from 073 (the CSV cell dialog toggle, the grid menu icons, the CSV and Spreadsheet preview icons and the workbook Read-only marker), nine from 074, sixteen from 075 and one from 078', () => {
     expect([...ICON_KEYS]).toEqual(EXPECTED_KEYS);
-    expect(ICON_KEYS).toHaveLength(192);
+    expect(ICON_KEYS).toHaveLength(193);
     expect(ICON_KEYS).not.toContain('notifications');
   });
 
