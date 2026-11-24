@@ -3038,6 +3038,14 @@ Each supersedes the named text only where it differs; that text is kept where it
 
   The row carries no number of its own: FR-170's rows 1–7, and FR-170c's references to them, keep their
   numbers.
+- **FR-170e** — *no editor for a binary file (2026-11-24, maintainer, #719; amends FR-170's row 2 condition
+  "The target is a file in the project", FR-030's Open in Editor row, and FR-170a / FR-170c where they draw
+  row 2 disabled)*: Open In ▸ New Editor, Active Editor and every named editor row MUST NOT be drawn for a
+  file the editor refuses as binary (067 FR-117's meaning): a type a binary preview provider claims (a PDF,
+  an image, a spreadsheet — 044 FR-073), whatever the provider's enabled state, or a file main's open
+  decision refuses as binary. A type known by its extension draws no row 2 even before main answers or when
+  the link does not resolve; any other binary file loses row 2 when main's answer arrives (FR-170c's "the
+  answer may remove rows"). Every other row is unchanged.
 - **FR-158b** — *what the reveal checks (sixth analysis pass; **S10**)*: a follow's reveal and the explicit
   **Open in OS Explorer** item make FR-158a's single bounded file-or-folder check instead of FR-035a's and
   FR-037's "check again that the path exists" — a location that is not there is revealed on its parent

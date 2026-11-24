@@ -52,6 +52,7 @@ throng's File Explorer, panels and shutdown stop short of the operating system a
 | FR-062 | **Refined by FR-129.** Down arrow shows the remembered list, whether or not anything is typed. | Hand-test feedback, MT-10. |
 | FR-064b, FR-066 | **Refined by FR-130.** The clear control sits in the Terminal section. | Hand-test feedback, MT-10. |
 | FR-116 | **Extended by FR-131** to Ctrl+click on a link. | Hand-test feedback, MT-14. |
+| FR-116, FR-117, FR-131; 006 FR-030 / FR-072; 043 FR-087 | **Amended by FR-137.** A binary preview type counts as binary, no menu offers a binary file an editor, every open route reaches the OS under the preference, and the preference-off notice says how to open the file. | #719. |
 | FR-123 | **Scope superseded by FR-132.** Every link form the editor recognises, not only relative ones. | Hand-test feedback, MT-14. |
 | FR-090 | **Amended by FR-132, in the front matter table only.** A form the body preview refuses follows as the editor would. The body is unchanged. | Hand-test feedback, MT-14. |
 | FR-067 | **Refined by FR-133.** Delete on a highlighted remembered value removes that one value. | Hand-test feedback, MT-10. |
@@ -682,6 +683,11 @@ A click on the resource popup dismisses it, so it is never in the way.
   *Down, Esc and "whatever it holds" are derived from the maintainer's feedback and the code; not confirmed by the maintainer.*
 - **FR-136**: With a selection spanning lines, the editor status bar MUST read the line as the range of the selection's first and last lines and the column as the column where the selection starts: `Ln 3-5, Col 4.`, whichever end holds the caret. A selection ending at column 1 of a line MUST NOT count that line. Spoken as `lines 3 to 5`. Extends FR-126.
   *The column-1 rule and the spoken form are derived; not confirmed by the maintainer.*
+- **FR-137**: *(2026-11-24, maintainer, #719. Widens FR-117's meaning, amends FR-116's and FR-131's "existing 'cannot open' message", and amends the File Explorer's Open In editor targets, 006 FR-030 / FR-072 and 043 FR-087.)* A file the editor refuses as binary (FR-117) is also any file whose type a binary preview provider claims — a PDF, an image, a spreadsheet — whether that provider is on or off (044 FR-073: such a type has no editor). For such a file:
+  - No menu MUST offer an editor target: the File Explorer's Open In MUST NOT list Last Active Editor, New Editor, Current Editor or Other Tab, and the Link menu follows 045 FR-170e.
+  - Opening it from File Explorer (click, double-click or Enter), Quick Open, a followed link or a drop MUST open its preview when that type's preview is on and set to open in it. Otherwise, with FR-116's preference on, it MUST open in the OS default program, with FR-018's one notice if the OS refuses; FR-117's single click still raises nothing.
+  - With FR-116's preference off, it MUST raise one notice that names the file, says it is not text, and says how to open it: turn on that type's preview toggle, named as Preferences shows it, where a provider claims the type and is off; and turn on **Open unsupported files in the OS**.
+  *Enter, Quick Open and a drop reaching the OS are derived from the maintainer's report; not confirmed by the maintainer.*
 
 ### Key Entities
 

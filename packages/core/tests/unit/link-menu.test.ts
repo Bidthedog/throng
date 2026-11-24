@@ -362,6 +362,47 @@ describe('buildLinkMenu — Find in File Explorer (#714)', () => {
   }
 });
 
+describe('buildLinkMenu — FR-170e (#719): a binary file is offered no editor', () => {
+  const NO_EDITOR = [
+    'Open Link',
+    'Open Preview (disabled)',
+    'Find in File Explorer',
+    'Open in OS Explorer',
+    'Open in OS Default Program',
+    'Copy Link to Clipboard',
+  ];
+
+  it('resolved as binary: no Open In ▸ row, every other row as for any file', () => {
+    expect(
+      menu({
+        resolution: file({ preview: 'disabled', binary: true }),
+        applicable: applicable({ previewByExtension: 'disabled' }),
+        openEditors: [{ id: 'e1', name: 'notes.md' }],
+      }),
+    ).toEqual(NO_EDITOR);
+  });
+
+  it('binary by extension: no Open In ▸ once resolved, even if the resolution does not say so', () => {
+    expect(
+      menu({
+        resolution: file({ preview: 'disabled' }),
+        applicable: applicable({ previewByExtension: 'disabled', binaryByExtension: true }),
+      }),
+    ).toEqual(NO_EDITOR);
+  });
+
+  it("binary by extension, 'pending' or unresolved: no Open In ▸ even disabled", () => {
+    for (const resolution of ['pending', null] as const) {
+      const rows = menu({
+        resolution,
+        applicable: applicable({ previewByExtension: 'disabled', binaryByExtension: true }),
+      });
+      expect(rows.some((r) => r.startsWith('Open In ▸'))).toBe(false);
+      expect(rows).toContain('Open Preview (disabled)');
+    }
+  });
+});
+
 describe('buildLinkMenu — Copy Link to Clipboard (FR-175, constitution 5.5.2)', () => {
   it("is labelled 'Copy Link to Clipboard' with id 'copyLink', last and enabled in every state", () => {
     for (const resolution of [file(), null, 'pending' as const]) {

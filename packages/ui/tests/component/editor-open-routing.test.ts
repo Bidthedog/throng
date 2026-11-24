@@ -1258,3 +1258,98 @@ describe('a file throng cannot open, and the OS program preference (067 FR-116, 
     expect(openInto).toHaveBeenCalledTimes(1);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * #719 — opening a binary file: its preview, else the OS, else one notice that says how to proceed
+ * ────────────────────────────────────────────────────────────────────────── */
+describe('opening a file the editor refuses as binary (#719)', () => {
+  const BINARY = { action: 'refuse', reason: 'binary' };
+
+  function mountWith(settings: Record<string, unknown>, decision: unknown) {
+    const svc = fakeServices();
+    const osOpen = vi.fn(() => Promise.resolve({ ok: true }));
+    Reflect.set(window, 'throng', {
+      editor: { openInto: () => Promise.resolve(decision) },
+      links: { open: osOpen },
+      panel: { notifyTyped: () => {} },
+      osName: 'windows',
+      notices: { log: () => {} },
+      config: { get: () => Promise.resolve({ settings }), onChange: () => () => {} },
+    });
+    render(
+      createElement(
+        ServicesProvider,
+        { services: svc },
+        createElement(
+          ConfigProvider,
+          null,
+          createElement(
+            ProjectsProvider,
+            { client: svc.projects },
+            createElement(
+              WorkspaceProvider,
+              { client: svc.workspace, activeProjectId: PROJECT },
+              createElement(
+                NotificationProvider,
+                null,
+                createElement('div', null, createElement(Probe, null), createElement(EditorOpenListener, null)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return osOpen;
+  }
+
+  async function open(name: string, gesture?: string): Promise<void> {
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('throng:open-file', {
+          detail: { projectId: PROJECT, relPath: name, absPath: `D:/proj/${name}`, ...(gesture ? { gesture } : {}) },
+        }),
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  const PDF_PREVIEW_OFF = { editor: { previews: { providers: { pdf: { enabled: false } } } } };
+  const noticeText = async (): Promise<string> => {
+    const notices = await screen.findAllByTestId('panel-failure-notice');
+    expect(notices, 'one condition, one notice').toHaveLength(1);
+    return notices[0]!.textContent ?? '';
+  };
+
+  it('preference off, its preview disabled: one notice naming both ways to open it', async () => {
+    mountWith({ ...PDF_PREVIEW_OFF, explorer: { openUnsupportedInOs: false } }, BINARY);
+    await ready();
+    await open('report.pdf', 'dblclick');
+
+    const text = await noticeText();
+    expect(text).toContain('report.pdf');
+    expect(text).toContain('PDF: Enabled');
+    expect(text).toContain('Open unsupported files in the OS');
+  });
+
+  it('preference off, no preview for its type: the notice names the preference only', async () => {
+    mountWith({ explorer: { openUnsupportedInOs: false } }, BINARY);
+    await ready();
+    await open('blob.dat', 'dblclick');
+
+    const text = await noticeText();
+    expect(text).toContain('Open unsupported files in the OS');
+    expect(text).not.toContain('Enabled');
+  });
+
+  it('preference on, opened by Enter or Quick Open (no tree gesture): the OS program, and no notice', async () => {
+    const osOpen = mountWith({ explorer: { openUnsupportedInOs: true } }, BINARY);
+    await ready();
+    await open('blob.dat');
+
+    await waitFor(() => expect(osOpen).toHaveBeenCalledTimes(1));
+    expect(osOpen.mock.calls[0]![0]).toMatchObject({ text: 'D:/proj/blob.dat', originProjectId: PROJECT });
+    expect(screen.queryAllByTestId('panel-failure-notice')).toHaveLength(0);
+  });
+});

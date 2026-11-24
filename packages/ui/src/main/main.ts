@@ -52,6 +52,7 @@ import {
   type Theme,
   NOT_A_MISSING_FILE,
   SHIPPED_PREVIEW_PROVIDERS,
+  binaryProviderClaims,
   parseLaunchFolder,
   providersTurnedOff,
   validateIconSetName,
@@ -2200,8 +2201,19 @@ if (isPrimaryInstance)
         ownerRoot: ownership?.ownerRoot ?? null,
         allProjectRoots: ownership?.allProjectRoots ?? [],
       });
-      if (result.ok) return undefined;
+      /*
+       * #719 — a file a BINARY preview provider claims (a PDF, an image, a spreadsheet) has no editor (044
+       * FR-073), so it is refused as binary whatever its bytes decode to, or however large it is: the menus
+       * offer it no editor on the same rule (`binaryProviderClaims`), and a refusal as binary is what sends it to
+       * the OS under `explorer.openUnsupportedInOs` (067 FR-116, FR-117). A missing file, a folder and an
+       * out-of-tree file keep their own reasons below.
+       */
+      const binaryType = binaryProviderClaims(SHIPPED_PREVIEW_PROVIDERS, absPath);
+      if (result.ok) return binaryType ? { reason: 'binary' } : undefined;
       if (!NOT_A_MISSING_FILE.has(result.reason)) return undefined;
+      if (binaryType && (result.reason === 'utf32' || result.reason === 'not-decodable' || result.reason === 'too-large')) {
+        return { reason: 'binary' };
+      }
       /*
        * NEVER INVENT AN `out-of-tree` REFUSAL WITHOUT AN OWNER ROOT.
        *

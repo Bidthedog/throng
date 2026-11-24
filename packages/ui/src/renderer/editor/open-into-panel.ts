@@ -20,7 +20,14 @@
  * The load itself is the panel's own `openFile` (use-editor), which carries `config.history` and the
  * intent to `throng:editor:load`; this module never builds a load request of its own.
  */
-import { collectPanels, isMissingReason, type OpenDecision } from '@throng/core';
+import {
+  binaryProviderClaims,
+  collectPanels,
+  isMissingReason,
+  logCaught,
+  type OpenDecision,
+  type PreviewProviderRegistry,
+} from '@throng/core';
 import type { useWorkspace } from '../state/workspace-store.js';
 import { getEditorActions, type EditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
@@ -70,6 +77,33 @@ export async function openDecisionFor(
     ownerKind: 'project',
     ownerProjectId: ownerProjectId ?? ws.layout?.projectId,
   });
+}
+
+/**
+ * #719 — is `absPath` a file the editor refuses as BINARY (067 FR-117)? Asked by every menu that would offer
+ * it an editor (File Explorer's Open In, the Link menu: 045 FR-170e), so none does.
+ *
+ * Two halves, one meaning: a binary preview provider claims its type (a PDF, an image, a spreadsheet — no
+ * editor by 044 FR-073), or main's own open decision refuses it as binary by its bytes. The second is the
+ * question every open already asks (`openDecisionFor`), so a menu and the open it would run cannot disagree.
+ * No bridge, or a bridge that fails, reads as "not binary": a menu row the open then refuses is the old
+ * behaviour, never a lost one.
+ */
+export async function editorRefusesAsBinary(
+  ws: WorkspaceApi,
+  absPath: string,
+  registry: PreviewProviderRegistry,
+  ownerProjectId?: string,
+): Promise<boolean> {
+  if (binaryProviderClaims(registry, absPath)) return true;
+  if (window.throng?.editor?.openInto === undefined) return false;
+  try {
+    const decision = await openDecisionFor(ws, absPath, ownerProjectId);
+    return decision?.action === 'refuse' && decision.reason === 'binary';
+  } catch (error) {
+    logCaught('open-into-panel: ask whether the editor refuses a file as binary', error);
+    return false;
+  }
 }
 
 /**

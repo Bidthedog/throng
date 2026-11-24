@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  binaryProviderClaims,
   createPreviewProviderRegistry,
   enabledProviderFor,
   previewAffordance,
@@ -333,5 +334,24 @@ describe('editable and maxFileBytesSetting (073, 077 FR-018)', () => {
     expect(() => createPreviewProviderRegistry([binary({ settings: [inMs], maxFileBytesSetting: 'delayMs' })])).toThrow(/size cap/);
     expect(() => createPreviewProviderRegistry([binary({ settings: [flag], maxFileBytesSetting: 'flag' })])).toThrow(/size cap/);
     expect(() => createPreviewProviderRegistry([binary({ maxFileBytesSetting: 'missing' })])).toThrow(/size cap/);
+  });
+});
+
+describe('binaryProviderClaims (#719) — a binary provider’s type has no editor', () => {
+  const registry = createPreviewProviderRegistry([text(), binary()]);
+
+  it('is true for a type a binary provider claims, whatever the case of its extension', () => {
+    expect(binaryProviderClaims(registry, 'D:/p/report.pdf')).toBe(true);
+    expect(binaryProviderClaims(registry, 'D:/p/REPORT.PDF')).toBe(true);
+  });
+
+  it('is false for a text provider’s type and for a type no provider claims', () => {
+    expect(binaryProviderClaims(registry, 'D:/p/notes.note')).toBe(false);
+    expect(binaryProviderClaims(registry, 'D:/p/blob.dat')).toBe(false);
+  });
+
+  it('holds for the shipped PDF, image and spreadsheet providers, and not for SVG (a text provider)', () => {
+    for (const name of ['a.pdf', 'a.png', 'a.xlsx']) expect(binaryProviderClaims(SHIPPED_PREVIEW_PROVIDERS, `D:/p/${name}`), name).toBe(true);
+    expect(binaryProviderClaims(SHIPPED_PREVIEW_PROVIDERS, 'D:/p/a.svg')).toBe(false);
   });
 });

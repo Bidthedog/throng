@@ -666,7 +666,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.openUnsupportedInOs',
     label: 'Open unsupported files in the OS',
     description:
-      'Double-clicking a file throng cannot open, or Ctrl+clicking a link to one, opens it in your OS default program. Off, throng says it cannot open the file.',
+      'Opening a file throng cannot open as text — by a double-click, Enter, Quick Open or a Ctrl+click on a link to it — opens it in your OS default program when its preview is off. Off, throng says it cannot open the file and how to.',
     group: 'File Explorer',
     control: 'toggle',
   },

@@ -15,7 +15,7 @@ import { SubWorkspaceWorkspaceClient } from '../state/subworkspace-window-client
 import { useProjects } from '../state/projects-store.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
-import { missingFileMessage } from './editor-missing-notice.js';
+import { binaryRefusalMessage, missingFileMessage, previewToggleToTurnOn } from './editor-missing-notice.js';
 import { drainRefusedOpens, publishRefusedOpen, refusedOpenOf, useRefusedOpens } from './refusal-store.js';
 import { getEditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
@@ -39,6 +39,13 @@ import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
 import { OPEN_IN_OS_EVENT, useOpenInOs, type OpenInOsDetail } from '../links/use-open-in-os.js';
 
 /**
+ * #719 — the asker named on the OS open of a refused binary file. Main's link gate refuses a request with no
+ * panel id (`link-ipc.ts`, I2), and a refusal from Quick Open or a drop has no panel of its own; the id only
+ * identifies who asked, and carries no authority (core `LinkResolutionRequest.panelId`).
+ */
+const OPEN_FILE_ASKER = 'open-file';
+
+/**
  * Open-from-tree orchestration (006 Phase B, US2/US9, FR-010/011a). Listens for
  * the explorer's `throng:open-file` intent and routes the file into the tab's
  * **last active editor** — creating the tab's single dedicated editor only if none
@@ -50,6 +57,19 @@ export function EditorOpenListener(): null {
   const ws = useWorkspace();
   // US7 (#141): the default open target for a file-tree open (last active editor, or a new one).
   const openTarget = useAppSettings().editor.openTarget;
+
+  /*
+   * 044 FR-052/FR-053 — the default open action. Read through a ref so a settings change does not
+   * reinstall the listener, and handed to the router with the registry this window draws providers from
+   * (FR-070). The refusal drain below reads it too (#719).
+   */
+  const previews = useAppSettings().editor.previews;
+  const { registry } = usePreviewProviders();
+  const openUnsupportedInOs = useAppSettings().explorer.openUnsupportedInOs;
+  // 074 FR-018 — Open <files> in: Default OS Program, from the tree or a followed link.
+  const openInOs = useOpenInOs();
+  const routeRef = useRef({ previews, registry, openUnsupportedInOs, openInOs });
+  routeRef.current = { previews, registry, openUnsupportedInOs, openInOs };
 
   /*
    * 041 FR-014 (#327) — turn refused opens into notices.
@@ -72,10 +92,25 @@ export function EditorOpenListener(): null {
   useEffect(() => {
     if (refused.length === 0) return;
     for (const { absPath, reason, encoding, size, limit } of drainRefusedOpens()) {
+      /*
+       * #719 — a file the editor refuses as BINARY, by any route that got this far (Enter in File Explorer,
+       * Quick Open, a drop; a double-click and a followed link decide before the editor is asked): with
+       * `explorer.openUnsupportedInOs` on it opens in the OS default program, whose own failure is the one
+       * notice (067 FR-018); off, the one notice says what is wrong and how to open the file after all.
+       */
+      const binary = reason === 'binary' ? routeRef.current : undefined;
+      // A file whose default open action is its preview keeps today's route (067 FR-131): it is not one
+      // throng "cannot open", only one this route could not preview.
+      if (binary?.openUnsupportedInOs && defaultOpenActionFor(binary.registry, binary.previews, absPath) !== 'preview') {
+        void binary.openInOs(absPath, projectId, OPEN_FILE_ASKER);
+        continue;
+      }
       reportSubject({
         subject: absPath,
         reason,
-        message: missingFileMessage(reason, encoding, size !== undefined && limit !== undefined ? { size, limit } : undefined),
+        message: binary
+          ? binaryRefusalMessage(previewToggleToTurnOn(binary.registry, binary.previews, absPath))
+          : missingFileMessage(reason, encoding, size !== undefined && limit !== undefined ? { size, limit } : undefined),
         // FR-018 — the row renders the path RELATIVE to the project root, because the notice's
         // heading already names the project. The absolute form stays in `detail` (FR-018c).
         displayPath: relativeToRoot(absPath, projectRoot),
@@ -85,18 +120,6 @@ export function EditorOpenListener(): null {
     }
   }, [refused, reportSubject, osName, projectRoot, projectId]);
 
-  /*
-   * 044 FR-052/FR-053 — the default open action. Read through a ref so a settings change does not
-   * reinstall the listener, and handed to the router with the registry this window draws providers from
-   * (FR-070).
-   */
-  const previews = useAppSettings().editor.previews;
-  const { registry } = usePreviewProviders();
-  const openUnsupportedInOs = useAppSettings().explorer.openUnsupportedInOs;
-  // 074 FR-018 — Open <files> in: Default OS Program, from the tree or a followed link.
-  const openInOs = useOpenInOs();
-  const routeRef = useRef({ previews, registry, openUnsupportedInOs, openInOs });
-  routeRef.current = { previews, registry, openUnsupportedInOs, openInOs };
   useEffect(() => {
     const onOpenInOs = (e: Event): void => {
       const detail = (e as CustomEvent<OpenInOsDetail>).detail;

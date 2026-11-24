@@ -175,7 +175,7 @@ on Windows and for a portable or archive copy.
 | Sort names | `explorer.sortOrder` | `natural` | `natural` · `characters` | How names are ordered within folders and within files. `natural` compares numbers by their value (`file 2` before `file 10`); `characters` compares character by character (`file 10` before `file 2`). Folders always come first. Takes effect straight away. |
 | Follow the active editor | `explorer.autoRevealActiveFile` | on | on · off | Select the active editor's file in File Explorer, expanding its folders. |
 | Copy-drag modifier | `explorer.dragCopyModifier` | `ctrl` | `ctrl` · `shift` · `alt` | The key that makes a file-tree drag copy instead of move. |
-| Open unsupported files in the OS | `explorer.openUnsupportedInOs` | on | on · off | Double-clicking a file throng cannot open, or Ctrl+clicking a link to one, opens it in your OS default program. Off, throng says it cannot open the file. |
+| Open unsupported files in the OS | `explorer.openUnsupportedInOs` | on | on · off | Opening a file throng cannot open as text — by a double-click, Enter, Quick Open or a Ctrl+click on a link to it — opens it in your OS default program when its preview is off. Off, throng says it cannot open the file and how to. |
 | Move-drag modifier | `explorer.dragMoveModifier` | `shift` | `ctrl` · `shift` · `alt` | The key that forces a file-tree drag to move. |
 
 ## Editor
