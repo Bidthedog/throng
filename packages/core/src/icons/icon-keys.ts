@@ -201,6 +201,8 @@ export const ICON_KEYS = [
   // 075 FR-068a — Print Preview's Back and Forward through the pages.
   'pagePrevious',
   'pageNext',
+  // 078 FR-009, FR-013 — the Themes picker's mark for a theme that meets WCAG AA.
+  'wcagConformant',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -588,6 +590,8 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
   print: 'The icon on Print… in a preview’s menus, and on the Print button in Print Preview.',
   pagePrevious: 'The icon on the Print Preview button that shows the page before the one on screen.',
   pageNext: 'The icon on the Print Preview button that shows the page after the one on screen.',
+  wcagConformant:
+    'The mark beside the theme picker in Preferences, Themes, shown when the selected theme meets WCAG AA contrast on every colour pair throng measures.',
 };
 
 /** Is `value` one of the icon keys? */
