@@ -44,7 +44,7 @@
  * Delete `ConfirmProvider` from `mount()` and `useConfirm` throws, so every test in the file fails
  * inside the render — which matters because two of them assert an ABSENCE.
  */
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -175,9 +175,41 @@ describe('the shipped theme tokens are unchanged by this feature (US3 scenario 9
     expect(held.real.length, 'the shipped registry must have been captured').toBeGreaterThan(0);
   });
 
-  // MOVED DOWN: "no shipped theme token declares a subgroup" is asserted over THEME_METADATA in
-  // core/tests/unit/metadata-subgroup.test.ts; with none declared the tab can render no subsection
-  // for them (the search-filtered variant made the same claim through a 150 ms debounce).
+  // 079 FR-014 superseded "no shipped theme token declares a subgroup": WHICH blocks carry one is
+  // asserted over THEME_METADATA in core/tests/unit/metadata-subgroup.test.ts and theme-metadata.test.ts.
+  // What this tab adds is that the real blocks render as subsections of their one area section.
+
+  it('draws each nested block once, inside its area, with Buttons holding Confirm, Cancel, Destroy (079 US2)', () => {
+    mount();
+    for (const [area, block] of [
+      ['Editor', 'Syntax'],
+      ['General', 'Buttons'],
+      ['File Explorer', 'File Icons'],
+      ['Markdown preview', 'Callouts'],
+    ] as const) {
+      expect(screen.getAllByTestId(`settings-group-${area}`), area).toHaveLength(1);
+      expect(screen.getByTestId(`settings-group-${area}`)).toContainElement(
+        screen.getByTestId(`themes-subgroup-${area}-${block}`),
+      );
+    }
+    // No section is named after a nested block any more (079 FR-013, SC-006).
+    expect(screen.queryAllByTestId(/^settings-group-.* · /)).toHaveLength(0);
+    const buttons = screen.getByTestId('themes-subgroup-General-Buttons');
+    const types = ['Confirm', 'Cancel', 'Destroy'].map((t) => within(buttons).getByTestId(`themes-subsection-General-Buttons-${t}`));
+    for (let i = 1; i < types.length; i++) {
+      expect(types[i - 1].compareDocumentPosition(types[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('returns the whole Syntax subgroup for "syntax" (079 US2 scenario 4)', async () => {
+    const { user } = mount();
+    await user.type(screen.getByTestId('themes-search'), 'syntax');
+    await waitFor(() => {
+      const syntaxRows = held.real.filter((d) => d.subgroup === 'Syntax');
+      expect(syntaxRows.length).toBeGreaterThan(0);
+      for (const d of syntaxRows) expect(screen.getByTestId(`theme-row-${d.key}`), d.key).toBeInTheDocument();
+    });
+  });
 
   it('still keeps colours.iconColour out of the generic groups (FR-027)', () => {
     /*

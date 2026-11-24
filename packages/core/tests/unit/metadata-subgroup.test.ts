@@ -217,10 +217,14 @@ describe('subgroup is ADDITIVE — a descriptor without one is unchanged (040 FR
   );
 });
 
-describe('the shipped theme tokens move nowhere (040 US3 scenario 9; moved down from the Themes tab)', () => {
-  it('declares no subgroup on any theme token, so the Themes tab renders no subsection for them', () => {
+// 079 FR-013/FR-014 supersede 040 US3 scenario 9 ("declares no subgroup on any theme token"): the
+// theme registry's nested blocks moved off "<Area> · <Sub>" group strings onto the heading fields.
+// What stays pinned is that ONLY those blocks carry a subgroup — nothing else moved.
+describe('the shipped theme tokens declare exactly the 079 heading blocks', () => {
+  it('carries a subgroup only on the Syntax, Buttons, File Icons and Callouts blocks', () => {
     expect(THEME_METADATA.length).toBeGreaterThan(0);
-    expect(THEME_METADATA.filter((d) => d.subgroup)).toEqual([]);
+    const blocks = [...new Set(THEME_METADATA.filter((d) => d.subgroup).map((d) => `${d.group} / ${d.subgroup}`))].sort();
+    expect(blocks).toEqual(['Editor / Syntax', 'File Explorer / File Icons', 'General / Buttons', 'Markdown preview / Callouts']);
   });
 });
 

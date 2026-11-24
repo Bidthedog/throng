@@ -317,8 +317,8 @@ const ALLOWED: readonly Allowed[] = [
   ...allow(
     `${CORE_SRC}/config/theme-metadata.ts`,
     'literal',
-    ['Markdown preview', 'Markdown preview · Callouts'],
-    'the Themes-editor area spec 075 FR-021 names (extending 021 FR-003): a heading for the callout colour tokens, it selects no provider',
+    ['Markdown preview'],
+    'the Themes-editor area spec 075 FR-021 names (extending 021 FR-003; its Callouts block is a subgroup since 079 FR-014): a heading for the callout colour tokens, it selects no provider',
   ),
   {
     file: `${CORE_SRC}/icons/default-icon-set.generated.ts`,

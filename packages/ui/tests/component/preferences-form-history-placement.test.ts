@@ -4,6 +4,7 @@
  * own; and the settings search still finds it.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { SETTINGS_METADATA, SPLIT_TIER, filterFields, orderRanked, rankField } from '@throng/core';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
@@ -65,6 +66,40 @@ describe('the clear control lives in the Terminal section (FR-130)', () => {
       const terminal = screen.getByTestId('settings-group-Terminal');
       expect(within(terminal).getByTestId('setting-form-history-clear'), q).toBeTruthy();
     }
+  });
+
+  // 079 research R6: keeping the control's anchor row must not undo the ranking. The old code rebuilt
+  // the result with `metadata.filter`, which put every section back in registry order.
+  it('keeps the ranked section order when the query brings the control in (079 FR-008)', () => {
+    const anchorKey = 'terminals.formHistory.maxEntries';
+    const candidates = ['clear', 'history', 'remembered', 'shell arguments', 'startup command', 'clear history', 'remembered entries'];
+    const registryGroups = [...new Set(SETTINGS_METADATA.map((d) => d.group))];
+    const pick = candidates
+      .map((q) => {
+        const found = filterFields(q, SETTINGS_METADATA, () => undefined);
+        if (found.some((d) => d.key === anchorKey)) return null; // the branch under test only runs without it
+        const anchor = SETTINGS_METADATA.find((d) => d.key === anchorKey)!;
+        const entries = [...found, anchor].map((field) => ({
+          field,
+          index: SETTINGS_METADATA.indexOf(field),
+          rank: rankField(q, field, undefined) ?? { tier: SPLIT_TIER, exact: 4 },
+        }));
+        const ranked = [...new Set(orderRanked(entries).map((d) => d.group))];
+        const byRegistry = registryGroups.filter((g) => ranked.includes(g));
+        return ranked.join('|') === byRegistry.join('|') ? null : { q, ranked };
+      })
+      .find((x) => x !== null);
+    // A query that cannot tell ranked order from registry order proves nothing — fail loudly instead.
+    expect(pick, 'no candidate query separates ranked from registry order').toBeTruthy();
+    mount();
+    fireEvent.change(screen.getByTestId('settings-search'), { target: { value: pick!.q } });
+    act(() => {
+      vi.advanceTimersByTime(DEBOUNCE_MS + 1);
+    });
+    const shown = screen
+      .getAllByTestId(/^settings-group-/)
+      .map((el) => el.getAttribute('data-testid')!.slice('settings-group-'.length));
+    expect(shown.filter((g) => pick!.ranked.includes(g))).toEqual(pick!.ranked);
   });
 
   it('is not shown for a query that has nothing to do with it', () => {

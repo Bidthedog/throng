@@ -211,12 +211,15 @@ test('the Themes tab groups tokens by app area, General first and Icons last (02
       const prefs = await openPrefs(app, win, 'themes');
 
       // Tokens render under AREA headings, not one flat "Colours" list (FR-001). General is first and
-      // the Icons section is last; a dense area nests an "Editor · Syntax" sub-group (FR-003a/FR-004).
+      // the Icons section is last; a dense area nests a Syntax subgroup inside Editor (FR-003a/FR-004;
+      // 079 FR-014). Editor starts folded (056 FR-016), and a fold hides rather than unmounts, so the
+      // subgroup is asserted present inside the section, not visible.
       const general = prefs.getByTestId('settings-group-General');
       const icons = prefs.getByTestId('settings-group-Icons');
-      const syntax = prefs.getByTestId('settings-group-Editor · Syntax');
+      const editor = prefs.getByTestId('settings-group-Editor');
       await expect(general).toBeVisible();
-      await expect(syntax).toBeVisible();
+      await expect(editor).toBeVisible();
+      await expect(editor.getByTestId('themes-subgroup-Editor-Syntax')).toHaveCount(1);
       await expect(icons).toBeVisible();
       const gy = await general.boundingBox();
       const iy = await icons.boundingBox();

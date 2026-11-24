@@ -27,8 +27,8 @@
  *
  * ══ WHAT `filterFields` DECIDES IS NOT ASSERTED HERE ══
  *
- * Which settings a query matches — name, description, value, the OR of two words, a section name,
- * nested sub-groups — is a pure function over the registry with twenty-three cases against it in
+ * Which settings a query matches — name, description, value, every word of a query (079), its rank, a section name,
+ * nested sub-groups — is a pure function over the registry with its cases against it in
  * `packages/core/tests/unit/settings-search.test.ts`. This file uses exactly one query, `theme`, and
  * only ever asks whether the FORM followed it.
  *
