@@ -707,6 +707,7 @@ a local `FR-010` sitting beside it would be read as the same requirement by anyo
   setting may move.**
 - **FR-037a**: Every shipped **sibling-string sub-group** MUST be left exactly as it is — in **both**
   registries:
+  *079:* Closed for the theme registry by 079 FR-013/FR-021 (the settings registry by 069 FR-068): no sibling-string sub-group remains (`specs/079-preferences-grouping-and-search/spec.md`).
 
   | Registry | Group strings | Shape |
   |---|---|---|
@@ -727,6 +728,7 @@ a local `FR-010` sitting beside it would be read as the same requirement by anyo
   `BUTTON_GROUP_ORDER` also depends on those three-segment strings. Filing an issue that asks for
   "migrate them onto `subgroup`" without saying this would be asking for something the codebase
   cannot do.
+  *079:* Resolved by 079 (issue #319): the button family nests as subgroup Buttons with subsections Confirm, Cancel, Destroy (`specs/079-preferences-grouping-and-search/spec.md`).
 
   **Discharged: filed as #319** (`[Tweak] One sub-grouping convention per registry, not two`, vNext),
   stating the two-level problem and asking for the decision rather than the migration.

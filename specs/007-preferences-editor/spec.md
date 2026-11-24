@@ -13,6 +13,7 @@
 ### Session 2026-07-09
 
 - Q: The Settings tab lists every setting; how does a user find one quickly? → A: **A typeahead search at the top of the Settings section.** The query is split on whitespace and a setting is shown when **any** typed word is a case-insensitive substring of its **name, description, or current value** (OR semantics — extra words *widen* the results, because the user is recalling a setting rather than filtering a known list; this deliberately differs from the font typeahead's AND semantics, FR-038b). Filtering is **debounced** so typing is never blocked, and the field carries an inline **reset (×) button** that clears the query immediately. Groups with no matching setting are hidden; a query matching nothing shows an empty state. (FR-049.)
+  *079:* Superseded: matching is AND (every word) with ranked results since 079 FR-001–FR-010; the reversal's reasoning is 079 FR-020 (`specs/079-preferences-grouping-and-search/spec.md`).
 
 ### Session 2026-07-08
 
@@ -487,6 +488,7 @@ sub-workspace's identity and working window controls, with no OS-drawn title bar
   the query and restores the full list immediately (never debounced); it MUST be shown only while a query is
   present. Groups left with no matching setting MUST be hidden, and a query matching nothing MUST show an
   explicit empty state rather than a blank pane. An empty query MUST show every setting.
+  *079:* Superseded in part: its OR ("any word") semantics are replaced by AND plus ranking — 079 FR-001–FR-010, FR-020 (`specs/079-preferences-grouping-and-search/spec.md`). The debounce, reset and empty state stand (079 FR-011).
 
 #### Key Bindings editor (UI)
 

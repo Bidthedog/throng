@@ -265,6 +265,7 @@ Releasing a preference slider made the thumb briefly jump back to the previous v
 - **FR-010**: The completeness-test failure MUST **name** the offending token.
 - **FR-013**: Typeahead search MUST find a token by name regardless of its group.
 - **FR-015**: Grouped search MUST also match **group (section) names**, returning all entries in a matched group (union with name matches, de-duplicated, case-insensitive substring).
+  *079:* Kept by 079 FR-022; a section-name match now ranks in the group tier, below name, sub-heading, value and description matches (`specs/079-preferences-grouping-and-search/spec.md`).
 - **FR-016**: A match on a **parent** area MUST include its nested **"Parent · Child"** sub-groups.
 - **FR-017**: Group-name matching MUST apply to **both** Themes and Settings tabs; it changes search behaviour only, no data.
 
@@ -293,6 +294,7 @@ Releasing a preference slider made the thumb briefly jump back to the previous v
 
 - **FR-027**: Every **text** action button on a dialog or form MUST be styled by exactly one of three types: **Confirm** (safe), **Cancel** (safe), **Destroy** (destructive confirm).
 - **FR-028**: Each button type MUST expose **six** style tokens — Background, Hover Background, Border, Hover Border, Text, Hover Text (**18 total**) — grouped under `General · Buttons · <Type>`.
+  *079:* Superseded in part by 079 FR-014: the 18 tokens and their types stand; they sit in General → Buttons → Confirm / Cancel / Destroy on the heading fields, not under a `General · Buttons · <Type>` group string (`specs/079-preferences-grouping-and-search/spec.md`).
 - **FR-029**: The legacy `buttonBg`/`buttonText`/`buttonHoverBg`/`buttonHoverText` tokens MUST be **removed**; buttons MUST NOT borrow `accent`, `danger`, `dangerText`, `accentText`, or `border`.
 - **FR-030**: The three button types MUST apply **only** to text buttons; **icon-only buttons MUST NOT** use them (they keep `hoverSurface`). A test MUST enforce both directions.
 
