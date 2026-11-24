@@ -4,8 +4,8 @@ Spec: `specs/078-theme-contrast-gate/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Readable text on accent and danger fills | untested | | | |
-| MT-02 | WCAG AA mark beside the Themes picker | untested | | | |
+| MT-01 | Readable text on accent and danger fills | signed off | c23ae5c4a3c7 | 2026-11-24 | |
+| MT-02 | WCAG AA mark beside the Themes picker | signed off | c23ae5c4a3c7 | 2026-11-24 | |
 
 ## MT-01: Readable text on accent and danger fills
 
