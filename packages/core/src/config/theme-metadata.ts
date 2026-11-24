@@ -196,8 +196,10 @@ export function roleSizeMax(key: string): number {
 
 /**
  * The closed, ordered set of Themes-editor **area** groups (021, FR-003/FR-004). General first (it
- * explains the areas that follow); Icons last (rendered by the icon section). A dense area may nest a
- * `"<Area> · <Sub>"` sub-group (e.g. `Editor · Syntax`); only the PARENT area is a member here.
+ * explains the areas that follow); Icons last (rendered by the icon section). Every descriptor's `group`
+ * is one of these. A dense area nests blocks on the descriptor's heading fields — `subgroup` (Editor →
+ * Syntax) and, one level further, `subsection` (General → Buttons → Confirm) — never by encoding them
+ * in the group string (079 FR-013, superseding the `"<Area> · <Sub>"` form 021 FR-028 used).
  */
 export const THEME_AREA_GROUPS: readonly string[] = [
   'General',
@@ -217,20 +219,27 @@ export const THEME_AREA_GROUPS: readonly string[] = [
 /** The area a token takes when NO rule places it — outside {@link THEME_AREA_GROUPS}, so the guard flags it. */
 const UNASSIGNED_AREA = '(unassigned)';
 
-/** typography role → area (021, data-model §2). */
-const TYPOGRAPHY_AREA: Record<string, string> = {
-  editor: 'Editor',
-  terminal: 'Terminal',
-  paneTitle: 'Main panel / workspace',
-  tab: 'Main panel / workspace',
-  panel: 'Main panel / workspace',
-  paneText: 'Main panel / workspace',
-  projectName: 'Projects / sidebar',
-  projectPath: 'Projects / sidebar',
-  // The base button typography lives in its OWN sub-group so it renders as "General · Buttons" ABOVE
-  // the three per-type colour blocks (`General · Buttons · Confirm/Cancel/Destroy`). The `dialog` role
-  // was retired in 021 (dialogs inherit the base font), so it no longer appears here.
-  button: 'General · Buttons',
+/** Where a token sits in the Themes editor: its area, and optionally the heading blocks inside it (079 FR-014). */
+export interface ThemePlacement {
+  group: string;
+  subgroup?: string;
+  subsection?: string;
+}
+
+/** typography role → placement (021, data-model §2). */
+const TYPOGRAPHY_AREA: Record<string, ThemePlacement> = {
+  editor: { group: 'Editor' },
+  terminal: { group: 'Terminal' },
+  paneTitle: { group: 'Main panel / workspace' },
+  tab: { group: 'Main panel / workspace' },
+  panel: { group: 'Main panel / workspace' },
+  paneText: { group: 'Main panel / workspace' },
+  projectName: { group: 'Projects / sidebar' },
+  projectPath: { group: 'Projects / sidebar' },
+  // The base button typography is the Buttons subgroup's own rows, so it renders ABOVE the three
+  // per-type colour subsections (Confirm / Cancel / Destroy). The `dialog` role was retired in 021
+  // (dialogs inherit the base font), so it no longer appears here.
+  button: { group: 'General', subgroup: 'Buttons' },
 };
 
 /** The non-prefix colours whose home is a specific pane (021, data-model §2). */
@@ -266,56 +275,57 @@ const GENERAL_COLOURS: ReadonlySet<string> = new Set([
   'attentionMark',
   // `surface`/`surfaceActive` are the present-day, overloaded former `panelSurface` (#62) — no single
   // dominant area, so General is their home (FR-014). 021 removed `menuSurface`/`dialogSurface` and the
-  // four legacy `button*` tokens; the 18 typed button tokens live under General · Buttons (§2, Buttons).
+  // four legacy `button*` tokens; the 18 typed button tokens live in General → Buttons (§2, Buttons).
   'surface', 'surfaceActive', 'text', 'textMuted', 'unsavedDot',
 ]);
 
 /**
- * The app AREA a theme token belongs to (021, FR-001/FR-007). Returns `undefined` for a token no rule
- * places — there is NO silent default. `descriptorForThemeToken` turns that into the sentinel group,
- * so an unplaced (typically new) token fails {@link assertThemeAreaGroups}, forcing its author to
+ * Where a theme token sits (021, FR-001/FR-007; 079 FR-014): its app AREA, and any heading blocks
+ * inside it. Returns `undefined` for a token no rule places — there is NO silent default.
+ * `descriptorForThemeToken` turns that into the sentinel group, so an unplaced (typically new) token fails {@link assertThemeAreaGroups}, forcing its author to
  * declare where it appears. The Icons area holds the icon-COLOUR token (a theme carries no icon tokens since 069).
  */
-export function areaForToken(key: string): string | undefined {
-  if (key === 'colours.iconColour') return 'Icons';
+function placementForToken(key: string): ThemePlacement | undefined {
+  if (key === 'colours.iconColour') return { group: 'Icons' };
   // 069 FR-061 — they colour the File Explorer's and Find in Files' icons, so they sit with the File Explorer.
-  if (/^colours\.fileIcon[A-Z]/.test(key)) return 'File Explorer · File Icons';
+  if (/^colours\.fileIcon[A-Z]/.test(key)) return { group: 'File Explorer', subgroup: 'File Icons' };
   if (key.startsWith('typography.')) return TYPOGRAPHY_AREA[key.split('.')[1] ?? ''];
-  if (key.startsWith('fonts.')) return 'General'; // base fonts are app-wide (data-model §2)
+  if (key.startsWith('fonts.')) return { group: 'General' }; // base fonts are app-wide (data-model §2)
   // The size tokens are placed EXPLICITLY, not by a `sizes.*` blanket — so a NEW size token fails the
   // guard rather than silently defaulting to General (SC-003). Both current ones are app-wide sizing;
   // `iconPx` stays in the General list (not the Icons area) because it is a slider rendered inline,
   // and an 'Icons' group here would collide with the icon section's own 'Icons' heading.
-  if (key === 'sizes.iconPx' || key === 'sizes.scrollbarPx') return 'General';
+  if (key === 'sizes.iconPx' || key === 'sizes.scrollbarPx') return { group: 'General' };
   if (key.startsWith('colours.')) {
     const name = lastSegment(key);
-    // The three-type button model (021, FR-027): each token nests under its type's sub-group so the
-    // Themes editor renders Confirm / Cancel / Destroy as distinct blocks within General.
+    // The three-type button model (021, FR-027): each token sits in its type's subsection of General →
+    // Buttons, so the Themes editor renders Confirm / Cancel / Destroy as distinct blocks (079 FR-014).
     // 069 FR-054 — the icon button's resting background sits with the other button tokens.
-    if (name === 'iconButtonSurface') return 'General · Buttons';
+    if (name === 'iconButtonSurface') return { group: 'General', subgroup: 'Buttons' };
     // 069 FR-060 — the title bar is part of every window, so it sits with the app-wide colours.
-    if (name === 'titleBarSurface') return 'General';
+    if (name === 'titleBarSurface') return { group: 'General' };
     const button = /^(confirm|cancel|destroy)Button/.exec(name);
     if (button) {
       const type = button[1];
-      return `General · Buttons · ${type.charAt(0).toUpperCase()}${type.slice(1)}`;
+      return { group: 'General', subgroup: 'Buttons', subsection: `${type.charAt(0).toUpperCase()}${type.slice(1)}` };
     }
-    if (name.startsWith('syntax')) return 'Editor · Syntax';
-    if (name.startsWith('editor')) return 'Editor';
+    if (name.startsWith('syntax')) return { group: 'Editor', subgroup: 'Syntax' };
+    if (name.startsWith('editor')) return { group: 'Editor' };
     // 075 FR-021 — the seven callout colour roles.
-    if (name.startsWith('callout')) return 'Markdown preview · Callouts';
-    if (name.startsWith('terminal')) return 'Terminal';
-    if (name.startsWith('searchMatch')) return 'Search';
-    if (name in COLOUR_AREA) return COLOUR_AREA[name];
-    if (GENERAL_COLOURS.has(name)) return 'General';
+    if (name.startsWith('callout')) return { group: 'Markdown preview', subgroup: 'Callouts' };
+    if (name.startsWith('terminal')) return { group: 'Terminal' };
+    if (name.startsWith('searchMatch')) return { group: 'Search' };
+    if (name in COLOUR_AREA) return { group: COLOUR_AREA[name] };
+    if (GENERAL_COLOURS.has(name)) return { group: 'General' };
   }
   return undefined;
 }
 
-/** The parent area of a (possibly `"Area · Sub"`) group string. */
-function parentArea(group: string): string {
-  return group.split(' · ')[0];
+/** The app AREA (group) a theme token belongs to, or `undefined` when no rule places it. 079: the area only. */
+export function areaForToken(key: string): string | undefined {
+  return placementForToken(key)?.group;
 }
+
 
 /**
  * Throw, naming every descriptor whose area is outside {@link THEME_AREA_GROUPS} (021, FR-009/FR-010).
@@ -326,7 +336,7 @@ function parentArea(group: string): string {
 export function assertThemeAreaGroups(registry: MetadataRegistry): void {
   const allowed = new Set(THEME_AREA_GROUPS);
   const bad = registry
-    .filter((d) => !allowed.has(parentArea(d.group)))
+    .filter((d) => !allowed.has(d.group))
     .map((d) => `${d.key} → ${d.group}`);
   if (bad.length) {
     throw new Error(`theme tokens with an unknown area group: ${bad.join(', ')}`);
@@ -337,10 +347,16 @@ export function assertThemeAreaGroups(registry: MetadataRegistry): void {
 export function descriptorForThemeToken(key: string): FieldDescriptor {
   const copy = THEME_TOKEN_COPY[key] ?? mechanicalCopy(key);
   // 021 — the group is the app AREA the token relates to, not its type. Unplaced → sentinel (guard fails).
-  const group = areaForToken(key) ?? UNASSIGNED_AREA;
+  const placement: ThemePlacement = placementForToken(key) ?? { group: UNASSIGNED_AREA };
+  const { group } = placement;
+  // 079 FR-014 — the heading blocks ride on the descriptor's own fields, present only when set.
+  const headings = {
+    ...(placement.subgroup ? { subgroup: placement.subgroup } : {}),
+    ...(placement.subsection ? { subsection: placement.subsection } : {}),
+  };
 
   if (key.startsWith('colours.')) {
-    return { key, label: copy.label, description: copy.description, group, control: 'colour' };
+    return { key, label: copy.label, description: copy.description, group, ...headings, control: 'colour' };
   }
 
   // Fonts + typography roles share the same field inference.
@@ -375,6 +391,7 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
     label: copy.label,
     description: copy.description,
     group,
+    ...headings,
     control,
     // A font stack may be emptied outright (015, FR-018): the app has a fallback family, so
     // "no preference" is a real answer, not a broken one. It is the clearest case of a value
@@ -442,32 +459,30 @@ export function themeEditableTokens(theme: Theme): string[] {
 
 /**
  * Build the theme metadata registry from a theme's editable token set, **ordered by area** (021,
- * FR-004): descriptors are stably sorted by `(index of area in THEME_AREA_GROUPS, group string,
- * original token order)`. So the renderer — which emits one section per group in registry order —
- * shows General first, Icons last, `Editor` before `Editor · Syntax`, and tokens within an area in
- * their theme-declared order. An unplaced token's sentinel area sorts to the end (rank = length).
+ * FR-004): descriptors are stably sorted by area index in THEME_AREA_GROUPS, then subgroup, then
+ * subsection, then theme-declared token order. So the renderer — which emits one section per area and
+ * its heading blocks in first-appearance order — shows General first, Icons last, an area's own tokens
+ * before its subgroups (Editor before Syntax), and a subgroup's own tokens before its subsections. An
+ * unplaced token's sentinel area sorts to the end (rank = length). 079 FR-015 keeps the resulting row
+ * order exactly what the old `"<Area> · <Sub>"` sort produced.
  */
-// Deliberate order among groups that share a parent area. Alphabetical is right everywhere EXCEPT the
-// button family: the desired order is the base typography subsection first, then Confirm, Cancel,
-// Destroy — not the alphabetical Cancel, Confirm, Destroy. A tiny explicit rank does that; every other
-// group keeps the alphabetical tie-break (so `Editor` still precedes `Editor · Syntax`, and the plain
-// `General` group still precedes `General · Buttons…`).
-const BUTTON_GROUP_ORDER: Readonly<Record<string, number>> = {
-  'General · Buttons': 0,
-  'General · Buttons · Confirm': 1,
-  'General · Buttons · Cancel': 2,
-  'General · Buttons · Destroy': 3,
-};
-function groupTieBreak(a: string, b: string): number {
-  const ra = BUTTON_GROUP_ORDER[a];
-  const rb = BUTTON_GROUP_ORDER[b];
+// No heading sorts first at each level (an area's own tokens, then its blocks). Among blocks,
+// alphabetical is right everywhere EXCEPT the button types: Confirm, Cancel, Destroy — not the
+// alphabetical Cancel, Confirm, Destroy. A tiny explicit rank does that.
+const BUTTON_SUBSECTION_ORDER: Readonly<Record<string, number>> = { Confirm: 0, Cancel: 1, Destroy: 2 };
+function headingOrder(a: string | undefined, b: string | undefined, rank?: Readonly<Record<string, number>>): number {
+  if ((a ?? '') === (b ?? '')) return 0;
+  if (!a) return -1;
+  if (!b) return 1;
+  const ra = rank?.[a];
+  const rb = rank?.[b];
   if (ra !== undefined && rb !== undefined) return ra - rb;
   return a.localeCompare(b);
 }
 
 export function buildThemeMetadata(theme: Theme): FieldDescriptor[] {
   const rank = (group: string): number => {
-    const i = THEME_AREA_GROUPS.indexOf(parentArea(group));
+    const i = THEME_AREA_GROUPS.indexOf(group);
     return i < 0 ? THEME_AREA_GROUPS.length : i;
   };
   return themeEditableTokens(theme)
@@ -475,7 +490,9 @@ export function buildThemeMetadata(theme: Theme): FieldDescriptor[] {
     .sort(
       (a, b) =>
         rank(a.d.group) - rank(b.d.group) ||
-        groupTieBreak(a.d.group, b.d.group) ||
+        a.d.group.localeCompare(b.d.group) ||
+        headingOrder(a.d.subgroup, b.d.subgroup) ||
+        headingOrder(a.d.subsection, b.d.subsection, a.d.subgroup === 'Buttons' ? BUTTON_SUBSECTION_ORDER : undefined) ||
         a.i - b.i,
     )
     .map((x) => x.d);
