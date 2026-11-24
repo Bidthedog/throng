@@ -220,6 +220,7 @@ Collapse All and see every heading folded; switch tab and see that tab's folds u
   every sibling-string group (`Editor · Navigation`, `General · Buttons · Cancel`, …), which render as
   sections (040 FR-037a). Supersedes 040 FR-036a's "the sections containing it are not collapsible
   either".
+  *079:* Since 079 FR-013/FR-021 no sibling-string group remains; those blocks are subgroups and subsections, foldable under FR-002 (`specs/079-preferences-grouping-and-search/spec.md`).
 - **FR-002**: Every **subgroup** and every **nested subsection** (054 FR-050a) MUST be foldable and
   unfoldable from its heading, independently of its parent and siblings. Supersedes 040 FR-036a's
   "MUST NOT be collapsible" and 040 contract rule 3. Declaration order (the rest of 040 FR-036a) is
