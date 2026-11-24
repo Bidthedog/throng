@@ -11,7 +11,7 @@
 import { THRONG_THEME, TOKEN_PARENT, type Theme } from '../theme.js';
 import { deriveFileIconColours } from '../file-icon-colours.js';
 import { deriveCalloutColours } from '../callout-colours.js';
-import { BY_DESIGN_LOW_CONTRAST_THEMES, SYNTAX_SELECTION_MIN } from '../theme-quality.js';
+import { SYNTAX_SELECTION_MIN } from '../theme-quality.js';
 import {
   CURRENT_MATCH_SEPARATION,
   INACTIVE_SELECTION_FROM_PAGE,
@@ -606,6 +606,17 @@ interface Palette {
   editorGutterFg?: string;
   selection?: string;
   unsavedDot?: string;
+  /**
+   * 078 FR-005 — the text drawn ON the accent fill: the accent text, the Confirm button's text at rest and on hover,
+   * and the Cancel button's hover text. One value, because it is one pair. Defaults to `bg`, which is what every
+   * theme drew there before 078; set only where `bg` falls below 4.5:1 on the accent.
+   */
+  onAccent?: string;
+  /**
+   * 078 FR-005a — the text drawn ON the danger fill: the danger text and the Destroy button's text at rest and on
+   * hover. Defaults to white, which every theme drew there before 078; set only where white falls below 3:1.
+   */
+  onDanger?: string;
   fontFamily?: string;
   monoFamily?: string;
   /** The theme's own ten syntax hues (016) — required; see {@link SyntaxSeeds}. */
@@ -636,15 +647,15 @@ function makeTheme(name: string, p: Palette): Theme {
   const mono = p.monoFamily ?? MONO;
   const editorBg = p.editorBg ?? p.bg;
   const editorFg = p.editorFg ?? p.text;
+  const onAccent = p.onAccent ?? p.bg;
+  const onDanger = p.onDanger ?? '#ffffff';
   const strip = statusStrip(editorBg, p.textMuted ?? p.text, p.text, p.accent);
   // The syntax hues and the search-match surfaces are derived TOGETHER: code is what gets drawn on
   // a match, so the surfaces are tinted only as far as the code stays readable on them (FR-007a).
   const code = syntaxAndSearch(p.syntax, editorBg, editorFg, p.accent);
-  // #105 — Matrix, VI-VIM and Gothic keep the selection they were drawn with: their low contrast is the point (#61).
+  // #105, and for every theme since 078 FR-001: the selection walked toward the body until the code on it reads.
   const authoredSelection = p.selection ?? p.surfaceActive ?? p.surface;
-  const selection = BY_DESIGN_LOW_CONTRAST_THEMES.includes(name)
-    ? authoredSelection
-    : readableSelection(authoredSelection, editorBg, editorFg, Object.values(code.syntax));
+  const selection = readableSelection(authoredSelection, editorBg, editorFg, Object.values(code.syntax));
   return {
     name,
     colours: {
@@ -728,20 +739,20 @@ function makeTheme(name: string, p: Palette): Theme {
       confirmButtonHoverBg: p.accent,
       confirmButtonBorder: p.accent,
       confirmButtonHoverBorder: p.accent,
-      confirmButtonText: p.bg,
-      confirmButtonHoverText: p.bg,
+      confirmButtonText: onAccent,
+      confirmButtonHoverText: onAccent,
       cancelButtonBg: p.surfaceActive ?? p.surface,
       cancelButtonHoverBg: p.accent,
       cancelButtonBorder: p.border ?? p.surface,
       cancelButtonHoverBorder: p.border ?? p.surface,
       cancelButtonText: p.text,
-      cancelButtonHoverText: p.bg,
+      cancelButtonHoverText: onAccent,
       destroyButtonBg: p.danger ?? '#e5534b',
       destroyButtonHoverBg: p.danger ?? '#e5534b',
       destroyButtonBorder: p.danger ?? '#e5534b',
       destroyButtonHoverBorder: p.danger ?? '#e5534b',
-      destroyButtonText: '#ffffff',
-      destroyButtonHoverText: '#ffffff',
+      destroyButtonText: onDanger,
+      destroyButtonHoverText: onDanger,
       // Syntax highlighting (016): the theme's own hues, guaranteed readable on the editor body
       // and through a search-match highlight alike (FR-007a).
       ...code.syntax,
@@ -769,10 +780,10 @@ function makeTheme(name: string, p: Palette): Theme {
       // The foreground ON the accent colour — hard-coded as a near-black literal in several places
       // before 018. `p.bg` is what the button tokens already use for text on accent, so it is the
       // value that keeps every theme looking the same.
-      accentText: p.bg,
+      accentText: onAccent,
       // White on the danger red in every palette — which is what all three call sites hard-coded,
       // so the token preserves every theme's appearance exactly while making it themeable.
-      dangerText: '#ffffff',
+      dangerText: onDanger,
       // 018 / FR-009. Before this, only the terminal's scrollbar was styled at all — it borrowed
       // `border` for the thumb and `textMuted` for the hover, and hard-coded `transparent` for the
       // track. Every other scrollable surface rendered the browser engine's default: a light-grey
@@ -837,6 +848,8 @@ const DEFAULT_THEME_DEFINITIONS: Record<string, () => Theme> = {
     bg: '#140f16', sidebar: '#0e0a10', surface: '#211a24', surfaceActive: '#2f2434',
     text: '#d8c8d0', textMuted: '#8b7d86', accent: '#8b1a2f', danger: '#c0392b',
     border: '#332738', terminalBg: '#0f0b11', selection: '#3a2540',
+    // 078 FR-005: its own text colour on the oxblood, 5.73:1 — the background colour was 2.06:1.
+    onAccent: '#d8c8d0',
     syntax: {
       keyword: '#c96a86', string: '#b9a2c9', comment: '#7d6c78', number: '#d29a6a',
       type: '#9ec5c9', function: '#e0b7c6', variable: '#d8c8d0', operator: '#a893a0',
@@ -881,6 +894,8 @@ const DEFAULT_THEME_DEFINITIONS: Record<string, () => Theme> = {
       success: '#39FF14', border: '#4C4C4C', statusBar: '#001330',
       terminalBg: '#001B40', terminalFg: '#d6e6f5', editorBg: '#001B40', editorFg: '#d6e6f5',
       selection: '#0a3350', unsavedDot: '#FFE600',
+      // 078 FR-005a: white on Burnt Amber is 2.77:1; Deep Space Blue on it is 6.15:1.
+      onDanger: '#001B40',
       // The brand's own vocabulary: Neon Core Green and Neon Cyan as the two accents, Burnt Amber
       // for callouts, Electric Yellow for values — on Deep Space Blue.
       syntax: {
@@ -902,6 +917,8 @@ const DEFAULT_THEME_DEFINITIONS: Record<string, () => Theme> = {
     bg: '#1e1e1e', sidebar: '#252526', surface: '#2d2d2d', surfaceActive: '#37373d',
     text: '#d4d4d4', textMuted: '#858585', accent: '#007acc', border: '#333333',
     terminalBg: '#1e1e1e', terminalFg: '#d4d4d4', editorBg: '#1e1e1e', selection: '#264f78',
+    // 078 FR-005 (#716): white on its blue, as VS Code draws it — the background colour was 3.70:1.
+    onAccent: '#ffffff',
     syntax: {
       keyword: '#569cd6', string: '#ce9178', comment: '#6a9955', number: '#b5cea8',
       type: '#4ec9b0', function: '#dcdcaa', variable: '#9cdcfe', operator: '#d4d4d4',
@@ -913,6 +930,8 @@ const DEFAULT_THEME_DEFINITIONS: Record<string, () => Theme> = {
     bg: '#1c1c1c', sidebar: '#161616', surface: '#262626', surfaceActive: '#303030',
     text: '#cccccc', textMuted: '#808080', accent: '#5f875f', border: '#303030',
     terminalBg: '#1c1c1c', selection: '#5f5f00', fontFamily: MONO,
+    // 078 FR-005: black on the moss green, 5.12:1 — the background colour was 4.15:1.
+    onAccent: '#000000',
     syntax: {
       keyword: '#87afd7', string: '#87af87', comment: '#6c6c6c', number: '#d7af5f',
       type: '#5fafaf', function: '#d7d7af', variable: '#cccccc', operator: '#afafaf',
@@ -924,6 +943,8 @@ const DEFAULT_THEME_DEFINITIONS: Record<string, () => Theme> = {
     bg: '#f0f4e8', sidebar: '#e5ecd6', surface: '#ffffff', surfaceActive: '#dfe8cd',
     text: '#2a3a1a', textMuted: '#5f6f4a', accent: '#6a8a3a', danger: '#a3502f',
     border: '#cdd9b5', terminalBg: '#f7faf0', terminalFg: '#2a3a1a', selection: '#cfe0a8',
+    // 078 FR-005: a near-black green on the moss accent, 4.90:1 — the pale ground was 3.54:1.
+    onAccent: '#0a0f05',
     syntax: {
       keyword: '#7a2f6a', string: '#3a6b2a', comment: '#5f6f4a', number: '#8a4b1a',
       type: '#1f5f6a', function: '#6a4a1a', variable: '#2a3a1a', operator: '#44563a',
@@ -975,8 +996,11 @@ const DEFAULT_THEME_DEFINITIONS: Record<string, () => Theme> = {
   // Debian: its crimson-swirl red, with cool complements so code does not read as all-error.
   Debian: () => makeTheme('Debian', {
     bg: '#1a1a1a', sidebar: '#141414', surface: '#242424', surfaceActive: '#2f2020',
-    text: '#cccccc', textMuted: '#888888', accent: '#d70a53', danger: '#d70a53',
+    text: '#cccccc', textMuted: '#888888', accent: '#ff5c8f', danger: '#d70a53',
     border: '#2f2020', terminalBg: '#1a1a1a', selection: '#4a1226',
+    // 078 FR-005c: the accent is a lighter pink so its count pill stands off the dark panels (5.95:1, was 3.36:1),
+    // with black text on it (7.18:1). The crimson stays the danger colour.
+    onAccent: '#000000',
     syntax: {
       keyword: '#ee5396', string: '#a2c4a0', comment: '#7a7a7a', number: '#e8a05c',
       type: '#79b8ca', function: '#d8b4dd', variable: '#cccccc', operator: '#b0b0b0',
