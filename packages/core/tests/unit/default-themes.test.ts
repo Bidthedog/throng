@@ -305,11 +305,11 @@ describe('theme-quality guards hold for the shipped set (009, US6)', () => {
   it('all shipped themes pass the distinctness gate', () => {
     expect(() => assertDistinct(themes)).not.toThrow();
   });
-  it('Bash, SUBNET and Cyberpunk pass WCAG 2.1 AA contrast', () => {
+  it('every shipped theme passes WCAG 2.1 AA contrast (078 FR-001, FR-006)', () => {
     expect(() => assertInScopeContrast(themes)).not.toThrow();
   });
-  // 019/#83: the syntax hues on the editor body are gated across every shipped theme bar the
-  // by-design carve-out — a different pairing set from the one IN_SCOPE_THEMES governs.
+  // 019/#83: the syntax hues on the editor body are gated across every shipped theme (078 FR-001),
+  // at their own floor (SYNTAX_BODY_MIN) rather than the enumerated pairings' thresholds.
   it('every shipped theme renders code legibly on its own editor body', () => {
     expect(() => assertSyntaxBodyContrast(themes)).not.toThrow();
   });

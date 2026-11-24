@@ -22,8 +22,8 @@ function v37Theme(name: string): Theme {
 }
 
 describe('the version-37 selection colours #105 moved', () => {
-  it('is shipped-defaults version 38', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(38);
+  it('is shipped-defaults version 38 or later', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(40);
   });
 
   it('records the seven recoloured themes, and only tokens whose shipped value really moved', () => {

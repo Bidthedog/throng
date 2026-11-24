@@ -21,6 +21,7 @@ import {
   hexToRgb,
   rgbToLab,
 } from '../../src/config/theme-quality.js';
+import { V38_MOVED_COLOURS } from '../../src/config/shipped-defaults.js';
 
 const FIXTURE = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/search-surfaces-pre-049.json', import.meta.url)), 'utf8'),
@@ -30,8 +31,9 @@ const THEMES = Object.entries(ALL_DEFAULT_THEMES);
 const NEW_TOKENS = ['searchMatchOccurrence', 'searchMatchOccurrenceInactive', 'editorSelectionInactive'] as const;
 const MATCH_SURFACES = ['searchMatch', 'searchMatchCurrent', 'searchMatchOccurrence', 'searchMatchOccurrenceInactive'] as const;
 
+/** A token's shipped value as it stood before 078 — the one later, recorded move (Debian's accent, 078 FR-005c). */
 const c = (theme: (typeof THEMES)[number][1], token: string): string =>
-  (theme.colours as Record<string, string>)[token]!;
+  V38_MOVED_COLOURS[theme.name]?.[token] ?? (theme.colours as Record<string, string>)[token]!;
 const dE = (a: string, b: string): number => ciede2000(rgbToLab(hexToRgb(a)), rgbToLab(hexToRgb(b)));
 
 /** FR-009a moved only the ordinary-match fill, and only where the shipped pair sat below the floor. */
