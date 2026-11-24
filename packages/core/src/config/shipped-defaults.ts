@@ -391,7 +391,95 @@ import { setAtPath } from './metadata.js';
 // selection derived from it. Version 37 wrote both into every theme file, so this is 049 round 2's guarded value
 // rewrite: {@link V37_MOVED_COLOURS} records what 37 wrote and {@link planThemeValueUpgrade} moves a token only where
 // the file still holds exactly that. 37 is not edited to carry it: the maintainer's hand-testing install holds a 37 marker.
-export const SHIPPED_DEFAULTS_VERSION = 38;
+//
+// Bumped by 078 (38 → 39): existing VALUES move again — the text drawn on the accent fill of VSCode, English Garden,
+// Debian, Gothic and VI-VIM (the accent text, the Confirm button's text at rest and on hover, the Cancel button's hover
+// text; FR-005), the text drawn on SUBNET's danger fill (the danger text and the Destroy button's text at rest and on
+// hover; FR-005a), the editor selection of Matrix, VI-VIM and Gothic, which #105's walk now reaches too (FR-001), and
+// Debian's accent with every colour derived from it, crimson to pink (FR-005c).
+// Version 38 wrote the old values into every theme file, so this is the guarded value rewrite once more:
+// {@link V38_MOVED_COLOURS} records what 38 wrote, and {@link planThemeValueUpgrade} moves a token only where the file
+// still holds exactly that. No leaf is added or removed, so the theme-leaves fixture records no change.
+//
+// Bumped again by 078 round 4 (39 → 40): Debian's accent turned pink after hand-testing builds of this branch had
+// already written a 39 marker — with white text on the crimson — into the maintainer's development config. Version 39
+// is not edited to carry it, for 043's (6 → 7) reason: `main.ts` runs the upgrade only when the saved marker differs.
+// {@link V39_MOVED_COLOURS} records the one value those interim 39 builds wrote that 38 did not; every other token they
+// wrote still equals its {@link V38_MOVED_COLOURS} entry, so both records together reach a 38 install and a 39 one.
+export const SHIPPED_DEFAULTS_VERSION = 40;
+
+/**
+ * The colours this branch's interim shipped-defaults-39 builds wrote that differ from both version 38 and today: Debian's
+ * text on the accent fill was white on the crimson before round 4. A frozen literal, for {@link V19_MOVED_COLOURS}' reason.
+ */
+export const V39_MOVED_COLOURS: Readonly<Record<string, Readonly<Record<string, string>>>> = deepFreeze({
+  Debian: {
+    accentText: '#ffffff',
+    confirmButtonText: '#ffffff',
+    confirmButtonHoverText: '#ffffff',
+    cancelButtonHoverText: '#ffffff',
+  },
+});
+
+/**
+ * The text-on-fill colours shipped-defaults version 38 wrote for the themes 078 retuned, and only those tokens. A
+ * frozen literal copy for {@link V19_MOVED_COLOURS}' reason: the live values are the new ones.
+ */
+export const V38_MOVED_COLOURS: Readonly<Record<string, Readonly<Record<string, string>>>> = deepFreeze({
+  VSCode: {
+    accentText: '#1e1e1e',
+    confirmButtonText: '#1e1e1e',
+    confirmButtonHoverText: '#1e1e1e',
+    cancelButtonHoverText: '#1e1e1e',
+  },
+  'English Garden': {
+    accentText: '#f0f4e8',
+    confirmButtonText: '#f0f4e8',
+    confirmButtonHoverText: '#f0f4e8',
+    cancelButtonHoverText: '#f0f4e8',
+  },
+  Debian: {
+    accentText: '#1a1a1a',
+    confirmButtonText: '#1a1a1a',
+    confirmButtonHoverText: '#1a1a1a',
+    cancelButtonHoverText: '#1a1a1a',
+    accent: '#d70a53',
+    attentionMark: '#d70a53',
+    terminalCursor: '#d70a53',
+    editorCursor: '#d70a53',
+    searchMatchCurrent: '#5c142e',
+    searchMatchCurrentBorder: '#d44477',
+    editorSelectionInactive: '#29171e',
+    activePanelBorder: '#d5316b',
+    activePanelBorderInactive: '#7d2b48',
+    confirmButtonBg: '#d70a53',
+    confirmButtonHoverBg: '#d70a53',
+    confirmButtonBorder: '#d70a53',
+    confirmButtonHoverBorder: '#d70a53',
+    cancelButtonHoverBg: '#d70a53',
+    editorStatusStripHover: '#542737',
+    linkUnderline: '#d70a53',
+    linkUnderlineHover: '#d70a53',
+  },
+  SUBNET: { dangerText: '#ffffff', destroyButtonText: '#ffffff', destroyButtonHoverText: '#ffffff' },
+  Gothic: {
+    accentText: '#140f16',
+    confirmButtonText: '#140f16',
+    confirmButtonHoverText: '#140f16',
+    cancelButtonHoverText: '#140f16',
+    editorSelection: '#3a2540',
+    editorSelectionInactive: '#2d121d',
+  },
+  'VI-VIM': {
+    accentText: '#1c1c1c',
+    confirmButtonText: '#1c1c1c',
+    confirmButtonHoverText: '#1c1c1c',
+    cancelButtonHoverText: '#1c1c1c',
+    editorSelection: '#5f5f00',
+    editorSelectionInactive: '#343412',
+  },
+  Matrix: { editorSelection: '#0f4f0f', editorSelectionInactive: '#051c05' },
+});
 
 /**
  * The selection colours shipped-defaults version 37 wrote for the themes #105 recoloured, and only those tokens. A
@@ -1397,6 +1485,20 @@ export function planThemeValueUpgrade(args: {
     const v37 = V37_MOVED_COLOURS[name];
     if (v37) {
       for (const [token, was] of Object.entries(v37)) {
+        moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
+      }
+    }
+    // 078 (38 → 39): the same guard against version 38's record.
+    const v38 = V38_MOVED_COLOURS[name];
+    if (v38) {
+      for (const [token, was] of Object.entries(v38)) {
+        moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
+      }
+    }
+    // 078 round 4 (39 → 40): and against what this branch's interim 39 builds wrote.
+    const v39 = V39_MOVED_COLOURS[name];
+    if (v39) {
+      for (const [token, was] of Object.entries(v39)) {
         moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
       }
     }

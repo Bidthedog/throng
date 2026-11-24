@@ -256,8 +256,12 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * Re-measured by #105, which walked seven bundled themes' editor selection (and with it their inactive selection)
  * toward the editor body until the code on it reads: 5.53090129134425 → 5.570747641805847. The closest pair moves
  * apart; the threshold is untouched at 4.3.
+ *
+ * Re-measured by 078 FR-005, which set VSCode's text on its accent fill to white (it was the background colour):
+ * 5.570747641805847 → 5.656250952178967. The closest pair is Windows Terminal and VSCode, and it moves apart; the
+ * threshold is untouched at 4.3.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.570747641805847;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 5.656250952178967;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A
@@ -468,9 +472,6 @@ export function assertMatchDistinctness(themes: readonly Theme[]): void {
 export const WCAG_AA_BODY = 4.5;
 export const WCAG_AA_LARGE_UI = 3.0;
 
-/** The bundled themes redesigned in feature 009 — build-blocking for contrast. */
-export const IN_SCOPE_THEMES: readonly string[] = ['Bash', 'SUBNET', 'Cyberpunk'];
-
 export interface ContrastPairing {
   /** foreground colour token. */
   fg: string;
@@ -514,14 +515,6 @@ export const SYNTAX_TOKENS: readonly string[] = syntaxTokensOf(THRONG_THEME);
  * already meet: all ten tokens across all fifteen bundled themes measure ≥6.01:1.
  */
 export const SYNTAX_BODY_MIN = 6.0;
-
-/**
- * Themes whose low contrast is the POINT, not a defect (019, C4/FR-028; #61's policy).
- *
- * All three pass the syntax/body gate today, so the carve-out costs nothing right now. It exists so
- * that a future recolour honouring one of these themes' character is not reported as a defect.
- */
-export const BY_DESIGN_LOW_CONTRAST_THEMES: readonly string[] = ['Matrix', 'VI-VIM', 'Gothic'];
 
 /**
  * Every syntax colour, measured on BOTH search-match surfaces (016, FR-007a).
@@ -588,6 +581,18 @@ const SYNTAX_ON_BODY: readonly ContrastPairing[] = SYNTAX_TOKENS.map(syntaxOnBod
 export const CONTRAST_PAIRINGS: readonly ContrastPairing[] = [
   { fg: 'text', bg: 'appBg', min: WCAG_AA_BODY, label: 'body text on app background' },
   { fg: 'textMuted', bg: 'appBg', min: WCAG_AA_LARGE_UI, label: 'muted text on app background' },
+  // 078 FR-004 (#716): small text on an accent fill — the Notifications count pill, selected rows,
+  // primary buttons. Body-text threshold, because the pill's text is 11px.
+  { fg: 'accentText', bg: 'accent', min: WCAG_AA_BODY, label: 'accent text on accent fill' },
+  // 078 FR-004a: the button text pairs 009 FR-016 required and nothing measured, at 009's UI-component
+  // threshold, plus the danger text on the danger colour (the same pair as Destroy's).
+  { fg: 'confirmButtonText', bg: 'confirmButtonBg', min: WCAG_AA_LARGE_UI, label: 'Confirm button text' },
+  { fg: 'confirmButtonHoverText', bg: 'confirmButtonHoverBg', min: WCAG_AA_LARGE_UI, label: 'Confirm button text on hover' },
+  { fg: 'cancelButtonText', bg: 'cancelButtonBg', min: WCAG_AA_LARGE_UI, label: 'Cancel button text' },
+  { fg: 'cancelButtonHoverText', bg: 'cancelButtonHoverBg', min: WCAG_AA_LARGE_UI, label: 'Cancel button text on hover' },
+  { fg: 'destroyButtonText', bg: 'destroyButtonBg', min: WCAG_AA_LARGE_UI, label: 'Destroy button text' },
+  { fg: 'destroyButtonHoverText', bg: 'destroyButtonHoverBg', min: WCAG_AA_LARGE_UI, label: 'Destroy button text on hover' },
+  { fg: 'dangerText', bg: 'danger', min: WCAG_AA_LARGE_UI, label: 'danger text on danger fill' },
   { fg: 'terminalFg', bg: 'terminalBg', min: WCAG_AA_BODY, label: 'terminal text on terminal background' },
   { fg: 'editorFg', bg: 'editorBg', min: WCAG_AA_BODY, label: 'editor text on editor background' },
   { fg: 'editorGutterFg', bg: 'editorGutterBg', min: WCAG_AA_LARGE_UI, label: 'gutter line numbers on gutter background' },
@@ -668,39 +673,42 @@ export function contrastFailures(theme: Theme): ContrastResult[] {
 }
 
 /**
- * Hard contrast gate for the in-scope themes (Bash, SUBNET, Cyberpunk): throw if
- * any enumerated pairing falls below its WCAG 2.1 AA threshold (FR-017).
+ * True when every pairing measured for `theme` clears its threshold (078 FR-007): the one definition
+ * of "meets WCAG AA" that the gate, the Themes picker's label and its mark all read. Never stored.
+ */
+export function meetsWcagAa(theme: Theme): boolean {
+  return contrastFailures(theme).length === 0;
+}
+
+/**
+ * Hard contrast gate (078 FR-001, superseding 009 FR-017/FR-018 and 019 FR-028): throw if ANY theme given has a
+ * measured pairing below its WCAG 2.1 AA threshold. There is no exemption list: every bundled theme is gated.
  */
 export function assertInScopeContrast(themes: readonly Theme[]): void {
   const problems: string[] = [];
   for (const theme of themes) {
-    if (!IN_SCOPE_THEMES.includes(theme.name)) continue;
     for (const f of contrastFailures(theme)) {
       problems.push(`${theme.name}: ${f.label} = ${f.ratio.toFixed(2)}:1 (needs ${f.min}:1)`);
     }
   }
   if (problems.length) {
-    throw new Error(`in-scope theme contrast below WCAG 2.1 AA: ${problems.join('; ')}`);
+    throw new Error(`theme contrast below WCAG 2.1 AA: ${problems.join('; ')}`);
   }
 }
 
 /**
- * Hard gate for the syntax-on-editor-body pairings across EVERY bundled theme bar the by-design
- * carve-out (019, FR-027/C4): throw if any syntax hue falls below `SYNTAX_BODY_MIN` on the editor
+ * Hard gate for the syntax-on-editor-body pairings across EVERY bundled theme (019 FR-027; 078 FR-001 removed
+ * 019 FR-028's carve-out): throw if any syntax hue falls below `SYNTAX_BODY_MIN` on the editor
  * background it is painted on, naming theme, token and measured ratio.
  *
  * Deliberately a THROW and deliberately its own gate, for two separate reasons:
- *   - a report nobody reads is what #83 objects to, so routing these to `knownContrastIssues()`
- *     would reproduce the defect in the fix. A theme that fails this fails the build;
- *   - its scope is not `IN_SCOPE_THEMES`, which governs the EXISTING pairings and stays untouched.
- *     Widening that is #61 (unscheduled) and is risky, because those themes may fail it today. Separating
- *     the pairing SETS is what lets this gate cover all fifteen without blocking on #61 — measured,
- *     every bundled theme already clears it, so gating them all cannot fail the build.
+ *   - a report nobody reads is what #83 objects to; a theme that fails this fails the build;
+ *   - its floor (`SYNTAX_BODY_MIN`, 6:1) is stricter than the enumerated pairings' thresholds, so it stays a
+ *     gate of its own even though both now cover every theme.
  */
 export function assertSyntaxBodyContrast(themes: readonly Theme[]): void {
   const problems: string[] = [];
   for (const theme of themes) {
-    if (BY_DESIGN_LOW_CONTRAST_THEMES.includes(theme.name)) continue;
     for (const r of measureContrast(theme)) {
       if (r.bg !== 'editorBg' || !r.fg.startsWith('syntax') || r.pass) continue;
       problems.push(
@@ -716,14 +724,12 @@ export function assertSyntaxBodyContrast(themes: readonly Theme[]): void {
 }
 
 /**
- * Hard gate for the syntax-on-selection pairings (#105), with the body gate's scope: every bundled theme bar the
- * by-design carve-out. Throws naming theme, token and measured ratio, for the body gate's reason — a report nobody
+ * Hard gate for the syntax-on-selection pairings (#105), with the body gate's scope: every bundled theme. Throws naming theme, token and measured ratio, for the body gate's reason — a report nobody
  * reads is the defect.
  */
 export function assertSyntaxSelectionContrast(themes: readonly Theme[]): void {
   const problems: string[] = [];
   for (const theme of themes) {
-    if (BY_DESIGN_LOW_CONTRAST_THEMES.includes(theme.name)) continue;
     for (const r of measureContrast(theme)) {
       if (r.bg !== 'editorSelection' || !r.fg.startsWith('syntax') || r.pass) continue;
       problems.push(`${theme.name}: ${r.fg} on editorSelection = ${r.ratio.toFixed(2)}:1 (needs ${r.min}:1)`);
@@ -734,24 +740,3 @@ export function assertSyntaxSelectionContrast(themes: readonly Theme[]): void {
   }
 }
 
-export interface KnownContrastIssue {
-  theme: string;
-  label: string;
-  ratio: number;
-  min: number;
-}
-
-/**
- * Contrast shortfalls in the OUT-OF-SCOPE bundled themes — reported as known
- * issues, never build-blocking (FR-018).
- */
-export function knownContrastIssues(themes: readonly Theme[]): KnownContrastIssue[] {
-  const out: KnownContrastIssue[] = [];
-  for (const theme of themes) {
-    if (IN_SCOPE_THEMES.includes(theme.name)) continue;
-    for (const f of contrastFailures(theme)) {
-      out.push({ theme: theme.name, label: f.label, ratio: Number(f.ratio.toFixed(2)), min: f.min });
-    }
-  }
-  return out;
-}
