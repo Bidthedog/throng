@@ -281,7 +281,10 @@ describe('parented is derived from the editor registry (FR-013)', () => {
     push.clear();
 
     coord.destroy('ed1');
-    await settleUntil(() => lastFor('v1')?.parent === null);
+    // #698: the run says it is standalone at once, with no content, and the disk's text follows in a second
+    // update once it is read. Waiting for `parent === null` alone read the first update on a slow macOS
+    // runner (pipeline 45323111672: `content: null`); wait for the disk's text as well.
+    await settleUntil(() => lastFor('v1')?.parent === null && lastFor('v1')?.content != null);
 
     expect(lastFor('v1')).toMatchObject({
       filePath: a,
