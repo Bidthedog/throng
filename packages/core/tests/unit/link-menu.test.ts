@@ -68,6 +68,7 @@ describe('buildLinkMenu — FR-170: the rows, in order, for every SC-025 fixture
       'Open In ▸ New Editor',
       'Open In ▸ Active Editor',
       'Open Preview',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Copy Link to Clipboard',
@@ -85,6 +86,7 @@ describe('buildLinkMenu — FR-170: the rows, in order, for every SC-025 fixture
       'Open In ▸ New Editor',
       'Open In ▸ Active Editor',
       'Open Preview (disabled)',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Copy Link to Clipboard',
@@ -96,6 +98,7 @@ describe('buildLinkMenu — FR-170: the rows, in order, for every SC-025 fixture
       'Open Link',
       'Open In ▸ New Editor',
       'Open In ▸ Active Editor',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Copy Link to Clipboard',
@@ -111,6 +114,7 @@ describe('buildLinkMenu — FR-170: the rows, in order, for every SC-025 fixture
       'Open Link',
       'Open In ▸ New Editor',
       'Open In ▸ Active Editor',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open Program',
       'Copy Link to Clipboard',
@@ -145,10 +149,10 @@ describe('buildLinkMenu — FR-170: the rows, in order, for every SC-025 fixture
     ]);
   });
 
-  it('a folder offers Open Link, Open in OS Explorer and Copy Link to Clipboard', () => {
+  it('an in-project folder offers Open Link, Find in File Explorer, Open in OS Explorer and Copy Link to Clipboard', () => {
     expect(
       menu({ resolution: { kind: 'folder', inProject: true, executable: false, preview: 'none' } }),
-    ).toEqual(['Open Link', 'Open in OS Explorer', 'Copy Link to Clipboard']);
+    ).toEqual(['Open Link', 'Find in File Explorer', 'Open in OS Explorer', 'Copy Link to Clipboard']);
   });
 
   it('a UNC file is treated like an on-device one', () => {
@@ -211,6 +215,7 @@ describe('buildLinkMenu — FR-170a: an unresolved link draws its applicable row
       'Open In ▸ Active Editor (disabled)',
       'Open In ▸ x.ts (disabled)',
       'Open Preview (disabled)',
+      'Find in File Explorer (disabled)',
       'Open in OS Explorer',
       'Open in OS Default Program (disabled)',
       'Copy Link to Clipboard',
@@ -248,12 +253,13 @@ describe("buildLinkMenu — FR-170c: 'pending' draws only the renderer-known row
       'Open In ▸ New Editor (disabled)',
       'Open In ▸ Active Editor (disabled)',
       'Open Preview (disabled)',
+      'Find in File Explorer (disabled)',
       'Open in OS Explorer',
       'Copy Link to Clipboard',
     ]);
   });
 
-  it('out of the project by name: Open Link, Open in OS Explorer, Copy Link to Clipboard', () => {
+  it('out of the project by name: Open Link, Open in OS Explorer, Copy Link to Clipboard (no Find in File Explorer)', () => {
     expect(
       menu({ resolution: 'pending', applicable: applicable({ inProjectByName: false }) }),
     ).toEqual(['Open Link', 'Open in OS Explorer', 'Copy Link to Clipboard']);
@@ -278,7 +284,7 @@ describe('buildLinkMenu — a folder by grammar never draws Open In ▸ or Open 
         resolution: 'pending',
         applicable: applicable({ folderByGrammar: true, previewByExtension: 'enabled' }),
       }),
-    ).toEqual(['Open Link', 'Open in OS Explorer', 'Copy Link to Clipboard']);
+    ).toEqual(['Open Link', 'Find in File Explorer (disabled)', 'Open in OS Explorer', 'Copy Link to Clipboard']);
   });
 
   it('with its synthesised folder resolution (§16.22)', () => {
@@ -287,7 +293,7 @@ describe('buildLinkMenu — a folder by grammar never draws Open In ▸ or Open 
         resolution: { kind: 'folder', inProject: true, executable: false, preview: 'none' },
         applicable: applicable({ folderByGrammar: true }),
       }),
-    ).toEqual(['Open Link', 'Open in OS Explorer', 'Copy Link to Clipboard']);
+    ).toEqual(['Open Link', 'Find in File Explorer', 'Open in OS Explorer', 'Copy Link to Clipboard']);
   });
 
   it('even if handed null, rows 2, 3, 5 and 6 stay absent', () => {
@@ -296,8 +302,64 @@ describe('buildLinkMenu — a folder by grammar never draws Open In ▸ or Open 
         resolution: null,
         applicable: applicable({ folderByGrammar: true, previewByExtension: 'enabled' }),
       }),
-    ).toEqual(['Open Link', 'Open in OS Explorer', 'Copy Link to Clipboard']);
+    ).toEqual(['Open Link', 'Find in File Explorer (disabled)', 'Open in OS Explorer', 'Copy Link to Clipboard']);
   });
+});
+
+describe('buildLinkMenu — Find in File Explorer (#714)', () => {
+  const folder = (over: Partial<ResolvedTarget> = {}): ResolvedTarget => ({
+    kind: 'folder',
+    inProject: true,
+    executable: false,
+    preview: 'none',
+    ...over,
+  });
+  const find = (over: Partial<LinkMenuContext> = {}): LinkMenuItem | undefined =>
+    buildLinkMenu(ctx(over)).find((i) => i.id === 'findInExplorer');
+
+  it('an in-project file draws it enabled, immediately before Open in OS Explorer', () => {
+    const items = buildLinkMenu(ctx());
+    const at = items.findIndex((i) => i.id === 'findInExplorer');
+    expect(at).toBeGreaterThan(0);
+    expect(items[at + 1]!.id).toBe('osExplorer');
+    expect([items[at]!.label, items[at]!.disabled, items[at]!.section]).toEqual([
+      'Find in File Explorer',
+      false,
+      'contextual',
+    ]);
+  });
+
+  it('an in-project folder draws it enabled', () => {
+    expect(find({ resolution: folder() })?.disabled).toBe(false);
+  });
+
+  it('a folder by grammar in the project draws it enabled', () => {
+    expect(
+      find({ resolution: folder(), applicable: applicable({ folderByGrammar: true }) })?.disabled,
+    ).toBe(false);
+  });
+
+  it('a file or folder that resolves outside the project draws none', () => {
+    expect(find({ resolution: file({ inProject: false }) })).toBeUndefined();
+    expect(find({ resolution: folder({ inProject: false }) })).toBeUndefined();
+  });
+
+  it("'pending' or unresolved, in the project by name: drawn disabled (FR-170a, FR-170c)", () => {
+    expect(find({ resolution: 'pending' })?.disabled).toBe(true);
+    expect(find({ resolution: null })?.disabled).toBe(true);
+  });
+
+  it("'pending' or unresolved, out of the project by name: not drawn", () => {
+    const outside = applicable({ inProjectByName: false });
+    expect(find({ resolution: 'pending', applicable: outside })).toBeUndefined();
+    expect(find({ resolution: null, applicable: outside })).toBeUndefined();
+  });
+
+  for (const cls of ['web', 'loopback', 'protocol', 'anchor'] as const) {
+    it(`a ${cls} link never draws it, whatever the resolution says`, () => {
+      expect(find({ cls, resolution: file() })).toBeUndefined();
+    });
+  }
 });
 
 describe('buildLinkMenu — Copy Link to Clipboard (FR-175, constitution 5.5.2)', () => {

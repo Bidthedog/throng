@@ -23,6 +23,10 @@ import type { ResolvedLink } from './types.js';
  *
  * Web, loopback, protocol and anchor links are decided by their class alone: Open Link and Copy Link
  * to Clipboard, every target row absent as meaningless.
+ *
+ * FR-170d (#714) adds **Find in File Explorer** immediately before row 4, for a file or folder inside
+ * the project; it is not one of FR-170's numbered rows, which this file's comments keep numbering as
+ * FR-170 does.
  */
 export type LinkMenuItemId =
   | 'openLink'
@@ -30,6 +34,7 @@ export type LinkMenuItemId =
   | 'openInActive'
   | 'openInEditor'
   | 'openPreview'
+  | 'findInExplorer'
   | 'osExplorer'
   | 'osDefaultProgram'
   | 'openProgram'
@@ -142,6 +147,20 @@ export function buildLinkMenu(ctx: LinkMenuContext): readonly LinkMenuItem[] {
     }
   }
   if (preview !== 'absent') items.push(row('openPreview', 'Open Preview', preview === 'disabled'));
+  // #714 — Find in File Explorer, beside Open in OS Explorer: the two "show me where this is" rows read
+  // together. It reveals the target in throng's own tree, which holds only the project, so it needs an
+  // existing target INSIDE the project — a file or a folder alike. Before main answers, and when the
+  // link did not resolve, it follows rows 2/3's rule (FR-170a, FR-170c): drawn disabled when the link
+  // is in the project by name, absent otherwise; an answer outside the project removes it.
+  const find: RowState =
+    resolution === 'pending' || resolution === null
+      ? applicable.inProjectByName
+        ? 'disabled'
+        : 'absent'
+      : resolution.inProject
+        ? 'enabled'
+        : 'absent';
+  if (find !== 'absent') items.push(row('findInExplorer', 'Find in File Explorer', find === 'disabled'));
   // Row 4 needs no target (FR-170a) — enabled in every state.
   items.push(row('osExplorer', 'Open in OS Explorer', false));
   if (program !== null) {

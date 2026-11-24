@@ -14,7 +14,9 @@ import { copyLinkAddress, performLinkTarget, resolveLinkForMenu, type LinkAction
 import { linkMenuActions, type LinkMenuPerformers } from './link-menu.js';
 import { currentLinkOpenInEditors, performLinkOpenIn } from './link-open-in-perform.js';
 import { openLinkMenu, type LinkMenuOpener } from './open-link-or-panel-menu.js';
-import { logCaught, previewIconOf } from '@throng/core';
+import { logCaught, previewIconOf, relPathUnderRoot } from '@throng/core';
+import { linkFirstReadingByName } from './path-by-name.js';
+import { revealInFileExplorer } from '../explorer/reveal-in-tree.js';
 
 /**
  * 045 FR-169 – FR-171, FR-170a – FR-170c — opening the ONE Link menu over a link, for every surface
@@ -89,6 +91,17 @@ export function openFileLinkMenu(args: {
 }): void {
   const { request, position, positionText, projectRoot, ws, deps } = args;
   const folderByGrammar = folderByGrammarByName(request.text, projectRoot);
+  // #714 — a folder by grammar is never resolved (FR-158d), so where it lies is read by name: its first
+  // reading, without the separator that marked it, and whether that is strictly inside the project.
+  // The root itself is not: the tree IS the root, and has no row to reveal.
+  const folderPath = folderByGrammar
+    ? linkFirstReadingByName({ text: request.text, baseDirectory: request.baseDirectory, projectRoot }).replace(
+        /(?<=.)[\\/]+$/,
+        '',
+      )
+    : null;
+  const folderInProject =
+    folderPath !== null && projectRoot !== null && relPathUnderRoot(projectRoot, folderPath) !== null;
   let applicable: LinkMenuApplicable = {
     inProjectByName: clickTargetByName(request.text, projectRoot, request.baseDirectory) !== 'osExplorer',
     previewByExtension: previewStateByExtension(args.previewRegistry, args.previewSettings, request.text),
@@ -130,6 +143,12 @@ export function openFileLinkMenu(args: {
     openInPreview: () => {
       if (!resolvedLink) return;
       void performLinkTarget({ target: 'preview', link: resolvedLink, request, deps });
+    },
+    // #714 — the panel header's Reveal File in File Explorer, on the resolved target (or a folder by
+    // grammar's own path). Drawn enabled only for a target inside the project (`buildLinkMenu`).
+    findInExplorer: () => {
+      const path = resolvedLink?.path ?? folderPath;
+      if (path) revealInFileExplorer(path);
     },
     // The two OS routes act on the REQUEST, never on `link` (FR-035, FR-037), so a folder's
     // synthesised resolution needs no real path here.
@@ -175,7 +194,7 @@ export function openFileLinkMenu(args: {
     args.opener.openMenu(
       args.x,
       args.y,
-      buildItems({ kind: 'folder', inProject: true, executable: false, preview: 'none' }),
+      buildItems({ kind: 'folder', inProject: folderInProject, executable: false, preview: 'none' }),
     );
     return;
   }

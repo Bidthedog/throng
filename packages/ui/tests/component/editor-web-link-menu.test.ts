@@ -224,7 +224,13 @@ describe('FR-170b / FR-170c — over a FILE link the Link menu opens at once, th
 
     // Rows 5 / 6 wait for main's answer; Open In ▸ is drawn, disabled, because the link is in the
     // project by name (FR-170c). An in-project `.ts` has no preview provider, so no Open Preview.
-    expect(menuLabels()).toEqual(['Open Link', 'Open In', 'Open in OS Explorer', 'Copy Link to Clipboard']);
+    expect(menuLabels()).toEqual([
+      'Open Link',
+      'Open In',
+      'Find in File Explorer',
+      'Open in OS Explorer',
+      'Copy Link to Clipboard',
+    ]);
     expect(menuItem('Open In').getAttribute('aria-disabled')).toBe('true');
     // SC-021 — ONE resolution per opening, and it has not been answered yet.
     expect(m.asked).toHaveLength(1);
@@ -242,6 +248,7 @@ describe('FR-170b / FR-170c — over a FILE link the Link menu opens at once, th
       expect(menuLabels()).toEqual([
         'Open Link',
         'Open In',
+        'Find in File Explorer',
         'Open in OS Explorer',
         'Open in OS Default Program',
         'Copy Link to Clipboard',
@@ -249,6 +256,80 @@ describe('FR-170b / FR-170c — over a FILE link the Link menu opens at once, th
     );
     expect(menuItem('Open In').getAttribute('aria-disabled')).toBe('false');
     expect(m.asked).toHaveLength(1);
+  });
+});
+
+describe('#714 — Find in File Explorer runs the panel header’s reveal for the link’s target', () => {
+  /** Every `throng:reveal-in-tree` the window sees — the event the File Explorer tree reveals on. */
+  function listenForReveals(): { paths: (string | undefined)[]; stop: () => void } {
+    const paths: (string | undefined)[] = [];
+    const listener = (e: Event): void => void paths.push((e as CustomEvent<{ absPath?: string }>).detail?.absPath);
+    window.addEventListener('throng:reveal-in-tree', listener);
+    return { paths, stop: () => window.removeEventListener('throng:reveal-in-tree', listener) };
+  }
+
+  it('is drawn disabled before main answers, and does nothing then', async () => {
+    const reveals = listenForReveals();
+    try {
+      const m = await mount();
+      m.pointAt(IN_FILE);
+      m.rightClick();
+      await waitFor(() => expect(menuLabels().length).toBeGreaterThan(0));
+
+      expect(menuItem('Find in File Explorer').getAttribute('aria-disabled')).toBe('true');
+      menuItem('Find in File Explorer').click();
+      expect(reveals.paths).toEqual([]);
+    } finally {
+      reveals.stop();
+    }
+  });
+
+  it('a resolved in-project file: enabled, and choosing it reveals that file', async () => {
+    const reveals = listenForReveals();
+    try {
+      const m = await mount();
+      m.pointAt(IN_FILE);
+      m.rightClick();
+      await waitFor(() => expect(m.asked).toHaveLength(1));
+      m.asked[0]!.answer({ ok: true, link: resolved(FOO_PATH) });
+      await waitFor(() => expect(menuItem('Find in File Explorer').getAttribute('aria-disabled')).toBe('false'));
+
+      menuItem('Find in File Explorer').click();
+      expect(reveals.paths).toEqual([FOO_PATH]);
+    } finally {
+      reveals.stop();
+    }
+  });
+
+  it('a resolved in-project folder: choosing it reveals that folder', async () => {
+    const reveals = listenForReveals();
+    try {
+      const m = await mount();
+      m.pointAt(IN_FILE);
+      m.rightClick();
+      await waitFor(() => expect(m.asked).toHaveLength(1));
+      m.asked[0]!.answer({
+        ok: true,
+        link: { path: 'C:/proj/src', kind: 'folder', inProject: true, executable: false, preview: 'none' },
+      });
+      await waitFor(() => expect(menuItem('Find in File Explorer').getAttribute('aria-disabled')).toBe('false'));
+
+      menuItem('Find in File Explorer').click();
+      expect(reveals.paths).toEqual(['C:/proj/src']);
+    } finally {
+      reveals.stop();
+    }
+  });
+
+  it('a target that resolves outside the project removes the row', async () => {
+    const m = await mount();
+    m.pointAt(IN_FILE);
+    m.rightClick();
+    await waitFor(() => expect(m.asked).toHaveLength(1));
+    m.asked[0]!.answer({ ok: true, link: { ...resolved('D:/elsewhere/foo.ts'), inProject: false } });
+
+    await waitFor(() => expect(menuLabels()).toContain('Open in OS Default Program'));
+    expect(menuLabels()).not.toContain('Find in File Explorer');
   });
 });
 
