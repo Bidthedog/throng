@@ -1393,6 +1393,7 @@ export {
   providerFor,
   enabledProviderFor,
   previewAffordance,
+  binaryProviderClaims,
 } from './preview/registry.js';
 export type { PreviewAffordance } from './preview/registry.js';
 export {

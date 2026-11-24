@@ -27,6 +27,9 @@ import type { ResolvedLink } from './types.js';
  * FR-170d (#714) adds **Find in File Explorer** immediately before row 4, for a file or folder inside
  * the project; it is not one of FR-170's numbered rows, which this file's comments keep numbering as
  * FR-170 does.
+ *
+ * FR-170e (#719) withholds row 2 — every Open In ▸ editor row — from a file the editor refuses as binary:
+ * by extension before main answers (`binaryByExtension`), and by the resolved target's `binary` after.
  */
 export type LinkMenuItemId =
   | 'openLink'
@@ -41,7 +44,10 @@ export type LinkMenuItemId =
   | 'copyLink';
 
 /** §16.22: names §16.7's inline `resolution` object — a {@link ResolvedLink} without its path. */
-export type ResolvedTarget = Pick<ResolvedLink, 'kind' | 'inProject' | 'executable' | 'preview'>;
+export type ResolvedTarget = Pick<ResolvedLink, 'kind' | 'inProject' | 'executable' | 'preview'> & {
+  /** FR-170e — the file is one the editor refuses as binary (067 FR-117): no Open In ▸ row. Absent reads false. */
+  readonly binary?: boolean;
+};
 
 /** §16.12 / §16.16: what the grammar and the extension decide without the disk (FR-170a). */
 export interface LinkMenuApplicable {
@@ -50,6 +56,8 @@ export interface LinkMenuApplicable {
   readonly executableByExtension: boolean;
   /** A path ending in a separator, or the project root itself (FR-168b): no Open In ▸, no preview. */
   readonly folderByGrammar: boolean;
+  /** FR-170e — a binary preview provider claims the extension (a PDF, an image): no Open In ▸ in any state. */
+  readonly binaryByExtension?: boolean;
 }
 
 export interface LinkMenuContext {
@@ -109,13 +117,15 @@ export function buildLinkMenu(ctx: LinkMenuContext): readonly LinkMenuItem[] {
   // Rows 2 and 3 — throng's own destinations.
   let openIn: RowState;
   let preview: RowState;
+  // FR-170e — a binary file never has an editor to open in, so row 2 is meaningless rather than unavailable.
+  const binary = applicable.binaryByExtension === true;
   if (resolution === 'pending' || resolution === null) {
     const byName = throngRows && applicable.inProjectByName;
-    openIn = byName ? 'disabled' : 'absent';
+    openIn = byName && !binary ? 'disabled' : 'absent';
     preview = byName && applicable.previewByExtension !== 'none' ? 'disabled' : 'absent';
   } else {
     const canOpen = throngRows && resolution.kind === 'file' && resolution.inProject;
-    openIn = canOpen ? 'enabled' : 'absent';
+    openIn = canOpen && !binary && resolution.binary !== true ? 'enabled' : 'absent';
     preview = !canOpen
       ? 'absent'
       : resolution.preview === 'enabled'

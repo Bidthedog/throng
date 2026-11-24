@@ -30,8 +30,8 @@
  * outside this feature's scope and unaffected. Removing the store to remove the batch would have
  * been a change to two behaviours in order to change one.
  */
-import { SETTINGS_METADATA, formatSetting, refusalMessage, toDisplayPath } from '@throng/core';
-import type { EncodingId, FieldDescriptor, OsName } from '@throng/core';
+import { SETTINGS_METADATA, formatSetting, previewSettingsDescriptors, refusalMessage, toDisplayPath } from '@throng/core';
+import type { EncodingId, FieldDescriptor, OsName, PreviewProviderRegistry, PreviewSettings } from '@throng/core';
 
 /**
  * One file that could not be opened. It carries no panel name: the row naming the panel is built by
@@ -95,6 +95,41 @@ export function missingFileMessage(
   if (reason === 'out-of-tree') return 'That file is outside this project, so it cannot be opened here.';
   if (reason === 'folder') return 'That is a folder, not a file.';
   return 'The file could not be opened — it may have been moved, renamed or deleted. An editor with a recovered buffer can be saved to write its contents back.';
+}
+
+/** `explorer.openUnsupportedInOs`'s label, as Preferences shows it. */
+const OPEN_UNSUPPORTED_IN_OS = SETTINGS_METADATA.find((d) => d.key === 'explorer.openUnsupportedInOs')?.label;
+
+/**
+ * #719 — the sentence for a file the editor refuses as BINARY, opened while `explorer.openUnsupportedInOs` is
+ * off (with it on, the OS default program opens the file and there is no notice). It says what is wrong, then
+ * how to open the file after all, naming each setting by the label Preferences shows: the file type's own
+ * preview toggle where a provider claims the type and is turned off, and the OS preference.
+ *
+ * `previewToggle` is that toggle's label (`"PDF: Enabled"`); absent where no provider claims the type, or the
+ * one that does is on (the open then went to the preview, and only a route past it — a drop — gets here).
+ */
+export function binaryRefusalMessage(previewToggle?: string): string {
+  const why = refusalMessage('binary');
+  if (OPEN_UNSUPPORTED_IN_OS === undefined) return why;
+  return previewToggle === undefined
+    ? `${why} To open it in your OS default program, turn on ${OPEN_UNSUPPORTED_IN_OS} in Preferences.`
+    : `${why} To open it, turn on ${previewToggle} in Preferences to preview it, or ${OPEN_UNSUPPORTED_IN_OS} to open it in your OS default program.`;
+}
+
+/**
+ * #719 — the label of the preview toggle that would open `absPath` (`"PDF: Enabled"`), as Preferences shows it:
+ * only where a provider claims the file's type and is turned off. `undefined` otherwise.
+ */
+export function previewToggleToTurnOn(
+  registry: PreviewProviderRegistry,
+  previews: PreviewSettings,
+  absPath: string,
+): string | undefined {
+  const provider = registry.forPath(absPath);
+  if (provider === undefined || previews.providers[provider.id]?.enabled === true) return undefined;
+  const key = `editor.previews.providers.${provider.id}.enabled`;
+  return previewSettingsDescriptors(registry).find((d) => d.key === key)?.label;
 }
 
 /** The file's own path, for the row's `detail` — copied and logged, never rendered (FR-034). */

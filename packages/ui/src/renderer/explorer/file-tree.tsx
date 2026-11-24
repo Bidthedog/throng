@@ -44,6 +44,7 @@ import { useWorkspace } from '../state/workspace-store.js';
  */
 import { describeOpenInTargets, openInMenuActions } from '../editor/open-in-targets.js';
 import { performOpenIn, readOpenInFacts } from '../editor/open-in-perform.js';
+import { editorRefusesAsBinary } from '../editor/open-into-panel.js';
 import { useDirtyPathKey } from '../editor/editor-state.js';
 import { useActiveEditorFilePath } from '../editor/active-editor-file.js';
 import { PanelSkeleton } from '../common/loading.js';
@@ -594,15 +595,19 @@ export function FileTree({
         // Awaited BEFORE the facts are read, so the whole decision is sampled from one moment
         // rather than from either side of an await the layout could move across. 044 FR-012 — main's
         // answer to "does this file have its one preview?" is asked in the same moment.
-        const [alreadyOpen, previewOpen] = await Promise.all([
+        // #719 — and whether the editor refuses it as binary, which offers it no editor target at all.
+        const [alreadyOpen, previewOpen, binary] = await Promise.all([
           window.throng?.editor?.isOpen?.(absPath) ?? false,
           window.throng?.preview?.isOpen?.(absPath) ?? false,
+          editorRefusesAsBinary(ws, absPath, previewRegistryRef.current, projectId),
         ]);
-        openIn = openInMenuActions(
-          describeOpenInTargets(readOpenInFacts(ws, absPath, alreadyOpen)),
-          // 047 FR-083 — the editor it lands in flashes.
-          (target) => void performOpenIn({ ws, absPath, target, flash: true }),
-        );
+        openIn = binary
+          ? undefined
+          : openInMenuActions(
+              describeOpenInTargets(readOpenInFacts(ws, absPath, alreadyOpen)),
+              // 047 FR-083 — the editor it lands in flashes.
+              (target) => void performOpenIn({ ws, absPath, target, flash: true }),
+            );
         // 044 FR-003, FR-004, FR-062 — core decides; the menu draws. The live settings and the injected
         // registry are read through refs, so the answer is this moment's rather than the last render's.
         // The reuse candidate and its name are read in `preview-open-in.ts`, shared with Find in Files (060 FR-048).

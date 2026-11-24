@@ -123,6 +123,16 @@ export function providerFor(
 }
 
 /**
+ * #719 — whether a BINARY provider claims the path by its extension, enabled or not: a PDF, an image, a
+ * spreadsheet. Such a file has no editor (044 FR-073, 074 FR-016: a binary provider offers no Throng Editor),
+ * so it is one the editor refuses as binary (067 FR-117) whatever its bytes look like, and no menu offers it
+ * an editor (045 FR-170e). The other half of that refusal is main's byte sniff, for a type no provider names.
+ */
+export function binaryProviderClaims(registry: PreviewProviderRegistry, path: string): boolean {
+  return registry.forPath(path)?.kind === 'binary';
+}
+
+/**
  * The provider for a path only while it is enabled (FR-062). A provider with no entry in `settings`
  * counts as disabled: settings are generated from the same registry, so a missing entry means the
  * two came from different registrations, and "not previewable" is the safe reading of that.

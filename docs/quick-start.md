@@ -251,7 +251,7 @@ can keep browsing or press **F2** to rename the file.
 
 Copy, cut and paste files between the File Explorer and your file manager in either direction, or drag files between them.
 A drag out of throng always copies. On a drag inside throng, the pointer shows whether the drop will copy or move, and you can press the copy or move key before or during the drag; on a drag in from your file manager, a label beside the pointer says which.
-Double-click a file throng cannot open and it opens in your OS program ([preference](preferences.md)).
+Open a file throng cannot open as text, such as a PDF whose preview is off, and it opens in your OS program; its menus offer it no editor ([preference](preferences.md#file-explorer)).
 Right-click a file for **Open in OS Default Program**, and any item for
 **Properties**, which totals a folder's contents as you watch.
 

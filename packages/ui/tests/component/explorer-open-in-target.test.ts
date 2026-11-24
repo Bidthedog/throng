@@ -144,7 +144,8 @@ const entry = (name: string, kind: 'file' | 'folder'): FileTreeEntry => ({
 
 /** One file is all this needs: the menu under test is a FILE's menu (`onContextMenu` in `file-tree.tsx`). */
 const LISTING: Record<string, FileTreeEntry[]> = {
-  '': [entry('note.txt', 'file')],
+  // #719 — `report.pdf` and `blob.dat` are the binary files of the last block.
+  '': [entry('note.txt', 'file'), entry('report.pdf', 'file'), entry('blob.dat', 'file')],
 };
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -592,5 +593,45 @@ describe('Other Tab lists the tabs a file could go to instead (006 FR-030)', () 
     const docs = within(tabs).getByTestId('menu-item-Docs');
     expect(docs, 'the row stays on the menu — a vanished row teaches nobody why').toBeVisible();
     expect(isDisabled(docs)).toBe(true);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * #719 — a binary file is never offered an editor
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('a file the editor refuses as binary is offered no editor target (#719)', () => {
+  /** `mount`, with main's open decision answering as the caller chooses (`editor.openInto`). */
+  async function mountWithDecision(decision: unknown) {
+    const mounted = await mount(oneNamedPanel('Scratch'));
+    const bridge = Reflect.get(window, 'throng') as { editor: Record<string, unknown> };
+    bridge.editor.openInto = () => Promise.resolve(decision);
+    return mounted;
+  }
+
+  async function flyoutFor(user: ReturnType<typeof userEvent.setup>, tree: HTMLElement, name: string) {
+    await user.pointer({ keys: '[MouseRight]', target: within(tree).getByText(name) });
+    await user.click(await screen.findByTestId('menu-item-Open In'));
+    return screen.findByTestId('submenu-Open In');
+  }
+
+  const EDITOR_ROWS = ['menu-item-New Editor', 'menu-item-Last Active Editor', 'menu-item-Current Editor', 'menu-item-Other Tab'];
+  const BINARY = { action: 'refuse', reason: 'binary' };
+
+  it.each(['report.pdf', 'blob.dat'])('%s: Open In lists no editor target', async (name) => {
+    setLastActiveEditor(TAB_ID, 'p1');
+    const { user, tree } = await mountWithDecision(BINARY);
+    const flyout = await flyoutFor(user, tree, name);
+
+    for (const id of EDITOR_ROWS) expect(within(flyout).queryByTestId(id), id).toBeNull();
+    expect(within(flyout).queryByTestId('menu-item-Last Active Editor (Scratch)')).toBeNull();
+    // The OS reveal stays, so the flyout still says where the file can go.
+    expect(within(flyout).getByTestId('menu-item-OS File Explorer')).toBeVisible();
+  });
+
+  it('control: a text file keeps its editor targets', async () => {
+    const { user, tree } = await mountWithDecision({ action: 'open' });
+    const flyout = await flyoutFor(user, tree, 'note.txt');
+    expect(within(flyout).getByTestId('menu-item-New Editor')).toBeVisible();
   });
 });

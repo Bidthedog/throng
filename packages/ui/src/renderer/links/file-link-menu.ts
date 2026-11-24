@@ -14,7 +14,8 @@ import { copyLinkAddress, performLinkTarget, resolveLinkForMenu, type LinkAction
 import { linkMenuActions, type LinkMenuPerformers } from './link-menu.js';
 import { currentLinkOpenInEditors, performLinkOpenIn } from './link-open-in-perform.js';
 import { openLinkMenu, type LinkMenuOpener } from './open-link-or-panel-menu.js';
-import { logCaught, previewIconOf, relPathUnderRoot } from '@throng/core';
+import { binaryProviderClaims, logCaught, previewIconOf, relPathUnderRoot } from '@throng/core';
+import { editorRefusesAsBinary } from '../editor/open-into-panel.js';
 import { linkFirstReadingByName } from './path-by-name.js';
 import { revealInFileExplorer } from '../explorer/reveal-in-tree.js';
 
@@ -109,6 +110,8 @@ export function openFileLinkMenu(args: {
     // reads it there); refined from main's answer once it arrives (FR-170a).
     executableByExtension: false,
     folderByGrammar,
+    // 045 FR-170e (#719) — a PDF, an image or a spreadsheet has no editor: no Open In ▸ even before main answers.
+    binaryByExtension: binaryProviderClaims(args.previewRegistry, request.text),
   };
   let resolvedLink: ResolvedLink | null = null;
   // 060 FR-045 — whether the resolved file is open in an editor anywhere (main's one-buffer answer),
@@ -209,19 +212,31 @@ export function openFileLinkMenu(args: {
       const answer = await resolveLinkForMenu(request);
       if (answer.ok) {
         resolvedLink = answer.link;
+        // 045 FR-170e (#719) — a file the editor refuses as binary gets no Open In ▸ row; asked only where one
+        // could be drawn (an in-project file), in the same moment as the open question.
+        let binary = false;
         if (answer.link.kind === 'file') {
-          try {
-            fileOpen = (await window.throng?.editor?.isOpen?.(answer.link.path)) ?? false;
-          } catch (error) {
-            logCaught('file-link-menu: ask whether the linked file is open', error);
-            fileOpen = false;
-          }
+          const path = answer.link.path;
+          [fileOpen, binary] = await Promise.all([
+            (async () => {
+              try {
+                return (await window.throng?.editor?.isOpen?.(path)) ?? false;
+              } catch (error) {
+                logCaught('file-link-menu: ask whether the linked file is open', error);
+                return false;
+              }
+            })(),
+            answer.link.inProject
+              ? editorRefusesAsBinary(ws, path, args.previewRegistry, request.originProjectId)
+              : Promise.resolve(false),
+          ]);
         }
         return {
           kind: answer.link.kind,
           inProject: answer.link.inProject,
           executable: answer.link.executable,
           preview: answer.link.preview,
+          ...(binary ? { binary } : {}),
         };
       }
       applicable = {
