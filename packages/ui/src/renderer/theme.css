@@ -658,6 +658,18 @@ textarea,
   letter-spacing: normal;
 }
 
+/* #715 — a pane header's own total (Projects, Sub-workspaces), the same pill, held beside the title
+   (its auto right margin takes the header's free space, so the actions stay right). A minimum width keeps
+   the header still as the number changes, as FR-133 does for the category pill. */
+.panel__count {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 26px;
+  margin-left: 8px;
+  margin-right: auto;
+  text-align: center;
+}
+
 /* FR-051a (#489) — a minimised category reads as collapsed at a glance: a dashed lower edge in the
    theme's border colour and an italic, muted name. The bold uppercase of FR-072 stays. 057 FR-130
    makes the header itself visibly paler: its surface mixed toward the sidebar it sits on, from the

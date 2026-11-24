@@ -8,7 +8,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { planConfirmations } from '@throng/core';
+import { formatGrouped, planConfirmations } from '@throng/core';
 import { useSubWorkspaces } from '../state/subworkspaces-store.js';
 import { useErrorNotice } from '../common/notification.js';
 import { useConfirm } from '../confirm-dialog.js';
@@ -231,6 +231,10 @@ export function SubworkspacesPanel({
         }
       >
         <span className="panel__title">Sub-workspaces</span>
+        {/* #715 — how many exist, open or minimised: the pane header's shared pill (`.panel__count`). */}
+        <span className="throng-count-pill panel__count" data-testid="subworkspaces-count">
+          {formatGrouped(subWorkspaces.length)}
+        </span>
         {/* 067 FR-082 — in the slot the Projects panel's New project button holds, with its classes. */}
         <span className="panel__header-actions">
           {minimised ? null : (
@@ -336,9 +340,9 @@ export function SubworkspacesPanel({
                       <span
                         className="subworkspace-item__counts"
                         data-testid={`subworkspace-counts-${sw.id}`}
-                        title={`${sw.tabCount} tab${sw.tabCount === 1 ? '' : 's'}, ${sw.panelCount} panel${sw.panelCount === 1 ? '' : 's'}`}
+                        title={`${formatGrouped(sw.tabCount)} tab${sw.tabCount === 1 ? '' : 's'}, ${formatGrouped(sw.panelCount)} panel${sw.panelCount === 1 ? '' : 's'}`}
                       >
-                        ({sw.tabCount}T·{sw.panelCount}P)
+                        ({formatGrouped(sw.tabCount)}T·{formatGrouped(sw.panelCount)}P)
                       </span>
                     </span>
                   )}
