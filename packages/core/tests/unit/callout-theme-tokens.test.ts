@@ -39,7 +39,8 @@ describe('callout role tokens (075 FR-020 – FR-022)', () => {
     expect(THEME_AREA_GROUPS.indexOf('Markdown preview')).toBe(THEME_AREA_GROUPS.indexOf('Editor') + 1);
     for (const role of CALLOUT_ROLES) {
       const d = THEME_METADATA.find((x) => x.key === `colours.${CALLOUT_ROLE_TOKENS[role]}`);
-      expect(d?.group, role).toBe('Markdown preview · Callouts');
+      // 079 FR-014: the Callouts block is a subgroup of the Markdown preview area, not a group string.
+      expect([d?.group, d?.subgroup], role).toEqual(['Markdown preview', 'Callouts']);
     }
   });
 

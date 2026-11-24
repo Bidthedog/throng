@@ -266,6 +266,22 @@ describe('the key bindings typeahead (FR-017, SC-019)', () => {
     await waitFor(() => expect(screen.getByTestId('binding-zoom.in')).toBeVisible());
     expect(screen.queryByTestId('keybindings-search-empty')).toBeNull();
   });
+
+  // 079 US1 — the tab draws the shared ranked order; the ranking's truth table is the unit suite's
+  // (`packages/core/tests/unit/settings-search.test.ts`). This asserts only that the tab follows it.
+  it('puts Go To Line first for "go to line", and requires every word (079 FR-001, FR-004)', async () => {
+    const { user } = mountTab();
+    await user.type(search(), 'go to line');
+    await waitFor(() => {
+      const rows = screen.getAllByTestId(/^binding-/).filter((el) => !/^binding-.*-/.test(el.getAttribute('data-testid') ?? ''));
+      expect(rows[0]).toHaveAttribute('data-testid', 'binding-navigate.gotoLine');
+    });
+    await user.click(screen.getByTestId('keybindings-search-clear'));
+    // Under OR, "zoom" alone would have kept the zoom rows; every word must match now.
+    await user.type(search(), 'zoom zzzznothing');
+    await waitFor(() => expect(screen.getByTestId('keybindings-search-empty')).toBeVisible());
+    expect(screen.queryByTestId('binding-zoom.in')).toBeNull();
+  });
 });
 
 /**

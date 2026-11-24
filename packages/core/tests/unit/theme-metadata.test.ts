@@ -10,9 +10,17 @@ import {
 import { assertEveryKeyDescribed, auditRegistry, type FieldDescriptor } from '../../src/config/metadata.js';
 import { filterFields } from '../../src/config/settings-search.js';
 import { THRONG_THEME, TYPOGRAPHY_ROLES, fieldsForRole } from '../../src/config/theme.js';
+import { ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
+import { buildThemeMetadata } from '../../src/config/theme-metadata.js';
+import { readFileSync } from 'node:fs';
 
-/** The parent area of a (possibly "Parent · Child") group string. */
-const areaOf = (group: string): string => group.split(' · ')[0];
+/** Every bundled theme's registry key order as it stood before 079 (generated once from the unchanged code). */
+const ROW_ORDER_BEFORE_079: unknown = JSON.parse(
+  readFileSync(new URL('../fixtures/theme-row-order-079.json', import.meta.url), 'utf8'),
+);
+
+/** A descriptor's heading path, for readable assertions. */
+const path = (d: FieldDescriptor): string => [d.group, d.subgroup, d.subsection].filter(Boolean).join(' / ');
 
 describe('THEME_METADATA completeness (FR-038/047)', () => {
   const tokens = themeEditableTokens(THRONG_THEME);
@@ -49,7 +57,8 @@ describe('THEME_METADATA completeness (FR-038/047)', () => {
       expect(desc!.control, key).toBe('colour');
       const type = key.slice('colours.'.length).replace(/Button.*/, '');
       const cap = `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
-      expect(desc!.group, key).toBe(`General · Buttons · ${cap}`);
+      // 079 FR-014: General → Buttons → <Type>, on the heading fields rather than one group string.
+      expect(path(desc!), key).toBe(`General / Buttons / ${cap}`);
     }
     // The four legacy button tokens no longer appear in the registry.
     for (const legacy of ['colours.buttonBg', 'colours.buttonText', 'colours.buttonHoverBg', 'colours.buttonHoverText']) {
@@ -145,11 +154,11 @@ describe('area grouping (021, FR-001..FR-009)', () => {
 
   it('every descriptor belongs to an area in the closed set (FR-003/FR-006)', () => {
     for (const d of THEME_METADATA) {
-      expect(THEME_AREA_GROUPS, `${d.key} → ${d.group}`).toContain(areaOf(d.group));
+      expect(THEME_AREA_GROUPS, `${d.key} → ${d.group}`).toContain(d.group);
     }
   });
 
-  it('renders areas in THEME_AREA_GROUPS order, Editor before Editor · Syntax (FR-004)', () => {
+  it('renders areas in THEME_AREA_GROUPS order, each area once (FR-004; 079 SC-006)', () => {
     const order: string[] = [];
     const seen = new Set<string>();
     for (const d of THEME_METADATA) {
@@ -159,19 +168,52 @@ describe('area grouping (021, FR-001..FR-009)', () => {
       }
     }
     expect(order[0]).toBe('General');
-    const areaIdx = (g: string): number => THEME_AREA_GROUPS.indexOf(areaOf(g));
+    const areaIdx = (g: string): number => THEME_AREA_GROUPS.indexOf(g);
     const idxs = order.map(areaIdx);
     for (let i = 1; i < idxs.length; i += 1) {
       expect(idxs[i], `area order broken at ${order[i]}`).toBeGreaterThanOrEqual(idxs[i - 1]);
     }
-    expect(order.indexOf('Editor')).toBeLessThan(order.indexOf('Editor · Syntax'));
+    // Each area is ONE section: no group string encodes a nested block any more (079 FR-013).
+    for (const g of order) expect(g, g).not.toContain(' · ');
+    // Within Editor, its own tokens come before the Syntax subgroup's (040 FR-036b, 079 FR-016).
+    const editor = THEME_METADATA.filter((d) => d.group === 'Editor');
+    const firstSyntax = editor.findIndex((d) => d.subgroup === 'Syntax');
+    expect(firstSyntax).toBeGreaterThan(0);
+    expect(editor.slice(firstSyntax).every((d) => d.subgroup === 'Syntax')).toBe(true);
+  });
+
+  it('keeps every bundled theme’s token rows in the order they had before 079 (FR-015, SC-005)', () => {
+    const before = ROW_ORDER_BEFORE_079 as Record<string, string[]>;
+    expect(Object.keys(before).sort()).toEqual(Object.keys(ALL_DEFAULT_THEMES).sort());
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      expect(buildThemeMetadata(theme).map((d) => d.key), name).toEqual(before[name]);
+    }
+  });
+
+  it('places each nested block on the heading fields (079 FR-014)', () => {
+    const p = (k: string): string => path(descriptorForThemeToken(k));
+    expect(p('colours.syntaxKeyword')).toBe('Editor / Syntax');
+    expect(p('typography.button.weight')).toBe('General / Buttons');
+    expect(p('colours.iconButtonSurface')).toBe('General / Buttons');
+    expect(p('colours.confirmButtonBg')).toBe('General / Buttons / Confirm');
+    expect(p('colours.cancelButtonHoverText')).toBe('General / Buttons / Cancel');
+    expect(p('colours.destroyButtonBorder')).toBe('General / Buttons / Destroy');
+    expect(p('colours.fileIconCode')).toBe('File Explorer / File Icons');
+    expect(p('colours.calloutInfo')).toBe('Markdown preview / Callouts');
+    expect(p('colours.editorBg')).toBe('Editor');
+  });
+
+  it('orders the button subsections Confirm, Cancel, Destroy after the base button tokens (079 FR-015)', () => {
+    const buttons = THEME_METADATA.filter((d) => d.group === 'General' && d.subgroup === 'Buttons');
+    const seen = [...new Set(buttons.map((d) => d.subsection ?? ''))];
+    expect(seen).toEqual(['', 'Confirm', 'Cancel', 'Destroy']);
   });
 
   it('assigns each token to its primary area (FR-005/FR-007/FR-014, spot checks)', () => {
     const g = (k: string): string => descriptorForThemeToken(k).group;
     expect(g('colours.editorGutterBg')).toBe('Editor');
     expect(g('colours.terminalFg')).toBe('Terminal');
-    expect(g('colours.syntaxKeyword')).toBe('Editor · Syntax');
+    expect(g('colours.syntaxKeyword')).toBe('Editor');
     expect(g('colours.surface')).toBe('General'); // the overloaded former panelSurface → General
     expect(g('colours.searchMatch')).toBe('Search');
     expect(g('colours.railBg')).toBe('Main panel / workspace');
@@ -180,23 +222,21 @@ describe('area grouping (021, FR-001..FR-009)', () => {
     expect(g('colours.activePanelBorder')).toBe('Main panel / workspace');
     expect(g('typography.projectName.family')).toBe('Projects / sidebar');
     expect(g('typography.editor.family')).toBe('Editor');
-    // The base button typography lives in its own General · Buttons subsection (021 follow-up).
-    expect(g('typography.button.weight')).toBe('General · Buttons');
+    // The base button typography lives in General's Buttons subgroup (021 follow-up; 079 FR-014).
+    expect(g('typography.button.weight')).toBe('General');
     expect(g('colours.iconColour')).toBe('Icons');
   });
 
-  it('the ten syntax colours share the Editor · Syntax sub-group (FR-003a)', () => {
+  it('the ten syntax colours share the Editor Syntax subgroup (FR-003a; 079 FR-014)', () => {
     const syntax = THEME_METADATA.filter((d) => d.key.startsWith('colours.syntax'));
     expect(syntax.length).toBe(10);
-    for (const d of syntax) expect(d.group).toBe('Editor · Syntax');
+    for (const d of syntax) expect(path(d)).toBe('Editor / Syntax');
   });
 
-  it('groups the 18 button tokens under General · Buttons · <Type> (021, US7)', () => {
-    expect(areaForToken('colours.confirmButtonBg')).toBe('General · Buttons · Confirm');
-    expect(areaForToken('colours.cancelButtonHoverText')).toBe('General · Buttons · Cancel');
-    expect(areaForToken('colours.destroyButtonBorder')).toBe('General · Buttons · Destroy');
-    // Their parent area is General, so the closed-set guard accepts them.
-    expect(areaOf('General · Buttons · Confirm')).toBe('General');
+  it('puts the 18 button tokens in the General area (021, US7; 079 FR-014 — areaForToken is the area only)', () => {
+    expect(areaForToken('colours.confirmButtonBg')).toBe('General');
+    expect(areaForToken('colours.cancelButtonHoverText')).toBe('General');
+    expect(areaForToken('colours.destroyButtonBorder')).toBe('General');
   });
 
   it('(G1) a group-name search surfaces every nested button row (FR-016)', () => {
