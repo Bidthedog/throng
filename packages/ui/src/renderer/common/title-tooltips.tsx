@@ -30,6 +30,15 @@
  * - **A title written onto the element under the pointer is noticed without a move.** xterm finds a link
  *   asynchronously after the move that reached it, so the pointer has usually stopped by the time the title exists.
  *
+ * ══ WHAT THE OS ALSO DRAWS (#718) ══
+ *
+ * - **An SVG element's `<title>` child.** The OS reads it and ignores an SVG `title` attribute. While an SVG element is
+ *   under the pointer an empty `<title>` stands in for its own (the same node goes back on leaving), so the OS has
+ *   nothing to draw and cannot fall back to an HTML ancestor's title. Mermaid output and inline SVG carry them; a
+ *   component drawing SVG writes a `title` attribute, as any other does.
+ * - **A same-origin frame's document** — an HTML Preview's page — which the window's listeners never see.
+ *   `installFrameTitleTooltips` takes it over, drawn by this window's popup.
+ *
  * One host per window, mounted at the renderer entry every window kind shares (`window-popups.tsx`).
  */
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactElement } from 'react';
@@ -68,17 +77,44 @@ function snapshot(): Shown | null {
   return shown;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/*
+ * Realm-free tests: a frame's nodes are not `instanceof` this window's `Node` or `Element` (#718).
+ */
+function asNode(target: EventTarget | null): Node | null {
+  return target !== null && typeof (target as Partial<Node>).nodeType === 'number' ? (target as Node) : null;
+}
+
+function asElement(target: EventTarget | null): Element | null {
+  const node = asNode(target);
+  return node !== null && node.nodeType === 1 ? (node as Element) : null;
+}
+
+function isSvg(el: Element): boolean {
+  return el.namespaceURI === SVG_NS;
+}
+
+/** An SVG element's first `<title>` child — what the OS draws for it (it ignores an SVG `title` attribute). */
+function svgTitleChild(el: Element): Element | null {
+  for (const child of el.children) if (child.namespaceURI === SVG_NS && child.localName === 'title') return child;
+  return null;
+}
+
 /**
  * The nearest element from `start` up whose title is (or is being) drawn: `current` itself, or one with a `title` —
  * the OS's own rule, under which the nearest element that HAS the attribute decides, and an empty one means "no
- * tooltip here" rather than "ask my ancestors" (the attention mark relies on it, FR-097).
+ * tooltip here" rather than "ask my ancestors" (the attention mark relies on it, FR-097). An SVG element's title is
+ * also its `<title>` child (#718): Mermaid output and an HTML page's inline SVG carry them.
  */
 function titledAncestor(start: EventTarget | null, current: Element | null): Element | null {
-  let node = start instanceof Element ? start : null;
+  let node = asElement(start);
   while (node !== null) {
     if (node === current) return node;
     const title = node.getAttribute('title');
     if (title !== null) return title.trim() === '' ? null : node;
+    const child = isSvg(node) ? svgTitleChild(node) : null;
+    if (child !== null) return (child.textContent ?? '').trim() === '' ? null : node;
     node = node.parentElement;
   }
   return null;
@@ -108,6 +144,28 @@ export function installTitleTooltips(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pointer = { x: 0, y: 0 };
   let visible = false;
+  /** Whether `current`'s text came from its SVG `<title>` child, so it has no `title` attribute to put back. */
+  let fromChild = false;
+  /**
+   * #718 — an SVG `current` with an empty `<title>` standing in for its own: the OS reads an SVG element's first
+   * `<title>` child and ignores the attribute, and an empty one stops it falling back to an ancestor's.
+   */
+  let shield: { el: Element; placeholder: Element; original: Element | null } | null = null;
+
+  const raiseShield = (el: Element, original: Element | null): void => {
+    const placeholder = (el.ownerDocument ?? doc).createElementNS(SVG_NS, 'title');
+    if (original !== null) el.replaceChild(placeholder, original);
+    else el.insertBefore(placeholder, el.firstChild);
+    shield = { el, placeholder, original };
+  };
+
+  const lowerShield = (): void => {
+    if (shield === null) return;
+    const { el, placeholder, original } = shield;
+    shield = null;
+    if (placeholder.parentNode === el && original !== null) el.replaceChild(original, placeholder);
+    else placeholder.remove();
+  };
 
   const stopTimer = (): void => {
     if (timer !== undefined) clearTimeout(timer);
@@ -143,6 +201,7 @@ export function installTitleTooltips(
       return;
     }
     removedByOwner = false;
+    fromChild = false;
     const previous = el.getAttribute(MOVED_TITLE);
     write(el, () => el.setAttribute('title', ''));
     el.setAttribute(MOVED_TITLE, text);
@@ -170,7 +229,7 @@ export function installTitleTooltips(
     let nearPointer = false;
     for (const record of records) {
       if (record.target === current) currentChanged = true;
-      else if (under !== null && record.target instanceof Node && record.target.contains(under)) nearPointer = true;
+      else if (under !== null && record.target.contains(under)) nearPointer = true;
     }
     if (currentChanged && current !== null) rewritten(current);
     if (nearPointer) reconsider();
@@ -198,35 +257,43 @@ export function installTitleTooltips(
     const el = current;
     const text = el.getAttribute(MOVED_TITLE);
     const removed = removedByOwner;
+    const childOnly = fromChild;
     current = null;
     removedByOwner = false;
+    fromChild = false;
     write(el, () => {
       el.removeAttribute(MOVED_TITLE);
+      if (childOnly) return; // the text lives in the SVG `<title>`, which the shield gives back
       // Our blank goes; a title the owner blanked stays blank, and one it took away stays away.
       if (text) el.setAttribute('title', text);
       else if (removed) el.removeAttribute('title');
       else el.setAttribute('title', '');
     });
+    lowerShield();
   }
 
   function take(el: Element): void {
-    const text = el.getAttribute('title') ?? '';
+    const attribute = el.getAttribute('title');
+    const child = isSvg(el) ? svgTitleChild(el) : null;
+    const text = attribute ?? child?.textContent ?? '';
     current = el;
     removedByOwner = false;
+    fromChild = attribute === null;
     write(el, () => {
       el.setAttribute(MOVED_TITLE, text);
       // EMPTY, not removed: removing it would hand the OS the nearest ancestor's title to draw instead.
-      el.setAttribute('title', '');
+      if (attribute !== null) el.setAttribute('title', '');
     });
+    if (isSvg(el)) raiseShield(el, child);
     arm();
   }
 
   const onMove = (event: Event): void => {
     const e = event as PointerEvent;
     pointer = { x: e.clientX, y: e.clientY };
-    under = e.target instanceof Element ? e.target : null;
+    under = asElement(e.target);
     if (pressed !== null) {
-      if (e.target instanceof Node && pressed.contains(e.target)) return;
+      if (pressed.contains(asNode(e.target))) return;
       pressed = null;
     }
     const target = titledAncestor(e.target, current);
@@ -237,7 +304,7 @@ export function installTitleTooltips(
 
   const onOut = (event: Event): void => {
     const related = (event as PointerEvent).relatedTarget;
-    const inside = (el: Element | null): boolean => el !== null && related instanceof Node && el.contains(related);
+    const inside = (el: Element | null): boolean => el !== null && el.contains(asNode(related));
     if (related === null) under = null;
     if (!inside(pressed)) pressed = null;
     if (current !== null && !inside(current)) release();
@@ -272,6 +339,19 @@ export function installTitleTooltips(
     doc.removeEventListener('scroll', conceal, true);
     view?.removeEventListener('blur', release);
   };
+}
+
+/**
+ * #718 — take over the titles in a same-origin frame's document (an HTML Preview's page), drawn by this window's
+ * popup. The frame's pointer coordinates are its own, so `toWindow` maps a point in the frame's viewport into the
+ * window's (the HTML body's `framePointToClient`, which knows how the panel's zoom scales the frame). Returns the
+ * uninstall; a new document (the frame reloaded) needs installing again.
+ */
+export function installFrameTitleTooltips(doc: Document, toWindow: (x: number, y: number) => { x: number; y: number }): () => void {
+  return installTitleTooltips(doc, TITLE_TOOLTIP_DELAY_MS, (text, x, y) => {
+    const at = toWindow(x, y - BELOW_POINTER);
+    publish({ text, x: at.x, y: at.y + BELOW_POINTER });
+  });
 }
 
 /** The tooltip. Below the pointer, flipped above it at the window's foot, kept on screen by the one positioner. */

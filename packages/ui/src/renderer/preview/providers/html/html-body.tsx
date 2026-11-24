@@ -34,7 +34,8 @@ import { useProjectsOptional } from '../../../state/projects-store.js';
 import { IconButton } from '../../../common/icon-button.js';
 import { sanitiseHtmlPage, type BlockedResource } from './html-sanitise.js';
 import { readFrameScroll, updateFrameInPlace, writeFrameScroll, type FrameScroll } from './html-frame-update.js';
-import { listenToFrameInput } from './frame-input.js';
+import { framePointToClient, listenToFrameInput } from './frame-input.js';
+import { installFrameTitleTooltips } from '../../../common/title-tooltips.js';
 import { listenToFrameFragments, listenToFrameLinkMenu, scrollToFragment } from './frame-fragments.js';
 import { listenToFrameMiddleDrag } from './frame-middle-drag.js';
 import { previewRefreshCount } from '../../refresh-preview.js';
@@ -232,6 +233,8 @@ export function HtmlBody({
     const stopFragments = listenToFrameFragments(doc);
     // FR-063a — a plain middle-button drag scrolls the page (`frame-middle-drag.ts`).
     const stopMiddleDrag = listenToFrameMiddleDrag(doc);
+    // #718 — the page's titles (a link's, an image's, an SVG's `<title>`) in the app's popup, never the OS's tooltip.
+    const stopTitles = installFrameTitleTooltips(doc, (x, y) => framePointToClient(frame, x, y));
     // FR-085a — the menu over a link is the panel's link menu (Open Link, Copy Link to Clipboard).
     const stopLinkMenu = listenToFrameLinkMenu(frame, doc, { docPath: filePathRef.current, projectRoot: projectRootRef.current }, (link, point) =>
       linkMenuRef.current?.(link, point),
@@ -251,6 +254,7 @@ export function HtmlBody({
       stopFragments();
       stopLinkMenu();
       stopMiddleDrag();
+      stopTitles();
       doc.removeEventListener('securitypolicyviolation', onViolation);
       doc.removeEventListener('scroll', onScroll);
     };

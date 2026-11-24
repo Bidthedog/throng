@@ -13,8 +13,11 @@ import {
   MOVED_TITLE,
   TITLE_TOOLTIP_DELAY_MS,
   TitleTooltipHost,
+  installFrameTitleTooltips,
   installTitleTooltips,
 } from '../../src/renderer/common/title-tooltips.js';
+import { framePointToClient } from '../../src/renderer/preview/providers/html/frame-input.js';
+import { nativeTooltipAt } from './native-tooltip.js';
 
 let uninstall: (() => void) | undefined;
 let button: HTMLButtonElement;
@@ -254,5 +257,87 @@ describe('a title its owner changes under a resting pointer — the terminal hos
     fireEvent.pointerOut(host, { relatedTarget: other });
     expect(host).toHaveAttribute('title', '');
     expect(host).not.toHaveAttribute(MOVED_TITLE);
+  });
+});
+
+/*
+ * #718 — an SVG's hover text is its `<title>` CHILD, not an attribute: the OS draws it, and a layer that looked only
+ * at `title` attributes never saw it. Mermaid output and an HTML page's inline SVG carry them; a preview never wrote
+ * them through the layer.
+ */
+describe('an SVG’s <title> under the resting pointer (#718)', () => {
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  let svg: SVGSVGElement;
+  let shape: SVGRectElement;
+  let title: SVGTitleElement;
+
+  beforeEach(() => {
+    svg = document.createElementNS(SVG_NS, 'svg');
+    const group = document.createElementNS(SVG_NS, 'g');
+    title = document.createElementNS(SVG_NS, 'title');
+    title.textContent = 'Request flow';
+    shape = document.createElementNS(SVG_NS, 'rect');
+    group.append(title, shape);
+    svg.append(group);
+    button.append(svg); // an HTML ancestor with a title of its own: the OS must not fall back to it either
+  });
+
+  it('is shown in the shared popup, and the OS has nothing to draw, until the pointer leaves', () => {
+    rest(shape);
+    expect(nativeTooltipAt(shape) ?? '', 'the OS would draw this tooltip').toBe('');
+    expect(tooltip()).toHaveTextContent('Request flow');
+    fireEvent.pointerOut(shape, { relatedTarget: other });
+    fireEvent.pointerOver(other);
+    expect(tooltip()).toBeNull();
+    expect(shape.parentElement!.firstElementChild, 'the very <title> the document had').toBe(title);
+    expect(title.textContent).toBe('Request flow');
+    expect(nativeTooltipAt(shape)).toBe('Request flow');
+  });
+
+  it('a title attribute on an SVG element is shown, and no HTML ancestor’s title is left for the OS', () => {
+    title.remove();
+    shape.setAttribute('title', 'Box');
+    rest(shape);
+    expect(tooltip()).toHaveTextContent('Box');
+    expect(nativeTooltipAt(shape) ?? '', 'the OS would draw the button’s title').toBe('');
+    fireEvent.pointerOut(shape, { relatedTarget: other });
+    expect(shape).toHaveAttribute('title', 'Box');
+    expect(shape.querySelector('title')).toBeNull();
+  });
+});
+
+/*
+ * #718 — an HTML Preview's page is a same-origin `srcdoc` frame: its own document, which the window's layer cannot
+ * see, so every `title` in the page (a link's follow hint, an image's, an SVG's `<title>`) was the OS's to draw.
+ */
+describe('a title inside a preview frame (#718)', () => {
+  let frame: HTMLIFrameElement;
+  let stop: () => void;
+
+  beforeEach(() => {
+    frame = document.createElement('iframe');
+    document.body.append(frame);
+    frame.getBoundingClientRect = () => ({ left: 100, top: 50, right: 500, bottom: 450, width: 400, height: 400, x: 100, y: 50, toJSON: () => ({}) });
+    stop = installFrameTitleTooltips(frame.contentDocument!, (x, y) => framePointToClient(frame, x, y));
+  });
+
+  afterEach(() => {
+    stop();
+    frame.remove();
+  });
+
+  it('is drawn by the window’s shared popup, placed under the pointer in window coordinates', () => {
+    const doc = frame.contentDocument!;
+    const img = doc.createElement('img');
+    img.title = 'diagram.png';
+    doc.body.append(img);
+    fireEvent.pointerOver(img, { clientX: 20, clientY: 20 });
+    expect(nativeTooltipAt(img), 'the OS would draw this tooltip').toBe('');
+    act(() => vi.advanceTimersByTime(TITLE_TOOLTIP_DELAY_MS));
+    expect(tooltip()).toHaveTextContent('diagram.png');
+    expect(tooltip()!.style.left).toBe('120px');
+    fireEvent.pointerOut(img, { relatedTarget: null });
+    expect(tooltip()).toBeNull();
+    expect(img).toHaveAttribute('title', 'diagram.png');
   });
 });
