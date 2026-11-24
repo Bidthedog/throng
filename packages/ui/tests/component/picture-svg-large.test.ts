@@ -7,7 +7,7 @@
  * Layer: component — needs a DOM (DOMParser); jsdom decodes no image, so the loader is a fake. jsdom's parse is far
  * slower than Chromium's, which makes the whole-document parse unmistakable here.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { drawSvgSource, type PictureLoader } from '../../src/renderer/preview/blocks/picture.js';
 
 const ok: PictureLoader = { load: () => Promise.resolve({ width: 10, height: 10 }) };
@@ -21,12 +21,17 @@ function heavy(shapes: number): string {
 describe('a large SVG (SC-003)', () => {
   it('is sized from its root tag, without parsing the whole document', async () => {
     const source = heavy(60_000); // ~2.3 MB
-    const started = performance.now();
-    const wrapper = await drawSvgSource(source, ok);
-    const elapsed = performance.now() - started;
-    expect(wrapper.getAttribute('viewBox')).toBe('0 0 400 150');
-    // jsdom parses this in seconds; a root-tag read takes a few milliseconds. 250 ms is an alarm, not a budget.
-    expect(elapsed, `drawing took ${Math.round(elapsed)} ms`).toBeLessThan(250);
+    // The claim is the parse that does not happen, so assert it, not a wall-clock bound: a 250 ms bound read
+    // 277 ms on a loaded macOS runner (pipeline 45320628054) from the URL and Blob built over 2.3 MB, while
+    // the parse it guards against takes seconds.
+    const parse = vi.spyOn(DOMParser.prototype, 'parseFromString');
+    try {
+      const wrapper = await drawSvgSource(source, ok);
+      expect(wrapper.getAttribute('viewBox')).toBe('0 0 400 150');
+      expect(parse, 'the whole document was parsed to read its size').not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
+    }
   });
 
   it('a malformed large SVG that will not draw still says what is wrong with it', async () => {
