@@ -712,11 +712,10 @@ export function ThemesTab(): ReactElement {
             onToggle={() => folds.toggle(foldKey(group))}
             {...countOf(foldKey(group))}
           >
-            {/* 040 FR-036 — this registry declares no `subgroup` either; it groups by SIBLING STRING
-                (`Editor · Syntax`, `General · Buttons · Confirm`), derived by `areaForToken` rather
-                than declared per descriptor. FR-037a leaves those five exactly where they are, so
-                what follows is capability, not migration: one registry, one rendering rule, ready for
-                the first theme descriptor to carry a subgroup. FR-036b: the ungrouped tokens first. */}
+            {/* 040 FR-036 — one rendering rule for all three registries. Since 079 FR-013/FR-014 the theme
+                registry declares its nested blocks on the heading fields (Editor → Syntax, General →
+                Buttons → Confirm / Cancel / Destroy, File Explorer → File Icons, Markdown preview →
+                Callouts) instead of sibling group strings. FR-036b: the ungrouped tokens first. */}
             {items.map(row)}
             {/* Shared markup; `themes-subgroup-`, NOT `settings-subgroup-`. This tab already borrows
                 the Settings tab's `settings-group-` prefix for its sections (a collision inherited,
