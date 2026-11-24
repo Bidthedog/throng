@@ -636,8 +636,8 @@ export { sanitiseSvg } from './config/svg-sanitise.js';
 export type { ThemeRenameResult } from './config/theme-ops.js';
 export { isValidThemeName, checkRename, activateTheme, cloneTheme, migrateTheme, migrateThemeColours } from './config/theme-ops.js';
 export { matchFamilies } from './config/font-typeahead.js';
-export type { SearchableField, SearchableDescriptor } from './config/settings-search.js';
-export { searchTokens, fieldHaystack, matchesQuery, filterFields } from './config/settings-search.js';
+export type { SearchableField, SearchableDescriptor, SearchRank, RankedEntry } from './config/settings-search.js';
+export { searchTokens, fieldHaystack, matchesQuery, filterFields, rankField, compareRank, orderRanked, SPLIT_TIER } from './config/settings-search.js';
 export { DEFAULT_THEMES, ALL_DEFAULT_THEMES } from './config/default-themes/index.js';
 export type { OnEntrySnapshot, WritePlan, WritePlanEntry } from './config/theme-reset.js';
 export {
