@@ -29,6 +29,13 @@ export function requestOpenInOs(absPath: string, projectId?: string): Promise<vo
   return Promise.resolve();
 }
 
+/**
+ * #720 — the asker named when the caller has no panel (Quick Open, the open router's Default OS Program). Main's
+ * link gate refuses a request with no panel id (`link-ipc.ts`, I2), so an empty one would have the OS open
+ * nothing; the id only identifies who asked, and carries no authority (core `LinkResolutionRequest.panelId`).
+ */
+export const OPEN_IN_OS_ASKER = 'open-in-os';
+
 /** `(absPath, projectId?, panelId?) => Promise<void>`; stable across renders. */
 export function useOpenInOs(): (absPath: string, projectId?: string, panelId?: string) => Promise<void> {
   const reportSubject = useReportSubjectFailure();
@@ -40,7 +47,7 @@ export function useOpenInOs(): (absPath: string, projectId?: string, panelId?: s
       text: absPath,
       kind: 'detectedPath',
       // Identifies the asker only; it carries no authority (core `LinkResolutionRequest.panelId`).
-      panelId: panelId ?? '',
+      panelId: panelId || OPEN_IN_OS_ASKER,
       ...(projectId ? { originProjectId: projectId } : {}),
     });
     if (outcome.ok) return;
