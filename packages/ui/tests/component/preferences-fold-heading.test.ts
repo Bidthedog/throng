@@ -56,11 +56,12 @@ describe('the heading element (F1, F2)', () => {
     expect(container.querySelector('h5')).not.toBeNull();
   });
 
-  it('carries a hover title naming the action: Fold while open, Unfold while folded', async () => {
+  it('carries no hover title, open or folded: its own text names it (disclosure-heading exception, #717)', async () => {
     render(createElement(Host));
-    expect(toggle()).toHaveAttribute('title', 'Fold section');
+    expect(toggle()).not.toHaveAttribute('title');
     await userEvent.setup({ delay: null }).click(toggle());
-    expect(toggle()).toHaveAttribute('title', 'Unfold section');
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle()).not.toHaveAttribute('title');
   });
 
   it('draws its chevron from the chevron token', () => {

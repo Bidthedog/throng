@@ -151,9 +151,6 @@ export function FoldHeading({
           data-testid={`${testId}-toggle`}
           aria-expanded={!folded}
           aria-controls={contentId}
-          // The hover title names the ACTION the click performs (themeable-icon-control rule); the
-          // accessible name stays the heading's own text, which is what a disclosure button is called.
-          title={folded ? 'Unfold section' : 'Fold section'}
           onClick={onToggle}
         >
           <Icon token="chevron" className={`fold-heading__chevron${folded ? '' : ' fold-heading__chevron--open'}`} />

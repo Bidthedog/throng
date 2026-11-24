@@ -2,7 +2,7 @@
 
 Binding: constitution Principle VI and Development Workflow & Quality Gates (`.specify/memory/constitution.md`, *VI. Simple, Modern, Discoverable UX; Development Workflow & Quality Gates › Action controls*). The
 constitution keeps a one-line MUST for each rule below and points here for its detail, which was
-moved verbatim from v7.4.0 at v7.4.1. This file is part of the constitution: change it only through
+moved verbatim from v7.4.0 at v7.4.1 and amended since (v7.5.0: disclosure headings). This file is part of the constitution: change it only through
 a constitution amendment (`throng-spec-governance`), and keep the constitution's one-line MUST in
 step with it. "Above" and "below" in the text refer to this file, or to the constitution where the
 rule named is not here.
@@ -188,6 +188,13 @@ a third over a status figure tells the user these are three kinds of thing when 
     Their label *is* the statement of the consequence being consented to; replacing it with an icon
     would remove the very information the dialog exists to convey. Their colours MUST still derive
     from theme tokens.
+  - **Exception — disclosure headings.** A disclosure heading — a fold/expand control whose own
+    visible text names what it opens, such as a Preferences section heading — need not carry a hover
+    title. A title there would only repeat what the heading already shows, and gets in the way of the
+    pointer moving down a list of them. Its accessible name is that visible text, and its open state is
+    shown by its chevron and `aria-expanded`. The exception is that narrow: a chevron that is a button
+    of its own, with no text inside it (a tree twisty, a results-group chevron), keeps its hover title,
+    and every other part of the rule still binds the heading, its chevron included (v7.5.0, #717).
   - **Default dialog actions.** A dialog or modal that offers decision buttons MUST mark exactly one
     as its **default action** — the button Enter performs (or the chord the dialog states for it, such
     as Ctrl+Enter where the dialog holds an editor), which takes the consequence the dialog exists

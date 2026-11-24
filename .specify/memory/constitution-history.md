@@ -12,6 +12,57 @@ Each record is an HTML comment, so read this file as source rather than rendered
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 7.4.0 → 7.4.1
+Bump rationale: PATCH. The maintainer (2026-11-20 13:05): "The constitution is still too long, though.
+                Do what you can to reduce it whilst not losing any salient information", by the method
+                they proposed: detail loaded on demand from skills the constitution names. Every rule
+                keeps a one-line MUST here, opening with its existing bold name so citations by rule
+                name still resolve; its detail moves VERBATIM to a `references/constitution-<topic>.md`
+                file of the owning skill, which the MUST names. A Governance bullet makes those files
+                part of the constitution, amendable only by amendment.
+                Not MAJOR: no guarantee is withdrawn or reversed and no compliant work becomes
+                non-compliant; every moved sentence still binds, word for word, through its MUST. Not
+                MINOR: no obligation is added; the Governance bullet states where moved text binds.
+                Rationale paragraphs are cut to one sentence; they carried no obligation, and their
+                full text is in v7.4.0 (b0c34331). Kept prose is reflowed to 100 columns, words
+                unchanged; IV's one-command and parity paragraphs are condensed in place.
+Moved verbatim (→ .claude/skills/<skill>/references/):
+                III hygiene, no orphaned views, Unload exception, elevation; IV terminal-tier override
+                    detail → throng-terminal-pty/constitution-terminals.md
+                IV modifier tiers, physical key, one chord per command, keypad, groups, outside the
+                    tiers, AltGr check → throng-config-preferences/constitution-chords.md
+                X theme ownership, quoted settings (known gaps); gates: editor completeness, digit
+                    grouping (known gaps) → throng-config-preferences/constitution-configuration.md
+                V layers, lowest layer, reserve table and replacement, tags, defects, suite runs and
+                    infrastructure faults, @admin → throng-testing/constitution-test-discipline.md
+                VI reachability, menu sections (seven-row table), disabled vs absent, links, variants,
+                    OS and setting naming, popups; gate: action controls (known gaps)
+                    → throng-renderer-ui/constitution-ux.md
+                XI layout, sub-workspaces, focus, Panel state → throng-renderer-ui/constitution-workspace.md
+                XI One document, one state → throng-editor-documents/constitution-document-state.md
+                XIII the five rules → throng-failure-notices/constitution-failure-trace.md
+                Migrations → throng-daemon-persistence/constitution-persistence.md
+                Static analysis and CI lanes → throng-release/constitution-ci-lanes.md
+                Documentation currency → throng-docs/constitution-docs-currency.md
+Kept in full: I; II; VII (open question: Change Review); VIII; IX; XII; III's presets bullet (open
+                question); IV's reserved and shadowable tiers, both exhaustive exception registers
+                (open question: the editor.columnSelect* parenthetical), Moving a shipped default, the
+                first-stroke terminal rule; Incremental Delivery; the review-scrutiny bullet.
+Sections: every principle, Technology & Architecture Constraints, Development Workflow & Quality
+                Gates and Governance modified; none added or removed. Every ## and ### heading is
+                byte-identical, so docs/architecture.md's anchors resolve.
+Enforcement: no test reads the constitution's text; menu-sections, tier, tag and budget tests encode
+                their lists as data.
+Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — no edit;
+                the Constitution Check reads the constitution and follows its skill references.
+           ✅ .specify/extensions.yml — no constitution hooks.
+           ✅ Owning SKILL.md files name their reference; drifted restatements reduced to a pointer.
+Deferred: the three open maintainer questions, unchanged; from 7.4.0, whether
+          TWO_STROKE_EXEMPT_ACTIONS becomes a categorical isTwoStrokeToken exemption.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 7.3.0 → 7.4.0 (supersedes 8.0.0, which was never released: it existed only as an unpushed commit on
                 feature/S073-S074-S075-file-previews, and nothing in the repository cites it)
 Bump rationale: MINOR. The maintainer's "Yes" (2026-11-20 12:17) answered a question framed around the modifier tiers

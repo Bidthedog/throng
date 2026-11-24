@@ -35,9 +35,10 @@ Principle XI — layout, sub-workspaces, focus, Panel state). The bullets below 
 
 - **Themeable icon controls.** Every interactive control that performs an action is an icon from the
   active theme's icon set with a hover title naming the action — not a text label. Icon colours come
-  from theme tokens; hardcoded CSS colours and inline SVG are forbidden. The narrow exception is
+  from theme tokens; hardcoded CSS colours and inline SVG are forbidden. The narrow exceptions are
   dialog decision buttons (confirm / cancel / save-as), whose label *is* the consequence being
-  consented to. Use `common/icon.tsx` and `common/icon-button.tsx`; the unit tests
+  consented to, and disclosure headings, which need no hover title (both in
+  `references/constitution-ux.md`). Use `common/icon.tsx` and `common/icon-button.tsx`; the unit tests
   `icon-tokens-exist`, `icon-call-sites`, `css-variables-defined` and `button-token-exclusion`
   enforce this.
 - **Every panel action is reachable.** Every discrete command or state toggle on a Panel has a

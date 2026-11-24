@@ -1,53 +1,33 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 7.4.0 → 7.4.1
-Bump rationale: PATCH. The maintainer (2026-11-20 13:05): "The constitution is still too long, though.
-                Do what you can to reduce it whilst not losing any salient information", by the method
-                they proposed: detail loaded on demand from skills the constitution names. Every rule
-                keeps a one-line MUST here, opening with its existing bold name so citations by rule
-                name still resolve; its detail moves VERBATIM to a `references/constitution-<topic>.md`
-                file of the owning skill, which the MUST names. A Governance bullet makes those files
-                part of the constitution, amendable only by amendment.
-                Not MAJOR: no guarantee is withdrawn or reversed and no compliant work becomes
-                non-compliant; every moved sentence still binds, word for word, through its MUST. Not
-                MINOR: no obligation is added; the Governance bullet states where moved text binds.
-                Rationale paragraphs are cut to one sentence; they carried no obligation, and their
-                full text is in v7.4.0 (b0c34331). Kept prose is reflowed to 100 columns, words
-                unchanged; IV's one-command and parity paragraphs are condensed in place.
-Moved verbatim (→ .claude/skills/<skill>/references/):
-                III hygiene, no orphaned views, Unload exception, elevation; IV terminal-tier override
-                    detail → throng-terminal-pty/constitution-terminals.md
-                IV modifier tiers, physical key, one chord per command, keypad, groups, outside the
-                    tiers, AltGr check → throng-config-preferences/constitution-chords.md
-                X theme ownership, quoted settings (known gaps); gates: editor completeness, digit
-                    grouping (known gaps) → throng-config-preferences/constitution-configuration.md
-                V layers, lowest layer, reserve table and replacement, tags, defects, suite runs and
-                    infrastructure faults, @admin → throng-testing/constitution-test-discipline.md
-                VI reachability, menu sections (seven-row table), disabled vs absent, links, variants,
-                    OS and setting naming, popups; gate: action controls (known gaps)
-                    → throng-renderer-ui/constitution-ux.md
-                XI layout, sub-workspaces, focus, Panel state → throng-renderer-ui/constitution-workspace.md
-                XI One document, one state → throng-editor-documents/constitution-document-state.md
-                XIII the five rules → throng-failure-notices/constitution-failure-trace.md
-                Migrations → throng-daemon-persistence/constitution-persistence.md
-                Static analysis and CI lanes → throng-release/constitution-ci-lanes.md
-                Documentation currency → throng-docs/constitution-docs-currency.md
-Kept in full: I; II; VII (open question: Change Review); VIII; IX; XII; III's presets bullet (open
-                question); IV's reserved and shadowable tiers, both exhaustive exception registers
-                (open question: the editor.columnSelect* parenthetical), Moving a shipped default, the
-                first-stroke terminal rule; Incremental Delivery; the review-scrutiny bullet.
-Sections: every principle, Technology & Architecture Constraints, Development Workflow & Quality
-                Gates and Governance modified; none added or removed. Every ## and ### heading is
-                byte-identical, so docs/architecture.md's anchors resolve.
-Enforcement: no test reads the constitution's text; menu-sections, tier, tag and budget tests encode
-                their lists as data.
-Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — no edit;
-                the Constitution Check reads the constitution and follows its skill references.
+Version change: 7.4.1 → 7.5.0
+Bump rationale: MINOR. Issue #717 (Tweak, maintainer-agreed): the Preferences fold headings' "Fold section" /
+                "Unfold section" hover popup repeated what the heading already shows and got in the way of the
+                pointer moving down the list. The maintainer chose to amend the rule rather than log a known gap.
+                Development Workflow & Quality Gates › Action controls gains "Exception — disclosure headings": a
+                fold/expand control whose own visible text names what it opens need not carry a hover title; its
+                accessible name is that text, and its open state is shown by its chevron and aria-expanded.
+                Argued against the project's own test. Not MAJOR: no previously-compliant work becomes
+                non-compliant, and the exception is bounded to controls whose visible text already carries what
+                the title would say, as 7.1.0's bounded CI exception was. Not PATCH: it changes what the rule
+                requires of a class of controls. A bounded exception that adds no obligation sits with MINOR.
+Modified principles: none.
+Modified sections: Development Workflow & Quality Gates › Action controls (new exception bullet, here and in
+                throng-renderer-ui/references/constitution-ux.md).
+Added sections: none. Removed sections: none.
+Audit (2026-11-24): covered and now titled none: the Preferences fold headings
+                (`packages/ui/src/renderer/preferences/fold-heading.tsx`). Covered and unchanged, as the exception
+                permits rather than requires: the markdown preview's callout title row (`callout-dom.ts`). Not
+                covered, because the chevron is a button of its own with no text: the explorer tree's twisty, the
+                Find in Files group chevron, the heading outline's toggle and the markdown fold gutter; each keeps
+                its hover title.
+Enforcement: `packages/ui/tests/component/preferences-fold-heading.test.ts` asserts the fold heading carries no
+                title, open or folded. No unit guard enforces titles on icon buttons; none needed changing.
+Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — name no control
+                titling; no edit.
            ✅ .specify/extensions.yml — no constitution hooks.
-           ✅ Owning SKILL.md files name their reference; drifted restatements reduced to a pointer.
-Deferred: the three open maintainer questions, unchanged; from 7.4.0, whether
-          TWO_STROKE_EXEMPT_ACTIONS becomes a categorical isTwoStrokeToken exemption.
+Deferred: none.
 -->
 
 # throng Constitution
@@ -629,6 +609,9 @@ Rationale: an installed build has no console, so the log is the only thing a use
   rule and its parts below are in the `throng-renderer-ui` skill (`references/constitution-ux.md`).
   - **Exception — dialog decision buttons.** The buttons by which a user consents to or declines an
     action inside a dialog MUST retain text labels, with colours from theme tokens.
+  - **Exception — disclosure headings.** A fold/expand control whose own visible text names what it
+    opens need not carry a hover title; its accessible name is that text, and its open state is shown
+    by its chevron and `aria-expanded`. No other control is exempt.
   - **Default dialog actions.** A dialog or modal that offers decision buttons MUST mark exactly one
     as its default action, drawn in the theme's Confirm (or Destroy) button type.
   - **Toast controls.** Every button a notice offers MUST sit in the card's single control group at
@@ -656,4 +639,4 @@ Rationale: an installed build has no console, so the log is the only thing a use
   is kept in [`constitution-history.md`](constitution-history.md), newest first. This file carries
   only the latest amendment's report.
 
-**Version**: 7.4.1 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-20
+**Version**: 7.5.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-24
