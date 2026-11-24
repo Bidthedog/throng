@@ -15,8 +15,11 @@ block the app**, so you can keep working while you edit a theme and watch each c
 
 - **The visual editors apply immediately** — there is no Save button and no restart. Toggles and
   dropdowns apply at once; a typed value applies when you press **Enter** or leave the box.
-- **Settings** has typeahead search that matches any word against a setting's name, description or
-  current value, and each section's name.
+- **Settings**, **Key Bindings** and **Themes** each have typeahead search. Every word you type must
+  appear in a row's name, description, current value or the headings above it, and the best match
+  comes first: a hit in the name ranks above one in the value, the description or a heading, and an
+  exact name above a partial one. Sections are ordered by their best match, and typing a section or
+  subsection name returns everything under it.
 - **The JSON view** (the **UI ⇄ JSON** toggle in the toolbar) edits the same files in throng's own
   editor. **Your document is applied when you leave it** — switching back to the visual editor,
   switching tab, or closing the window — rather than as you type, because a half-typed number is
