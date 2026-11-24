@@ -6,6 +6,9 @@ import {
   canRunAsAdmin,
   emptyValueFor,
   filterFields,
+  orderRanked,
+  rankField,
+  SPLIT_TIER,
   getAtPath,
   isSettingOverridden,
   LANGUAGES,
@@ -217,7 +220,15 @@ export function SettingsTab({
     // 067 FR-130 — the clear control is not a setting, so it has no haystack of its own: a query that
     // names it keeps the row it follows, and with it the Terminal group, in the result.
     if (!FORM_HISTORY_QUERY.test(applied) || found.some((d) => d.key === FORM_HISTORY_LAST_KEY)) return found;
-    return metadata.filter((d) => d.key === FORM_HISTORY_LAST_KEY || found.includes(d));
+    // 079 research R6: the anchor row joins the RANKED result at the weakest rank, rather than the result
+    // being rebuilt in registry order, which would undo the ranking for this one query.
+    const valueOf = (d: FieldDescriptor): unknown => getAtPath(settings, d.key);
+    const entries = [...found, ...metadata.filter((d) => d.key === FORM_HISTORY_LAST_KEY)].map((field) => ({
+      field,
+      index: metadata.indexOf(field),
+      rank: rankField(applied, field, valueOf(field)) ?? { tier: SPLIT_TIER, exact: 4 },
+    }));
+    return orderRanked(entries);
   }, [applied, settings, metadata]);
   // 056 — the UNFILTERED grouping gives the fold totals (and the keys that exist); with no query applied
   // it IS what is shown, so it is reused rather than grouped a second time. The fold wiring is shared
