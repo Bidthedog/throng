@@ -587,6 +587,9 @@
     },
     "pageNext": {
       "lucide": "circle-chevron-right"
+    },
+    "wcagConformant": {
+      "lucide": "shield-check"
     }
   }
 }

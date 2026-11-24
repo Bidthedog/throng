@@ -292,4 +292,5 @@ calloutQuote.svg - The icon at the start of a quote callout’s title row in a d
 print.svg - The icon on Print… in a preview’s menus, and on the Print button in Print Preview.
 pagePrevious.svg - The icon on the Print Preview button that shows the page before the one on screen.
 pageNext.svg - The icon on the Print Preview button that shows the page after the one on screen.
+wcagConformant.svg - The mark beside the theme picker in Preferences, Themes, shown when the selected theme meets WCAG AA contrast on every colour pair throng measures.
 ---- icon keys: end ----

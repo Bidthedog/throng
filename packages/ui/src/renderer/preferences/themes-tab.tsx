@@ -12,6 +12,7 @@ import {
   getAtPath,
   isThemeTokenOverridden,
   matchesQuery,
+  meetsWcagAa,
   reservedThemeNames,
   setAtPath,
   themeTokenDiffersFromEntry,
@@ -30,6 +31,7 @@ import { useTabFolding } from './use-preference-folds.js';
 import { RowActions } from './row-actions.js';
 import { IconSection } from './icon-section.js';
 import { IconButton } from '../common/icon-button.js';
+import { Icon } from '../common/icon.js';
 import { ROW_ACTION_TOKENS } from './row-action-tokens.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useNotify } from '../common/notification.js';
@@ -318,6 +320,8 @@ export function ThemesTab(): ReactElement {
   const target = useMemo(() => rows.find((r) => r.name === activeName) ?? null, [rows, activeName]);
   const targetName = target?.name ?? activeName;
   const isBuiltIn = target?.kind === 'built-in';
+  // 078 FR-007/FR-011: measured live from the active theme as painted, so an edit moves the mark at once.
+  const activeConforms = useMemo(() => meetsWcagAa(activeTheme), [activeTheme]);
   const isCustom = target?.kind === 'custom';
 
   // Optimistic latest theme: rapid edits (e.g. select a set then change a
@@ -523,6 +527,18 @@ export function ThemesTab(): ReactElement {
               </option>
             ))}
           </select>
+          {/* 078 FR-009/FR-010: a positive mark only — nothing at all in its place when the theme does not conform. */}
+          {activeConforms && (
+            <span
+              className="themes-toolbar__wcag"
+              data-testid="theme-wcag-mark"
+              role="img"
+              aria-label="Meets WCAG AA contrast"
+              title="Meets WCAG AA contrast"
+            >
+              <Icon token="wcagConformant" />
+            </span>
+          )}
         </label>
 
         {/* Actions on the SELECTED theme… */}
