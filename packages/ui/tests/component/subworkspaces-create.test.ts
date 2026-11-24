@@ -125,6 +125,16 @@ describe('creating (FR-083)', () => {
     expect(screen.queryByTestId('subworkspaces-empty')).toBeNull();
   });
 
+  it('raises the header count pill (#715)', async () => {
+    const server = makeServer();
+    const { user } = await mount(server);
+    await waitFor(() => expect(screen.getByTestId('subworkspaces-count')).toHaveTextContent('0'));
+    await user.click(screen.getByTestId('subworkspace-new'));
+    await screen.findByTestId('subworkspace-item-swNew');
+    await user.keyboard('{Escape}');
+    expect(screen.getByTestId('subworkspaces-count')).toHaveTextContent('1');
+  });
+
   it('keeps the existing rows and adds the new one after them', async () => {
     const existing: SubWorkspaceMetaDto = { id: 'swOld', name: 'Detached A', colour: '#3fb950', tabCount: 2, panelCount: 3 };
     const { user } = await mount(makeServer([existing]));

@@ -10,6 +10,7 @@ import { SearchKeybindings } from './search/search-keybindings.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
 import { ProjectsPanel } from './sidebar/projects-panel.js';
 import { SubworkspacesPanel } from './sidebar/subworkspaces-panel.js';
+import { ProjectsRailSummary } from './sidebar/projects-summary.js';
 import { useProjects } from './state/projects-store.js';
 import { WorkspaceProvider, useWorkspace } from './state/workspace-store.js';
 import { useServices } from './composition-root.js';
@@ -559,7 +560,9 @@ export function App(): ReactElement {
                   />
                 </>
               ) : (
-                <CollapsedRail testId="pane-rail-left" label="Projects & Sub-workspaces" onShow={toggleLeft} />
+                <CollapsedRail testId="pane-rail-left" label="Projects & Sub-workspaces" onShow={toggleLeft}>
+                  <ProjectsRailSummary />
+                </CollapsedRail>
               )}
             </aside>
             <TitleManager />

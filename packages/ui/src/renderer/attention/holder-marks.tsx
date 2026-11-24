@@ -3,7 +3,7 @@ import { useWorkspaceOptional } from '../state/workspace-store.js';
 import { BusyGlyph } from '../common/busy-glyph.js';
 import { AttentionMark } from './attention-mark.js';
 import { AttentionPopover } from './attention-popover.js';
-import { categoryCycleKey, goToNextMarkedOf, projectCycleKey } from './mark-cycle.js';
+import { allProjectsCycleKey, categoryCycleKey, goToNextMarkedOf, projectCycleKey } from './mark-cycle.js';
 import {
   useCategoryMark,
   useMarkForPanels,
@@ -86,6 +86,24 @@ export function CategoryHeaderMark({
       mark={mark}
       testId={`attention-category-${categoryId}`}
       cycleKey={categoryCycleKey(categoryId)}
+      projectIds={projectIds}
+      grouped
+    />
+  );
+}
+
+/**
+ * The collapsed Projects pane's rail (#715): a minimised category header's mark over EVERY project — the
+ * same sum (FR-131), Failed rule (FR-135), "9+" (FR-136), blink, popover and click. Nothing is drawn while
+ * nothing is marked: the rail has no name beside it to hold still, so no slot is kept.
+ */
+export function ProjectsTotalMark({ projectIds }: { projectIds: readonly string[] }): ReactElement | null {
+  const mark = useCategoryMark(projectIds);
+  return mark === null ? null : (
+    <ListHolderMark
+      mark={mark}
+      testId="attention-projects-total"
+      cycleKey={allProjectsCycleKey()}
       projectIds={projectIds}
       grouped
     />

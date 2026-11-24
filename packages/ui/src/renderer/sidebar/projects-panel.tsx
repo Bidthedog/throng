@@ -26,6 +26,7 @@ import type { ProjectCategoryDto, ProjectDto } from '@throng/ipc-contract';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
 import { CategoryHeaderMark, ProjectRowLead } from '../attention/holder-marks.js';
+import { ProjectsCountPill } from './projects-summary.js';
 import { goToNextMarkedOf, hasMarkedPanel, projectCycleKey } from '../attention/mark-cycle.js';
 import { useErrorNotice } from '../common/notification.js';
 import { useDirtyProjectKey } from '../editor/editor-state.js';
@@ -1095,6 +1096,9 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     >
       <header className="panel__header">
         <span className="panel__title">Projects</span>
+        {/* #715 — the pane's total. No attention mark here: while the pane is open the rows show their
+            own; the collapsed rail carries the total mark (`ProjectsRailSummary`). */}
+        <ProjectsCountPill />
         <span className="panel__header-actions">
           <button
             ref={newButtonRef}

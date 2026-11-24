@@ -155,6 +155,16 @@
   padding-right: calc(var(--throng-size-icon) + 18px);
 }
 
+/* #715 — the collapsed Projects pane's total and attention total, stacked below the rotated label, one
+   character clear of it (the right rail's pending badge's spacing). The pill sits centred, not beside a title. */
+.pane-rail__summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1ch;
+}
+
 /* Rotated, uppercased label shown in a collapsed gutter (rail). */
 .pane-rail__label {
   writing-mode: vertical-rl;

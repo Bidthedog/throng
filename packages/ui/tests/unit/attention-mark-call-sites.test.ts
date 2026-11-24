@@ -37,6 +37,8 @@ const HOLDER_SITES: Record<string, readonly string[]> = {
   PanelHeaderMark: ['workspace/panel-placeholder.tsx'],
   ProjectRowLead: ['sidebar/projects-panel.tsx'],
   CategoryHeaderMark: ['sidebar/projects-panel.tsx'],
+  // #715 — the collapsed Projects pane's rail: a category header's mark over every project.
+  ProjectsTotalMark: ['sidebar/projects-summary.tsx'],
   TabMark: ['workspace/tab-group.tsx', 'workspace/tab-picker.tsx'],
   OverflowMark: ['workspace/tab-group.tsx'],
   PopoverPanelMark: ['workspace/tab-popover.tsx'],
@@ -63,12 +65,13 @@ describe('the attention mark is one component, drawn the same way everywhere', (
 
   it('every holder wrapper gives its mark an `attention-<site>-` testid', () => {
     const text = SOURCES.find((s) => s.path === 'attention/holder-marks.tsx')!.text;
-    const ids = [...text.matchAll(/testId=\{`([^`]+)`\}/g)].map((m) => m[1]);
+    const ids = [...text.matchAll(/testId=(?:\{`([^`]+)`\}|"([^"]+)")/g)].map((m) => m[1] ?? m[2]);
     expect(ids.length).toBeGreaterThanOrEqual(6);
     // `attention-<site>-<id>` — the TabMark's site is `tab` or `tab-picker`, passed in.
     expect(ids.sort()).toEqual(
       [
         'attention-category-${categoryId}',
+        'attention-projects-total',
         'attention-overflow-${side}',
         'attention-panel-${panelId}',
         'attention-project-${projectId}',

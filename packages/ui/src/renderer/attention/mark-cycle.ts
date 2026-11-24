@@ -21,6 +21,11 @@ export function categoryCycleKey(categoryId: string): string {
   return `category:${categoryId}`;
 }
 
+/** The collapsed Projects pane's total mark (#715): every project, so one cursor for the whole list. */
+export function allProjectsCycleKey(): string {
+  return 'projects';
+}
+
 /** Whether any of `projectIds` has a marked panel now. */
 export function hasMarkedPanel(projectIds: readonly string[]): boolean {
   const ids = new Set(projectIds);

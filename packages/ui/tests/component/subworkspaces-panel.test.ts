@@ -139,6 +139,47 @@ describe('its controls are icon-set icons, not text glyphs (069 FR-010)', () => 
   });
 });
 
+describe('the header count (#715)', () => {
+  const pill = () => screen.getByTestId('subworkspaces-count');
+
+  it('shows a count pill with how many sub-workspaces exist', async () => {
+    await mount(makeServer([sw('swA', 'Detached A'), sw('swB', 'Detached B')]));
+    await waitFor(() => expect(pill()).toHaveTextContent('2'));
+    expect(pill()).toHaveClass('throng-count-pill', 'panel__count');
+    expect(pill().closest('header')).toHaveClass('panel__header');
+  });
+
+  it('shows 0 when there are none', async () => {
+    await mount(makeServer([]));
+    expect(pill()).toHaveTextContent('0');
+  });
+
+  it('drops when one is destroyed', async () => {
+    const server = makeServer([sw('sw1', 'Detached A'), sw('sw2', 'Detached B')]);
+    const { user } = await mount(server);
+    await waitFor(() => expect(pill()).toHaveTextContent('2'));
+    await user.click(screen.getByTestId('subworkspace-delete-sw1'));
+    await screen.findByTestId('confirm-dialog');
+    await user.click(screen.getByTestId('confirm-accept'));
+    await waitFor(() => expect(screen.getByTestId('confirm-dialog')).toHaveTextContent(/absolutely sure/i));
+    await user.click(screen.getByTestId('confirm-accept'));
+    await waitFor(() => expect(pill()).toHaveTextContent('1'));
+  });
+
+  it('groups a large count by the locale (constitution 5.4.0)', async () => {
+    await mount(makeServer(Array.from({ length: 1234 }, (_, i) => sw(`s${i}`, `S ${i}`))));
+    await waitFor(() => expect(pill()).toHaveTextContent((1234).toLocaleString()));
+  });
+
+  it('groups each row’s tab and panel counts too, closing 5.4.0’s known gap in this file', async () => {
+    await mount(makeServer([{ ...sw('swA', 'Detached A'), tabCount: 1200, panelCount: 3400 }]));
+    await waitFor(() => expect(names()).toEqual(['Detached A']));
+    const counts = screen.getByTestId('subworkspace-counts-swA');
+    expect(counts).toHaveTextContent(`(${(1200).toLocaleString()}T·${(3400).toLocaleString()}P)`);
+    expect(counts).toHaveAttribute('title', `${(1200).toLocaleString()} tabs, ${(3400).toLocaleString()} panels`);
+  });
+});
+
 describe('renaming (double-click)', () => {
   it('opens a box on double-click and commits the new name on Enter', async () => {
     const server = makeServer([sw('sw1', 'Detached A')]);
@@ -315,6 +356,12 @@ describe('minimise and restore (068 FR-036)', () => {
     expect(button.getAttribute('aria-label')).toBe('Minimise Sub-workspaces');
     fireEvent.click(button);
     expect(onToggleMinimise).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the count pill on the minimised header (#715)', async () => {
+    await mountMinimisable({ minimised: true, onToggleMinimise: vi.fn() });
+    await waitFor(() => expect(screen.getByTestId('subworkspaces-count')).toHaveTextContent('1'));
+    expect(screen.queryByTestId('subworkspace-list')).toBeNull();
   });
 
   it('draws restorePanel while minimised (069 FR-040)', async () => {
