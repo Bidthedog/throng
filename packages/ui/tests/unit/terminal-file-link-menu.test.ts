@@ -38,6 +38,7 @@ function performers(calls: string[] = []): LinkMenuPerformers & { calls: string[
       calls.push(target.kind === 'editor' ? `editor:${target.editorId}` : `editor:${target.kind}`);
     }),
     openInPreview: vi.fn(() => calls.push('preview')),
+    findInExplorer: vi.fn(() => calls.push('findInExplorer')),
     osExplorer: vi.fn(() => calls.push('osExplorer')),
     osDefaultProgram: vi.fn(() => calls.push('osDefaultProgram')),
     openProgram: vi.fn(() => calls.push('openProgram')),
@@ -69,6 +70,7 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
       'Open Link',
       'Open In',
       'Open Preview',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Copy Link to Clipboard',
@@ -91,18 +93,19 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
     expect(labels(items)).toEqual([
       'Open Link',
       'Open In',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open Program',
       'Copy Link to Clipboard',
     ]);
   });
 
-  it('a folder offers Open Link, Open in OS Explorer and Copy Link to Clipboard only', () => {
+  it('an in-project folder offers Open Link, Find in File Explorer, Open in OS Explorer and Copy Link to Clipboard only', () => {
     const items = linkMenuActions(
       { cls: 'onDevice', applicable: applicable(), openLink: noop, copyLink: noop },
       { kind: 'folder', inProject: true, executable: false, preview: 'none' },
     );
-    expect(labels(items)).toEqual(['Open Link', 'Open in OS Explorer', 'Copy Link to Clipboard']);
+    expect(labels(items)).toEqual(['Open Link', 'Find in File Explorer', 'Open in OS Explorer', 'Copy Link to Clipboard']);
   });
 
   it('an UNRESOLVED link draws its applicable rows DISABLED, never absent (FR-170a)', () => {
@@ -120,12 +123,14 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
       'Open Link',
       'Open In',
       'Open Preview',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open Program',
       'Copy Link to Clipboard',
     ]);
     expect(item(items, 'Open In').disabled).toBe(true);
     expect(item(items, 'Open Preview').disabled).toBe(true);
+    expect(item(items, 'Find in File Explorer').disabled).toBe(true);
     expect(item(items, 'Open in OS Explorer').disabled).toBeFalsy();
     expect(item(items, 'Open Program').disabled).toBe(true);
   });
@@ -145,6 +150,7 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
       'Open Link',
       'Open In',
       'Open Preview',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Copy Link to Clipboard',
     ]);
@@ -204,7 +210,7 @@ describe('linkMenuActions — each row performs its OWN target (FR-054)', () => 
     expect(perf.calls).toEqual(['editor:new', 'editor:active', 'editor:e1']);
   });
 
-  it('Open Preview, Open in OS Explorer and Open Program each reach their own performer', () => {
+  it('Open Preview, Find in File Explorer, Open in OS Explorer and Open Program each reach their own performer', () => {
     const perf = performers();
     const items = linkMenuActions(
       {
@@ -217,9 +223,10 @@ describe('linkMenuActions — each row performs its OWN target (FR-054)', () => 
       { kind: 'file', inProject: true, executable: true, preview: 'enabled' },
     );
     item(items, 'Open Preview').onClick?.();
+    item(items, 'Find in File Explorer').onClick?.();
     item(items, 'Open in OS Explorer').onClick?.();
     item(items, 'Open Program').onClick?.();
-    expect(perf.calls).toEqual(['preview', 'osExplorer', 'openProgram']);
+    expect(perf.calls).toEqual(['preview', 'findInExplorer', 'osExplorer', 'openProgram']);
   });
 
   it('a DISABLED row carries no handler at all', () => {

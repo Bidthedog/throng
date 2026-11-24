@@ -66,6 +66,7 @@ import { requestPreviewOpen } from '../preview/open-preview.js';
 import { focusPanel, requestPanelFocus } from '../workspace/panel-focus.js';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { guardVisibleRowScroll } from './visible-row-scroll.js';
+import { REVEAL_IN_TREE_EVENT } from './reveal-in-tree.js';
 
 const ROW_HEIGHT = 24;
 
@@ -171,8 +172,8 @@ export function FileTree({
       // Focus travels with this one: the user asked to be taken to the file.
       if (rel) void revealInTree(rel);
     };
-    window.addEventListener('throng:reveal-in-tree', handler);
-    return () => window.removeEventListener('throng:reveal-in-tree', handler);
+    window.addEventListener(REVEAL_IN_TREE_EVENT, handler);
+    return () => window.removeEventListener(REVEAL_IN_TREE_EVENT, handler);
   }, [rootFolder, revealInTree]);
 
   // 018 / FR-051 — was an inline strip; now the one notification model.

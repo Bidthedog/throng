@@ -138,6 +138,7 @@ describe('openPreviewLinkMenu — SC-025: the same Link menu, per fixture (FR-17
       'Open Link',
       'Open In',
       'Open Preview',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Copy Link to Clipboard',
@@ -226,6 +227,36 @@ describe('openPreviewLinkMenu — SC-025: the same Link menu, per fixture (FR-17
     expect(classifyPreviewLink('slack://open', ctx).kind).toBe('inert');
   });
 
+  it('#714: a folder by grammar inside the project offers Find in File Explorer, which reveals that folder', () => {
+    const resolve = vi.fn();
+    (window as unknown as { throng: unknown }).throng = { links: { resolve } };
+    const reveals: (string | undefined)[] = [];
+    const listener = (e: Event): void => void reveals.push((e as CustomEvent<{ absPath?: string }>).detail?.absPath);
+    window.addEventListener('throng:reveal-in-tree', listener);
+    try {
+      const opener = fakeOpener();
+      openPreviewLinkMenu(baseArgs({ link: { kind: 'outside', target: 'sub/' }, opener, docPath: 'D:\\proj\\README.md' }));
+
+      // FR-158d — a folder by grammar asks main nothing.
+      expect(resolve).not.toHaveBeenCalled();
+      const find = opener.opened[0]?.find((i) => i.label === 'Find in File Explorer');
+      expect(find?.disabled).toBe(false);
+      find?.onClick?.();
+      expect(reveals).toEqual(['D:\\proj\\sub']);
+    } finally {
+      window.removeEventListener('throng:reveal-in-tree', listener);
+    }
+  });
+
+  it('#714: a folder by grammar outside the project, or the project root itself, offers no Find in File Explorer', () => {
+    (window as unknown as { throng: unknown }).throng = { links: { resolve: vi.fn() } };
+    for (const target of ['D:\\elsewhere\\', 'D:\\proj\\']) {
+      const opener = fakeOpener();
+      openPreviewLinkMenu(baseArgs({ link: { kind: 'outside', target }, opener }));
+      expect(opener.opened[0]?.map((i) => i.label)).toEqual(['Open Link', 'Open in OS Explorer', 'Copy Link to Clipboard']);
+    }
+  });
+
   it('Open Link runs the panel’s own follow, exactly as Ctrl+click does (S6)', () => {
     const onFollow = vi.fn();
     const opener = fakeOpener();
@@ -300,6 +331,29 @@ describe('in a mounted panel', () => {
       await waitFor(() => expect(m.links.resolve).toHaveBeenCalledTimes(1));
       await screen.findByTestId('menu-item-Open Preview');
     } finally {
+      m.unmount();
+    }
+  });
+
+  it('#714: Find in File Explorer on a `file` link reveals the resolved file, as the header’s Reveal File does', async () => {
+    const m = await mountMarkdownPreview('# T\n\n[Other](other.md)\n', 'D:/proj/docs/a.md');
+    const reveals: (string | undefined)[] = [];
+    const listener = (e: Event): void => void reveals.push((e as CustomEvent<{ absPath?: string }>).detail?.absPath);
+    window.addEventListener('throng:reveal-in-tree', listener);
+    try {
+      m.links.resolve.mockResolvedValue({
+        ok: true,
+        link: { path: 'D:\\proj\\docs\\other.md', kind: 'file', inProject: true, executable: false, preview: 'enabled' },
+      });
+      const other = await screen.findByText('Other', {}, COLD);
+      fireEvent.contextMenu(other, { clientX: 20, clientY: 20 });
+      await waitFor(() =>
+        expect(screen.getByTestId('menu-item-Find in File Explorer').getAttribute('aria-disabled')).toBe('false'),
+      );
+      fireEvent.click(screen.getByTestId('menu-item-Find in File Explorer'));
+      expect(reveals).toEqual(['D:\\proj\\docs\\other.md']);
+    } finally {
+      window.removeEventListener('throng:reveal-in-tree', listener);
       m.unmount();
     }
   });

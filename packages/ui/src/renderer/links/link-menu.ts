@@ -31,7 +31,8 @@ import type { LinkOpenInTarget } from './link-open-in.js';
  * all, so there is nothing for a future caller to reach past the disabled state and run.
  */
 
-/** The performers for the five rows that act on an actual resolved target (rows 2 – 6). Absent for a
+/** The performers for the rows that act on an actual resolved target (rows 2 – 6, and #714's Find in
+ *  File Explorer). Absent for a
  *  link class with no file targets at all (web, loopback, protocol, anchor) — see {@link LinkMenuBuildArgs}. */
 export interface LinkMenuPerformers {
   /**
@@ -42,6 +43,8 @@ export interface LinkMenuPerformers {
   readonly openInEditor: (target: LinkOpenInTarget) => void | Promise<void>;
   /** FR-034. */
   readonly openInPreview: () => void | Promise<void>;
+  /** #714 — the panel header's Reveal File in File Explorer, on the link's target (file or folder). */
+  readonly findInExplorer: () => void | Promise<void>;
   /** FR-035 / FR-035a. */
   readonly osExplorer: () => void | Promise<void>;
   /** FR-036. */
@@ -76,7 +79,8 @@ export interface LinkMenuBuildArgs {
 
 const ICONS: Partial<Record<LinkRow['id'], IconKey>> = {
   // Open Link and Open in OS Default Program carry no icon: no open/link token exists (023's rule,
-  // #127) — an icon only where a real token exists, never a lookalike.
+  // #127) — an icon only where a real token exists, never a lookalike. Find in File Explorer (#714)
+  // carries none either: it wears what the panel header's Reveal File in File Explorer wears, which is none.
   openInNew: 'editorPanel',
   openInActive: 'editorPanel',
   openInEditor: 'editorPanel',
@@ -108,6 +112,8 @@ function performerFor(
         : () => void performers.openInEditor({ kind: 'editor', editorId });
     case 'openPreview':
       return () => void performers.openInPreview();
+    case 'findInExplorer':
+      return () => void performers.findInExplorer();
     case 'osExplorer':
       return () => void performers.osExplorer();
     case 'osDefaultProgram':

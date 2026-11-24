@@ -377,7 +377,9 @@ an editor, by that file type's default open action under [Previews](#previews), 
 when the link names a line and column; a folder, a network path, a `file:` URL and anything else on
 disk is shown in OS Explorer; and an allowed protocol goes to its own handler. **A click never runs a
 file and never opens one in its default program** — that is reached only by choosing *Open in OS
-Default Program* or, for an executable, *Open Program* from the Link menu. The link underline and the
+Default Program* or, for an executable, *Open Program* from the Link menu. *Find in File Explorer* on
+the Link menu selects a linked file or folder in throng's own File Explorer; it is offered once the link
+is found inside the project. The link underline and the
 plain-click hint take their colours from the theme (see [Themes](#themes-and-icon-sets)).
 
 | Setting | Key | Default | Values | What it does |

@@ -111,6 +111,7 @@ import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
 import { anotherPanelShowsFile } from '../editor/document-views.js';
 import { revealPanelFile } from './reveal-panel-file.js';
+import { revealInFileExplorer } from '../explorer/reveal-in-tree.js';
 import { BackForwardButtons } from '../navigation/back-forward-buttons.js';
 import { usePanelHistory } from '../navigation/history-store.js';
 import { navigatePanelHistory } from '../navigation/navigate-history.js';
@@ -865,12 +866,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   })();
                 },
                 revealInTree: () => {
-                  window.dispatchEvent(
-                    new CustomEvent('throng:reveal-in-tree', {
-                      // 044 T123 — a preview reveals the file IT shows; it has no editor state to read.
-                      detail: { absPath: isPreview ? (previewFilePath ?? undefined) : editorUi?.filePath },
-                    }),
-                  );
+                  // 044 T123 — a preview reveals the file IT shows; it has no editor state to read.
+                  revealInFileExplorer(isPreview ? previewFilePath : editorUi?.filePath);
                 },
                 // #273 — the panel's OWN absolute path. See `revealPanelFile` for what this used to
                 // do and why a root-relative path was wrong in two directions at once. A preview's is the

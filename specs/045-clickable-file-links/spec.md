@@ -3023,6 +3023,21 @@ Each supersedes the named text only where it differs; that text is kept where it
   until main answers, because executability is main's answer. The answer may add, enable **or remove**
   rows: a folder removes rows 2, 3, 5 and 6; a resolved file enables what applies; an unresolved one adds
   row 5 or 6 disabled by extension (FR-170a).
+- **FR-170d** — *Find in File Explorer (2026-11-24, maintainer, #714; amends FR-170's row list, and its
+  "a link that does not resolve MUST offer only …" and "a web, loopback or action-protocol link MUST offer
+  … only" sentences, by this one row)*: the Link menu MUST also offer **Find in File Explorer**,
+  immediately before Open in OS Explorer. Choosing it reveals the target in throng's own File Explorer,
+  with the action the panel header's **Reveal File in File Explorer** runs: it expands the ancestors,
+  selects the row and scrolls it into view. A folder target is revealed and selected the same way. The
+  row is:
+  - **Enabled** once the target resolves to a file or folder inside the project.
+  - **Disabled** before main answers, or when the link did not resolve, while the link is in the project
+    by name. This is the same rule FR-170c and FR-170a give Open In ▸ and Open Preview.
+  - **Not drawn** once the target resolves outside the project, nor for a web, loopback, protocol or
+    anchor link.
+
+  The row carries no number of its own: FR-170's rows 1–7, and FR-170c's references to them, keep their
+  numbers.
 - **FR-158b** — *what the reveal checks (sixth analysis pass; **S10**)*: a follow's reveal and the explicit
   **Open in OS Explorer** item make FR-158a's single bounded file-or-folder check instead of FR-035a's and
   FR-037's "check again that the path exists" — a location that is not there is revealed on its parent
