@@ -1,6 +1,6 @@
 import { execFile, type ExecFileOptions } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
-import { logCaught } from '@throng/core';
+import { logCaught, logExpected } from '@throng/core';
 
 /**
  * `execFile`, with the process START made on a worker thread (051 FR-010).
@@ -33,9 +33,9 @@ interface Reply {
 const WORKER_SOURCE = `
 const { parentPort } = require('node:worker_threads');
 const { execFile } = require('node:child_process');
-parentPort.on('message', ({ id, file, args, options }) => {
+parentPort.on('message', ({ id, file, args, options, input }) => {
   try {
-    execFile(file, args, options, (error, stdout, stderr) => {
+    const child = execFile(file, args, options, (error, stdout, stderr) => {
       parentPort.postMessage({
         id,
         error: error ? { message: error.message, code: error.code, killed: error.killed, signal: error.signal } : null,
@@ -43,6 +43,11 @@ parentPort.on('message', ({ id, file, args, options }) => {
         stderr: String(stderr ?? ''),
       });
     });
+    if (typeof input === 'string') {
+      // A child that exits before reading its input breaks the pipe; its exit code, in the callback, reports that.
+      child.stdin.on('error', () => undefined);
+      child.stdin.end(input);
+    }
   } catch (error) {
     parentPort.postMessage({ id, error: { message: String(error && error.message || error) }, stdout: '', stderr: '' });
   }
@@ -94,18 +99,28 @@ function theWorker(): Worker | null {
   return worker;
 }
 
+/** `execFileOffLoop`'s options: `execFile`'s, plus `input`, written to the child's stdin and then closed (081 R11). */
+export type OffLoopExecOptions = ExecFileOptions & { input?: string };
+
 /** `execFile(file, args, options, callback)`, started off the caller's event loop. Output is always text. */
-export function execFileOffLoop(file: string, args: readonly string[], options: ExecFileOptions, callback: ExecCallback): void {
+export function execFileOffLoop(file: string, args: readonly string[], options: OffLoopExecOptions, callback: ExecCallback): void {
+  const { input, ...execOptions } = options;
   const w = theWorker();
   if (!w) {
     // child-exempt: a pass-through runner; the error, stdout and stderr go to the caller's callback, which watches the start.
-    execFile(file, [...args], { ...options, encoding: 'utf8' }, (error, stdout, stderr) =>
+    const child = execFile(file, [...args], { ...execOptions, encoding: 'utf8' }, (error, stdout, stderr) =>
       callback(error, String(stdout ?? ''), String(stderr ?? '')),
     );
+    if (input !== undefined) {
+      child.stdin?.on('error', (error) =>
+        logExpected('off-loop-exec: write input', 'a child that exits before reading its input breaks the pipe; its exit code reports that', error),
+      );
+      child.stdin?.end(input);
+    }
     return;
   }
   const id = nextId++;
   pending.set(id, callback);
   w.ref();
-  w.postMessage({ id, file, args: [...args], options: { ...options, encoding: 'utf8' } });
+  w.postMessage({ id, file, args: [...args], options: { ...execOptions, encoding: 'utf8' }, input });
 }

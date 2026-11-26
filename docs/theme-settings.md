@@ -1215,6 +1215,14 @@ The icon for a file whose kind throng does not recognise. Empty takes the Icon C
 
 The colour of the File Explorer and Find in Files icon for a file whose kind throng does not recognise. Leave it empty and it takes the Icon Colour, like the folders.
 
+### Ignored Entry Opacity
+
+**Cog › Themes › File Explorer**
+
+`sizes.ignoredEntryOpacity`
+
+How strongly the File Explorer draws a file or folder git ignores. Lower fades it further; 1 draws it like any other.
+
 ## Projects / sidebar
 
 ### Side Panel Background

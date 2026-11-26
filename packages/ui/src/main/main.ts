@@ -68,6 +68,7 @@ import type {
   IOsPropertiesDialog,
   IExecutableExtensions,
   IFileSystem,
+  IgnoreOracle,
   IForegroundHandoff,
   ISystemNotifier,
   ITaskbarBadge,
@@ -1799,7 +1800,10 @@ if (isPrimaryInstance)
   const explorerWatcher = new ExplorerWatcher(
     projectWatcher,
     (evt, absRoot, relPaths) => {
-      broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:changed', evt);
+      // 081 FR-072a — a changed .gitignore re-asks git about every listed entry, not only its own folder's. A report that
+      // could not name its paths says the same, since the renderer re-reads everything it holds.
+      const ignoreRulesChanged = relPaths === null || relPaths.some((p) => p === '.gitignore' || p.endsWith('/.gitignore'));
+      broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:changed', ignoreRulesChanged ? { ...evt, ignoreRulesChanged } : evt);
       /*
        * 043 FR-045d — the SECOND consumer of this ONE watch, and no watcher is added.
        *
@@ -1826,7 +1830,7 @@ if (isPrimaryInstance)
     },
     projectWatchExclusion,
   );
-  const filesService = new FilesService(fileSystem, shellIntegration);
+  const filesService = new FilesService(fileSystem, shellIntegration, container.get<IgnoreOracle>(UI_TYPES.IgnoreOracle));
   // FR-018 — a raw error that a classified message replaces still reaches the log, so it outlives
   // the notice being dismissed. `diagnostics.log` is the same rotating file the daemon writes to.
   filesService.setDiagnosticLog((message) => diagnostics.log.warn(message));

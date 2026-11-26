@@ -127,6 +127,13 @@
         "colours.calloutWarning"
       ],
       "removed": []
+    },
+    {
+      "version": 41,
+      "added": [
+        "sizes.ignoredEntryOpacity"
+      ],
+      "removed": []
     }
   ]
 }

@@ -191,6 +191,15 @@
   opacity: 0.45;
 }
 
+/* 081 FR-071 — an entry git ignores, and everything beneath an ignored folder, reads as secondary. The row's
+   contents fade, and only by opacity, so the text keeps the theme's hue and the icon its colours; the row itself does
+   not, so selection, hover, the active-file mark and a drop target keep their full strength behind it. The amount is
+   the theme's Ignored Entry Opacity, which the 078 contrast gate measures on each of those backgrounds. The rename
+   field and the unsaved mark are not the entry's look but something being done to it, and stay at full strength. */
+.tree-row--ignored > :is(.tree-twisty, .tree-icon, .tree-label, .tree-symlink) {
+  opacity: var(--throng-explorer-ignored-opacity);
+}
+
 /* The folder that would receive the current drag-drop is highlighted (FR-091). */
 .tree-row--drop-target {
   background: color-mix(in srgb, var(--throng-colour-accent) 22%, transparent);

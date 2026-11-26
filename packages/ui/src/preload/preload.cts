@@ -709,6 +709,7 @@ contextBridge.exposeInMainWorld('throng', {
     startOsDrag: (relPaths: readonly string[]) => ipcRenderer.send('throng:files:startOsDrag', relPaths),
     setRoot: (root: string | null) => ipcRenderer.send('throng:files:setRoot', root),
     list: (relDir: string) => ipcRenderer.invoke('throng:files:list', relDir),
+    ignored: (relPaths: readonly string[]) => ipcRenderer.invoke('throng:files:ignored', relPaths),
     rename: (relPath: string, newName: string) =>
       ipcRenderer.invoke('throng:files:rename', relPath, newName),
     move: (srcRelPaths: string[], destRelDir: string) =>

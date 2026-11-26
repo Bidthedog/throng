@@ -17,7 +17,9 @@ export {
   type MachineIdentityOptions,
   type ProcessAnonymiserOptions,
 } from './machine-identity.js';
-export { execFileOffLoop } from './off-loop-exec.js';
+export { execFileOffLoop, type OffLoopExecOptions } from './off-loop-exec.js';
+// 081 US8 — which explorer entries git ignores, asked of git itself.
+export { GitIgnoreOracle, type ExecLike, type GitIgnoreOracleOptions } from './git-ignore-oracle.js';
 export { STDERR_TAIL_CHARS, logChildFailure, watchChild, type WatchChildOptions } from './watch-child.js';
 export { clearStaleSocket } from './stale-socket.js';
 // 070 R1 — the POSIX code Linux and macOS share.

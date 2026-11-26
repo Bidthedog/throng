@@ -58,6 +58,23 @@ export interface ThemeSizes {
   iconPx?: number;
   /** Scrollbar thickness, in pixels. */
   scrollbarPx?: number;
+  /**
+   * 081 US8 (FR-071) — the opacity of the text and icon of a File Explorer entry git ignores, 0.2 to 1. The row's
+   * background is not faded, so selection, hover and the active-file mark keep their strength.
+   */
+  ignoredEntryOpacity?: number;
+}
+
+/** 081 FR-071 — the shipped ignored-entry opacity, and the bounds the editor and the CSS variable both hold it to. */
+export const IGNORED_ENTRY_OPACITY_DEFAULT = 0.6;
+export const IGNORED_ENTRY_OPACITY_MIN = 0.2;
+export const IGNORED_ENTRY_OPACITY_MAX = 1;
+
+/** A theme's ignored-entry opacity, held to its bounds; a missing or non-numeric value takes the default. */
+export function ignoredEntryOpacityOf(sizes: ThemeSizes | undefined): number {
+  const value = sizes?.ignoredEntryOpacity;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return IGNORED_ENTRY_OPACITY_DEFAULT;
+  return Math.min(IGNORED_ENTRY_OPACITY_MAX, Math.max(IGNORED_ENTRY_OPACITY_MIN, value));
 }
 
 /** The named text sections that can be styled independently (FR-030/FR-074). */
@@ -395,6 +412,7 @@ export const THRONG_THEME: Theme = {
   sizes: {
     iconPx: 16,
     scrollbarPx: 12,
+    ignoredEntryOpacity: IGNORED_ENTRY_OPACITY_DEFAULT,
   },
 };
 
@@ -613,6 +631,7 @@ export function toCssVariables(theme: Theme): Record<string, string> {
   const sizes = { ...THRONG_THEME.sizes, ...theme.sizes };
   vars['--throng-size-icon'] = `${sizes.iconPx ?? 16}px`;
   vars['--throng-size-scrollbar'] = `${sizes.scrollbarPx ?? 12}px`;
+  vars['--throng-explorer-ignored-opacity'] = String(ignoredEntryOpacityOf(sizes));
 
   const fonts = { ...THRONG_THEME.fonts, ...theme.fonts };
   const baseWeight = fonts.weights?.normal ?? THRONG_THEME.fonts.weights.normal;

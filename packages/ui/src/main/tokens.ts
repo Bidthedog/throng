@@ -14,6 +14,8 @@ export const UI_TYPES = {
   Clipboard: Symbol.for('throng:IClipboard'),
   FileManagerRegistration: Symbol.for('throng:IFileManagerRegistration'),
   FileAttributes: Symbol.for('throng:IFileAttributes'),
+  // 081 US8: which explorer entries git ignores.
+  IgnoreOracle: Symbol.for('throng:IgnoreOracle'),
   OsPropertiesDialog: Symbol.for('throng:IOsPropertiesDialog'),
   FileAccessInfo: Symbol.for('throng:IFileAccessInfo'),
   ClipboardService: Symbol.for('throng:ClipboardService'),

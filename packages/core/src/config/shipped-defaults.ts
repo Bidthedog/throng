@@ -406,7 +406,10 @@ import { setAtPath } from './metadata.js';
 // is not edited to carry it, for 043's (6 → 7) reason: `main.ts` runs the upgrade only when the saved marker differs.
 // {@link V39_MOVED_COLOURS} records the one value those interim 39 builds wrote that 38 did not; every other token they
 // wrote still equals its {@link V38_MOVED_COLOURS} entry, so both records together reach a 38 install and a 39 one.
-export const SHIPPED_DEFAULTS_VERSION = 40;
+//
+// Bumped by 081 (40 → 41): a THEMES payload, additive. One size token, `sizes.ignoredEntryOpacity`, the fade on a File
+// Explorer entry git ignores (FR-071). Every payload arrives, no existing value moves.
+export const SHIPPED_DEFAULTS_VERSION = 41;
 
 /**
  * The colours this branch's interim shipped-defaults-39 builds wrote that differ from both version 38 and today: Debian's
