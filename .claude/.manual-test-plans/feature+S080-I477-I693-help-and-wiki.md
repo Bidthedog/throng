@@ -4,13 +4,13 @@ Spec: `specs/080-help-and-wiki/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | The guide site: look, version, navigation and search | needs retest | | | failed: The search box clear button looks crap. When scrolling past the end of a page the left nav moves slightly; it should stay put and scroll independently of the page. 'Start here' should be called 'Intro'. |
-| MT-02 | Help from the cog menu and F1, in every window | untested | | | |
-| MT-03 | The (?) beside every setting | needs retest | | | failed: The (?) helpers seem to be the same size; make them smaller and still legible. |
-| MT-04 | The references, split into pages | untested | | | |
-| MT-05 | The (?) on key bindings and theme settings | needs retest | | | failed: The Find in Files options (?) links to 'Narrow a search' rather than 'Search the whole project'. |
-| MT-06 | Every guide page, complete | needs retest | | | failed: Rewrite the guide and descriptions with stop-slop; no 'says so', 'you can never', 'no one noticed', 'silently fails'. Drop the 'Why you'd use this' and 'Where' prefixes: header, bold breadcrumb, long description, screenshot, callouts, horizontal rules between sections. Screenshots should be lazy loaded like the front page. |
-| MT-07 | The Help window | needs retest | | | failed: Hovering a link should show it, internal or external, in a small fading popover bottom left; an external link click should ask confirm/cancel showing the link, controlled by a Preferences setting (on by default) for all external links, with a button to Preferences. |
+| MT-01 | The guide site: look, version, navigation and search | signed off | 5f0979e41830 | 2026-11-26 | |
+| MT-02 | Help from the cog menu and F1, in every window | signed off | 5f0979e41830 | 2026-11-26 | |
+| MT-03 | The (?) beside every setting | signed off | 5f0979e41830 | 2026-11-26 | |
+| MT-04 | The references, split into pages | signed off | 5f0979e41830 | 2026-11-26 | |
+| MT-05 | The (?) on key bindings and theme settings | signed off | 5f0979e41830 | 2026-11-26 | |
+| MT-06 | Every guide page, complete | signed off | 5f0979e41830 | 2026-11-26 | |
+| MT-07 | The Help window | signed off | 5f0979e41830 | 2026-11-26 | |
 
 ## MT-01: The guide site: look, version, navigation and search
 
