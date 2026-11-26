@@ -82,7 +82,7 @@ be driven from a terminal with `rm f; sleep 0.2; printf 'x\n' > f` (inside the 5
    says it is a folder, and nothing calls it missing.
 2. **Given** a panel the user cannot see or a path they only stepped through in Back/Forward history, **When** a tab
    activates, **Then** no notice names it.
-2a. **Given** a hidden panel whose file is really missing, **When** the user brings that panel into view, **Then** one
+3. **Given** a hidden panel whose file is really missing, **When** the user brings that panel into view, **Then** one
    notice names it (FR-012a).
 3. **Given** a file open in an editor and in a Markdown preview, **When** another program deletes it and writes it
    again within the settle window, **Then** no notice and no banner appear, a clean buffer stays clean, and both
@@ -303,7 +303,7 @@ Terminals do not. Every panel type with a status strip gains the same highlight.
   the `path-missing` cause, so it never supersedes the File Explorer's report as an absent folder would (030 FR-029,
   FR-034a).
 - **FR-012**: A notice MUST name only editor panels the user can find and open in the tab it names. A panel hidden
-  in an inactive stack slot or behind Focus Mode, and a path the user only passed through in Back/Forward history
+  by Focus Mode (the workspace has no other way to hide a panel in a shown tab; research R4), and a path the user only passed through in Back/Forward history
   (044 FR-106d) that is no longer the panel's file, MUST NOT raise one.
 - **FR-012a** *(Q3, 2026-11-26)*: A hidden editor panel whose file really cannot be opened MUST have its notice
   deferred until the panel is next shown, and then raised once, naming that panel. If the file opens by then, no
@@ -346,7 +346,10 @@ Terminals do not. Every panel type with a status strip gains the same highlight.
   Explorer** at the head of its right-hand action group, followed by the section separator Save and Save As use
   (067 FR-069 – FR-074).
 - **FR-041**: Each button MUST run its panel menu item's action with no second code path, and MUST be disabled
-  exactly when the menu item is, with the same reason in its tooltip (067 FR-071, FR-073).
+  exactly when the menu item is, with the same reason in its tooltip (067 FR-071, FR-073). The menu rows, which
+  are absent today for a document with no file, MUST instead be drawn disabled with the reason, so menu and button
+  agree (Principle VI). Where the user has turned the default-program row off
+  (`explorer.showOpenInOsDefaultProgram`), its button is not shown either.
 - **FR-042**: Each button MUST use a themeable icon token with an overridable colour (themeable icon controls gate).
 - **FR-043**: The pair and their separator MUST join the header fit order (067 FR-069a/FR-069b), hiding before Save
   and Save As. Both actions MUST stay on the panel menu at every width.
@@ -414,7 +417,8 @@ Terminals do not. Every panel type with a status strip gains the same highlight.
   line ending after it. In a file with a final newline, the row is written after that newline and followed by one.
 - **FR-082**: Clicking, selecting or moving through the entry row with the keyboard MUST write nothing.
 - **FR-083**: The entry row MUST look not yet part of the file (a muted or absent row number, from existing theme
-  tokens). Delete Row, Cut and Insert Row Above MUST be drawn disabled on it, never hidden (Principle VI). This
+  tokens). Cut and Insert Row Above (the row-header operations that need a real row; the menu has no Delete Row)
+  MUST be drawn disabled on it, never hidden (Principle VI). This
   refines 073 FR-038 and FR-037c/FR-037f; 073's spec gains a note pointing here.
 - **FR-084**: Empty rows already in the document, Insert Row Above/Below, paste past the last row, the file's line
   endings and final newline, and the read-only spreadsheet preview MUST be unchanged.
