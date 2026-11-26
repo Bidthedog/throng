@@ -1396,8 +1396,13 @@ export async function createProject(win: Page, name: string, root: string): Prom
   // listener it removes on a timer). On a shared app the previous test's drop can be that recent,
   // so the click is retried until the form shows. Only a lost click is retried: once the form is up
   // nothing clicks New project again.
+  //
+  // #723: on a fresh shared app this is the first action, and `firstWindow()` resolving is not the
+  // renderer being clickable. Wait for the button on its own budget first, then bound each click so
+  // `toPass` can actually retry and its final error names why the click failed.
+  await expect(win.getByTestId('project-new')).toBeVisible({ timeout: 30_000 });
   await expect(async () => {
-    await win.getByTestId('project-new').click();
+    await win.getByTestId('project-new').click({ timeout: 2_000 });
     await expect(win.getByTestId('project-form')).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 15_000 });
   await win.getByTestId('project-root-input').fill(root);
