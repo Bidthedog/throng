@@ -81,6 +81,9 @@ function withLayout(): void {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect(this: Element) {
     return modelRect(this);
   });
+  // The body draws only while it is mounted, so always on screen: 400 px wide, as the model's blocks are. jsdom's 0
+  // would read as a body with no box, whose tables wait for a width before they are laid out (081 FR-020).
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
 }
 
 // ── the window: a gate that unmounts and remounts the panel, and main's history ────────────────────────
