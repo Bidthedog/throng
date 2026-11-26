@@ -27,6 +27,7 @@ import { BrowserWindow, WebContentsView, ipcMain, screen, session, type IpcMainE
 import { HELP_APP_BASE_URL, decideHelpNavigation, logExpected, websiteUrlFor, type IShellIntegration } from '@throng/core';
 import { appIcon } from './app-icon.js';
 import { HELP_SCHEME, createHelpProtocolHandler } from './help-protocol.js';
+import { openFromWindow } from './link-prompt.js';
 import { exemptFromNavigationGuard } from './renderer-request-filter.js';
 import { revealWhenPainted } from './reveal-when-painted.js';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
@@ -76,8 +77,9 @@ function prepareSession(deps: HelpWindowDeps): Session {
   return s;
 }
 
+/** A link leaving the guide: its prompt (FR-070) asks the Help window, where it was followed. */
 function openOutside(deps: HelpWindowDeps, url: string): void {
-  void deps.shellIntegration.openExternal(url);
+  void openFromWindow(helpWindow, () => deps.shellIntegration.openExternal(url));
 }
 
 function sendState(): void {
