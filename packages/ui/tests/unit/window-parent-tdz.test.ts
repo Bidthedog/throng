@@ -87,4 +87,10 @@ describe('secondary windows resolve their parent without touching a const in its
     // window, the master of every window throng opens, must close it on its own `closed`.
     expect(MAIN).toMatch(/mainWindow\.on\(\s*'closed'\s*,\s*\(\)\s*=>\s*\{[^}]*closeHelpWindow\(\)/);
   });
+
+  it('closes the Help window when macOS hides the main window on close (080 FR-054, 070 FR-028)', () => {
+    // On macOS a close only hides the main window (throng stays in the Dock), so `closed` never fires: the hide path
+    // must close Help itself, or it outlives the window it belongs to.
+    expect(MAIN).toMatch(/onMainWindowClose\(\)\s*===\s*'hide'\)\s*\{[^}]*closeHelpWindow\(\)[^}]*mainWindow\.hide\(\)/);
+  });
 });
