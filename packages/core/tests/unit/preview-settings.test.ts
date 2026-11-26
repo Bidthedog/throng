@@ -195,11 +195,9 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
    * menus and status bars. Substrings, not the sentence, so the wording can be polished without a test
    * edit. The old sentence ("Scrolling the preview never moves the editor") became false under FR-121.
    */
-  it('describes syncScroll as two-way, and names the menu item and the status-bar button that also switch it (FR-122f)', () => {
+  it('describes syncScroll as two-way (FR-122f; its other routes live in the reference, 080 FR-013)', () => {
     const sync = byKey(descriptors, 'editor.previews.syncScroll');
     expect(sync.description).toContain('both directions');
-    expect(sync.description).toContain('Synchronise Scrolling');
-    expect(sync.description).toContain('status bar');
     expect(sync.description).not.toContain('never moves the editor');
     // Analyze T1 — the preview's own bar has no preview button: there the toggle sits beside Open in Editor /
     // Go to Editor, so "beside the preview button" is true of only one of the two bars it names.
@@ -285,8 +283,8 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
       allowedValues: ['lastActive', 'new'],
     });
     // 054 FR-052 — the sentence names the provider ("…most recently used Markdown preview…").
-    expect(openTarget.description).toContain('Last Active reuses the most recently used Markdown preview');
-    expect(openTarget.description).toContain('otherwise a new preview opens');
+    expect(openTarget.description).toContain('Where a Markdown preview opens');
+    expect(openTarget.description).toContain('reuse the last one used in this tab, or a new panel');
     // 054 FR-052 — disabled while the provider is off, like every other provider leaf.
     expect(openTarget.enabledWhen).toEqual({ key: 'editor.previews.providers.markdown.enabled', is: true });
     // 054 FR-051 — generated per text provider; a binary provider gets none, and no top-level row remains.

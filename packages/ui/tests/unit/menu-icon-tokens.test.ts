@@ -108,6 +108,7 @@ const cogMenu = (): MenuAction[] =>
     openLogs: noop,
     openResourceMonitor: noop,
     openAbout: noop,
+    openHelp: noop,
     keybindings: DEFAULT_KEYBINDINGS,
   });
 
@@ -221,7 +222,7 @@ describe('the rows #126 shipped blank now carry a glyph (#127)', () => {
     expect(glyphFor(row(items, 'Paste').icon ?? '')?.trim()).toBeTruthy();
   });
 
-  it('all six cog rows (057 FR-106 took Go to Next Marked Panel back out; 055 added Resource Monitor), which read as one gear beside blank lines before 023', () => {
+  it('all seven cog rows (057 FR-106 took Go to Next Marked Panel back out; 055 added Resource Monitor), which read as one gear beside blank lines before 023', () => {
     const items = cogMenu();
     for (const testId of [
       'cog-menu-settings',
@@ -230,6 +231,8 @@ describe('the rows #126 shipped blank now carry a glyph (#127)', () => {
       'cog-menu-logs',
       // 055 FR-056 — the Resource Monitor row wears the `resourceMonitor` token, not a borrowed one.
       'cog-resource-monitor',
+      // 080 FR-010 — Help wears the `help` token.
+      'cog-menu-help',
       'cog-menu-about',
     ]) {
       const item = flatten(items).find((i) => i.testId === testId);

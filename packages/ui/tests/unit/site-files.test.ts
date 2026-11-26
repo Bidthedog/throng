@@ -81,7 +81,8 @@ describe('the website (064 FR-001, FR-002)', () => {
 
   it('is described to search engines and link previews', () => {
     expect(read('site/robots.txt')).toContain('Sitemap: https://throng-ide.com/sitemap.xml');
-    expect(read('site/sitemap.xml')).toContain('<loc>https://throng-ide.com/</loc>');
+    // sitemap.xml is written by the build, from every page it builds (guide-build.test.ts, FR-042).
+    expect(existsSync(join(ROOT, 'site', 'sitemap.xml')), 'a hand-kept sitemap.xml goes stale').toBe(false);
     expect(page).toContain('<link rel="canonical" href="https://throng-ide.com/">');
     const ld = JSON.parse(page.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1] ?? 'null');
     expect(ld).toMatchObject({ '@type': 'SoftwareApplication', name: 'throng' });
@@ -90,6 +91,22 @@ describe('the website (064 FR-001, FR-002)', () => {
     }
     const manifest = JSON.parse(read('site/site.webmanifest')) as { icons: { src: string }[] };
     for (const icon of manifest.icons) expect(existsSync(join(ROOT, 'site', icon.src)), icon.src).toBe(true);
+  });
+
+  it("links the sitemap page from the footer every page lifts (080 FR-042)", () => {
+    expect(page.slice(page.indexOf('<footer'))).toContain('<a href="/sitemap/">Sitemap</a>');
+  });
+
+  it("points language models at the guide's references and the sitemap page (080 FR-043)", () => {
+    const llms = read('site/llms.txt');
+    for (const url of [
+      'https://throng-ide.com/guide/reference/preferences/',
+      'https://throng-ide.com/guide/reference/key-bindings/',
+      'https://throng-ide.com/guide/reference/theme-settings/',
+      'https://throng-ide.com/sitemap/',
+    ]) {
+      expect(llms, url).toContain(`(${url})`);
+    }
   });
 
   it('gives language models a summary whose links point at docs that exist', () => {

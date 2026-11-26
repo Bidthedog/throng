@@ -188,7 +188,9 @@ describe('SETTINGS_METADATA notification leaves (030 US1, #224; 068 US3)', () =>
       expect(byKey.get(`notifications.${type}.panel`)?.description, type).toMatch(
         /Notifications panel until (you )?dismiss.*with or without a toast/is,
       );
-      expect(byKey.get(`notifications.${type}.toast`)?.description, type).toMatch(/with neither, it is shown nowhere/i);
+      expect(byKey.get(`notifications.${type}.toast`)?.description, type).toMatch(
+        /turn off both Toast and Panel and they appear nowhere/i,
+      );
     }
   });
 
@@ -212,11 +214,12 @@ describe('SETTINGS_METADATA notification leaves (030 US1, #224; 068 US3)', () =>
     expect((d!.max! - d!.min!) % d!.step!).toBe(0);
   });
 
-  it('every type Toast description states the toast duration and the pointer/focus pause, with no stale wording (FR-032)', () => {
+  // FR-032's one global duration and its pointer/focus pause are stated once, on the toast duration's own row (above);
+  // 080 FR-013 cut the restatement from each type's Toast description, whose detail lives in the reference.
+  it('no type Toast description carries a per-type duration (FR-032)', () => {
     for (const type of ['error', 'warning', 'info', 'success', 'attention']) {
       const text = byKey.get(`notifications.${type}.toast`)?.description ?? '';
-      expect(text, type).toMatch(/leaves after the toast duration/i);
-      expect(text, type).toMatch(/pointer is over it or focus is inside it/i);
+      expect(text, type).toMatch(/as a toast/i);
       expect(text, type).not.toMatch(/shorten|Display for/i);
     }
   });
@@ -360,7 +363,7 @@ describe('SETTINGS_METADATA new-project + verb changes (011)', () => {
     // and reversible. The KEY has read `destroyTab` since it was written; only the copy lagged.
     expect(byKey.get('confirmations.destroyTab')?.label).toBe('Destroy a tab');
     expect(byKey.get('confirmations.destroyTab')?.description).toBe(
-      'How many confirmations before a tab (with its panels) is destroyed.',
+      'How many times throng asks before it destroys a tab and its panels.',
     );
     expect(byKey.get('confirmations.destroyPanel')?.label).toBe('Destroy a panel');
 

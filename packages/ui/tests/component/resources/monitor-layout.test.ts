@@ -79,15 +79,11 @@ describe('the first row (FR-121): <filter> | Updated … (n s ago) | ?', () => {
     expect(within(controls).queryByTestId('monitor-help')).toBeNull();
   });
 
-  it('keeps the help button\'s accessible name and behaviour', async () => {
+  it('names the help link for the window it explains (080 FR-046; what it opens is monitor-help-links.test.ts)', async () => {
     await openWindow();
     const help = await screen.findByTestId('monitor-help');
-    expect(help).toHaveAttribute('title', 'Help');
-    expect(help).toHaveAttribute('aria-label', 'Help');
-    fireEvent.click(help);
-    expect(screen.getByTestId('monitor-help-panel')).toBeInTheDocument();
-    fireEvent.click(help);
-    expect(screen.queryByTestId('monitor-help-panel')).toBeNull();
+    expect(help).toHaveAttribute('title', 'Help: Resource Monitor');
+    expect(help).toHaveAttribute('aria-label', 'Help: Resource Monitor');
   });
 
   // The three-column top row (filter left, line centred, help right) is a stylesheet claim:

@@ -14,7 +14,20 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { KEYBINDINGS_METADATA, settingsLeaves } from '@throng/core';
+import {
+  DEFAULT_KEYBINDINGS,
+  GUIDE_EXCLUSIONS,
+  GUIDE_MAP,
+  GUIDE_PAGES,
+  HELP_BASE_URL,
+  KEYBINDINGS_METADATA,
+  SETTINGS_METADATA,
+  SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS,
+  THEME_METADATA,
+  defaultPanelTypeRegistry,
+  settingsLeaves,
+  type GuideExclusion,
+} from '@throng/core';
 
 const ROOT = process.cwd();
 const DOCS = join(ROOT, 'docs');
@@ -154,10 +167,17 @@ describe('every binding, setting and variable is documented in its one home', ()
 });
 
 describe('README.md stays an entry point', () => {
-  it('is short, and links down to installation, quick start, the docs index and CONTRIBUTING', () => {
+  it('is short, and links down to installation, the user guide, the docs index and CONTRIBUTING', () => {
     const readme = read(join(ROOT, 'README.md'));
     expect(readme.split(/\r?\n/).length, 'README.md has grown past an entry point').toBeLessThanOrEqual(150);
-    for (const target of ['docs/installation.md', 'docs/quick-start.md', 'docs/README.md', 'CONTRIBUTING.md']) {
+    // 080 US1 AC4: the guide is linked where it is published, from its start page and its Quick start.
+    for (const target of [
+      'docs/installation.md',
+      `${HELP_BASE_URL}quick-start/`,
+      HELP_BASE_URL,
+      'docs/README.md',
+      'CONTRIBUTING.md',
+    ]) {
       expect(readme.includes(`(${target}`), `README.md does not link ${target}`).toBe(true);
     }
   });
@@ -196,15 +216,17 @@ describe('README.md stays an entry point', () => {
   });
 });
 
-describe('macOS coverage of the quick start (070 SC-007)', () => {
-  it('names, for every quick-start section, what proves it on macOS', () => {
-    const headings = read(join(DOCS, 'quick-start.md'))
+/** 070 SC-007, retargeted by 080 (research R14) at the guide's Quick start, which replaced docs/quick-start.md. */
+describe('macOS coverage of the Quick start (070 SC-007)', () => {
+  it('names, for every Quick start task, what proves it on macOS', () => {
+    const headings = read(join(ROOT, 'site', 'guide', 'quick-start.md'))
       .split('\n')
-      .filter((line) => /^#{2,3} /.test(line))
-      .map((line) => line.replace(/^#{2,3} /, '').trim());
+      .filter((line) => /^## /.test(line))
+      .map((line) => line.replace(/^## /, '').trim());
+    expect(headings.length, 'site/guide/quick-start.md has no task headings').toBeGreaterThan(0);
     const macos = read(join(DOCS, 'macos.md'));
-    const start = macos.indexOf('## Coverage of the quick start');
-    expect(start, 'docs/macos.md has no "## Coverage of the quick start" section').toBeGreaterThanOrEqual(0);
+    const start = macos.indexOf('## Coverage of the Quick start');
+    expect(start, 'docs/macos.md has no "## Coverage of the Quick start" section').toBeGreaterThanOrEqual(0);
     const rows = macos
       .slice(start)
       .split('\n')
@@ -213,5 +235,219 @@ describe('macOS coverage of the quick start (070 SC-007)', () => {
     for (const heading of headings) {
       expect(rows, `docs/macos.md's coverage table has no row for "${heading}"`).toContain(heading);
     }
+  });
+});
+
+/**
+ * 080 FR-004a, FR-015, FR-018 (contracts/guide-map.md § Checks) — the guide map, the guide's pages and the
+ * preferences reference agree, and everything a user can do is taught somewhere or excluded with a reason.
+ */
+describe('the user guide covers the app (080)', () => {
+  const GUIDE = join(ROOT, 'site', 'guide');
+  const guideFiles = (): string[] => readdirSync(GUIDE).filter((f) => f.endsWith('.md'));
+  const REFERENCE_FILES = ['preferences.md', 'key-bindings.md', 'theme-settings.md'];
+  const frontMatter = (file: string): Record<string, string> => {
+    const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(read(join(GUIDE, file)));
+    const fields: Record<string, string> = {};
+    for (const line of (m?.[1] ?? '').split(/\r?\n/)) {
+      const kv = /^([a-z]+):\s*(.*)$/.exec(line.trim());
+      if (kv) fields[kv[1] as string] = (kv[2] as string).trim().replace(/^(['"])(.*)\1$/, '$2');
+    }
+    return fields;
+  };
+  /** Each page's `##` task headings, as their anchors. */
+  const taskHeadings = (): Array<{ page: string; anchor: string; heading: string }> =>
+    guideFiles().flatMap((f) =>
+      read(join(GUIDE, f))
+        .split(/\r?\n/)
+        .filter((l) => /^## /.test(l))
+        .map((l) => ({ page: f.replace(/\.md$/, ''), heading: l.slice(3).trim(), anchor: slug(l.slice(3)) })),
+    );
+
+  it("lists the pages in GUIDE_PAGES' order, with the titles GUIDE_PAGES gives them", () => {
+    const fromFiles = guideFiles()
+      .map((f) => ({ slug: f.replace(/\.md$/, ''), ...frontMatter(f) }))
+      .sort((a, b) => Number(a.order) - Number(b.order))
+      .map((p) => `${p.slug}: ${p.title}`);
+    expect(fromFiles).toEqual(GUIDE_PAGES.map((p) => `${p.slug}: ${p.title}`));
+  });
+
+  it('has a map entry for every task heading in site/guide/, and a heading for every map entry', () => {
+    const headings = taskHeadings().map((h) => `${h.page}#${h.anchor}`);
+    const mapped = GUIDE_MAP.map((t) => `${t.page}#${t.anchor}`);
+    expect(
+      headings.filter((h) => !mapped.includes(h)),
+      'task headings with no GUIDE_MAP entry',
+    ).toEqual([]);
+    expect(
+      mapped.filter((m) => !headings.includes(m)),
+      'GUIDE_MAP entries whose heading is not in site/guide/',
+    ).toEqual([]);
+  });
+
+  const covered = (kind: GuideExclusion['kind'], field: 'commands' | 'panelTypes' | 'previewTypes', ids: string[]) => {
+    const inMap = new Set(GUIDE_MAP.flatMap((t) => t[field] as readonly string[]));
+    const excluded = new Set(GUIDE_EXCLUSIONS.filter((e) => e.kind === kind).map((e) => e.id));
+    return ids.filter((id) => !inMap.has(id) && !excluded.has(id));
+  };
+
+  it('teaches every command, or excludes it with a reason', () => {
+    expect(covered('command', 'commands', Object.keys(DEFAULT_KEYBINDINGS.bindings)), 'commands in no guide task').toEqual(
+      [],
+    );
+  });
+
+  it('teaches every panel type, or excludes it with a reason', () => {
+    const kinds = defaultPanelTypeRegistry.list().map((d) => d.id);
+    expect(covered('panelType', 'panelTypes', kinds), 'panel types in no guide task').toEqual([]);
+  });
+
+  it('teaches every preview type, or excludes it with a reason', () => {
+    const ids = SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((d) => d.id);
+    expect(covered('previewType', 'previewTypes', ids), 'preview types in no guide task').toEqual([]);
+  });
+
+  /**
+   * Each keyed section, by key: a heading, its bold breadcrumb (080 FR-059), its key code span, then the lead
+   * line. `crumb` is false for a section whose breadcrumb is missing.
+   */
+  const sectionsByKey = (file: string): Map<string, { lead: string; crumb: boolean }> => {
+    const lines = read(join(DOCS, file)).split(/\r?\n/);
+    const found = new Map<string, { lead: string; crumb: boolean }>();
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!/^#{2,6} /.test(lines[i] as string)) continue;
+      const crumb = isBreadcrumb((lines[i + 2] ?? '').trim());
+      const at = crumb ? i + 4 : i + 2;
+      const key = /^`([^`]+)`$/.exec((lines[at] ?? '').trim());
+      if (key) found.set(key[1] as string, { lead: (lines[at + 2] ?? '').trim(), crumb });
+    }
+    return found;
+  };
+  const leads = (file: string): Map<string, string> =>
+    new Map([...sectionsByKey(file)].map(([key, s]) => [key, s.lead]));
+  const REFERENCES = [
+    { file: 'preferences.md', what: 'setting', registry: SETTINGS_METADATA },
+    { file: 'key-bindings.md', what: 'key binding', registry: KEYBINDINGS_METADATA },
+    { file: 'theme-settings.md', what: 'theme setting', registry: THEME_METADATA },
+  ] as const;
+
+  for (const ref of REFERENCES) {
+    it(`gives every ${ref.what} a section in docs/${ref.file}, led by its own description (080 FR-016, FR-028)`, () => {
+      const lead = leads(ref.file);
+      const missing = ref.registry.filter((d) => !lead.has(d.key)).map((d) => d.key);
+      expect(missing, `${ref.what}s with no section of their own in docs/${ref.file}`).toEqual([]);
+      const differ = ref.registry.filter((d) => lead.has(d.key) && lead.get(d.key) !== d.description).map((d) => d.key);
+      expect(differ, `sections whose lead paragraph is not the ${ref.what}'s description`).toEqual([]);
+    });
+
+    it(`opens every ${ref.what}'s section in docs/${ref.file} with a bold breadcrumb (080 FR-059)`, () => {
+      const crumbless = [...sectionsByKey(ref.file)].filter(([, s]) => !s.crumb).map(([key]) => key);
+      expect(crumbless, `${ref.what} sections with no breadcrumb after the heading`).toEqual([]);
+    });
+
+    it(`has a ## section in docs/${ref.file} for every ${ref.what} group, which its (?) URL names (080 FR-026)`, () => {
+      const headings = new Set(
+        read(join(DOCS, ref.file))
+          .split(/\r?\n/)
+          .filter((l) => /^## /.test(l))
+          .map((l) => l.slice(3).trim()),
+      );
+      const groups = [...new Set(ref.registry.map((d) => d.group))];
+      expect(groups.filter((g) => !headings.has(g)), `${ref.what} groups with no ## heading`).toEqual([]);
+    });
+  }
+
+  /** Pages that teach no task, and so take no task layout and need no screenshot. */
+  const NO_TASKS = new Set(['index.md', 'faq.md']);
+
+  it('ships no page as an outline (080 FR-033)', () => {
+    expect(guideFiles().filter((f) => frontMatter(f).status === 'outline'), 'pages marked status: outline').toEqual([]);
+  });
+
+  /** A paragraph that is wholly bold, with no label: a breadcrumb (080 FR-059). */
+  const isBreadcrumb = (p: string): boolean => /^\*\*[^*\n][\s\S]*\*\*$/.test(p) && !/^\*\*Where:/.test(p);
+  /** Prose: not a list, an image, a callout, a table or a code block. */
+  const isProse = (p: string): boolean => !/^(\d+\.|[-*] |!\[|>|\||```|`[^`]+`$)/.test(p);
+  const paragraphs = (body: string): string[] =>
+    body
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter((p) => p !== '');
+
+  it('lays out every task: a bold breadcrumb, a prose lead, then numbered steps (080 FR-059)', () => {
+    const broken: string[] = [];
+    for (const f of guideFiles().filter((g) => !NO_TASKS.has(g))) {
+      const sections = read(join(GUIDE, f)).split(/^## /m).slice(1);
+      for (const s of sections) {
+        const [heading, ...body] = s.split(/\r?\n/);
+        const paras = paragraphs(body.join('\n'));
+        const ok =
+          isBreadcrumb(paras[0] ?? '') && isProse(paras[1] ?? '') && paras.slice(1).some((p) => /^1\. \S/.test(p));
+        if (!ok) broken.push(`${f}: ${heading}`);
+      }
+    }
+    expect(broken, 'task sections not opening with a bold breadcrumb, a prose lead and numbered steps').toEqual([]);
+  });
+
+  it('carries no Where or Why prefix on any guide or reference page (080 FR-059, supersedes FR-030)', () => {
+    const files = [...guideFiles().map((f) => join(GUIDE, f)), ...REFERENCE_FILES.map((f) => join(DOCS, f))];
+    const found = files.flatMap((file) =>
+      paragraphs(read(file))
+        .filter((p) => /^\*\*Where:\*\*|^\*Why you'd use this:\*/.test(p))
+        .map((p) => `${relative(ROOT, file)}: ${p.slice(0, 40)}`),
+    );
+    expect(found).toEqual([]);
+  });
+
+  it('uses none of the banned AI phrases in the guide, the references or an in-app description (080 FR-058)', () => {
+    const BANNED = /says so|you can never|no one noticed|silently fail/i;
+    const texts: Array<[string, string]> = [
+      ...guideFiles().map((f): [string, string] => [`site/guide/${f}`, read(join(GUIDE, f))]),
+      ...REFERENCE_FILES.map((f): [string, string] => [`docs/${f}`, read(join(DOCS, f))]),
+      ...SETTINGS_METADATA.map((d): [string, string] => [`setting ${d.key}`, d.description]),
+      ...KEYBINDINGS_METADATA.map((d): [string, string] => [`key binding ${d.key}`, d.description]),
+      ...THEME_METADATA.map((d): [string, string] => [`theme setting ${d.key}`, d.description]),
+    ];
+    const found = texts.flatMap(([where, text]) =>
+      text.split(/\r?\n/).flatMap((line) => {
+        const hit = BANNED.exec(line);
+        return hit ? [`${where}: "${hit[0]}"`] : [];
+      }),
+    );
+    expect(found, 'banned phrases (rewrite the sentence; stop-slop)').toEqual([]);
+  });
+
+  it('shows at least one screenshot of its own on every page that teaches a task (080 FR-031)', () => {
+    const missing = guideFiles()
+      .filter((f) => !NO_TASKS.has(f))
+      .filter((f) => {
+        const page = f.replace(/\.md$/, '');
+        const images = [...read(join(GUIDE, f)).matchAll(/!\[[^\]]*\]\((images\/[^)\s]+)\)/g)].map((m) => m[1] as string);
+        return !images.some((i) => i.startsWith(`images/${page}/`) && existsSync(join(GUIDE, i)));
+      });
+    expect(missing, 'pages with no existing screenshot under images/<page>/').toEqual([]);
+  });
+
+  it('has only landscape screenshots, so each fills the page column (080 FR-037)', () => {
+    const images = (dir: string): string[] =>
+      readdirSync(dir).flatMap((f) => {
+        const path = join(dir, f);
+        return statSync(path).isDirectory() ? images(path) : f.endsWith('.png') ? [path] : [];
+      });
+    const portrait = images(join(GUIDE, 'images')).filter((path) => {
+      const png = readFileSync(path);
+      return png.readUInt32BE(20) >= png.readUInt32BE(16);
+    });
+    expect(portrait.map((p) => relative(GUIDE, p)), 'portrait screenshots: take them with the panel filling the window').toEqual([]);
+  });
+
+  it('links only screenshots that exist', () => {
+    const dead = guideFiles().flatMap((f) =>
+      [...read(join(GUIDE, f)).matchAll(/!\[[^\]]*\]\((images\/[^)\s]+)\)/g)]
+        .map((m) => m[1] as string)
+        .filter((i) => !existsSync(join(GUIDE, i)))
+        .map((i) => `${f}: ${i}`),
+    );
+    expect(dead, 'images linked from site/guide/ that do not exist').toEqual([]);
   });
 });

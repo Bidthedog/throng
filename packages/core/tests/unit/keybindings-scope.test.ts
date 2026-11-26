@@ -186,13 +186,17 @@ describe('the Projects scope (046 R3, FR-015)', () => {
   });
 
   it('is a member of EVERYWHERE and of no narrower scope set', () => {
+    // 080 FR-010 — the one narrower window-level set: Help is live everywhere a terminal is not, so F1
+    // reaches a terminal's program. It acts on no document and no file tree, so it keeps 046 R3's intent.
+    const allButTerminal = [...ALL_SCOPES].filter((s) => s !== 'terminal');
     for (const action of ACTION_IDS) {
       const scopes = COMMAND_SCOPES[action];
       if (!scopes.has(PROJECTS)) continue;
-      expect(
-        [...ALL_SCOPES].every((s) => scopes.has(s)),
-        `"${action}" is live in projects without being EVERYWHERE`,
-      ).toBe(true);
+      const everywhere = [...ALL_SCOPES].every((s) => scopes.has(s));
+      const windowLevelButTerminal = action === 'help.open' && allButTerminal.every((s) => scopes.has(s));
+      expect(everywhere || windowLevelButTerminal, `"${action}" is live in projects without being EVERYWHERE`).toBe(
+        true,
+      );
     }
     // …and every EVERYWHERE command picks it up — zoom, focus movement, the view toggles, menu.open.
     for (const action of ['zoom.in', 'focus.left', 'view.toggleProjects', 'menu.open', 'navigate.quickOpen']) {

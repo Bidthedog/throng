@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_APP_SETTINGS, SHIPPED_PREVIEW_PROVIDERS, type AppSettings } from '@throng/core';
 import {
+  exemptFromNavigationGuard,
   guardNavigation,
   installNavigationGuards,
   installRendererRequestFilter,
@@ -196,6 +197,17 @@ describe('guardNavigation', () => {
    * made the E2E harness's `reloadWindow` time out (40 call sites), and a product reload is not a
    * navigation away from anything.
    */
+  // 080 FR-050 — the Help window's guide view decides its own navigation; every other contents keeps the guard.
+  it('lifts the guard for the one contents exempted, and only that one', () => {
+    const help = fakeContents('throng-help://app/guide/');
+    const other = fakeContents();
+    guardNavigation(help.contents);
+    guardNavigation(other.contents);
+    exemptFromNavigationGuard(help.contents);
+    expect(help.navigate('throng-help://app/guide/terminals/')).toEqual({ prevented: false });
+    expect(other.navigate('https://example.com/')).toEqual({ prevented: true });
+  });
+
   it('lets a reload of the same document through', () => {
     const w = fakeContents();
     guardNavigation(w.contents);

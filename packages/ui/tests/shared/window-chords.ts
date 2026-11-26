@@ -244,6 +244,11 @@ export const COVERED_IN_COMPONENT: ReadonlyMap<string, { test: string; key: stri
    * its own component test: it mounts the real dispatcher, and asserts a press from a focused terminal
    * reaches it (US7 AS2).
    */
+  /*
+   * 080 FR-010 — `help.open` is `F1`, the function-key branch, live in every scope but a terminal. Pressed
+   * through the real dispatcher in both shapes (opens; a terminal keeps the key) by its own component test.
+   */
+  ['help.open', { test: 'window-help-key.test.ts', key: 'F1', mods: [] }],
   ['focus.nextMarkedPanel', { test: 'attention-next-command.test.ts', key: 'G', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
   /*
    * 046 iterate round 1 (T106/T111) — `project.next` / `project.previous` moved to the tier-1

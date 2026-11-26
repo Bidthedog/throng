@@ -68,10 +68,10 @@ describe('Open <files> in — descriptors (FR-016, FR-017)', () => {
     expect(row('grid')?.optionLabels?.preview).toBe('Throng Preview Editor');
   });
 
-  it('describes what each value does and that Open In targets do what they name', () => {
+  // 080 FR-013 — the options name themselves; what each does, and Open In's exception, live in the reference.
+  it('says where the files open from', () => {
     const description = row('notes')?.description ?? '';
-    expect(description).toContain('operating system');
-    expect(description).toContain('Open In');
+    expect(description).toBe('Where Notes files open from File Explorer, Quick Open, links and Find in Files.');
   });
 
   it('gives a binary provider Open previews in as well', () => {
