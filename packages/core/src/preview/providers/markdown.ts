@@ -34,7 +34,7 @@ export const markdownProvider: PreviewProviderDescriptor = {
       leaf: 'typesetMath',
       label: 'Typeset math',
       description:
-        'Draw mathematics written between dollar signs, or in a math code block, as typeset equations. When off, each expression shows as the text it was written in.',
+        'Draw mathematics written between dollar signs, or in a math code block, as typeset equations.',
       control: 'toggle',
       default: true,
     },
@@ -42,7 +42,7 @@ export const markdownProvider: PreviewProviderDescriptor = {
       leaf: 'loadRemoteImages',
       label: 'Load remote images',
       description:
-        'Show images a Markdown document links from the web over a secure connection, such as build badges. When off, each shows its alternative text instead and nothing is requested.',
+        'Show images a Markdown document links from the web over https. Off shows their alternative text.',
       control: 'toggle',
       default: true,
     },
@@ -52,7 +52,7 @@ export const markdownProvider: PreviewProviderDescriptor = {
       leaf: 'showFrontMatter',
       label: 'Show front matter',
       description:
-        'Show the block of metadata at the top of a Markdown document, such as its title and tags, as a table. When off, the block is not shown at all and the document begins after it.',
+        'Show the metadata block at the top of a Markdown document as a table. Off hides it.',
       control: 'toggle',
       default: true,
     },
@@ -62,7 +62,7 @@ export const markdownProvider: PreviewProviderDescriptor = {
       leaf: 'gutter',
       label: 'Preview gutter',
       description:
-        'Show a narrow gutter beside each heading in a Markdown preview, with a fold arrow. It is the only control that shows or hides the gutter; folding stays available from the menus and key bindings while it is off.',
+        'Show a gutter with a fold arrow beside each heading in a Markdown preview.',
       control: 'toggle',
       default: true,
     },
@@ -71,7 +71,7 @@ export const markdownProvider: PreviewProviderDescriptor = {
     {
       leaf: 'headingJumpMs',
       label: 'Heading jump scroll duration',
-      description: 'How long a jump to a heading in a Markdown preview takes to scroll into view. 0 jumps instantly.',
+      description: 'How long a Markdown preview takes to scroll to a heading you jump to. 0 jumps at once.',
       control: 'number',
       default: 200,
       // 077 FR-001, FR-012 — stored in ms, 0–1,500 ms.

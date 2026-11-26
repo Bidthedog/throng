@@ -44,6 +44,7 @@ import {
   displayOf,
   formatGrouped,
   groupRows,
+  helpUrl,
   isWithinRoot,
   markStale,
   orderGroups,
@@ -69,6 +70,8 @@ import { useNotify } from '../common/notification.js';
 import { Icon } from '../common/icon.js';
 import { BusyGlyph } from '../common/busy-glyph.js';
 import { IconButton } from '../common/icon-button.js';
+import { HelpLink } from '../common/help-link.js';
+import { effectiveHelpBase } from '../help/help-opener.js';
 import { RESULT_ROW_CLASS, ResultsList, resultRowHeightPx } from './results-list.js';
 import { commitReplace } from './commit-replace.js';
 import { findInFilesContentMenu } from './content-menu.js';
@@ -1070,6 +1073,13 @@ export function FindInFilesPanel({
           >
             <Icon token="collapseAll" />
           </button>
+          {/* 080 FR-017 — the options above (modes, excludes, grouping) open Search the whole project (FR-061). */}
+          <HelpLink
+            url={helpUrl({ page: 'finding', anchor: 'search-the-whole-project' }, { base: effectiveHelpBase() })}
+            label="Find in Files options"
+            testId={`help-link-fif-options-${panelId}`}
+            className="icon-button fif-btn"
+          />
         </div>
       </div>
 

@@ -2725,8 +2725,7 @@ textarea,
 .attention-popover,
 .notification-place-popover,
 .status-popover,
-.info-helper-popover,
-.monitor-help {
+.info-helper-popover {
   position: fixed;
   z-index: 1000;
   max-width: 360px;
@@ -3106,6 +3105,23 @@ textarea,
 .panel__action--icon {
   font-size: 15px;
   line-height: 1;
+}
+/* 080 — every (?) is one small size, wherever it sits and whatever button class the surface lends it (a
+   panel action, a Find in Files button). Element-qualified so it wins over those classes in any load order. */
+button.icon-button.help-link {
+  width: auto;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 2px;
+  font-size: 11px;
+  border-width: 1px;
+}
+/* 080 FR-055 — an `.icon` takes the theme's icon size (16px by default), so the button's own size alone leaves the
+   glyph as big as every other icon. The (?) glyph is sized here, smaller and still legible, whatever that setting. */
+button.icon-button.help-link .icon {
+  font-size: 12px;
+  width: 12px;
+  height: 12px;
 }
 .panel__action--neutral:hover {
   border-color: var(--text-dim);
@@ -4925,36 +4941,8 @@ canvas.status-popover__plot {
   cursor: pointer;
 }
 
-/*
- * The help panel (FR-093, FR-119): hangs under its button; placed by clampToViewport, so it is fixed to the
- * window. Its surface is the app's popover (grouped with `.attention-popover` above — no glow of its own);
- * this is only what differs: it takes the pointer and the focus, has a width, and scrolls if the window is short.
- */
-.monitor-help {
-  box-sizing: border-box;
-  width: 380px;
-  max-width: calc(100vw - 16px);
-  max-height: calc(100vh - 16px);
-  overflow: auto;
-  pointer-events: auto;
-}
-
-.monitor-help__disclaimer {
-  margin: 0 0 4px;
-  font-style: italic;
-}
-
-.monitor-help__heading {
-  margin: 8px 0 2px;
-  font-size: 12px;
-  font-weight: var(--throng-font-weight-bold);
-}
-
-.monitor-help p {
-  margin: 0 0 4px;
-}
-
-/* The "?" helpers (FR-119): the existing help glyph, small, beside what it explains; its words open in the popover style. */
+/* The "?" helpers (055 FR-119): the existing help glyph, small, beside what it explains. Print Preview's opens its words
+   in the popover style; the Resource Monitor's are help links to the guide (080 FR-046). */
 /* A helper's text keeps its line breaks: a list of placeholders reads one to a line. */
 .info-helper-popover {
   white-space: pre-line;

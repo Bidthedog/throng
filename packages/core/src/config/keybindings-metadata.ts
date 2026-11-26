@@ -33,19 +33,19 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'panel.zoomIn',
     'Focus & Zoom',
     'Zoom panel type in',
-    "Increase the text size of every panel of the active panel's type. Also reachable by holding Ctrl and scrolling up over a panel.",
+    'Increase the text size of every panel of the active panel\'s type.',
   ),
   chord(
     'panel.zoomOut',
     'Focus & Zoom',
     'Zoom panel type out',
-    "Decrease the text size of every panel of the active panel's type. Also reachable by holding Ctrl and scrolling down over a panel.",
+    'Decrease the text size of every panel of the active panel\'s type.',
   ),
   chord(
     'panel.zoomReset',
     'Focus & Zoom',
     'Reset panel type zoom',
-    "Return the active panel's type to its default text size. Also reachable by holding Ctrl and clicking a panel with the middle mouse button.",
+    'Return the active panel\'s type to its default text size.',
   ),
   // 048 FR-001/FR-020 — the four split commands, beside the other commands that act on the active
   // panel. Descriptions name no chord: a rebind would make them false.
@@ -78,7 +78,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'panel.destroy',
     'Focus & Zoom',
     'Destroy Panel',
-    'Destroy the focused panel, exactly as its Destroy menu item does — with the same confirmations and unsaved-changes guard. A preview is closed instead. Does nothing while focus is in a side pane.',
+    'Destroy the focused panel, as its Destroy menu item does. A preview closes instead.',
   ),
   // 054 FR-071 — beside Destroy Panel. In a terminal this chord no longer reaches the program; Shift+Enter
   // still sends a line break.
@@ -86,7 +86,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'panel.toggleMaximise',
     'Focus & Zoom',
     'Toggle Focus Mode',
-    "Focus Mode: let the focused panel fill its tab's middle section (Enter Focus Mode), or step back out of it one level at a time (Exit Focus Mode). While it is on, the panel's status bar says so, the tab's other panels are hidden, and the panel cannot be split, moved or destroyed. Also on each panel's header and menu.",
+    'Focus Mode: let the focused panel fill its tab\'s middle section, or step back out of it.',
   ),
   chord(
     'focus.left',
@@ -128,7 +128,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'focus.notice',
     'Focus & Zoom',
     'Focus the most recent notice',
-    'Move focus to the newest notice on screen so its list can be read and scrolled by keyboard. Does nothing when there is no notice.',
+    'Move focus to the newest notice on screen, so its list can be read and scrolled by keyboard.',
   ),
   // 046 iterate round 1 (FR-087) — beside every other `focus.*` command, rather than in `View` with
   // the pane toggles and the project-cycling pair: a user hunting for "jump focus somewhere" finds
@@ -151,7 +151,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'focus.workspace',
     'Focus & Zoom',
     'Focus Workspace',
-    'Move keyboard focus back to the active panel in the centre workspace, without switching tab, panel or project.',
+    'Move keyboard focus back to the active panel in the centre workspace.',
   ),
 
   // 057 (R15) — also the cog menu's "Go to Next Marked Panel" row, so the description names no chord.
@@ -159,7 +159,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'focus.nextMarkedPanel',
     'Navigate',
     'Go to next flagged panel',
-    'Focus the next panel marked as needing you, switching project if it is in another. Does nothing when no panel is marked.',
+    'Focus the next panel marked as needing you, switching project if it is in another.',
   ),
 
   // View
@@ -180,7 +180,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'view.resourceMonitor',
     'View',
     'Resource Monitor',
-    'Open the Resource Monitor: what throng and everything it started is using, by component, project, tab, panel and process.',
+    'Open the Resource Monitor: what throng and everything it started is using.',
   ),
   // 046 US2 (FR-015/019/020/022) — step the active project, or jump focus straight to a side pane,
   // from anywhere in the window.
@@ -205,13 +205,15 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
 
   // Application (070 FR-027, FR-024a) — the macOS app menu's commands, each rebindable here (Principle VI). All three
   // are macOS's only: Windows and Linux open Settings from the cog, and gain no Key Bindings row (FR-039).
+  // 080 FR-010 — the cog menu's Help row, from the keyboard.
+  chord('help.open', 'Application', 'Help', "Open the user guide's start page in throng's Help window."),
   { ...chord('app.settings', 'Application', 'Open Settings', 'Open Preferences at its Settings tab.'), onlyOn: 'macos' },
   {
     ...chord(
       'app.installCommandLine',
       'Application',
       "Install 'throng' command",
-      'Put the throng command on your PATH, so throng opens a folder from a terminal. macOS asks for an administrator’s approval when the folder needs it.',
+      'Put the throng command on your PATH, so throng opens a folder from a terminal.',
     ),
     onlyOn: 'macos',
   },
@@ -220,7 +222,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
       'app.uninstallCommandLine',
       'Application',
       "Uninstall 'throng' command",
-      'Take the throng command off your PATH. Only a command that points at throng is removed.',
+      'Take the throng command off your PATH. throng removes it only when it points at throng.',
     ),
     onlyOn: 'macos',
   },
@@ -231,13 +233,13 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'tabs.rename',
     'Tabs',
     'Rename tab',
-    'Start renaming the active tab from any panel, a terminal included. Focus returns to the panel afterwards.',
+    'Start renaming the active tab from any panel, a terminal included.',
   ),
   chord(
     'tabs.openPicker',
     'Tabs',
     'Open tab picker',
-    'Open a searchable list of every tab in the window and jump to the one you choose. Works at any tab count, not only when the strip overflows.',
+    'Open a searchable list of every tab in the window and jump to the one you choose.',
   ),
 
   /*
@@ -252,13 +254,13 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'navigate.quickOpen',
     'Navigate',
     'Quick Open',
-    'Open any file in the current project by typing part of its path. Works from an editor, a terminal or the file tree.',
+    'Open any file in the current project by typing part of its path.',
   ),
   chord(
     'navigate.gotoLine',
     'Navigate',
     'Go To Line',
-    'Jump to a line number in the focused editor. Live in an editor only, so a terminal keeps its own Ctrl+G.',
+    'Jump to a line number in the focused editor. Editors only.',
   ),
   // 044 (#10, #136). Navigate for the same reason as the two above: each one takes you somewhere —
   // to a file's rendering, back or forward through a panel's files, or to where a link points.
@@ -266,13 +268,13 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'preview.open',
     'Navigate',
     'Open Preview',
-    'Open a rendered preview of the focused editor’s file, or of the file selected in File Explorer. Unbound by default.',
+    'Open a rendered preview of the focused editor\'s file or the selected file. Unbound by default.',
   ),
   chord(
     'navigate.back',
     'Navigate',
     'Back',
-    'Show the previous file in the focused editor or preview’s history. In an editor this takes the key from moving by syntax.',
+    'Show the previous file in the focused editor or preview\'s history.',
   ),
   chord(
     'navigate.forward',
@@ -291,7 +293,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'preview.followLink',
     'Navigate',
     'Open Link',
-    'Open the link under the caret in an editor, or the focused link in a preview, exactly as Ctrl+click does. In an editor with no link under the caret it keeps the editor’s own meaning. Not live in a terminal, where Ctrl+Enter reaches the program.',
+    'Open the link under the caret in an editor, or the focused link in a preview.',
   ),
   // 047 (research R7) — opens the Go to Heading pop-down, preview-only. Shares Ctrl+G with
   // navigate.gotoLine on a disjoint scope, the same "no clash" story navigate.gotoLine already has
@@ -300,7 +302,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'preview.goToHeading',
     'Navigate',
     'Go to Heading, Page or Row…',
-    'Open a searchable list of the preview’s headings and jump to one; in a PDF preview, Go to Page; in a CSV or spreadsheet preview, Go to Row. Live in a preview only.',
+    'Jump to a heading in a preview; in a PDF, Go to Page; in a CSV or spreadsheet, Go to Row.',
   ),
   // 073 FR-038 — the CSV Preview Editor's insert commands, each also on its row or column menu.
   chord('grid.insertRowAbove', 'CSV grid', 'Insert Row Above', 'Insert an empty row above the active cell in the CSV Preview Editor.'),
@@ -312,7 +314,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'preview.print',
     'Navigate',
     'Print…',
-    'Open Print Preview for the active preview, to choose a printer and page settings and see the pages before printing. Live in a preview only.',
+    'Open Print Preview for the active preview. Previews only.',
   ),
 
   // File Explorer (resolved while the File Explorer pane has focus)
@@ -321,13 +323,13 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'file.undo',
     'File Explorer',
     'Undo file operation',
-    'Reverse the last move, rename, delete or replacing paste made in the file tree; a move between projects undoes from either project.',
+    'Reverse the last move, rename, delete or replacing paste made in the file tree.',
   ),
   chord(
     'file.redo',
     'File Explorer',
     'Redo file operation',
-    'Re-apply the last file operation that was undone.',
+    'Redo the last file operation you undid.',
   ),
   chord('file.cut', 'File Explorer', 'Cut', 'Cut the selected file or folder.'),
   chord('file.copy', 'File Explorer', 'Copy', 'Copy the selected file or folder.'),
@@ -342,7 +344,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'editor.print',
     'Editor',
     'Print…',
-    'Open Print Preview for the active editor\'s document, unsaved changes included, to choose a printer and page settings and see the pages before printing. Live in an editor only.',
+    'Open Print Preview for the active editor\'s document, unsaved changes included.',
   ),
 
   // Editor text editing (016). These are live only inside an editor, which is why `Cut line`
@@ -351,7 +353,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'editor.cutLine',
     'Editor',
     'Cut line',
-    'Cut the whole line the cursor sits on when nothing is selected, or just the selection when there is one.',
+    'Cut the selection, or the cursor\'s whole line when you have no selection.',
   ),
   chord(
     'editor.indentLines',
@@ -401,62 +403,62 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'preview.toggleSyncScroll',
     'Editor',
     'Synchronise Scrolling',
-    'Turn synchronised scrolling between editors and their previews on or off, everywhere. Live in an editor or a preview. Unbound by default.',
+    'Turn synchronised scrolling between editors and previews on or off, everywhere. Unbound by default.',
   ),
   // 059 FR-041 — the document's own format, in the menu items' own words (FR-040).
   chord(
     'editor.reopenWithEncoding',
     'Editor',
     'Reopen with Encoding…',
-    "Read the focused editor's file again in an encoding you choose, when it was detected wrongly. Unsaved changes are asked about first. Unbound by default.",
+    'Read the focused editor\'s file again in an encoding you choose. Unbound by default.',
   ),
   chord(
     'editor.changeEncoding',
     'Editor',
     'Change Encoding…',
-    "Choose the encoding the focused editor's document is saved in. The document is marked changed, and you can undo it; nothing is written until you save. Unbound by default.",
+    'Choose the encoding throng saves the focused editor\'s document in. Unbound by default.',
   ),
   chord(
     'editor.convertLineEndingsToCr',
     'Editor',
     'Convert to CR',
-    "Change every line ending in the focused editor's document to CR, as one step you can undo. Unbound by default.",
+    'Change every line ending in the focused editor to CR, as one undo step. Unbound by default.',
   ),
   chord(
     'editor.insertLineBreakLf',
     'Editor',
     'Insert Line Break (LF)',
-    "Start a new line ending in LF at the cursor, whatever the document's other lines end in. Unbound by default.",
+    'Start a new line ending in LF at the cursor, whatever the other lines end in. Unbound by default.',
   ),
   chord(
     'editor.insertLineBreakCr',
     'Editor',
     'Insert Line Break (CR)',
-    "Start a new line ending in CR at the cursor, whatever the document's other lines end in. Unbound by default.",
+    'Start a new line ending in CR at the cursor, whatever the other lines end in. Unbound by default.',
   ),
   chord(
     'editor.insertLineBreakCrlf',
     'Editor',
     'Insert Line Break (CRLF)',
-    "Start a new line ending in CRLF at the cursor, whatever the document's other lines end in. Unbound by default.",
+    'Start a new line ending in CRLF at the cursor, whatever the other lines end in. Unbound by default.',
   ),
   chord(
     'editor.toggleWhitespace',
     'Editor',
     'View Whitespace',
-    "Show or hide a symbol for every space, tab, line break and invisible character in the focused editor. Unbound by default.",
+    'Show or hide a symbol for every space, tab, line break and invisible character. Unbound by default.',
   ),
   chord(
     'editor.convertLineEndingsToLf',
     'Editor',
     'Convert to LF',
-    "Change every line ending in the focused editor's document to LF, as one step you can undo. Unbound by default.",
+    'Change every line ending in the focused editor to LF, as one undo step. Unbound by default.',
   ),
   chord(
     'editor.convertLineEndingsToCrlf',
     'Editor',
     'Convert to CRLF',
-    "Change every line ending in the focused editor's document to CRLF, as one step you can undo. Unbound by default.",
+    'Change every line ending in the focused editor to CRLF, as one undo step. Unbound by default.',
   ),
 
   // Markdown (047, research R5) — section folding, live in a Markdown editor and a preview, on the
@@ -473,7 +475,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'markdown.toggleAll',
     'Markdown',
     'Toggle all sections',
-    'Collapse every section if any is expanded, otherwise expand every section.',
+    'Collapse every section if any is open, otherwise expand them all.',
   ),
   chord(
     'markdown.collapseSection',
@@ -493,13 +495,13 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'markdown.collapseAllInside',
     'Markdown',
     'Collapse all inside this section',
-    'Collapse every section nested under the section containing the caret (editor) or the top of the view (preview), leaving that section itself open.',
+    'Collapse every section nested under the current one, leaving that section itself open.',
   ),
   chord(
     'markdown.expandAllInside',
     'Markdown',
     'Expand all inside this section',
-    'Expand the section containing the caret (editor) or the top of the view (preview), even when it is collapsed, and every section nested under it.',
+    'Expand the current section and every section nested under it.',
   ),
 
   // Search (013) — one shared find bar routed to the active panel. A terminal
@@ -591,18 +593,18 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'terminal.toggleRememberCommand',
     'Terminal',
     'Remember the last running command',
-    "Turn on or off whether the focused terminal saves the command running when it ends as its startup command. The terminal keeps running. Unbound by default.",
+    'Turn on or off whether the focused terminal saves its running command at exit. Unbound by default.',
   ),
   chord(
     'terminal.toggleRememberDirectory',
     'Terminal',
     'Reopen in the last directory',
-    "Turn on or off whether the focused terminal reopens in the folder it was last working in. Unbound by default.",
+    'Turn on or off whether the focused terminal reopens in its last folder. Unbound by default.',
   ),
   chord(
     'terminal.toggleNotifications',
     'Terminal',
     'Terminal notifications',
-    "Turn on or off whether the focused terminal can raise attention marks, pop-ups and desktop notifications. Unbound by default.",
+    'Turn on or off whether the focused terminal can raise marks and notifications. Unbound by default.',
   ),
 ];

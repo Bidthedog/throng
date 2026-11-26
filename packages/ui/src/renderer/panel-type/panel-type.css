@@ -30,6 +30,25 @@
   opacity: 0.85;
 }
 
+/* 080 FR-017 — a title and its (?) on one line, the (?) centred on the text. */
+.panel-type-form__field-title,
+.panel-type-form__help {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.panel-type-form__help {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+.panel-type-form__help-link {
+  flex: none;
+  align-self: center;
+  margin: 0;
+}
+
 .panel-type-form select,
 .panel-type-form input[type='text'] {
   padding: 6px 8px;

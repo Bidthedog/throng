@@ -2,18 +2,24 @@
 // bundles attached to releases. A deployment replaces the whole site, so every deployment brings the repositories, and
 // needs no signing key to do it.
 //
-//   node scripts/site.mjs assemble --out <dir>      what pages.yml deploys; needs `gh`, and fails on a missing bundle
-//   node scripts/site.mjs preview [--port <n>]      serves site/ locally, publishing nothing (FR-003); `npm run site:preview`
+//   node scripts/site.mjs assemble --out <dir> [--version <tag>]
+//                                                   what pages.yml deploys; needs `gh`, and fails on a missing bundle.
+//                                                   With --version (080 FR-002b) it builds the user guide too.
+//   node scripts/site.mjs latest-tag                the newest published release's tag: what pages.yml checks out
+//   node scripts/site.mjs preview [--port <n>]      builds site/ and the guide into a temp dir and serves it,
+//                                                   publishing nothing (FR-003); `npm run site:preview`
 //
 // Node built-ins only.
 import { spawnSync } from 'node:child_process';
-import { cpSync, createReadStream, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { REPO_SLUG, selectBundles } from './package-repo.mjs';
+import { buildGuide } from './guide-build.mjs';
+import { stampVersion } from './guide-template.mjs';
+import { REPO_SLUG, compareSemver, selectBundles } from './package-repo.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KEY_FILE = 'throng-repo-key.asc';
@@ -47,9 +53,28 @@ function layChannel(extracted, out, channel, version) {
   }
 }
 
+/**
+ * 080 FR-002b — the tag every deployment builds from: the newest published `v*` release, prereleases
+ * included (every release before 1.0.0 is one). Never a fallback to master: with nothing published the
+ * deployment fails and Pages keeps serving what it had.
+ */
+export function latestReleaseTag(releases) {
+  const published = releases
+    .filter((r) => !r.draft && /^v\d+\.\d+\.\d+/.test(r.tag_name))
+    .sort((a, b) => compareSemver(b.tag_name.slice(1), a.tag_name.slice(1)));
+  if (published.length === 0) throw new Error('no published release to build the site from');
+  return published[0].tag_name;
+}
+
+/**
+ * `version` (080 FR-002b) is stamped into the home page and every guide page; `guide` builds the user guide
+ * and both references into /guide/ (FR-002). A release from before the guide passes neither.
+ */
 export async function assembleSite({
   source = join(ROOT, 'site'),
   out,
+  version,
+  guide,
   listReleases = listReleasesFromGitHub,
   fetchBundle = fetchBundleFromGitHub,
 }) {
@@ -58,8 +83,15 @@ export async function assembleSite({
   }
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  cpSync(source, out, { recursive: true });
+  // site/guide/ is the guide's Markdown source: buildGuide renders it (and copies its images); never served raw.
+  cpSync(source, out, { recursive: true, filter: (path) => path !== join(source, 'guide') });
   writeFileSync(join(out, '.nojekyll'), '');
+  const home = readFileSync(join(source, 'index.html'), 'utf8');
+  if (version !== undefined) writeFileSync(join(out, 'index.html'), stampVersion(home, version));
+  if (guide !== undefined) {
+    if (version === undefined) throw new Error('the guide needs the version it describes');
+    await buildGuide({ ...guide, siteIndexHtml: home, out, version });
+  }
 
   const picked = selectBundles(await listReleases());
   const work = mkdtempSync(join(tmpdir(), 'throng-site-'));
@@ -131,19 +163,40 @@ function flag(argv, name) {
 
 async function main(argv) {
   const [command, ...rest] = argv;
+  if (command === 'latest-tag') {
+    console.log(latestReleaseTag(await listReleasesFromGitHub()));
+    return;
+  }
   if (command === 'assemble') {
     const out = flag(rest, '--out');
     if (!out) throw new Error('assemble needs --out <dir>');
-    await assembleSite({ out: resolve(out) });
+    // 080 FR-002b — pages.yml passes the release tag it checked out; the guide describes that release.
+    const tag = flag(rest, '--version');
+    const version = tag?.replace(/^v/, '');
+    const guide =
+      version !== undefined && existsSync(join(ROOT, 'site', 'guide'))
+        ? { guideSource: join(ROOT, 'site', 'guide'), docsSource: join(ROOT, 'docs'), repoRoot: ROOT, tag }
+        : undefined;
+    await assembleSite({ out: resolve(out), version, guide });
     return;
   }
   if (command === 'preview') {
     const port = Number(flag(rest, '--port') ?? 8080);
-    await serveStatic(join(ROOT, 'site'), port);
-    console.log(`[site] previewing site/ on http://127.0.0.1:${port}/ (no package indexes; Ctrl+C to stop)`);
+    const dir = mkdtempSync(join(tmpdir(), 'throng-site-preview-'));
+    await assembleSite({
+      out: dir,
+      version: 'dev',
+      guide: { guideSource: join(ROOT, 'site', 'guide'), docsSource: join(ROOT, 'docs'), repoRoot: ROOT, tag: 'master' },
+      listReleases: async () => [],
+    });
+    // Search needs Pagefind's index; it is built only when Pagefind is already installed, never fetched here.
+    const pagefind = spawnSync('npx', ['--no-install', 'pagefind', '--site', dir], { encoding: 'utf8' });
+    const search = pagefind.status === 0 ? 'search built' : 'no search: Pagefind is not installed (npm i -g pagefind)';
+    await serveStatic(dir, port);
+    console.log(`[site] previewing site/ and the guide on http://127.0.0.1:${port}/ (${search}; no package indexes; Ctrl+C to stop)`);
     return;
   }
-  throw new Error('usage: site.mjs assemble --out <dir> | site.mjs preview [--port <n>]');
+  throw new Error('usage: site.mjs assemble --out <dir> [--version <tag>] | site.mjs latest-tag | site.mjs preview [--port <n>]');
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

@@ -14,9 +14,12 @@ The four headline features are projects and workspaces, panels (drag-to-split, w
 ## Docs
 
 - [README](https://github.com/Bidthedog/throng/blob/master/README.md): what throng is and the full feature list
-- [Quick start](https://github.com/Bidthedog/throng/blob/master/docs/quick-start.md): a tour from first launch to a working project
-- [Key bindings](https://github.com/Bidthedog/throng/blob/master/docs/key-bindings.md): every default chord, all rebindable
-- [Preferences](https://github.com/Bidthedog/throng/blob/master/docs/preferences.md): every setting, themes and icon sets
+- [User guide](https://throng-ide.com/guide/): how to do each thing in throng, task by task
+- [Quick start](https://throng-ide.com/guide/quick-start/): a tour from first launch to a working project
+- [Key bindings](https://throng-ide.com/guide/reference/key-bindings/): every default chord, all rebindable
+- [Preferences](https://throng-ide.com/guide/reference/preferences/): every setting, themes and icon sets
+- [Theme settings](https://throng-ide.com/guide/reference/theme-settings/): every colour and font a theme sets
+- [Sitemap](https://throng-ide.com/sitemap/): every page on this site
 - [Architecture](https://github.com/Bidthedog/throng/blob/master/docs/architecture.md): the app, the background service and how they talk
 
 ## Optional

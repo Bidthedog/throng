@@ -45,19 +45,19 @@ export const spreadsheetProvider: PreviewProviderDescriptor = {
     'application/vnd.apple.numbers',
   ],
   enabledDescription:
-    'Offer previews of spreadsheet workbooks (.xlsx, .xlsm, .xlsb, .xls, .ods, .fods and .numbers). When off, every spreadsheet preview closes and their preview commands are shown disabled.',
+    'Offer previews of spreadsheet workbooks, such as .xlsx, .ods and .numbers. Off closes them.',
   settings: [
     {
       leaf: 'firstRowHeader',
       label: 'First row is a header',
-      description: "Show each sheet's first row in the column header strip instead of the column letters, with the data starting at its second row.",
+      description: 'Show each sheet\'s first row in the column header strip instead of the column letters.',
       control: 'toggle',
       default: false,
     },
     {
       leaf: 'maxPreviewBytes',
       label: 'Preview size limit',
-      description: 'The largest workbook a spreadsheet preview loads. A larger one shows a notice naming its size and this limit instead.',
+      description: 'The largest workbook a spreadsheet preview loads.',
       control: 'number',
       default: SPREADSHEET_SIZE_LIMIT_BYTES.shipped,
       min: SPREADSHEET_SIZE_LIMIT_BYTES.min,

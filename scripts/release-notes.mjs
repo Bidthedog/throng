@@ -10,9 +10,10 @@
 // unreviewed release ships.
 //
 //   node scripts/release-notes.mjs render --version <v> [--out <file>] [--artifacts <json>] [--gaps <json>] [--sha <commit>]
+//                                         [--guide-links]   refuse (exit 5) an Added or Changed entry with no guide link
 //
 // Exit codes: 0 rendered · 2 no section for that version (or no version given) · 3 the section is
-// empty · 4 unusable input.
+// empty · 4 unusable input · 5 an Added or Changed entry links no guide task (with --guide-links).
 //
 // It deliberately does NOT hash anything. 020 FR-042a requires each checksum to be computed as the
 // LAST step that reads an artifact's bytes, and that step is `scripts/checksum.mjs` at publish
@@ -20,7 +21,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { composeReleaseBody, lookupReleaseNotes } from '@throng/core';
+import { composeReleaseBody, guideLinkRefusals, lookupReleaseNotes } from '@throng/core';
 
 /** Read a `--flag value` pair out of argv, or `undefined`. */
 function flagValue(argv, name) {
@@ -71,6 +72,24 @@ export function runReleaseNotes({ argv, changelog, artifacts, commitSha, gaps = 
         `[release-notes] the CHANGELOG.md section for ${version} lists nothing. ` +
         `If that is deliberate, say so with the exact line: "- No user-visible changes in this release."`,
     };
+  }
+
+  // 080 FR-019 — the release being cut links each Added and Changed entry to the guide task that teaches it. Only the
+  // release asks (--guide-links): the nightly pipeline previews the body of a version already published, written
+  // before the rule.
+  if (rest.includes('--guide-links')) {
+    const refusals = guideLinkRefusals(lookup.found);
+    if (refusals.length > 0) {
+      return {
+        code: 5,
+        stdout: '',
+        stderr: [
+          `[release-notes] the CHANGELOG.md section for ${version} has entries that link no task of the user guide:`,
+          ...refusals.map((r) => `  ${r}`),
+          'Link each to the guide task that teaches it, or move it under ### Fixed if it changes nothing a user does.',
+        ].join('\n'),
+      };
+    }
   }
 
   return {

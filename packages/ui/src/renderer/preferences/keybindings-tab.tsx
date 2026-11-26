@@ -9,6 +9,7 @@ import {
   descriptorsForThisPlatform,
   filterFields,
   isBindingOverridden,
+  keyBindingHelpUrl,
   scopeNames,
   type ActionId,
   type FieldDescriptor,
@@ -17,11 +18,14 @@ import { useKeybindings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { debounce, writeConfig } from '../config/write-config.js';
 import { IconButton } from '../common/icon-button.js';
+import { HelpLink, helpUrlOrNone } from '../common/help-link.js';
+import { effectiveHelpBase } from '../help/help-opener.js';
 import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
 import { CaptureModal } from './capture-modal.js';
 import { foldKey, groupDescriptors } from './group-descriptors.js';
+import { useRevealRow, type RevealRequest } from './use-reveal-row.js';
 import { Subsection } from './subsection.js';
 import { FoldAllButtons, FoldHeading } from './fold-heading.js';
 import { useTabFolding } from './use-preference-folds.js';
@@ -66,8 +70,11 @@ const SEARCH_DEBOUNCE_MS = 150;
 
 export function KeybindingsTab({
   searchDebounceMs = SEARCH_DEBOUNCE_MS,
+  focusSection,
 }: {
   searchDebounceMs?: number;
+  /** 080 FR-064 — a binding (by action id) or a group to unfold and scroll to. */
+  focusSection?: RevealRequest;
 } = {}): ReactElement {
   const keybindings = useKeybindings();
   const entry = useOnEntry().keybindings;
@@ -117,6 +124,10 @@ export function KeybindingsTab({
     [applied, allGroups, matches],
   );
   const { folds, countOf } = useTabFolding('keybindings', query, applied, allGroups, groups);
+  useRevealRow(focusSection, platformKeybindings, allGroups, folds, {
+    row: (key) => `binding-${key}`,
+    group: (group) => `keybindings-group-${group}`,
+  });
 
   const writeBindings = (next: Record<string, string[]>): void => {
     void writeConfig(
@@ -273,6 +284,8 @@ export function KeybindingsTab({
                 title="Double-click to add a binding"
               >
                 <div className="settings-row__meta">
+                  {/* 080 FR-028 — the (?) beside the command's title, in the label line. */}
+                  <div className="settings-row__title">
                   <label className="settings-row__label">
                     {d.label}
                     {/**
@@ -292,6 +305,12 @@ export function KeybindingsTab({
                       ))}
                     </span>
                   </label>
+                  <HelpLink
+                    url={helpUrlOrNone(() => keyBindingHelpUrl(d.key, effectiveHelpBase()))}
+                    label={d.label}
+                    testId={`help-link-binding-${d.key}`}
+                  />
+                  </div>
                   <p className="settings-row__desc">{d.description}</p>
                 </div>
                 <div className="settings-row__control">

@@ -52,6 +52,7 @@ const aboutParam = search.get('about');
 // 075 — the Print Preview window, for the job main opened it with.
 const printJob = search.get('printPreview');
 const monitorParam = search.has('monitor');
+const helpParam = search.has('help');
 const identity = parseWindowIdentity(window.location.search);
 
 // The drain applies to EVERY window — that is the whole point of it (C22/C23).
@@ -84,6 +85,9 @@ function loadWindowApp(): Promise<ReactElement> {
   }
   if (monitorParam) return import('./resources/monitor-app.js').then(({ MonitorApp }) => <MonitorApp />);
   if (aboutParam !== null) return import('./about/about-app.js').then(({ AboutApp }) => <AboutApp />);
+  // 080 FR-048 — the Help window's title bar and toolbar; main draws the guide below them.
+  if (helpParam) return import('./help/help-app.js').then(({ HelpApp }) => <HelpApp />);
+  // 080 FR-063 — the prompt an external link shows before it opens.
   if (printJob !== null) {
     const jobId = printJob;
     return import('./print-preview/print-preview-app.js').then(({ PrintPreviewApp }) => <PrintPreviewApp jobId={jobId} />);

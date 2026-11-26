@@ -171,6 +171,7 @@ export {
   NO_USER_VISIBLE_CHANGES,
   RELEASE_BODY_MAX_LENGTH,
   composeReleaseBody,
+  guideLinkRefusals,
   lookupReleaseNotes,
 } from './config/release-notes.js';
 export type {
@@ -1735,3 +1736,5 @@ export {
   measureCalloutContrast,
 } from './config/callout-colours.js';
 export type { CalloutContrastResult } from './config/callout-colours.js';
+// 080 FR-004a, FR-009 — the user guide's map and help URLs.
+export * from './help/index.js';

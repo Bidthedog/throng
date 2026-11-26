@@ -90,8 +90,21 @@ export function installRendererRequestFilter(
  */
 export function guardNavigation(contents: NavigationGuardTarget): void {
   contents.on('will-navigate', (event) => {
+    if (EXEMPT.has(contents)) return;
     if (event.url !== contents.getURL()) event.preventDefault();
   });
+}
+
+/** Web contents whose navigation another, narrower rule decides (080 FR-050: the Help window's guide view). */
+const EXEMPT = new WeakSet<object>();
+
+/**
+ * 080 FR-050 — lift the guard for ONE web contents, the Help window's guide view, whose own `will-navigate` keeps
+ * it inside the shipped guide (`decideHelpNavigation`). Checked when each navigation happens, because the guard is
+ * installed when the contents is created, before its owner can name it.
+ */
+export function exemptFromNavigationGuard(contents: object): void {
+  EXEMPT.add(contents);
 }
 
 /**

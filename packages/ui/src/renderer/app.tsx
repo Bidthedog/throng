@@ -36,6 +36,8 @@ import { PasteProgressNotice } from './explorer/paste-progress-notice.js';
 import { DifferentCopyNotice } from './common/different-copy-notice.js';
 import { InstalledVersionNotice } from './common/installed-version-notice.js';
 import { CommandLineNotice } from './common/command-line-notice.js';
+import { LinkPromptHost } from './link-prompt/link-prompt-host.js';
+import { OpenExternalFailedNotice } from './common/open-external-failed-notice.js';
 import { IconSetBackupNotice } from './common/icon-set-backup-notice.js';
 import { ClashPrompt } from './explorer/clash-prompt.js';
 import { PasteQuitPrompt } from './explorer/paste-quit-prompt.js';
@@ -646,6 +648,9 @@ export function App(): ReactElement {
           <InstalledVersionNotice />
           {/* 070 FR-024a — the throng command's install, uninstall and start-up outcomes, main window only. */}
           <CommandLineNotice />
+          {/* 080 FR-011 — a link or Help the OS could not open in the browser. */}
+          <OpenExternalFailedNotice />
+        <LinkPromptHost />
           <IconSetBackupNotice />
           <ClashPrompt />
           <PasteQuitPrompt />

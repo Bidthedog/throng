@@ -26,8 +26,43 @@
  * `scripts/checksum.mjs` at publish time.
  */
 
+import { GUIDE_MAP, type GuideTask } from '../help/guide-map.js';
+import { HELP_BASE_URL, parseHelpUrl } from '../help/help-urls.js';
 import type { ReleaseArtifact } from './release-artifacts.js';
 import type { UnprovenGap } from './verification-verdict.js';
+
+/** The sections whose entries describe something a user can now do, or do differently (080 FR-019). */
+const GUIDED_SECTIONS = new Set(['added', 'changed']);
+
+/**
+ * 080 FR-019 (research R11) — one refusal per `### Added` or `### Changed` entry that links no task of the user
+ * guide, or links one the guide map does not have. Each names the entry by its first 60 characters. `### Fixed`,
+ * `### Removed`, `### Known issues` and the no-change declaration are exempt. Empty means the notes may ship.
+ */
+export function guideLinkRefusals(notes: ReleaseNotes, map: readonly GuideTask[] = GUIDE_MAP): string[] {
+  if (notes.isEmptyByDeclaration) return [];
+  const refusals: string[] = [];
+  for (const section of notes.sections) {
+    if (!GUIDED_SECTIONS.has(section.heading.trim().toLowerCase())) continue;
+    for (const entry of section.entries) {
+      const name = entry.slice(0, 60);
+      // A bare link to the guide's start page is prose, not a claim about a task: neither counted nor refused.
+      const links = [...entry.matchAll(/https?:\/\/[^\s)<>\]]+/g)]
+        .map((m) => m[0])
+        .filter((u) => u.startsWith(HELP_BASE_URL) && u !== HELP_BASE_URL);
+      if (links.length === 0) {
+        refusals.push(`${section.heading}: "${name}" links no task of the user guide (${HELP_BASE_URL}<page>/#<task>)`);
+        continue;
+      }
+      const unknown = links.filter((url) => {
+        const target = parseHelpUrl(url);
+        return target === null || !map.some((t) => t.page === target.page && t.anchor === target.anchor);
+      });
+      for (const url of unknown) refusals.push(`${section.heading}: "${name}" links ${url}, which is not a guide task`);
+    }
+  }
+  return refusals;
+}
 
 /** The exact line that declares a release deliberately has nothing user-visible in it (FR-009). */
 export const NO_USER_VISIBLE_CHANGES = 'No user-visible changes in this release.';

@@ -180,6 +180,24 @@ declare global {
       };
       /** 066 T026 — dev seam `THRONG_TEST_PANEL_THROW`: every panel body throws. Never true when packaged. */
       testPanelThrow?: boolean;
+      /** 080 FR-048 — open a guide URL in the one Help window. */
+      openHelp?: (url: string) => void;
+      /** 080 FR-051 — the Help window's toolbar. */
+      help?: {
+        back: () => void;
+        forward: () => void;
+        openInBrowser: () => void;
+        onCover?: (cb: (png: Uint8Array | null) => void) => () => void;
+        layout: (top: number) => void;
+        ready: () => void;
+        onState: (cb: (state: { title: string; canGoBack: boolean; canGoForward: boolean }) => void) => () => void;
+      };
+      /** 080 FR-063 — the external-link prompt window's bridge. */
+      /** 080 FR-070 — main asks this window to show the external-link prompt inline; it answers with the id. */
+      linkPrompt?: {
+        onAsk: (cb: (request: { id: number; url: string }) => void) => () => void;
+        answer: (id: number, reply: 'open' | 'cancel' | 'preferences') => void;
+      };
       about?: {
         open: () => void;
         // US4 (#139) — static identity only; the third-party list is fetched via getThirdParty().
@@ -204,6 +222,8 @@ declare global {
       };
       // 024 US7 (#159): open an http(s) URL in the system browser (hoisted top-level from `about`).
       openExternal?: (url: string) => void;
+      // 080 FR-011: an open the OS refused, reported back to the window that asked.
+      onOpenExternalFailed?: (cb: (failure: { url: string; reason: string }) => void) => () => void;
       // A window is told when the app-modal preferences window blurs/unblurs it (US10/FR-035).
       onWindowBlurred?: (cb: (blurred: boolean) => void) => () => void;
       // App-close warning when terminals are running (005 / FR-015).

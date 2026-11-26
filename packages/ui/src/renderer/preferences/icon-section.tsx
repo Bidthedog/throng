@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
+  descriptorForThemeToken,
+  themeTokenHelpUrl,
   DEFAULT_ICON_SET_NAME,
   ICON_KEYS,
   ICON_KEY_DESCRIPTIONS,
@@ -12,6 +14,8 @@ import {
 } from '@throng/core';
 import { ColourField } from '../common/colour-picker.js';
 import { IconButton } from '../common/icon-button.js';
+import { HelpLink, helpUrlOrNone } from '../common/help-link.js';
+import { effectiveHelpBase } from '../help/help-opener.js';
 import { ROW_ACTION_TOKENS } from './row-action-tokens.js';
 import { Icon } from '../common/icon.js';
 import { useConfigLoaded, useIconSets } from '../config/config-store.js';
@@ -78,6 +82,8 @@ export interface IconSectionProps {
   entryTheme?: Theme;
   shippedTheme?: Theme;
 }
+
+const ICON_COLOUR = 'colours.iconColour';
 
 export function IconSection({
   theme,
@@ -390,11 +396,16 @@ export function IconSection({
       {showPackRow ? (
         <div className="settings-row" data-testid="icon-colour-row">
           <div className="settings-row__meta">
-            <label className="settings-row__label">Icon colour</label>
-            <p className="settings-row__desc">
-              Leave it empty and every glyph takes the colour of whatever holds it — which is what
-              they have always done, so no theme changes until you set this.
-            </p>
+            {/* 080 FR-028 — the (?) beside the title, and the registry's one-line description. */}
+            <div className="settings-row__title">
+              <label className="settings-row__label">Icon colour</label>
+              <HelpLink
+                url={helpUrlOrNone(() => themeTokenHelpUrl(ICON_COLOUR, effectiveHelpBase()))}
+                label="Icon colour"
+                testId={`help-link-theme-${ICON_COLOUR}`}
+              />
+            </div>
+            <p className="settings-row__desc">{descriptorForThemeToken(ICON_COLOUR).description}</p>
           </div>
           <div className="settings-row__control">
             {/*

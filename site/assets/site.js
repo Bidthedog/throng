@@ -102,6 +102,65 @@
     shots.forEach(reveal);
   }
 
+  // 080 FR-053 — the guide's navigation scrolls on its own (FR-039), so on a page low in its list the open page's
+  // entry would sit out of sight. Scroll the navigation itself (never scrollIntoView, which would also move the page
+  // off the section a link asked for) so the entry is in view, near the middle.
+  var guideNav = document.querySelector('.guide-nav');
+  var here = guideNav && guideNav.querySelector('a[aria-current="page"]');
+  if (here && guideNav.scrollHeight > guideNav.clientHeight) {
+    var navBox = guideNav.getBoundingClientRect();
+    var hereBox = here.getBoundingClientRect();
+    if (hereBox.top < navBox.top || hereBox.bottom > navBox.bottom) {
+      guideNav.scrollTop += hereBox.top - navBox.top - (guideNav.clientHeight - hereBox.height) / 2;
+    }
+  }
+
+  // 080 FR-051 — in throng's Help window (the guide shipped with the app) the mouse's back and forward buttons step
+  // the guide's history, as they do in a browser. A browser already does this, so the website is left alone.
+  if (window.location.protocol === 'throng-help:') {
+    window.addEventListener('mouseup', function (e) {
+      if (e.button === 3) { e.preventDefault(); window.history.back(); }
+      else if (e.button === 4) { e.preventDefault(); window.history.forward(); }
+    });
+
+    // 080 FR-062 — the Help window has no status line, so a hovered link shows its address in one popover at the
+    // bottom left, with whether it stays in the guide. A browser draws its own, so the website is left alone.
+    var linkStatus = document.createElement('div');
+    linkStatus.className = 'link-status';
+    linkStatus.setAttribute('aria-hidden', 'true');
+    var linkKind = document.createElement('span');
+    linkKind.className = 'link-status__kind';
+    var linkAddress = document.createElement('span');
+    linkAddress.className = 'link-status__address';
+    linkStatus.appendChild(linkKind);
+    linkStatus.appendChild(linkAddress);
+    document.body.appendChild(linkStatus);
+    var linkOf = function (target) { return target && target.closest ? target.closest('a[href]') : null; };
+    // The Help window keeps only guide and sitemap pages (FR-050); a shipped link to any other page (the header's
+    // Home, Features, Install) opens the website in the browser, so it is external and shows the website's address.
+    var canonical = document.querySelector('link[rel="canonical"]');
+    var website = canonical ? new URL(canonical.href).origin : '';
+    var staysInGuide = function (link) {
+      return link.protocol === window.location.protocol && link.host === window.location.host &&
+        /^\/(guide|sitemap)\//.test(link.pathname);
+    };
+    document.addEventListener('pointerover', function (e) {
+      var link = linkOf(e.target);
+      if (!link) return;
+      var inGuide = staysInGuide(link);
+      linkKind.textContent = inGuide ? 'In the guide' : 'External';
+      linkStatus.classList.toggle('link-status--external', !inGuide);
+      linkAddress.textContent = inGuide
+        ? link.pathname + link.hash
+        : link.protocol === window.location.protocol ? website + link.pathname + link.search + link.hash : link.href;
+      linkStatus.classList.add('shown');
+    });
+    document.addEventListener('pointerout', function (e) {
+      var link = linkOf(e.target);
+      if (link && !link.contains(e.relatedTarget)) linkStatus.classList.remove('shown');
+    });
+  }
+
   // A screenshot opens full size in a modal; without script its link opens the image itself.
   var zooms = document.querySelectorAll('a.zoom');
   if (zooms.length && typeof HTMLDialogElement === 'function') {
@@ -162,4 +221,22 @@
       link.replaceWith(frame);
     });
   });
+
+  // The guide's search (080 FR-002c): Pagefind's static index, built at deploy time. Absent locally without
+  // Pagefind, in which case the field simply is not drawn.
+  var search = document.getElementById('search');
+  if (search && typeof window.PagefindUI === 'function') {
+    new window.PagefindUI({ element: '#search', showSubResults: true, showImages: false, resetStyles: false,
+      // FR-035: the clear control is drawn as an icon; its name is still read out.
+      translations: { clear_search: 'Clear search' } });
+    // The results panel hangs from the header's foot (080 FR-029), whose height changes when the header wraps.
+    var top = document.querySelector('header.top');
+    var measure = function () {
+      document.documentElement.style.setProperty('--header-h', top.getBoundingClientRect().height + 'px');
+    };
+    if (top) {
+      measure();
+      if (typeof window.ResizeObserver === 'function') new window.ResizeObserver(measure).observe(top);
+    }
+  }
 })();

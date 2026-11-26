@@ -7,12 +7,14 @@
  * and carries a title all the same. There is no narrowing (FR-100): the filter, the drill-down and the
  * ordering are the ways to find something.
  */
-import { useCallback, useRef, useState, type ReactElement } from 'react';
-import { allowedIntervals } from '@throng/core';
+import { useRef, type ReactElement } from 'react';
+import { allowedIntervals, helpUrl } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { writeConfigPatch } from '../config/write-config.js';
 import { FIGURE_ICON, FIGURE_LABEL, FIGURE_ORDER, type FigureId } from './figures.js';
-import { HelpButton, HelpPanel } from './help-panel.js';
+import { HelpLink } from '../common/help-link.js';
+import { effectiveHelpBase } from '../help/help-opener.js';
+import { MONITOR_HELP } from './helper-targets.js';
 import { InfoHelper } from './info-helper.js';
 import { setView, useNetworkUnavailable, useListView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
@@ -51,24 +53,18 @@ export function FilterField(): ReactElement {
 }
 
 /**
- * The general "?" and the panel it opens (FR-093, FR-119). It ends the window's FIRST row (FR-121), right-aligned,
- * rather than the toolbar's. Closing the panel from the keyboard, or by pressing the button again, hands focus back.
+ * The general "?" (080 FR-046): a help link opening *Find your way around the Resource Monitor* in the guide. It ends
+ * the window's FIRST row (055 FR-121), right-aligned, rather than the toolbar's. Supersedes 055 FR-093 and FR-119's
+ * help panel.
  */
-export function HelpControl(): ReactElement {
-  const [helpOpen, setHelpOpen] = useState(false);
-  const helpButton = useRef<HTMLButtonElement | null>(null);
-  const setHelpButton = useCallback((el: HTMLButtonElement | null): void => {
-    helpButton.current = el;
-  }, []);
-  const closeHelp = useCallback((returnFocus: boolean): void => {
-    setHelpOpen(false);
-    if (returnFocus) helpButton.current?.focus();
-  }, []);
+export function HelpControl(): ReactElement | null {
   return (
-    <>
-      <HelpButton open={helpOpen} onToggle={() => (helpOpen ? closeHelp(true) : setHelpOpen(true))} nodeRef={setHelpButton} />
-      {helpOpen ? <HelpPanel anchor={helpButton} onClose={closeHelp} /> : null}
-    </>
+    <HelpLink
+      url={helpUrl(MONITOR_HELP, { base: effectiveHelpBase() })}
+      label="Resource Monitor"
+      testId="monitor-help"
+      className="icon-button monitor-controls__button"
+    />
   );
 }
 

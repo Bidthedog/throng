@@ -83,12 +83,12 @@ function confirmDescriptor(key: string, label: string, description: string): Fie
  *
  * A type's Toast, Panel and OS switches share one row (057 FR-108, 068 FR-092), as three checkboxes
  * in any combination. There is no per-severity duration: one global toast duration
- * (`notifications.toastDurationMs`) governs every toast, and the Toast description says so.
+ * (`notifications.toastDurationMs`) governs every toast; its own description says what pauses it. Each type's
+ * consequence of being silenced lives in the preferences reference (080 FR-013).
  */
 function noticeDescriptors(
   severity: 'error' | 'warning' | 'info' | 'success' | 'attention',
   noun: string,
-  consequence: string,
 ): FieldDescriptor[] {
   // 057 FR-108: the three settings of one type share a line in Preferences.
   const row = { id: `notifications.${severity}`, label: noun };
@@ -108,10 +108,7 @@ function noticeDescriptors(
     {
       key: `notifications.${severity}.toast`,
       label: 'Toast',
-      description:
-        `Show ${noun.toLowerCase()} notices as a toast. Every toast leaves after the toast duration, unless the pointer is over it or focus is inside it. ` +
-        `With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it is shown nowhere in throng. ` +
-        `${consequence} Whatever these say, the event is still written to the log.`,
+      description: `Show ${noun.toLowerCase()} notices as a toast. Turn off both Toast and Panel and they appear nowhere.`,
       group: 'Notifications',
       row,
       control: 'toggle',
@@ -132,7 +129,7 @@ function noticeDescriptors(
       label: 'OS Notify',
       get description() {
         // 068 FR-065 (constitution v6.5.0): the OS is named generically.
-        return `Raise an OS notification for ${noun.toLowerCase()} notices, whatever Toast and Panel say — but only while throng is not focused. While it is focused, Toast and Panel decide. Unavailable while "Operating system notifications" is off, keeping its setting.`;
+        return `Send ${noun.toLowerCase()} notices to the OS while throng is not focused, whatever Toast and Panel say.`;
       },
       group: 'Notifications',
       row,
@@ -153,7 +150,7 @@ const MARKDOWN_SECTIONS_OPEN: FieldDescriptor = {
   key: 'editor.markdownSectionsOpen',
   label: 'Markdown sections open',
   description:
-    'How a Markdown document’s heading sections start out, in the editor and in a fresh preview: expanded, or collapsed. Collapse All / Expand All and per-section folding still work either way.',
+    'How a Markdown document\'s heading sections start out, in the editor and a fresh preview.',
   group: 'Editor',
   control: 'select',
   allowedValues: ['expanded', 'collapsed'],
@@ -169,7 +166,7 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     key: 'resourceMonitor.captureIntervalMs',
     label: 'Capture interval',
     description:
-      'How often throng measures its own CPU, memory, GPU and I/O, for the status bar and the Resource Monitor alike. A longer history needs a slower capture: when the history window chosen needs a slower one than this, the capture interval in force is shown beside it.',
+      'How often throng measures its own CPU, memory, GPU and I/O.',
     group: 'Resource Monitor',
     control: 'slider',
     // 077 FR-001 — stored in ms, shown in seconds.
@@ -190,7 +187,7 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     key: 'resourceMonitor.historyMs',
     label: 'History window',
     description:
-      'How much history the Resource Monitor keeps for each process while it is open. Nothing is kept once it closes.',
+      'How much history the Resource Monitor keeps for each process while it is open.',
     group: 'Resource Monitor',
     control: 'slider',
     // 077 FR-001 — stored in ms, shown in minutes.
@@ -205,7 +202,7 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     key: 'resourceMonitor.cpuWarningPercent',
     label: 'CPU warning',
     description:
-      'The share of the whole machine\'s CPU at which a figure is shown in the warning colour. Kept below the critical level.',
+      'The share of the machine\'s CPU at which a figure turns the warning colour.',
     group: 'Resource Monitor',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in percent.
@@ -218,7 +215,7 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
   {
     key: 'resourceMonitor.cpuCriticalPercent',
     label: 'CPU critical',
-    description: 'The share of the whole machine\'s CPU at which a figure is shown in the critical colour.',
+    description: 'The share of the machine\'s CPU at which a figure turns the critical colour.',
     group: 'Resource Monitor',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in percent.
@@ -232,7 +229,7 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     key: 'resourceMonitor.memoryWarningPercent',
     label: 'Memory warning',
     description:
-      'The share of installed memory at which a figure is shown in the warning colour. Kept below the critical level.',
+      'The share of installed memory at which a figure turns the warning colour.',
     group: 'Resource Monitor',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in percent.
@@ -245,7 +242,7 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
   {
     key: 'resourceMonitor.memoryCriticalPercent',
     label: 'Memory critical',
-    description: 'The share of installed memory at which a figure is shown in the critical colour.',
+    description: 'The share of installed memory at which a figure turns the critical colour.',
     group: 'Resource Monitor',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in percent.
@@ -259,7 +256,7 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     key: 'resourceMonitor.popoverDelayMs',
     label: 'Popup delay',
     description:
-      'How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits.',
+      'How long the pointer rests on the status bar usage figures before their popup opens.',
     group: 'Resource Monitor',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
@@ -276,7 +273,7 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     ...confirmDescriptor(
       'confirmations.killProcesses',
       'Kill processes',
-      'How many confirmations before the Resource Monitor force-ends a process (Kill Process) or everything running beneath a project, tab, panel or process (Kill All Below).',
+      'How many confirmations before the Resource Monitor force-ends a process or everything below it.',
     ),
     group: 'Resource Monitor',
   },
@@ -299,7 +296,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   confirmDescriptor(
     'confirmations.destroyProject',
     'Remove a project',
-    'How many confirmations before a project is removed (unregistered; no files are deleted).',
+    'How many times throng asks before it removes a project. It unregisters it and deletes no files.',
   ),
   // 046 FR-034a / FR-081 — what the plain Unload Project row does; the menu's second Unload row
   // does the other. FR-111 withdrew `confirmations.unloadProject`, which used to sit here: no Unload
@@ -309,7 +306,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'window.nativeWayland',
     label: 'Use native Wayland',
     description:
-      'Run the window directly on Wayland instead of through XWayland. Dragging a tab out, placing windows, and keeping Preferences and About above the main window work best through XWayland. Dragging files out of the File Explorer into GNOME Files works only on native Wayland. Takes effect the next time throng starts.',
+      'Run the window on Wayland itself instead of through XWayland. Applies at the next start.',
     group: 'General',
     subgroup: 'Window',
     control: 'toggle',
@@ -319,7 +316,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'panes.projects.maxWidth',
     label: 'Projects pane max width',
-    description: 'The widest the Projects sidebar pane can be dragged.',
+    description: 'The widest you can drag the Projects pane.',
     group: 'General',
     subgroup: 'Window',
     control: 'slider',
@@ -333,7 +330,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'panes.fileExplorer.maxWidth',
     label: 'File Explorer pane max width',
-    description: 'The widest the File Explorer pane can be dragged.',
+    description: 'The widest you can drag the File Explorer pane.',
     group: 'General',
     subgroup: 'Window',
     control: 'slider',
@@ -347,7 +344,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'projects.openFromOutside',
     label: 'Folder opened from outside throng',
-    description: 'What happens when a folder arrives from the OS file manager or the command line: switch to its project, or only load it.',
+    description: 'What a folder from the OS file manager or command line does: switch to its project, or load it.',
     group: 'General',
     subgroup: 'Projects',
     control: 'select',
@@ -359,7 +356,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'projects.popoverEnabled',
     label: 'Project popover',
     description:
-      'Show a popover when the pointer rests on a project in the Projects pane: its full name, its ID, its full path, its tab and panel counts, and how to rename it.',
+      'Show a popover with a project\'s name, ID, path and counts when the pointer rests on it.',
     group: 'General',
     subgroup: 'Projects',
     control: 'toggle',
@@ -369,7 +366,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'projects.popoverDelayMs',
     label: 'Project popover delay',
     description:
-      'How long the pointer must rest on a project before its popover appears. Zero shows it as soon as the pointer arrives.',
+      'How long the pointer must rest on a project before its popover appears. Zero shows it at once.',
     group: 'General',
     subgroup: 'Projects',
     control: 'slider',
@@ -386,7 +383,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'projects.unloadTerminalAction',
     label: 'Unload project: default terminal action',
     description:
-      'What the Unload Project menu item does to the project\'s terminals; the second Unload item in the same menu does the other. Keep terminals running leaves every terminal alive, to reattach when the project is next loaded; End terminals ends them all.',
+      'What Unload Project does to the project\'s terminals: keep them running, or end them all.',
     group: 'Confirmations',
     control: 'select',
     allowedValues: ['keepRunning', 'endTerminals'],
@@ -398,18 +395,26 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   confirmDescriptor(
     'confirmations.destroyTab',
     'Destroy a tab',
-    'How many confirmations before a tab (with its panels) is destroyed.',
+    'How many times throng asks before it destroys a tab and its panels.',
   ),
   confirmDescriptor(
     'confirmations.destroyPanel',
     'Destroy a panel',
-    'How many confirmations before a panel is destroyed.',
+    'How many times throng asks before it destroys a panel.',
   ),
   confirmDescriptor(
     'confirmations.destroySubWorkspace',
     'Destroy a sub-workspace',
-    'How many confirmations before a sub-workspace is destroyed.',
+    'How many times throng asks before it destroys a sub-workspace.',
   ),
+  {
+    // 080 FR-063 — one prompt before ANY external link reaches the OS, from every window and route.
+    key: 'confirmations.openExternalLink',
+    label: 'Ask before opening external links',
+    description: 'Show a link and ask before throng opens it in your browser or another app.',
+    group: 'Confirmations',
+    control: 'toggle',
+  },
   // 055 FR-063 — the Resource Monitor's own confirmation sits in its group (077 FR-022); its other actions reuse the
   // rows above.
 
@@ -443,7 +448,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.smoothScrollMs',
     label: 'Tab scroll animation',
     description:
-      'How long the tab strip takes to ease to a new position when it scrolls. Zero scrolls instantly — as does the system "reduce motion" setting, which overrides this without changing it.',
+      'How long the tab strip takes to ease to a new position. Zero jumps there at once.',
     group: 'Tabs',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
@@ -461,7 +466,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.closeArmingDelayMs',
     label: 'Tab close-button delay',
     description:
-      'How long the pointer must rest on a tab before its close button will act. The delay is what stops a click landing on a tab the pointer was only passing over.',
+      'How long the pointer must rest on a tab before its close button will act.',
     group: 'Tabs',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
@@ -478,7 +483,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.maxNameLength',
     label: 'Longest tab and panel name',
     description:
-      'The most characters a tab or panel name may use. Longer names are shortened for display, with the full name still shown on hover. One limit covers both, because they are the same name in the same strip.',
+      'The most characters a tab or panel name may have. throng shortens longer names on screen.',
     group: 'Tabs',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in characters.
@@ -494,7 +499,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.maxWidth',
     label: 'Widest tab',
     description:
-      'The widest a tab may be drawn, in characters. A longer title is ellipsised in the strip and shown in full on hover — the name itself is not shortened, which is what the name limit above does.',
+      'The widest a tab grows, in characters. A longer title ends in … and shows in full on hover.',
     group: 'Tabs',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in characters.
@@ -512,7 +517,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.newTabPosition',
     label: 'New tabs open',
     description:
-      'Where a tab created with + is inserted: immediately to the right of the active tab, or at the end of the strip.',
+      'Where a tab created with + goes: right of the active tab, or at the end of the strip.',
     group: 'Tabs',
     control: 'select',
     allowedValues: ['afterActive', 'end'],
@@ -522,7 +527,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.chevronRepeatDelayMs',
     label: 'Chevron repeat delay',
     description:
-      'How long a press-and-hold on a scroll chevron waits before the strip starts scrolling continuously. Releasing the pointer stops it immediately.',
+      'How long you hold a scroll chevron before the strip keeps scrolling.',
     group: 'Tabs',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
@@ -545,7 +550,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'tabs.popoverDelayMs',
     label: 'Tab popover delay',
     description:
-      'How long the pointer must rest on a tab before its information popover appears. Zero shows it as soon as the pointer arrives; a longer delay keeps it out of the way while you cross the strip.',
+      'How long the pointer must rest on a tab before its popover appears. Zero shows it at once.',
     group: 'Tabs',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
@@ -569,7 +574,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'behaviour.tabHoverActivateMs',
     label: 'Tab hover-activate delay',
     description:
-      'How long a panel or tab you are DRAGGING must dwell over another tab before that tab comes to the front. It is what lets you drop onto a tab that is not the one currently showing: hold the drag over that tab, wait, and it switches so you can drop inside it. An ordinary mouse-over does nothing — this delay applies only while a drag is in progress.',
+      'How long a dragged panel or tab must dwell over another tab before that tab comes to the front.',
     group: 'Tabs',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
@@ -609,7 +614,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.deleteMode',
     label: 'Delete files to',
     get description() {
-      return `Send deleted files to the OS ${trashTerm()}, or delete permanently.`;
+      return `Send deleted files to the OS ${trashTerm()}, or delete them for good.`;
     },
     group: 'File Explorer',
     control: 'select',
@@ -620,7 +625,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.replaceMode',
     label: 'When Paste replaces an item',
     get description() {
-      return `What happens to an item a paste or drag replaces: move it to the ${trashTerm()}, so undo can restore it, or delete it permanently.`;
+      return `What happens to an item a paste or drag replaces: moved to the ${trashTerm()} for undo, or deleted.`;
     },
     group: 'File Explorer',
     control: 'select',
@@ -634,7 +639,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.sortOrder',
     label: 'Sort names',
     description:
-      'How names are ordered within folders and within files: numbers by their value (file 2 before file 10), or character by character (file 10 before file 2).',
+      'How File Explorer orders names: numbers by value (file 2 before file 10), or character by character.',
     group: 'File Explorer',
     control: 'select',
     allowedValues: ['natural', 'characters'],
@@ -658,7 +663,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.autoRevealActiveFile',
     label: 'Follow the active editor',
     description:
-      "Automatically select the currently active editor's file in File Explorer, expanding its folders.",
+      "Select the active editor's file in File Explorer, opening its folders to show it.",
     group: 'File Explorer',
     control: 'toggle',
   },
@@ -666,7 +671,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.openUnsupportedInOs',
     label: 'Open unsupported files in the OS',
     description:
-      'Opening a file throng cannot open as text — by a double-click, Enter, Quick Open or a Ctrl+click on a link to it — opens it in your OS default program when its preview is off. Off, throng says it cannot open the file and how to.',
+      'Open a file throng cannot show as text in your OS default program, when its preview is off.',
     group: 'File Explorer',
     control: 'toggle',
   },
@@ -698,7 +703,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.popoverDelayMs',
     label: 'File Explorer popover delay',
     description:
-      'How long the pointer must rest on a file or folder before a popover shows its icon, larger, beside its path. Zero shows it as soon as the pointer arrives.',
+      'How long the pointer rests on a file or folder before its popover appears. Zero shows it at once.',
     group: 'File Explorer',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
@@ -772,7 +777,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.autoSave',
     label: 'Auto-save',
-    description: 'Write edits automatically after typing settles, without Ctrl+S.',
+    description: 'Save edits once you stop typing, without Ctrl+S.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -781,7 +786,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.saveDocumentScroll',
     label: 'Save Document Scroll Position',
     description:
-      'Remember each document’s scroll position: reopening a file in the same editor restores where you were, instead of starting at the top.',
+      'Remember each document\'s scroll position, so reopening a file returns to where you were.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -824,7 +829,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.fallbackEncoding',
     label: 'Fallback encoding',
     description:
-      'The code page a file is read in when it has no BOM and is not valid UTF-8 or UTF-16 (what other editors call ANSI).',
+      'The code page for a file with no BOM that is not valid UTF-8 or UTF-16 (what others call ANSI).',
     group: 'Editor',
     control: 'select',
     allowedValues: [...CODE_PAGE_IDS],
@@ -874,7 +879,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.projectPathDisplay',
     label: 'Project editor path display',
-    description: 'Show a project-owned editor pill as the full path or just the file name.',
+    description: 'Show a project editor\'s pill as the full path or the file name alone.',
     group: 'Editor',
     control: 'select',
     allowedValues: ['full', 'name'],
@@ -882,7 +887,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.subWorkspacePathDisplay',
     label: 'Sub-workspace editor path display',
-    description: 'Show a sub-workspace-owned editor pill as the full path or just the file name.',
+    description: 'Show a sub-workspace editor\'s pill as the full path or the file name alone.',
     group: 'Editor',
     control: 'select',
     allowedValues: ['full', 'name'],
@@ -898,7 +903,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.defaultWordWrap',
     label: 'Editor default word wrap',
     description:
-      'Wrap long lines by default in new editors. Toggle per editor from its status bar, its content menu, or the Toggle Word Wrap key binding.',
+      'Wrap long lines by default in new editors. Each editor can toggle it for itself.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -907,7 +912,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.defaultShowWhitespace',
     label: 'Editor default view whitespace',
     description:
-      'Show a symbol for every space, tab, line break and invisible character by default in new editors. Toggle per editor from its status bar, its content menu, or the View Whitespace key binding.',
+      'Show a symbol for every space, tab, line break and invisible character by default in new editors.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -916,7 +921,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.whitespaceHoverNames',
     label: 'Editor whitespace hover names',
     description:
-      'With View Whitespace on, resting the pointer on a marker for half a second names its character in a popover above the pointer, and the pointer becomes the help cursor. Off, neither.',
+      'With View Whitespace on, resting the pointer on a marker names its character in a popover.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -938,7 +943,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.showGutter',
     label: 'Show the editor gutter',
     description:
-      'Show the strip of line numbers down the left-hand side of every editor. Hiding it gives that width back to the document, which then starts at the panel’s left edge.',
+      'Show line numbers down the left of every editor. Hiding them gives the width back to the document.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -950,7 +955,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.highlightOccurrences',
     label: 'Highlight other occurrences of the selection',
     description:
-      'Softly tint every other instance of the text selected in an editor or a preview. The tint is a visual aid only: nothing else is selected.',
+      'Tint the other places the text you selected appears, in an editor or a preview.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -973,7 +978,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.showStatusBar',
     label: 'Show panel status bar',
     description:
-      'The bar along the bottom of editor and preview panels. Off hides all of it, whatever the two settings below say. Terminals have their own.',
+      'Off hides the bar in editor and preview panels, whatever the two below. Terminals have their own.',
     group: 'Editor',
     subgroup: 'Status Bar',
     control: 'toggle',
@@ -1032,7 +1037,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.detectInEditors',
     label: 'Detect links in editors',
     description:
-      'Show links in editor documents — paths throng recognises by their shape, web links, allowlisted protocol links, and hyperlinks a program declared. Off, none of them are shown, and Ctrl+click and Ctrl+Enter keep their ordinary editor meanings everywhere.',
+      'Show links in editor documents: detected paths, web links, protocol links and declared hyperlinks.',
     group: 'Editor',
     subgroup: 'Links',
     control: 'toggle',
@@ -1041,7 +1046,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.detectInTerminals',
     label: 'Detect links in terminals',
     description:
-      'Show links in terminal output — paths throng recognises by their shape, web links, allowlisted protocol links, and hyperlinks a program declared. Off, none of them are shown; Ctrl+click then does nothing where a link used to be.',
+      'Show links in terminal output: detected paths, web links, protocol links and declared hyperlinks.',
     group: 'Editor',
     subgroup: 'Links',
     control: 'toggle',
@@ -1063,7 +1068,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.existenceCheckTimeoutMs',
     label: 'Link resolution timeout',
     description:
-      'How long throng waits for a link to resolve when you follow it or open its Link menu — in total, however many places it looks. Raise it for a slow network share. It applies to the next check, with no restart.',
+      'How long to resolve a link you follow or its Link menu. Raise it for a slow network; no restart.',
     group: 'Editor',
     subgroup: 'Links',
     control: 'slider',
@@ -1079,7 +1084,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.protocolAllowlist',
     label: 'Allowed link protocols',
     description:
-      'URI schemes, besides web links, that are drawn as links and followed with their handler, in terminals and editors alike — for example mailto, tel or slack. Enter a name with or without its colon; case does not matter. Schemes that run code are never links, even if listed here.',
+      'URI schemes, besides web links, shown as links in terminals and editors, such as mailto or slack.',
     group: 'Editor',
     subgroup: 'Links',
     control: 'array',
@@ -1094,7 +1099,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.knownFileExtensions',
     label: 'File extensions that end a spaced path',
     description:
-      'File extensions that end a path containing spaces when it is not quoted, in terminals and editors alike. Add or remove entries; each is taken with or without its leading dot, and without case.',
+      'Extensions that end an unquoted path with spaces, in terminals and editors. Any case, dot optional.',
     group: 'Editor',
     subgroup: 'Links',
     control: 'array',
@@ -1108,7 +1113,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.navigation.quickOpenExcludeHidden',
     label: 'Quick Open hides excluded files',
     description:
-      'Leave the files this project hides out of Quick Open — both the excluded file patterns and anything you chose "Hide in this project" for. The modal has a control that shows them just for that search, without changing this.',
+      'Leave the files this project hides out of Quick Open.',
     group: 'Editor',
     subgroup: 'Navigation',
     control: 'toggle',
@@ -1128,7 +1133,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.navigation.rememberQuickOpenQuery',
     label: 'Remember the last Quick Open query',
     description:
-      'Reopen Quick Open with the last query that actually opened a file, selected so typing replaces it. A query you abandoned with Escape is not kept, nor is one from another project. Held for this session only — never written to disk.',
+      'Reopen Quick Open with the last query that opened a file, until throng closes.',
     group: 'Editor',
     subgroup: 'Navigation',
     control: 'toggle',
@@ -1137,7 +1142,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.navigation.rememberGotoLineNumber',
     label: 'Remember the last Go To Line number',
     description:
-      'Reopen Go To Line with the last line number you actually went to, selected so typing replaces it. Held for this session only — never written to disk.',
+      'Reopen Go To Line with the last line number you went to, until throng closes.',
     group: 'Editor',
     subgroup: 'Navigation',
     control: 'toggle',
@@ -1153,7 +1158,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.navigation.historySize',
     label: 'Navigation history size',
     description:
-      'How many files Back and Forward remember in each editor and preview panel. Older files drop off first, and lowering this trims every open panel at once — never the file it is showing.',
+      'How many files Back and Forward remember in each editor and preview panel.',
     group: 'Editor',
     subgroup: 'Navigation',
     control: 'slider',
@@ -1176,7 +1181,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.shellIntegration',
     label: 'Shell integration',
     description:
-      "Ask shells that cannot be observed from outside to report their working directory, so terminals reopen where you left them. PowerShell needs this: its `cd` never moves the process's real working directory. Installs a prompt function that defers to any prompt you already have — switch it off if it disagrees with a custom prompt.",
+      'Ask shells throng cannot watch from outside to report their working directory.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1187,7 +1192,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.reloadMode',
     label: 'Reload terminals when a project opens',
     description:
-      'Automatic reloads every terminal in every tab as soon as a project opens — today’s behaviour. Manual starts none of them: each terminal panel waits, showing a Reload action, so a project with many terminals costs nothing until you ask for the ones you want.',
+      'Whether a project\'s terminals start when it opens, or each waits for you to reload it.',
     group: 'Terminal',
     control: 'select',
     allowedValues: TERMINAL_RELOAD_MODES,
@@ -1199,7 +1204,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.defaultRememberCommand',
     label: 'Remember the last running command by default',
     description:
-      'Tick “Remember the last running command” on new terminal panels. When a terminal is closed while a command is running, that command is saved and runs again next time the panel opens. A running Claude Code session is remembered as a resume of that session, not as a fresh start. This ships off, and a panel you switch it on for keeps its own setting.',
+      'New terminals remember their running command; a Claude Code session as a resume of that session.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1207,7 +1212,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.defaultRememberDirectory',
     label: 'Reopen in the last directory by default',
     description:
-      'Tick “Reopen in the last directory” on new terminal panels, so a terminal comes back where you left it rather than at the project root. A remembered directory that has gone away falls back to the project root without complaint.',
+      'Tick “Reopen in the last directory” on new terminal panels.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1217,7 +1222,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.defaultNotifications',
     label: 'Terminal notifications by default',
     description:
-      'Tick “Terminal notifications” on new terminal panels, so a terminal can raise attention marks, pop-ups and desktop notifications. Off, a terminal that has not chosen for itself stays silent — terminals you already have included. Each terminal’s own toggle, on its status bar or in its menu, overrides this for that terminal. This ships on.',
+      'Tick “Terminal notifications” on new terminal panels.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1227,7 +1232,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.defaultRunAsAdmin',
     label: 'Run as administrator by default',
     description:
-      'Tick “Run as administrator” on new terminal panels. This only sets what the checkbox starts as — whether a terminal can be elevated at all still depends on throng itself running elevated, and turning this on never elevates anything on its own.',
+      'Tick “Run as administrator” on new terminal panels. The tick alone elevates nothing.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1237,21 +1242,21 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.macOptionIsMeta',
     label: 'Use Option as Meta',
     description:
-      'Make Option act as the Meta key in terminals, so shortcuts such as Option+B and Option+F reach programs that use Meta. Off, Option types the characters your keyboard layout puts on it, such as # or @.',
+      'Make Option act as the Meta key in terminals, so programs that use Meta receive it.',
     group: 'Terminal',
     control: 'toggle',
   },
   {
     key: 'terminals.formHistory.enabled',
     label: 'Remember terminal form values',
-    description: 'Offer Startup Command and Shell Arguments values used before, per terminal type. Off stops recording and offering them, and keeps what is already stored until cleared.',
+    description: 'Offer Startup Command and Shell Arguments values used before, per terminal type.',
     group: 'Terminal',
     control: 'toggle',
   },
   {
     key: 'terminals.formHistory.maxEntries',
     label: 'Terminal form values remembered',
-    description: 'How many values each field keeps per terminal type. Lowering this trims every list to its newest entries.',
+    description: 'How many values each field keeps per terminal type.',
     group: 'Terminal',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in count.
@@ -1269,7 +1274,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.commandPollMs',
     label: 'Command tracking interval',
     description:
-      'How often throng checks which command a terminal is running, while it has input or output. A quiet terminal is checked ten times less often. Lower notices a new command sooner; higher does less work. A command you start and leave running for longer than one interval is always remembered.',
+      'How often throng checks which command a busy terminal is running.',
     group: 'Terminal',
     // Bounded numerics render a slider in this app (018 FR-034), and the step must be at least 1%
     // of the range so the control can actually be aimed. 250ms-5s is also the range this knob is
@@ -1290,7 +1295,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.advertiseHyperlinks',
     label: 'Tell programs that links are supported',
     description:
-      'Start terminal programs with FORCE_HYPERLINK=1, so tools that can emit clickable links — Claude Code among them — do. This applies to terminals started afterwards and does not change one that is already running, because a program’s environment is fixed when it starts. A FORCE_HYPERLINK you have set yourself is never overridden, in either direction. Turning this off does not stop throng recognising paths a program prints as plain text.',
+      'New terminals get FORCE_HYPERLINK=1 unless you set it. Terminals already running are not changed.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1300,7 +1305,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.titleTemplate',
     label: 'Terminal title template',
     description:
-      'What a terminal panel is named; its icon is always shown. {command} the running command · {app} its program · {arch} its architecture · {title} the title it set · {shell} the terminal type · {path} the directory · {folder} its last folder · {project} the project · {admin} Admin when elevated. Text shows as typed; (( )) {{ }} show a bracket or brace. ( … ), or a placeholder followed by an operator, is a C# expression: "strings" with placeholders inside, c ? a : b, a ?? b, a || b, a && b, !a. A value is true when not empty. The default shows claude: work on links | Git Bash (D:\\git\\throng), ping localhost -t | Git Bash (D:\\git\\throng) or Git Bash (D:\\git\\throng).',
+      'The name of a terminal panel, built from placeholders such as {command}, {shell} and {path}.',
     group: 'Terminal',
     control: 'text',
     validate: validateTitleTemplate,
@@ -1311,7 +1316,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.titleCommandMaxLength',
     label: 'Longest command in a terminal title',
     description:
-      'How many characters of the running command a terminal panel’s name shows before it is cut short with an ellipsis.',
+      'How many characters of the running command a terminal panel\'s name shows.',
     group: 'Terminal',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in characters.
@@ -1325,7 +1330,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.titlePathMaxLength',
     label: 'Longest directory in a terminal title',
     description:
-      'How many characters of the working directory a terminal panel’s name shows. A longer one keeps its drive and last folder and drops folders from the middle.',
+      'How many characters of the working directory a terminal panel\'s name shows.',
     group: 'Terminal',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in characters.
@@ -1342,7 +1347,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.enabled',
     label: 'Mark terminals that need you',
     description:
-      'Raise an attention mark on a terminal panel when something happens in it that you may want to look at. Off, no terminal raises a mark and every existing terminal mark is withdrawn. The switches below choose which events count.',
+      'Raise an attention mark on a terminal panel when something happens in it that you may want to see.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1351,7 +1356,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.processExited',
     label: 'Program exited',
     description:
-      'Mark a terminal whose program ended without you ending it. A zero exit code raises the Attention mark, anything else the Failed mark. Exact: throng is told when the process exits.',
+      'Mark a terminal whose program ended without you ending it.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1361,7 +1366,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.commandFinished',
     label: 'Command finished',
     description:
-      'Mark a terminal when its foreground command ends and nothing replaces it. Always the Attention mark: the exit code is not known. Exact, but up to two Command tracking intervals late, because throng notices by watching the foreground command and waits for a second check that still finds nothing running, so the pause between two commands of a loop is not a finish; a command that starts and ends between two checks can be missed.',
+      'Mark a terminal when its foreground command ends, up to two Command tracking intervals late.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1381,7 +1386,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.notification',
     label: 'Program notification',
     description:
-      'Mark a terminal when a program sends a desktop notification request through the terminal. Exact: the program asked for it.',
+      'Mark a terminal when a program sends a desktop notification request through it.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1391,7 +1396,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.progressEnded',
     label: 'Progress ended',
     description:
-      'Mark a terminal when a program reports that the progress it was showing completed (Attention mark) or failed (Failed mark). Exact: the program reported it.',
+      'Mark a terminal when a program reports that its progress completed or failed.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1401,7 +1406,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.unseenOutput',
     label: 'Unseen output',
     description:
-      'Mark a terminal that prints output while it is not the focused panel. A heuristic: it means the terminal changed, not that it needs you.',
+      'Mark a terminal that prints output while it is not the focused panel.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1411,7 +1416,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.outputQuiet',
     label: 'Output went quiet',
     description:
-      'Mark a terminal whose output stops for the quiet time below, after it printed while not focused. A heuristic: throng cannot tell a program that is waiting from one that is working silently.',
+      'Mark a terminal whose output stops for the quiet time below, after it printed while not focused.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1445,7 +1450,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'attention.taskbarBadge',
     label: 'Taskbar badge',
     description:
-      'Show the number of marked panels, across every project, on throng’s taskbar button, whether or not throng is focused. It uses the Failed style while any marked panel is Failed, and is not affected by the notification settings.',
+      'Show the number of marked panels, across every project, on throng\'s taskbar button.',
     group: 'General',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1458,7 +1463,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.indent.style',
     label: 'Indent with',
     description:
-      'What a new indent inserts, unless the file already indents differently or its language says otherwise.',
+      'What a new indent inserts, unless the file or its language says otherwise.',
     group: 'Editor',
     subgroup: 'Indentation',
     control: 'select',
@@ -1486,7 +1491,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.indent.tabWidth',
     label: 'Tab width',
     description:
-      'How many columns a literal tab occupies on screen. Display only — it never changes the file’s contents.',
+      'How many columns a tab character takes on screen. The file stays as it is.',
     group: 'Editor',
     subgroup: 'Indentation',
     control: 'slider',
@@ -1502,7 +1507,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.indentByLanguage',
     label: 'Indentation by language',
     description:
-      'Per-language indentation. A file that already indents differently still wins — this decides what a new indent inserts.',
+      'Indentation for new indents, by language. A file that already indents its own way keeps it.',
     group: 'Editor',
     subgroup: 'Indentation',
     control: 'map',
@@ -1537,7 +1542,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.persistUndoHistory',
     label: 'Keep undo history after a crash',
     description:
-      'Restore the undo history along with unsaved changes when the app is reopened after a crash. Removed text lives in the recovery file until then.',
+      'Restore the undo history along with unsaved changes when throng reopens after a crash.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -1547,7 +1552,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'newProject.startingFolder',
     label: 'New project folder starts at',
     description:
-      'Where the new-project folder picker opens: your user profile, the last folder you chose, or a fixed override.',
+      'Where the new-project folder picker opens: your user profile, the last folder, or an override.',
     group: 'New Project',
     control: 'select',
     allowedValues: ['profile', 'lastViewed', 'override'],
@@ -1556,7 +1561,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'newProject.overridePath',
     label: 'Override start folder',
     description:
-      'The fixed folder the new-project picker opens at when "Override" is selected. Type a path or browse to pick one.',
+      'The folder the new-project picker opens at when you choose Override.',
     group: 'New Project',
     control: 'folder',
     clearable: true, // empty = no override; the picker falls back to last-viewed, then the profile
@@ -1604,7 +1609,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.openTarget',
     label: 'Find in Files results open in',
     description:
-      'Whether a new search reuses the Find in Files panel that ran the last one, or opens a fresh panel each time and leaves the earlier results where they are.',
+      'Whether a new search reuses the last Find in Files panel, or opens a fresh panel each time.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'select',
@@ -1621,7 +1626,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.trigger',
     label: 'Find in Files searches',
     description:
-      'Whether a Find in Files search waits for you to press Run, or starts on its own once you stop typing. Running on its own searches the whole project, so it costs more than the find bar does.',
+      'Whether a Find in Files search waits for Run, or starts on its own once you stop typing.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'select',
@@ -1651,7 +1656,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.settleMs',
     label: 'Find in Files delay',
     description:
-      'How long Find in Files waits after you stop typing before it starts searching, when it is set to search as you type.',
+      'How long Find in Files waits after you stop typing before it searches, when searching as you type.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'slider',
@@ -1668,7 +1673,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.defaultGrouping',
     label: 'Find in Files groups results by',
     description:
-      'How Find in Files panels arrange their rows. Choosing a grouping in a panel changes this setting, and every open panel follows it.',
+      'How Find in Files panels arrange their rows. Every open panel follows it.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'select',
@@ -1684,7 +1689,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.showResults',
     label: 'Show results',
     description:
-      'Whether Find in Files shows its result headings collapsed or expanded. The panel’s collapse toggle changes this setting too.',
+      'Whether Find in Files shows its result headings collapsed or expanded.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'select',
@@ -1702,7 +1707,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.excludeGlobs',
     label: 'Excluded from search',
     description:
-      'Glob patterns Find in Files skips. Separate from the File Explorer’s excluded globs, which only decide what the tree shows. A panel’s exclusions toggle switches this list off for that panel.',
+      'Glob patterns Find in Files skips, separate from the File Explorer\'s excluded globs.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'array',
@@ -1713,7 +1718,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.useExcludeGlobs',
     label: 'New panels use the exclusions',
     description:
-      'Whether a new Find in Files panel starts with its exclusions toggle on, applying the list above. Each panel can switch it for itself.',
+      'Whether a new Find in Files panel starts with its exclusions toggle on.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'toggle',
@@ -1722,7 +1727,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.warnIrreversibleCommit',
     label: 'Ask before a replace that cannot be undone',
     description:
-      'Whether Find in Files confirms before writing replacements it has no way to take back, such as into files that are not open in an editor.',
+      'Confirm before Find in Files writes replacements it cannot take back.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'toggle',
@@ -1749,7 +1754,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.summaryNoticeMode',
     label: 'Replace summary notices',
     description:
-      'Whether the notice reporting what a Find in Files replace changed is never shown, shown as a toast only, or shown as a toast and kept in the Notifications panel until you dismiss it. This governs the notice whether the replace succeeded, partly succeeded or failed, and it is used instead of the notification settings for that severity. Whatever this says, the outcome is still written to the log.',
+      'Where throng reports a Find in Files replace: nowhere, as a toast, or in the panel.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'select',
@@ -1780,7 +1785,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.os',
     label: 'Operating system notifications',
     description:
-      'Allow throng to send OS notifications at all. Off, nothing reaches the OS and every OS Notify is unavailable, though each keeps its setting.',
+      'Allow throng to send OS notifications at all.',
     group: 'Notifications',
     control: 'toggle',
   },
@@ -1789,7 +1794,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.toastDurationMs',
     label: 'Toast duration',
     description:
-      'How long every toast stays on screen. A toast stays while the pointer is over it or keyboard focus is inside it, and leaves the full duration after both have gone. A notice kept in the Notifications panel stays there until you dismiss it.',
+      'How long a toast stays, paused while the pointer is over it or keyboard focus is inside it.',
     group: 'Notifications',
     // Bounded numeric, so a slider (018). The 500 ms step is at least 1% of the 29000 range (FR-091), divides
     // it exactly so the maximum is reachable, and lands on the shipped 3000. It constrains DRAGGING
@@ -1807,7 +1812,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.toastWidthPx',
     label: 'Toast width',
     description:
-      'How wide every toast is. A toast is never wider than half the window, and shows at most three lines of text: a longer one is cut off with an ellipsis, and hovering it shows all of its text. The Notifications panel always shows a notification whole.',
+      'How wide every toast is, never more than half the window.',
     group: 'Notifications',
     // Bounded numeric, so a slider (018). The 10 px step is at least 1% of the 500 range (5, FR-090), divides it exactly so
     // the maximum is reachable, and lands on the shipped 520. It constrains DRAGGING only: the field beside it takes any
@@ -1828,7 +1833,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.hoverDelayMs',
     label: 'Notification hover delay',
     description:
-      'How long the pointer must rest on a notification before it shows more: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. Zero shows it as soon as the pointer arrives; a longer delay keeps the notifications still while you move the pointer across them. Keyboard focus never waits.',
+      'How long the pointer must rest on a notification before it shows its whole text.',
     group: 'Notifications',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in ms.
@@ -1845,7 +1850,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.confirmDismissAll',
     label: 'Confirm before dismissing all notifications',
     description:
-      'Ask for confirmation before Dismiss all clears every notification in the Notifications panel. Attention marks are never cleared by it.',
+      'Ask for confirmation before Dismiss all clears every notification in the Notifications panel.',
     group: 'Notifications',
     control: 'toggle',
   },
@@ -1854,7 +1859,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.panelLimit',
     label: 'Notifications panel limit',
     description:
-      'The most notifications the Notifications panel keeps. Past the limit the oldest are dropped and you are warned once that unattended notifications can affect performance.',
+      'The most notifications the panel keeps. Past it, throng drops the oldest and warns once.',
     group: 'Notifications',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in count.
@@ -1865,35 +1870,19 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     max: PANEL_LIMIT_MAX,
     step: 10,
   },
-  ...noticeDescriptors(
-    'error',
-    'Error',
-    'Turning errors off means a failed operation reports nothing on screen.',
-  ),
-  ...noticeDescriptors(
-    'warning',
-    'Warning',
-    'Turning warnings off means a partly-failed operation reports nothing on screen.',
-  ),
-  ...noticeDescriptors('info', 'Information', 'These are ordinary progress and status messages.'),
-  ...noticeDescriptors(
-    'success',
-    'Success',
-    'These confirm an operation that worked, so they are the ones most worth switching off.',
-  ),
+  ...noticeDescriptors('error', 'Error'),
+  ...noticeDescriptors('warning', 'Warning'),
+  ...noticeDescriptors('info', 'Information'),
+  ...noticeDescriptors('success', 'Success'),
   // 057 FR-111: one type for both kinds of attention mark; a Failed mark keeps the Error colour and icon.
-  ...noticeDescriptors(
-    'attention',
-    'Attention',
-    'These announce a terminal that needs you, Attention and Failed marks alike. The mark itself is raised whatever you choose.',
-  ),
+  ...noticeDescriptors('attention', 'Attention'),
   {
     // 057 FR-095 — how a raised mark clears. 077 FR-021 (maintainer, 2026-11-21): under Notifications, beside the
     // Attention row that announces the mark, superseding 057 FR-108's and 069 FR-068's place for it under General.
     key: 'attention.clearDelayMs',
     label: 'Clear delay',
     description:
-      'How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
+      'How long keyboard focus must stay in a marked panel before its mark clears.',
     group: 'Notifications',
     subgroup: 'Attention',
     control: 'slider',
@@ -1913,7 +1902,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'diagnostics.logLevel',
     label: 'Log detail',
     description:
-      'How much throng records in its log files. Raise this to debug before reproducing a problem, then send the logs with your report. Logs never leave this machine.',
+      'How much throng records in its log files. Logs never leave this machine.',
     group: 'Logging',
     control: 'select',
     allowedValues: [...LOG_LEVELS],
@@ -1922,7 +1911,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'diagnostics.maxFileBytes',
     label: 'Log file size',
     description:
-      'How large a single log file may grow before throng starts a new one. Older files are kept for the days set below, up to the folder limit.',
+      'How large a single log file may grow before throng starts a new one.',
     group: 'Logging',
     control: 'slider',
     // 077 FR-001 — stored in bytes, shown in MB, a quarter of a megabyte a step.
@@ -1952,7 +1941,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'diagnostics.keepDays',
     label: 'Days of logs kept',
     description:
-      'How many days of logs to keep, counting only days throng was running. Older logs are deleted.',
+      'How many days of logs to keep, counting days throng ran. throng deletes older logs.',
     group: 'Logging',
     control: 'slider',
     // 077 — a COUNT of the days throng ran (066 FR-019), not a span of time, so it stays a count.
@@ -1968,7 +1957,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'diagnostics.maxTotalBytes',
     label: 'Log folder limit',
     description:
-      'The most space all of throng’s logs may take. When the folder grows past it, the oldest logs are deleted first.',
+      'The most space throng\'s logs may take. throng deletes the oldest first.',
     group: 'Logging',
     control: 'slider',
     // Steps of 50 MB: the slider guard wants a step of at least 1% of the range. 077 FR-001 — stored in bytes.

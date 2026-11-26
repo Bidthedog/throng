@@ -56,6 +56,7 @@ import {
   parseLaunchFolder,
   providersTurnedOff,
   validateIconSetName,
+  websiteRootFor,
 } from '@throng/core';
 import type {
   DifferentCopyNotice,
@@ -134,6 +135,10 @@ import { readUiSettings } from './ui-settings.js';
 import { installCrashHandlers, startUiDiagnostics, watchWindowHealth } from './diagnostics.js';
 import { forwardRendererConsole, registerDiagnosticsLogIpc } from './diagnostics-ipc.js';
 import { testPanelThrowEnabled } from './test-panel-throw-seam.js';
+import { HELP_SCHEME } from './help-protocol.js';
+import { closeHelpWindow, coverHelpGuide, openHelpWindow, type HelpWindowDeps } from './help-window.js';
+import { withExternalLinkPrompt } from './external-link-prompt.js';
+import { askToOpenLink, focusLinkPrompt, registerLinkPromptIpc, type LinkPromptDeps } from './link-prompt.js';
 import { registerNoticeLogIpc } from './notice-log.js';
 import { registerRendererDebugLogIpc } from './renderer-debug-log.js';
 import {
@@ -654,6 +659,13 @@ protocol.registerSchemesAsPrivileged([
   {
     scheme: PREVIEW_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: false, stream: true },
+  },
+  // 080 FR-049, FR-050 — the guide shipped with the app, read-only, handled only on the Help window's own session
+  // (`help-window.ts`). `supportFetchAPI` because the guide's search (Pagefind) fetches its index and WebAssembly;
+  // no `bypassCSP`: every response carries the guide's own policy, which allows nothing remote.
+  {
+    scheme: HELP_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true },
   },
 ]);
 
@@ -1240,6 +1252,7 @@ if (isPrimaryInstance)
   });
   ipcMain.on('throng:theme:bootstrap', (event) => {
     // 066 T026: the panel-throw dev seam rides on this one synchronous ask rather than adding its own.
+    // 080 FR-009: so does the help base URL override.
     event.returnValue = { ...themeBootstrap(currentTheme), testPanelThrow: testPanelThrow };
   });
   // The window `backgroundColor` shown before the web contents paint must also match
@@ -1466,7 +1479,30 @@ if (isPrimaryInstance)
   // behind file-explorer reveal/open (FR-035) — built early because Preferences, About and the drag
   // ghost all need it below, well before FilesService (which also takes it) is built further down.
   // FR-038 / D4: built by the factory, so an elevated app reveals and opens as the interactive user.
-  const shellIntegration = createAppShellIntegration(shell);
+  const baseShellIntegration = createAppShellIntegration(shell);
+  // 080 FR-063 — every external link, from every window and route, reaches the OS through `openExternal` on this
+  // seam, so wrapping it here once makes each of them ask first while the setting is on. Every consumer below
+  // takes the wrapped seam. The prompt is drawn inline in the window the link was followed in (FR-070).
+  const linkPromptDeps: LinkPromptDeps = {
+    getMainWindow: currentMainWindow,
+    cover: coverHelpGuide,
+    // Read at click time, by which point `preferencesDeps` below exists.
+    openPreferences: () => {
+      openPreferences('settings', preferencesDeps, 'confirmations.openExternalLink'); // 080 FR-064 — the row itself
+    },
+  };
+  registerLinkPromptIpc(ipcMain, linkPromptDeps);
+  const shellIntegration = withExternalLinkPrompt(baseShellIntegration, {
+    // `THRONG_E2E_LINK_PROMPT=off` is the E2E harness's seam (as `THRONG_E2E_CLIPBOARD` is): its link specs
+    // count the opens they make. A spec that tests the prompt leaves it unset.
+    enabled: () => currentSettings.confirmations.openExternalLink && process.env.THRONG_E2E_LINK_PROMPT !== 'off',
+    ask: (url) => askToOpenLink(linkPromptDeps, url),
+    focusPrompt: focusLinkPrompt,
+    // The click on Open is the user's action now, so the foreground hand-on is made again for it (044 FR-119).
+    onOpen: () => {
+      container.get<IForegroundHandoff>(UI_TYPES.ForegroundHandoff).allow();
+    },
+  });
 
   // 069: the icon-set handlers. A change re-reads the config and broadcasts it, because the sets ride
   // that payload and the cached sets changed without any file the config watcher reads changing.
@@ -1567,6 +1603,21 @@ if (isPrimaryInstance)
     // 070 FR-026: About is close-only, so on macOS only its close light is live.
     chrome: () => secondaryWindowChrome(platform.windowChrome(), hostTraits().os, { maximise: false }),
   };
+  // 080 FR-048 — the one Help window: F1, the cog menu's Help and every (?) send a guide URL here.
+  const helpDeps: HelpWindowDeps = {
+    indexHtml: resolveFromHere('../renderer/index.html'),
+    preloadPath: resolveFromHere('../preload/preload.cjs'),
+    bundleRoot: resolveFromHere('../help'),
+    websiteRoot: websiteRootFor(app.isPackaged), // FR-065
+    shellIntegration,
+    log: (line) => diagnostics.log.warn(line),
+    backgroundColor: themeBackground,
+    getMainWindow: currentMainWindow,
+    chrome: () => secondaryWindowChrome(platform.windowChrome(), hostTraits().os, { maximise: true }),
+  };
+  ipcMain.on('throng:help:open', (_event, url: unknown) => {
+    openHelpWindow(helpDeps, typeof url === 'string' ? url : undefined);
+  });
   /*
    * 070 FR-024a — Install and Uninstall 'throng' command. The seam is unavailable where an installer already puts the
    * command on the PATH (Windows, Linux), so the actions appear only on macOS. Each action comes to one outcome, shown
@@ -3093,7 +3144,10 @@ if (isPrimaryInstance)
   // cannot host this: they are downstream of the quit that the live ghost prevents. Disposing on
   // the main window's `closed` (its children are closed by the WindowManager on the same event)
   // lets the last window's close actually end the app.
-  mainWindow.on('closed', () => disposeGhost());
+  mainWindow.on('closed', () => {
+    disposeGhost();
+    closeHelpWindow(); // 080 FR-054 — Help closes with throng
+  });
   // Now the main window exists, the About menu can parent to it (see the nullable
   // ref above — set here so a menu click before this point opens About unparented
   // rather than crashing on the not-yet-initialised `const mainWindow`).

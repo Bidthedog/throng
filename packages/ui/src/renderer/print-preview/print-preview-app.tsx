@@ -36,6 +36,10 @@ import { ConfigProvider, useActiveTheme } from '../config/config-store.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { TitleBar } from '../title-bar/title-bar.js';
 import { HelpTip } from '../common/help-tip.js';
+import { NotificationProvider } from '../common/notification.js';
+import { LinkPromptHost } from '../link-prompt/link-prompt-host.js';
+import { OpenExternalFailedNotice } from '../common/open-external-failed-notice.js';
+import { useHelpKey } from '../help/use-help-key.js';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
 import { Spinner } from '../common/loading.js';
@@ -803,13 +807,19 @@ export function PrintPreview({ jobId, bridge = window.throng?.print }: PrintPrev
 export function PrintPreviewApp({ jobId }: { jobId: string }): ReactElement {
   return (
     <ConfigProvider>
-      <Themed jobId={jobId} />
+      <NotificationProvider>
+        {/* 080 FR-011 — Help the OS could not open in the browser. */}
+        <OpenExternalFailedNotice />
+        <LinkPromptHost />
+        <Themed jobId={jobId} />
+      </NotificationProvider>
     </ConfigProvider>
   );
 }
 
 function Themed({ jobId }: { jobId: string }): ReactElement {
   const theme = useActiveTheme();
+  useHelpKey(); // 080 FR-010 — F1 opens the guide (this window mounts no window dispatcher)
   return (
     <ThemeProvider theme={theme}>
       <PrintPreview jobId={jobId} />

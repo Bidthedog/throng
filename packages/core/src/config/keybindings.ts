@@ -58,6 +58,8 @@ export type ActionId =
   | 'view.toggleExplorer'
   /** 055 FR-050 — open the Resource Monitor; from a sub-workspace window it opens in the main one. */
   | 'view.resourceMonitor'
+  /** 080 FR-010 — open the online user guide's start page in the OS browser. */
+  | 'help.open'
   /**
    * 046 US2 (FR-015/FR-019/FR-020) — step the active project forward/back, and move keyboard
    * focus straight to the File Explorer or the Projects pane, from anywhere in the window. All
@@ -295,6 +297,12 @@ const EVERYWHERE = new Set<DispatchScope>([
   'preview',
   'projects',
 ]);
+/**
+ * 080 FR-010 — every surface but a terminal. Help's F1 belongs to the program running in a terminal
+ * (mc, htop and nano open their own help on it), so it is never live there and needs no Principle IV
+ * exception; the cog menu's Help row still reaches the guide from a terminal.
+ */
+const NOT_TERMINAL = new Set<DispatchScope>([...EVERYWHERE].filter((scope) => scope !== 'terminal'));
 const EDITOR_ONLY = new Set<DispatchScope>(['editor']);
 /**
  * 045 FR-045 / S3 (#394): the panel kinds a file link can be FOLLOWED from with the keyboard.
@@ -390,6 +398,8 @@ export const COMMAND_SCOPES: CommandScopes = {
   'view.toggleExplorer': EVERYWHERE,
   // 055 R12 — the monitor is about the whole application, so it opens from any surface.
   'view.resourceMonitor': EVERYWHERE,
+  // 080 FR-010 — F1 reaches a terminal's program, so Help is live everywhere else.
+  'help.open': NOT_TERMINAL,
   // 046 US2 (FR-015/020) — window-level, the same reasoning as the pane toggles above: a user
   // stepping projects or jumping focus to a side pane means the same thing from a terminal, an
   // editor or the tree, and `projects` (046 R3) is included so the commands work FROM the pane too.
@@ -617,6 +627,8 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     // 055 R12 — tier 1 like the pane toggles. Y, not 055's R: GNOME keeps R, and a chord is the same on every platform
     // where it can be (062 FR-034a).
     'view.resourceMonitor': ['Ctrl+Shift+Alt+Y'],
+    // 080 FR-010 — the standard Help key, the same on every platform. Not live in a terminal (NOT_TERMINAL).
+    'help.open': ['F1'],
     /*
      * 046 iterate round 1 (FR-102) — TIER 1, alongside the rest of the navigation family. Moved
      * from their pre-round Ctrl+Alt values (US2, FR-020/021): none of the four is in the reserved
@@ -1413,6 +1425,7 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'view.toggleProjects',
   'view.toggleExplorer',
   'view.resourceMonitor',
+  'help.open',
   'menu.open',
   'file.undo',
   'file.redo',

@@ -1,6 +1,6 @@
 /**
- * A small "?" beside something that needs a sentence or two of explanation (055 FR-119): the Resource Monitor's
- * controls (`resources/info-helper.tsx`, whose words are `helper-copy.ts`'s) and Print Preview's header and footer.
+ * A small "?" beside something that needs a sentence or two of explanation (055 FR-119): Print Preview's header and
+ * footer. (The Resource Monitor's helpers open the guide instead, 080 FR-046.)
  *
  * It is a themeable icon control (the existing `help` token, small): a hover title and an accessible name,
  * no text label. It opens on click, Enter or Space; it closes on Esc, a second click or a click elsewhere

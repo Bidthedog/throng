@@ -36,7 +36,7 @@ export const htmlProvider: PreviewProviderDescriptor = {
       leaf: 'safeSources',
       label: 'Safe preview sources',
       description:
-        'Web addresses an HTML preview may load stylesheets, fonts and images from — for example https://fonts.googleapis.com, or https://*.example.com for every subdomain. Only https. Scripts never run, whatever is listed. A project can trust more sources of its own in Project Settings.',
+        'https sources for an HTML preview\'s stylesheets, fonts and images. Project Settings can add more.',
       control: 'list',
       default: SHIPPED_HTML_SAFE_SOURCES,
       // FR-072c — the editor refuses an entry that is not a source, in Project Settings' words.

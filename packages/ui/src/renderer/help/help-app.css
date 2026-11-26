@@ -1,0 +1,43 @@
+/*
+ * The Help window's own document (080 FR-048, FR-051): the title bar and the toolbar above the guide, which main draws
+ * in a view below the toolbar. Every colour is a theme token.
+ */
+.help-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--throng-colour-text);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+  /* The shared TitleBar reads its height from this var, as in the About window. */
+  --title-bar-height: var(--pane-header-height, 34px);
+}
+
+.help-root .title-bar {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* 080 FR-070 — the guide's still, in the guide's place, while a dialog covers the window */
+.help-cover {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.help-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-toolbar__spacer {
+  flex: 1 1 auto;
+}

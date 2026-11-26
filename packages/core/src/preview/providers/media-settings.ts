@@ -20,7 +20,7 @@ export function transparencyHatchSetting(noun: string): ProviderSettingDeclarati
   return {
     leaf: 'transparencyHatch',
     label: 'Hatch transparent areas',
-    description: `Draw diagonal hatching behind the transparent parts of ${noun}, so their edges show against the background. The hatch colour is the theme's Picture Transparency Marker.`,
+    description: `Hatch the transparent parts of ${noun}, so their edges show against the background.`,
     control: 'toggle',
     default: true,
   };

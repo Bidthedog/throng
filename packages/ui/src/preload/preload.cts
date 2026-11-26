@@ -22,7 +22,9 @@ import type { TerminalOutputNotification as OutputDelivery } from '@throng/ipc-c
  * pre-paint hook available.
  */
 function applyBootstrapTheme(): boolean {
-  let boot: { name?: unknown; vars?: unknown; colorScheme?: unknown; testPanelThrow?: unknown } | undefined;
+  let boot:
+    | { name?: unknown; vars?: unknown; colorScheme?: unknown; testPanelThrow?: unknown }
+    | undefined;
   try {
     boot = ipcRenderer.sendSync('throng:theme:bootstrap') as typeof boot;
   } catch (error) {
@@ -60,6 +62,7 @@ function applyBootstrapTheme(): boolean {
   if (!paint()) document.addEventListener('DOMContentLoaded', paint, { once: true });
   return boot.testPanelThrow === true;
 }
+
 
 /** 066 T026 — the panel-throw dev seam, carried by the theme bootstrap reply; false when main cannot be asked. */
 const testPanelThrow = applyBootstrapTheme();
@@ -473,6 +476,37 @@ contextBridge.exposeInMainWorld('throng', {
   },
   // 066 T026 — the dev seam `THRONG_TEST_PANEL_THROW`, decided by main (always false when packaged).
   testPanelThrow,
+  // 080 FR-048 — open a guide URL in the one Help window (main creates it, or brings it forward).
+  openHelp: (url: string) => ipcRenderer.send('throng:help:open', url),
+  // 080 FR-051 — the Help window's own toolbar: its page's state, and Back, Forward and Open in browser.
+  help: {
+    back: () => ipcRenderer.send('throng:help:back'),
+    forward: () => ipcRenderer.send('throng:help:forward'),
+    openInBrowser: () => ipcRenderer.send('throng:help:openInBrowser'),
+    // 080 FR-070 — a still of the guide to show while a dialog covers the window (null: the guide is back).
+    onCover: (cb: (png: Uint8Array | null) => void) => {
+      const handler = (_event: unknown, png: Uint8Array | null): void => cb(png);
+      ipcRenderer.on('throng:help:cover', handler);
+      return () => ipcRenderer.removeListener('throng:help:cover', handler);
+    },
+    layout: (top: number) => ipcRenderer.send('throng:help:layout', top),
+    ready: () => ipcRenderer.send('throng:help:ready'),
+    onState: (cb: (state: { title: string; canGoBack: boolean; canGoForward: boolean }) => void) => {
+      const handler = (_event: unknown, state: { title: string; canGoBack: boolean; canGoForward: boolean }): void => cb(state);
+      ipcRenderer.on('throng:help:state', handler);
+      return () => ipcRenderer.removeListener('throng:help:state', handler);
+    },
+  },
+  // 080 FR-063 — the external-link prompt: the address it asks about, and the user's answer.
+  // 080 FR-070 — the external-link prompt, shown inline in the window main asks.
+  linkPrompt: {
+    onAsk: (cb: (request: { id: number; url: string }) => void) => {
+      const handler = (_event: unknown, request: { id: number; url: string }): void => cb(request);
+      ipcRenderer.on('throng:linkPrompt:ask', handler);
+      return () => ipcRenderer.removeListener('throng:linkPrompt:ask', handler);
+    },
+    answer: (id: number, reply: 'open' | 'cancel' | 'preferences') => ipcRenderer.send('throng:linkPrompt:answer', id, reply),
+  },
   about: {
     // Cog → About throng (020, FR-003): create-or-focus the single shared, app-modal
     // About window. This is the discoverable entry point — throng draws its own title
@@ -504,6 +538,12 @@ contextBridge.exposeInMainWorld('throng', {
   // (hoisted from the `about` namespace so a terminal link isn't routed through an About-scoped API).
   // The main process re-validates the scheme; a non-http(s) URL opens nowhere.
   openExternal: (url: string) => ipcRenderer.send('throng:openExternal', url),
+  // 080 FR-011 — main reports an open the OS refused, so this window can say so (`main/external-url.ts`).
+  onOpenExternalFailed: (cb: (failure: { url: string; reason: string }) => void) => {
+    const handler = (_event: unknown, failure: { url: string; reason: string }): void => cb(failure);
+    ipcRenderer.on('throng:openExternal:failed', handler);
+    return () => ipcRenderer.removeListener('throng:openExternal:failed', handler);
+  },
   // A window learns it has been blurred by the app-modal preferences window (US10/FR-035) — the
   // deterministic "a child window took focus" signal the hover-suppression gate needs.
   onWindowBlurred: (cb: (blurred: boolean) => void) => {

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactElement } from 'react';
 import {
+  GUIDE_MAP,
   defaultPanelTypeRegistry,
+  helpUrl,
   type PanelKind,
   type PanelTypeContext,
   type TerminalMemory,
@@ -26,6 +28,8 @@ import {
 } from '../terminal/exit-store.js';
 import { markExplicitRetype } from '../terminal/explicit-retype.js';
 import { useNotify } from '../common/notification.js';
+import { HelpLink } from '../common/help-link.js';
+import { effectiveHelpBase } from '../help/help-opener.js';
 import { terminalSubject, usePanelPlace } from '../common/panel-subject.js';
 import { requestPanelFocusAfterRetype, usePanelFocusTarget } from '../workspace/panel-focus.js';
 import './panel-type.css';
@@ -142,6 +146,12 @@ export function PanelTypeForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelId, formerKind, deps]);
   const confirmable = canConfirm(state, deps);
+  // 080 FR-017 — the topic page's task that teaches the chosen type, not the Quick start's tour of it.
+  const guideTask =
+    state.selectedKind === null
+      ? undefined
+      : (GUIDE_MAP.find((t) => t.panelTypes.includes(state.selectedKind as string) && t.page !== 'quick-start') ??
+        GUIDE_MAP.find((t) => t.panelTypes.includes(state.selectedKind as string)));
   const historyEnabled = settings.terminals.formHistory.enabled;
 
   const onConfirm = (): void => {
@@ -238,7 +248,18 @@ export function PanelTypeForm({
       {/* 018 / FR-051 — the last of the four copy-pasted error strips. It is the shared notification
           model now (see the effect above), and its per-panel identifiers are preserved. */}
       <label className="panel-type-form__field">
-        <span>Panel Type</span>
+        <span className="panel-type-form__field-title">
+          Panel Type
+          {/* 080 FR-017 — the chosen type's guide task; none until a type with a task is chosen. */}
+          {guideTask !== undefined ? (
+            <HelpLink
+              url={helpUrl({ page: guideTask.page, anchor: guideTask.anchor }, { base: effectiveHelpBase() })}
+              label={guideTask.task}
+              testId={`help-link-panel-type-${panelId}`}
+              className="icon-button panel-type-form__help-link"
+            />
+          ) : null}
+        </span>
         <select
           data-testid={`panel-type-select-${panelId}`}
           value={state.selectedKind ?? ''}

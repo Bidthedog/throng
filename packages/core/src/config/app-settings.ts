@@ -555,6 +555,8 @@ export interface AppSettings {
     destroySubWorkspace: ConfirmLevel;
     /** 055 FR-063 — Kill Process and Kill All Below in the Resource Monitor. */
     killProcesses: ConfirmLevel;
+    /** 080 FR-063 — ask before any external link is handed to the OS. On by default. */
+    openExternalLink: boolean;
     // 046 FR-111 withdrew `unloadProject` (FR-034b): no Unload row asks anything, so the level had
     // nothing to govern. A saved value is an unmodelled key, dropped by the next write (019 FR-023).
   };
@@ -852,6 +854,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     destroyPanel: 'double',
     destroySubWorkspace: 'double',
     killProcesses: 'double',
+    openExternalLink: true,
   },
   projects: { unloadTerminalAction: 'keepRunning', openFromOutside: 'switch', popoverDelayMs: 300, popoverEnabled: true },
   panes: {
@@ -1836,6 +1839,8 @@ export function parseAppSettings(raw: unknown): AppSettings {
         d.confirmations.destroySubWorkspace,
       ),
       killProcesses: confirmLevel(confirmations.killProcesses, d.confirmations.killProcesses),
+      openExternalLink:
+        typeof confirmations.openExternalLink === 'boolean' ? confirmations.openExternalLink : d.confirmations.openExternalLink,
     },
     window: {
       nativeWayland:

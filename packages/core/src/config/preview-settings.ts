@@ -184,7 +184,7 @@ export function previewSettingsDescriptors(
       key: `${PREFIX}.updateDelayMs`,
       label: 'Preview update delay',
       description:
-        'How long a preview beside an editor waits after you stop typing before it shows your changes. Zero updates it on every change.',
+        'How long a preview waits after you stop typing before it shows your changes. Zero updates at once.',
       group: GROUP,
       subgroup: SUBGROUP,
       control: 'slider',
@@ -200,7 +200,7 @@ export function previewSettingsDescriptors(
       key: `${PREFIX}.maxWaitMs`,
       label: 'Preview maximum wait',
       description:
-        'The longest a preview beside an editor goes without showing your changes while you keep typing. A value below the update delay behaves as the update delay.',
+        'The longest a preview goes without showing your changes while you keep typing.',
       group: GROUP,
       subgroup: SUBGROUP,
       control: 'slider',
@@ -219,7 +219,7 @@ export function previewSettingsDescriptors(
       key: `${PREFIX}.syncScroll`,
       label: 'Synchronise preview and editor scrolling',
       description:
-        "Keep a preview and its editor at the same place in the file, in both directions: scrolling either one scrolls the other. Also switched by Synchronise Scrolling in the editor's and the preview's menus, and by the Synchronise Scrolling button on their status bars.",
+        'Keep a preview and its editor scrolled to the same place, in both directions.',
       group: GROUP,
       subgroup: SUBGROUP,
       control: 'toggle',
@@ -229,7 +229,7 @@ export function previewSettingsDescriptors(
       key: `${PREFIX}.syncHighlightMs`,
       label: 'Scroll-sync highlight duration',
       description:
-        'How long the soft highlight stays on the place a preview and its editor are in step at after Synchronise Scrolling moves one with the other, before it fades out. 0 shows no highlight at all. It is a visual guide only: scrolling is kept in step either way.',
+        'How long the highlight shows after Synchronise Scrolling moves a preview or editor. 0 shows none.',
       group: GROUP,
       subgroup: SUBGROUP,
       control: 'slider',
@@ -246,7 +246,7 @@ export function previewSettingsDescriptors(
       key: `${PREFIX}.copyFormat`,
       label: 'Preview copy format',
       description:
-        'What Copy puts on the clipboard from a preview: formatted text that keeps headings, lists and links when pasted into a document, or plain text alone.',
+        'What Copy takes from a preview: formatted text that keeps headings, lists and links, or plain text.',
       group: GROUP,
       subgroup: SUBGROUP,
       control: 'select',
@@ -265,7 +265,7 @@ export function previewSettingsDescriptors(
       label: `${provider.displayName}: ${provider.enabledLabel ?? 'Enabled'}`,
       description:
         provider.enabledDescription ??
-        `Offer previews of ${provider.displayName} files. When off, every preview of these files closes and their preview commands are shown disabled.`,
+        `Offer previews of ${provider.displayName} files. Off closes them and disables their preview commands.`,
       group: GROUP,
       subgroup: SUBGROUP,
       subsection,
@@ -276,14 +276,12 @@ export function previewSettingsDescriptors(
       // action" and FR-051's "no setting for a binary provider"); same key, so no stored value changes meaning.
       const files = provider.filesNoun ?? `${provider.displayName} files`;
       const offered = offeredOpenActions(provider);
-      const what = offered.includes('editor')
-        ? 'in a throng editor, in its throng preview, or in the operating system’s default program for it'
-        : 'in its throng preview, or in the operating system’s default program for it';
       out.push({
         key: providerKey(provider.id, 'defaultOpenAction'),
         label: `Open ${files} in`,
         // 054 FR-030 — Find in Files follows it, except Default OS Program, which cannot show a match (074 FR-019).
-        description: `Where ${files} open from File Explorer, Quick Open and links: ${what}. A Find in Files result set to the default program opens an editor at the match. Open In's targets always do what they name.`,
+        // 080 FR-013 — the options name themselves; that exception, and Open In's, live in the reference.
+        description: `Where ${files} open from File Explorer, Quick Open, links and Find in Files.`,
         group: GROUP,
         subgroup: SUBGROUP,
         subsection,
@@ -298,7 +296,7 @@ export function previewSettingsDescriptors(
       out.push({
         key: providerKey(provider.id, 'openTarget'),
         label: `${provider.displayName}: Open previews in`,
-        description: `Where a ${provider.displayName} preview opens: Last Active reuses the most recently used ${provider.displayName} preview in the tab you are looking at; otherwise a new preview opens.`,
+        description: `Where a ${provider.displayName} preview opens: reuse the last one used in this tab, or a new panel.`,
         group: GROUP,
         subgroup: SUBGROUP,
         subsection,

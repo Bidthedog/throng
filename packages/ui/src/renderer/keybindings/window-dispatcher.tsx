@@ -71,7 +71,8 @@ import { openResourceMonitor } from '../resources/monitor-store.js';
 import { zoomFocusedDiagram, zoomPanelDiagram } from '../preview/diagram/diagram-zoom.js';
 import { useSidePaneActions, type SidePaneActions } from '../workspace/side-pane-actions.js';
 import { endSplitMode, getSplitModePanel, startSplitMode, subscribeSplitMode } from '../workspace/split-mode.js';
-import { logExpected } from '@throng/core';
+import { logExpected, startPageUrl } from '@throng/core';
+import { effectiveHelpBase, openHelp } from '../help/help-opener.js';
 
 /**
  * 031 FR-032a — the command that opens the tab picker (`Ctrl+Alt+T` by default, rebindable).
@@ -953,6 +954,14 @@ export function WindowDispatcher({
               );
             }
           }
+          break;
+        /*
+         * 080 FR-010, FR-011 — Help (F1), from every surface but a terminal (the scope is core's, so a
+         * focused terminal never resolves it and F1 reaches its program). The start page opens in throng's Help
+         * window (FR-048) through the one opener, in the main window and in every sub-workspace window alike.
+         */
+        case 'help.open':
+          openHelp(startPageUrl(effectiveHelpBase()));
           break;
         // 070 FR-027, FR-024a — the macOS app menu's commands, from the keyboard (Principle VI). Main runs each one
         // exactly as the menu item does, notices included.

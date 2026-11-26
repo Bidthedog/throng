@@ -1,9 +1,11 @@
 import { useRef, type ReactElement } from 'react';
+import { startPageUrl } from '@throng/core';
 
 import { Icon } from '../common/icon.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useKeybindings } from '../config/config-store.js';
 import { openResourceMonitor } from '../resources/monitor-store.js';
+import { effectiveHelpBase, openHelp } from '../help/help-opener.js';
 import { cogMenuItems } from './cog-menu-items.js';
 
 /**
@@ -43,6 +45,7 @@ export function CogMenu(): ReactElement {
       openLogs: () => void window.throng?.diagnostics?.openLogs?.(),
       openResourceMonitor: openResourceMonitor,
       openAbout: () => window.throng?.about?.open?.(),
+      openHelp: () => openHelp(startPageUrl(effectiveHelpBase())),
       keybindings,
     });
 
