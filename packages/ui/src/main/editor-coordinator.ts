@@ -2954,13 +2954,13 @@ export class EditorCoordinator {
       /*
        * 081 FR-013 — not yet. Another program that deletes a file and writes it again (an agent, a formatter)
        * leaves a gap this read falls into, and reporting it force-dirtied a clean buffer and raised the notice and
-       * the banner over a file back on disk a moment later (#728). The path must stay gone for the settle window;
-       * a newer failed read restarts it. The timer is no bracket substitute: throng's own moves never get here
-       * (`movePending` above), and `markDeleted` stays immediate for File Explorer's delete (FR-014).
+       * the banner over a file back on disk a moment later (#728). The path must stay gone for the settle window,
+       * counted from the FIRST failed read: a later event in a busy folder must not push the report back for ever.
+       * The timer is no bracket substitute: throng's own moves never get here (`movePending` above), and
+       * `markDeleted` stays immediate for File Explorer's delete (FR-014).
        */
       if (!settled) {
-        this.clearDeleteSettle(doc);
-        doc.deleteSettle = setTimeout(() => {
+        doc.deleteSettle ??= setTimeout(() => {
           doc.deleteSettle = undefined;
           void this.onDiskChange(panelId, watchedPath, true);
         }, EXTERNAL_DELETE_SETTLE_MS);

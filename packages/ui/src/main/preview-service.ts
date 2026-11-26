@@ -2107,11 +2107,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
        * 081 FR-013 — the watch found the file gone: wait the settle window before saying so. Another program that
        * deletes a file and writes it again leaves a gap this read falls into, and the preview said "no longer
        * exists" over a file back on disk a moment later (#728). Only the watch's own read (`force` false) waits: a
-       * refresh or a change of source is the user asking, and is answered now.
+       * refresh or a change of source is the user asking, and is answered now. The window counts from the FIRST
+       * failed read, so a busy folder's later events cannot push the report back for ever.
        */
       if (read.notice.kind === 'deleted' && !opts.force && opts.settled !== true && run.notice?.kind !== 'deleted') {
-        this.clearDeleteSettle(run);
-        run.deleteSettle = setTimeout(() => {
+        run.deleteSettle ??= setTimeout(() => {
           run.deleteSettle = undefined;
           void this.readAndApply(run, { force: false, repeat: false, settled: true });
         }, EXTERNAL_DELETE_SETTLE_MS);

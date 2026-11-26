@@ -109,6 +109,25 @@ describe('an outside delete waits the settle window (081 FR-013; #728 "deleted a
     expect(coord.getContent('p1')).toMatchObject({ fileMissing: true, dirty: true });
   });
 
+  it('a busy folder does not push the report back: the window counts from the first failed read', async () => {
+    const file = join(root, 'doc.txt');
+    const noisy = join(root, 'noisy.log');
+    await writeFile(file, 'x\n');
+    await coord.load(meta('p1', file));
+    await watchStarted();
+
+    const removedAt = Date.now();
+    await rm(file, { force: true });
+    // Another file in the same folder changes every 100 ms for twice the window.
+    for (let i = 0; i < (EXTERNAL_DELETE_SETTLE_MS * 2) / 100; i++) {
+      await writeFile(noisy, `${i}\n`);
+      await sleep(100);
+    }
+    const relay = deletedRelays()[0];
+    expect(relay, 'still unreported after twice the window: the noise kept restarting the timer').toBeDefined();
+    expect(Date.now() - removedAt).toBeGreaterThanOrEqual(EXTERNAL_DELETE_SETTLE_MS);
+  });
+
   it('throng’s own move still needs no timer: the document follows at once and nothing is reported (FR-014)', async () => {
     const from = join(root, 'doc.txt');
     const to = join(root, 'moved.txt');
