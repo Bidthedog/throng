@@ -228,6 +228,7 @@ jobs:
           # 042 FR-001/FR-007: the body is COMPOSED from CHANGELOG.md and the invariant footer, never authored here.
           node scripts/release-notes.mjs render \
             --version "$version" \
+            --guide-links \
             --artifacts "$artifacts" \
             --gaps "$(cat verification-gaps.json)" \
             --sha "${{ github.sha }}" \

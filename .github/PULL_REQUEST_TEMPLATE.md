@@ -53,7 +53,8 @@ paste relevant passing output here
 
 <!-- Constitution Development Workflow: documentation MUST be brought current in the same change. -->
 
-- [ ] The **`throng-docs` audit** was run: each user-visible change is documented in its one home under [`docs/`](../docs/README.md) — [key bindings](../docs/key-bindings.md), [preferences](../docs/preferences.md), [environment](../docs/environment.md), [architecture](../docs/architecture.md), [quick start](../docs/quick-start.md), [installation](../docs/installation.md) — and `docs-currency.test.ts` is green. *(Or: "docs unaffected".)*
+- [ ] The **`throng-docs` audit** was run: each user-visible change is documented in its one home under [`docs/`](../docs/README.md) — [key bindings](../docs/key-bindings.md), [preferences](../docs/preferences.md), [environment](../docs/environment.md), [architecture](../docs/architecture.md), [installation](../docs/installation.md) — and `docs-currency.test.ts` is green. *(Or: "docs unaffected".)*
+- [ ] **The [user guide](../site/guide/quick-start.md)** teaches the change: the task that covers it in `site/guide/` is updated or added, with its `GUIDE_MAP` entry in `packages/core/src/help/guide-map.ts` — **or** no user can see the change, and this description has a line starting `No user-facing change: ` with the reason. CI refuses a source change with neither (080 FR-018).
 - [ ] **`README.md`** is still a short entry point (a new major feature gets one line in its feature list, nothing more).
 - [ ] **`CONTRIBUTING.md`** updated if the process, toolchain, testing bar, or setup changed.
 
