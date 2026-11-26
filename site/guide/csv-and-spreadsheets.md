@@ -44,6 +44,9 @@ another grid.
 1. Right-click a row number or a column letter.
 2. Choose to insert above, below, left or right, or to insert rows or columns you copied.
 
+To add a row at the end, type into the empty row below the last one. It joins the file only once you type or paste
+into it, and a new empty row appears under it.
+
 ## Copy and paste cells
 
 **The CSV grid › Ctrl+C / Ctrl+V**

@@ -39,6 +39,27 @@ What changed in each release of throng, written for someone deciding whether to 
   name that opens its own section of the reference, now split into a page per section. Panel types, the terminal
   form, the Projects pane and Find in Files carry a **?** to the guide task that teaches them.
   ([guide](https://throng-ide.com/guide/preferences/#find-a-setting), [#477](https://github.com/Bidthedog/throng/issues/477))
+- Editor and preview title bars have **Open in OS Default Program** and **Find in File Explorer** buttons; the panel
+  menu's Reveal File in File Explorer is now called Find in File Explorer. ([guide](https://throng-ide.com/guide/layout/#read-a-panels-header), [#725](https://github.com/Bidthedog/throng/issues/725))
+- **Follow the active preview** (Preferences › Settings › File Explorer, on by default) reveals a preview's file in
+  the File Explorer when the preview becomes active. ([guide](https://throng-ide.com/guide/files/#browse-your-projects-files), [#724](https://github.com/Bidthedog/throng/issues/724))
+- The File Explorer fades files and folders that git ignores. ([guide](https://throng-ide.com/guide/files/#recognise-files-at-a-glance), [#729](https://github.com/Bidthedog/throng/issues/729))
+- The CSV Preview Editor shows an empty row after the last row, ready to type into. ([guide](https://throng-ide.com/guide/csv-and-spreadsheets/#insert-rows-and-columns), [#732](https://github.com/Bidthedog/throng/issues/732))
+
+### Changed
+
+- Right-clicking a link to a local file or folder offers the File Explorer's **Open In** submenu, with the same
+  rows in the same order. ([guide](https://throng-ide.com/guide/editing/#follow-links-in-your-files), [#731](https://github.com/Bidthedog/throng/issues/731))
+- A terminal in Focus Mode shows the Focus Mode status-bar highlight that editors and previews already show. ([guide](https://throng-ide.com/guide/layout/#concentrate-on-one-panel), [#727](https://github.com/Bidthedog/throng/issues/727))
+
+### Fixed
+
+- "Couldn't open" notices no longer name panels you cannot see, no longer call an existing folder missing, and no
+  longer appear when another program deletes and rewrites a file within half a second. ([#728](https://github.com/Bidthedog/throng/issues/728))
+- Markdown tables in a preview that was out of view while its file changed now lay out correctly when shown, and
+  their column handles work. ([#730](https://github.com/Bidthedog/throng/issues/730))
+- The Synchronise Scrolling highlight no longer shifts a table row's layout, marks the right row from the editor
+  side, and marks the next line when a scroll stops on a blank line. ([#733](https://github.com/Bidthedog/throng/issues/733))
 
 ## 1.0.0-beta2 — 2026-11-23
 

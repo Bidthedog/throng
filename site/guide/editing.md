@@ -133,7 +133,8 @@ The editor finds links and file paths in your text. Ctrl+click follows one to th
 
 1. Hold **Ctrl** (macOS: **Cmd**) and click a path or URL.
 2. Or put the caret on it and press **Ctrl+Enter**.
-3. Right-click a link for every other place it could open.
+3. Right-click a link for every other place it could open. For a file or folder, **Open In** lists the same places
+   as the File Explorer's **Open In** for that file.
 
 ## Go back to where you were
 

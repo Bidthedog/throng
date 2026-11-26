@@ -121,6 +121,9 @@ Focus Mode gives one panel the whole tab, with the side panes folded away, until
 2. The tab's other panels hide and both side panes fold away.
 3. Do the same again, or press **Esc**, to put everything back.
 
+While a panel is in Focus Mode its status bar is highlighted and names the mode, with the key that leaves it. Terminals
+do this too when their status bar is shown.
+
 ## Zoom text in panels or the whole window
 
 **Anywhere**
@@ -180,6 +183,8 @@ A panel's header names what it is and shows whether it needs you.
 
 1. Read the type icon and the title.
 2. Look for the file it shows, an unsaved dot, an attention mark and, for an elevated terminal, **ADMIN**.
+3. On an editor or a preview, the first two buttons open the file in your system's default program and find it in
+   the File Explorer. They are greyed out, with the reason on hover, while the document has no file.
 
 On a narrow panel the less important controls give way first; every one stays on the panel's menu.
 

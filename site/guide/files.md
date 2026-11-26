@@ -22,8 +22,9 @@ The File Explorer shows the active project as a tree, from its root folder down.
 
 ![The File Explorer, with src and docs expanded](images/files/browse-your-project.png)
 
-The tree updates as files change on disk, and can follow the editor you are working in with the
-[Follow the active editor](../../docs/preferences.md#file-explorer) setting.
+The tree updates as files change on disk. It can follow the editor you are working in with the
+[Follow the active editor](../../docs/preferences.md#file-explorer) setting, and the preview you are looking at
+with **Follow the active preview**. Both are on unless you turn them off.
 
 ## Select several files
 
@@ -177,5 +178,7 @@ Icons and badges in the tree show each file's kind and state.
 
 1. Read the icon: it shows each file's kind and marks special folders.
 2. A badge marks a symbolic link, and a dot marks unsaved changes.
+3. A faded name is one git ignores, such as build output or a dependency folder. Editing `.gitignore` updates the
+   fade. Outside a git repository nothing is faded.
 
 Icon sets are chosen in [Themes and icons](themes-and-icons.md).
