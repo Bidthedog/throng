@@ -15,9 +15,8 @@ import { asKeyboardMenu } from '../../src/renderer/workspace/keyboard-menu.js';
  * scope (FR-169's note, FR-046).
  *
  * A file link's menu opens AT ONCE with what the renderer knows (FR-170c) and is updated in place
- * when the ONE menu-open resolution answers (SC-021). Open In ▸ carries New Editor, Active Editor and
- * one row per open editor by name (FR-170 row 2) — the editor already showing the target excepted —
- * and each performs its own route.
+ * when the ONE menu-open resolution answers (SC-021). Open In ▸ carries the File Explorer's rows for the
+ * same file (081 FR-050), and each performs its own route.
  *
  * The menu is opened for real: a `contextmenu` event on the mounted view's content, through the
  * `domEventHandlers` `use-editor.ts` installs, into the window's `ContextMenuProvider`.
@@ -29,7 +28,6 @@ const SELF_TEXT = './notes.txt';
 const DOC = `read ${URL_TEXT} first\nsee ${FILE_TEXT} and ${SELF_TEXT}\nplain words here\n`;
 const IN_URL = DOC.indexOf(URL_TEXT) + 6;
 const IN_FILE = DOC.indexOf(FILE_TEXT) + 4;
-const IN_SELF = DOC.indexOf(SELF_TEXT) + 4;
 const IN_PLAIN = DOC.indexOf('plain words') + 2;
 
 const SELF_PATH = 'C:/proj/notes.txt';
@@ -222,39 +220,31 @@ describe('FR-170b / FR-170c — over a FILE link the Link menu opens at once, th
     m.rightClick();
     await waitFor(() => expect(menuLabels().length).toBeGreaterThan(0));
 
-    // Rows 5 / 6 wait for main's answer; Open In ▸ is drawn, disabled, because the link is in the
-    // project by name (FR-170c). An in-project `.ts` has no preview provider, so no Open Preview.
-    expect(menuLabels()).toEqual([
-      'Open Link',
-      'Open In',
-      'Find in File Explorer',
-      'Open in OS Explorer',
-      'Copy Link to Clipboard',
-    ]);
-    expect(menuItem('Open In').getAttribute('aria-disabled')).toBe('true');
+    // 081 FR-053 — Open In ▸ holds the OS rows. It is live before main answers because OS File Explorer
+    // inside it needs no answer; the rows that do are drawn disabled inside it (FR-051).
+    expect(menuLabels()).toEqual(['Open Link', 'Open In', 'Find in File Explorer', 'Copy Link to Clipboard']);
+    expect(menuItem('Open In').getAttribute('aria-disabled')).toBe('false');
+    await openInRows();
+    expect(menuItem('OS File Explorer').getAttribute('aria-disabled')).toBe('false');
+    expect(menuItem('New Editor').getAttribute('aria-disabled')).toBe('true');
+    expect(menuItem('Open in OS Default Program').getAttribute('aria-disabled')).toBe('true');
     // SC-021 — ONE resolution per opening, and it has not been answered yet.
     expect(m.asked).toHaveLength(1);
     expect(m.asked[0]!.request.text).toBe(FILE_TEXT);
   });
 
-  it('when main answers, the SAME menu gains its rows and Open In ▸ enables', async () => {
+  it('when main answers, the SAME menu enables the rows inside Open In ▸', async () => {
     const m = await mount();
     m.pointAt(IN_FILE);
     m.rightClick();
     await waitFor(() => expect(m.asked).toHaveLength(1));
     m.asked[0]!.answer({ ok: true, link: resolved(FOO_PATH) });
 
-    await waitFor(() =>
-      expect(menuLabels()).toEqual([
-        'Open Link',
-        'Open In',
-        'Find in File Explorer',
-        'Open in OS Explorer',
-        'Open in OS Default Program',
-        'Copy Link to Clipboard',
-      ]),
-    );
-    expect(menuItem('Open In').getAttribute('aria-disabled')).toBe('false');
+    await waitFor(() => expect(menuItem('Find in File Explorer').getAttribute('aria-disabled')).toBe('false'));
+    expect(menuLabels()).toEqual(['Open Link', 'Open In', 'Find in File Explorer', 'Copy Link to Clipboard']);
+    await openInRows();
+    expect(menuItem('New Editor').getAttribute('aria-disabled')).toBe('false');
+    expect(menuItem('Open in OS Default Program').getAttribute('aria-disabled')).toBe('false');
     expect(m.asked).toHaveLength(1);
   });
 });
@@ -328,46 +318,37 @@ describe('#714 — Find in File Explorer runs the panel header’s reveal for th
     await waitFor(() => expect(m.asked).toHaveLength(1));
     m.asked[0]!.answer({ ok: true, link: { ...resolved('D:/elsewhere/foo.ts'), inProject: false } });
 
-    await waitFor(() => expect(menuLabels()).toContain('Open in OS Default Program'));
-    expect(menuLabels()).not.toContain('Find in File Explorer');
+    await waitFor(() => expect(menuLabels()).toEqual(['Open Link', 'Open In', 'Copy Link to Clipboard']));
   });
 });
 
-describe('FR-170 row 2 — Open In ▸ New Editor, Active Editor, and one row per open editor', () => {
+describe('081 FR-050 — Open In ▸ carries the File Explorer’s editor targets, each performing its own route', () => {
   async function answered(offset: number, path: string) {
     const m = await mount();
     m.pointAt(offset);
     m.rightClick();
     await waitFor(() => expect(m.asked).toHaveLength(1));
     m.asked[0]!.answer({ ok: true, link: resolved(path) });
-    await waitFor(() => expect(menuItem('Open In').getAttribute('aria-disabled')).toBe('false'));
+    await waitFor(() => expect(menuItem('Find in File Explorer').getAttribute('aria-disabled')).toBe('false'));
     return m;
   }
 
-  it('names this editor, which shows a different file', async () => {
+  it('the File Explorer’s rows for an in-project file this editor does not show', async () => {
     await answered(IN_FILE, FOO_PATH);
-    expect(await openInRows()).toEqual(['New Editor', 'Active Editor', 'Panel 1']);
+    expect(await openInRows()).toEqual([
+      'OS File Explorer',
+      'Open in OS Default Program',
+      'Last Active Editor',
+      'New Editor',
+      'Terminal',
+      'Search',
+    ]);
   });
 
-  it('leaves out the editor already showing the target', async () => {
-    await answered(IN_SELF, SELF_PATH);
-    expect(await openInRows()).toEqual(['New Editor', 'Active Editor']);
-  });
-
-  it('the named row opens the file INTO that editor', async () => {
+  it('Last Active Editor reuses the active editor — no new panel', async () => {
     const m = await answered(IN_FILE, FOO_PATH);
     await openInRows();
-    menuItem('Panel 1').click();
-
-    await waitFor(() => expect(m.h.calls.load).toHaveBeenCalledWith(expect.objectContaining({ absPath: FOO_PATH })));
-    await waitFor(() => expect(m.h.view().state.doc.toString()).toBe('export const foo = 1;\n'));
-    expect(m.notifyTyped).not.toHaveBeenCalled();
-  });
-
-  it('Active Editor reuses the active editor — no new panel', async () => {
-    const m = await answered(IN_FILE, FOO_PATH);
-    await openInRows();
-    menuItem('Active Editor').click();
+    menuItem('Last Active Editor').click();
 
     await waitFor(() => expect(m.h.calls.load).toHaveBeenCalledWith(expect.objectContaining({ absPath: FOO_PATH })));
     expect(m.notifyTyped).not.toHaveBeenCalled();

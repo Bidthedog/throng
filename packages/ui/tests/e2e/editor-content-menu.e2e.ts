@@ -116,13 +116,15 @@ async function expectEditorLinkSurfaces(win: Page, pid: string): Promise<void> {
   await expect(menu).toHaveCount(1);
   await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();
   await expect(win.getByTestId('menu-item-Open In')).toBeVisible();
-  await expect(win.getByTestId('menu-item-Open in OS Explorer')).toBeVisible();
-  await expect(win.getByTestId('menu-item-Open in OS Default Program')).toBeVisible({ timeout: 10_000 });
+  // 081 FR-053 — the OS rows live in Open In ▸ now; Find in File Explorer enables once main answers.
+  await expect(win.getByTestId('menu-item-Find in File Explorer')).toHaveAttribute('aria-disabled', 'false', { timeout: 10_000 });
   await expect(win.getByTestId('menu-item-Copy Link to Clipboard')).toBeVisible();
   await expect(win.getByTestId('menu-item-Cut')).toHaveCount(0);
   await win.getByTestId('menu-item-Open In').click();
+  // 081 FR-050 — the File Explorer's Open In ▸ rows for the same file.
+  await expect(win.getByTestId('menu-item-OS File Explorer')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Open in OS Default Program')).toHaveAttribute('aria-disabled', 'false');
   await expect(win.getByTestId('menu-item-New Editor')).toBeVisible();
-  await expect(win.getByTestId('menu-item-Active Editor')).toBeVisible();
   await win.keyboard.press('Escape');
   await win.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);

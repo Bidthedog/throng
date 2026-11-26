@@ -30,9 +30,18 @@ import type { ResolvedLink } from './types.js';
  *
  * FR-170e (#719) withholds row 2 — every Open In ▸ editor row — from a file the editor refuses as binary:
  * by extension before main answers (`binaryByExtension`), and by the resolved target's `binary` after.
+ *
+ * ══ A LOCAL FILE OR FOLDER (081 FR-050 – FR-054) ══
+ *
+ * An `onDevice` link no longer draws rows 2 – 6 here. It draws one `openIn` item carrying the target's
+ * STATE — kind, in the project, binary, pending — and the renderer builds the File Explorer's Open In ▸
+ * from it with the explorer's own builder (`renderer/explorer/open-in-rows.ts`), so the two menus share
+ * one source. 045's omission rules travel in that state. Open Link, Find in File Explorer and Copy Link to
+ * Clipboard stay rows of this menu. A UNC link keeps the rows above unchanged (FR-054).
  */
 export type LinkMenuItemId =
   | 'openLink'
+  | 'openIn'
   | 'openInNew'
   | 'openInActive'
   | 'openInEditor'
@@ -72,6 +81,17 @@ export interface LinkMenuContext {
   readonly openLink: () => void;
 }
 
+/** 081 FR-050 — what the Open In ▸ rows of a local link turn on; the renderer's `openInRows` reads it. */
+export interface LinkOpenInState {
+  readonly kind: 'file' | 'folder';
+  /** Resolved, or before that by name. False: the OS rows only (045 FR-170a/FR-170c, 081 FR-052). */
+  readonly inProject: boolean;
+  /** No editor rows (045 FR-170e). */
+  readonly binary: boolean;
+  /** Main has not answered, or the link did not resolve: rows that need the answer are drawn disabled. */
+  readonly pending: boolean;
+}
+
 export interface LinkMenuItem {
   /** What the item performs. Callers route on this, never on the label. */
   readonly id: LinkMenuItemId;
@@ -87,6 +107,8 @@ export interface LinkMenuItem {
   readonly editorId?: string;
   /** Open Link only: the surface's Ctrl+click. Every other id is performed by the caller. */
   readonly run?: () => void;
+  /** The `openIn` item only: the target state its Open In ▸ rows are built from. */
+  readonly openIn?: LinkOpenInState;
 }
 
 const OPEN_IN = 'Open In';
@@ -112,6 +134,32 @@ export function buildLinkMenu(ctx: LinkMenuContext): readonly LinkMenuItem[] {
   if (ctx.cls !== 'unc' && ctx.cls !== 'onDevice') return [...items, copy];
 
   const { resolution, applicable } = ctx;
+  const find = findInExplorerState(resolution, applicable);
+  const findRow = (): LinkMenuItem => row('findInExplorer', 'Find in File Explorer', find === 'disabled');
+
+  if (ctx.cls === 'onDevice') {
+    const binaryByExtension = applicable.binaryByExtension === true;
+    const openIn: LinkOpenInState =
+      resolution === 'pending' || resolution === null
+        ? {
+            kind: applicable.folderByGrammar ? 'folder' : 'file',
+            inProject: applicable.inProjectByName,
+            binary: binaryByExtension,
+            pending: true,
+          }
+        : {
+            kind: resolution.kind,
+            inProject: resolution.inProject,
+            binary: binaryByExtension || resolution.binary === true,
+            pending: false,
+          };
+    // Enabled in every state: OS File Explorer, inside it, needs no target (FR-170a, row 4).
+    items.push(row('openIn', OPEN_IN, false, { openIn }));
+    if (find !== 'absent') items.push(findRow());
+    items.push(copy);
+    return items;
+  }
+
   const throngRows = !applicable.folderByGrammar;
 
   // Rows 2 and 3 — throng's own destinations.
@@ -157,20 +205,8 @@ export function buildLinkMenu(ctx: LinkMenuContext): readonly LinkMenuItem[] {
     }
   }
   if (preview !== 'absent') items.push(row('openPreview', 'Open Preview', preview === 'disabled'));
-  // #714 — Find in File Explorer, beside Open in OS Explorer: the two "show me where this is" rows read
-  // together. It reveals the target in throng's own tree, which holds only the project, so it needs an
-  // existing target INSIDE the project — a file or a folder alike. Before main answers, and when the
-  // link did not resolve, it follows rows 2/3's rule (FR-170a, FR-170c): drawn disabled when the link
-  // is in the project by name, absent otherwise; an answer outside the project removes it.
-  const find: RowState =
-    resolution === 'pending' || resolution === null
-      ? applicable.inProjectByName
-        ? 'disabled'
-        : 'absent'
-      : resolution.inProject
-        ? 'enabled'
-        : 'absent';
-  if (find !== 'absent') items.push(row('findInExplorer', 'Find in File Explorer', find === 'disabled'));
+  // #714 — Find in File Explorer, beside Open in OS Explorer: the two "show me where this is" rows read together.
+  if (find !== 'absent') items.push(findRow());
   // Row 4 needs no target (FR-170a) — enabled in every state.
   items.push(row('osExplorer', 'Open in OS Explorer', false));
   if (program !== null) {
@@ -184,6 +220,17 @@ export function buildLinkMenu(ctx: LinkMenuContext): readonly LinkMenuItem[] {
   }
   items.push(copy);
   return items;
+}
+
+/**
+ * #714 — Find in File Explorer reveals the target in throng's own tree, which holds only the project, so it
+ * needs an existing target INSIDE the project, a file or a folder alike. Before main answers, and when the
+ * link did not resolve, it follows rows 2/3's rule (FR-170a, FR-170c): drawn disabled when the link is in
+ * the project by name, absent otherwise; an answer outside the project removes it.
+ */
+function findInExplorerState(resolution: LinkMenuContext['resolution'], applicable: LinkMenuApplicable): RowState {
+  if (resolution === 'pending' || resolution === null) return applicable.inProjectByName ? 'disabled' : 'absent';
+  return resolution.inProject ? 'enabled' : 'absent';
 }
 
 /**

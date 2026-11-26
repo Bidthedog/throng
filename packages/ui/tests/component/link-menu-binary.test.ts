@@ -11,8 +11,8 @@ import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 
 /**
  * #719 — a file the editor refuses as binary (067 FR-117's meaning: a PDF, an image, a spreadsheet, or any
- * file main's open decision refuses as `binary`) is never offered an editor on the Link menu: no Open In ▸
- * New Editor, Active Editor or named editor (045 FR-170e). Driven through `openFileLinkMenu`, the one
+ * file main's open decision refuses as `binary`) is never offered an editor on the Link menu: no editor row
+ * in Open In ▸ (045 FR-170e, kept inside the File Explorer's rows by 081 FR-051). Driven through `openFileLinkMenu`, the one
  * opener a terminal, an editor and a preview share, with main answered at the bridge.
  */
 
@@ -67,7 +67,10 @@ async function openMenu(text: string): Promise<{ first: MenuAction[]; settled: M
   return { first, settled: settled ?? [] };
 }
 
-const labels = (items: MenuAction[]): (string | undefined)[] => items.map((i) => i.label);
+/** The Open In ▸ rows' labels (081 FR-050: the File Explorer's rows, the editor targets among them). */
+const openIn = (items: MenuAction[]): (string | undefined)[] =>
+  (items.find((i) => i.label === 'Open In')?.submenu ?? []).map((i) => i.label);
+const EDITOR_ROWS = ['Last Active Editor', 'New Editor'];
 const BINARY = { action: 'refuse', reason: 'binary' };
 const fileLink = (path: string, preview: 'none' | 'enabled' | 'disabled'): LinkResolution => ({
   ok: true,
@@ -75,26 +78,28 @@ const fileLink = (path: string, preview: 'none' | 'enabled' | 'disabled'): LinkR
 });
 
 describe('the Link menu offers no editor for a binary file (#719, 045 FR-170e)', () => {
-  it('a PDF in the project: no Open In ▸, before or after main answers', async () => {
+  it('a PDF in the project: no editor row in Open In ▸, before or after main answers', async () => {
     bridge(fileLink(`${ROOT}/report.pdf`, 'enabled'), BINARY);
     const { first, settled } = await openMenu(`${ROOT}/report.pdf`);
-    expect(labels(first)).not.toContain('Open In');
-    expect(labels(settled)).not.toContain('Open In');
+    for (const row of EDITOR_ROWS) {
+      expect(openIn(first)).not.toContain(row);
+      expect(openIn(settled)).not.toContain(row);
+    }
     // Its preview and the OS routes stay on offer.
-    expect(labels(settled)).toContain('Open Preview');
-    expect(labels(settled)).toContain('Open in OS Default Program');
+    expect(openIn(settled)).toContain('New Preview Panel');
+    expect(openIn(settled)).toContain('Open in OS Default Program');
   });
 
-  it('a file no provider claims that main refuses as binary: no Open In ▸ once main answers', async () => {
+  it('a file no provider claims that main refuses as binary: no editor row once main answers', async () => {
     bridge(fileLink(`${ROOT}/blob.dat`, 'none'), BINARY);
     const { settled } = await openMenu(`${ROOT}/blob.dat`);
-    expect(labels(settled)).not.toContain('Open In');
-    expect(labels(settled)).toContain('Open in OS Default Program');
+    for (const row of EDITOR_ROWS) expect(openIn(settled)).not.toContain(row);
+    expect(openIn(settled)).toContain('Open in OS Default Program');
   });
 
-  it('control: a text file keeps Open In ▸', async () => {
+  it('control: a text file keeps its editor rows', async () => {
     bridge(fileLink(`${ROOT}/notes.txt`, 'none'), { action: 'open' });
     const { settled } = await openMenu(`${ROOT}/notes.txt`);
-    expect(labels(settled)).toContain('Open In');
+    expect(openIn(settled)).toEqual(expect.arrayContaining(EDITOR_ROWS));
   });
 });

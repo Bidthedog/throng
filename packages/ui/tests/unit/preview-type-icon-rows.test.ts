@@ -59,6 +59,7 @@ describe('Open In → Preview rows wear the type’s preview icon (074 FR-103)',
   });
 });
 
+// Open Preview is a UNC link's row since 081 FR-053; a local link draws the explorer's preview rows above.
 describe('a link menu’s Open Preview wears the linked type’s preview icon (074 FR-103)', () => {
   const applicable: LinkMenuApplicable = {
     inProjectByName: true,
@@ -70,7 +71,7 @@ describe('a link menu’s Open Preview wears the linked type’s preview icon (0
   const openPreviewRow = (previewIcon?: ReturnType<typeof previewIconOf>): MenuAction | undefined =>
     linkMenuActions(
       {
-        cls: 'onDevice',
+        cls: 'unc',
         applicable,
         openEditors: [],
         openLink: noop,

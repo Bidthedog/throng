@@ -8,6 +8,7 @@ import {
   type IconKey,
 } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
+import { openInSubmenu } from '../explorer/open-in-rows.js';
 import type { LinkOpenInTarget } from './link-open-in.js';
 
 /**
@@ -71,6 +72,11 @@ export interface LinkMenuBuildArgs {
   readonly copyLink: () => void | Promise<void>;
   readonly performers?: LinkMenuPerformers;
   /**
+   * 081 FR-050 — the Open In ▸ rows of a local file or folder, from core's target state: the surface builds
+   * them with the File Explorer's `openInRows`. Absent, or no rows, draws no Open In ▸.
+   */
+  readonly openIn?: (state: NonNullable<LinkMenuItem['openIn']>) => MenuAction[];
+  /**
    * 074 FR-103 — the icon Open Preview is drawn with: the preview icon of the provider that claims the linked
    * file (`previewIconOf`). Absent draws the generic `preview` icon.
    */
@@ -81,6 +87,7 @@ const ICONS: Partial<Record<LinkRow['id'], IconKey>> = {
   // Open Link and Open in OS Default Program carry no icon: no open/link token exists (023's rule,
   // #127) — an icon only where a real token exists, never a lookalike. Find in File Explorer (#714)
   // carries none either: it wears what the panel header's Reveal File in File Explorer wears, which is none.
+  // These rows are a UNC link's (081 FR-054 keeps them); a local link's Open In ▸ rows carry their own icons.
   openInNew: 'editorPanel',
   openInActive: 'editorPanel',
   openInEditor: 'editorPanel',
@@ -169,6 +176,12 @@ export function linkMenuActions(
   // disabled rows (the open answer arrives with the resolution).
   const fileOpen = args.fileOpen === true;
   for (const base of built) {
+    // 081 FR-050 — a local file or folder: the File Explorer's Open In ▸, built from core's target state.
+    if (base.id === 'openIn') {
+      const children = base.openIn !== undefined ? (args.openIn?.(base.openIn) ?? []) : [];
+      if (children.length > 0) rows.push(openInSubmenu(children, base.section));
+      continue;
+    }
     let item: LinkRow = base;
     if (fileOpen && base.submenu === 'Open In') {
       if (base.id === 'openInActive') continue;

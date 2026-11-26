@@ -2810,7 +2810,9 @@ found and is kept as written.*
 
   *(Superseded in part by 081 FR-050 – FR-053: for a local file or folder, the Open In, Open Preview, Open in OS
   Explorer and Open in OS Default Program rows move into one **Open In ▸** submenu built from the File Explorer's,
-  under its labels. FR-170a/FR-170c/FR-170e's omission and disabled rules still apply inside it.)*
+  under its labels. FR-170a/FR-170e's omission rules still apply inside it; FR-170c's rows not drawn while the target
+  resolves are drawn disabled there instead (081 FR-051); an executable's Open Program gives way to the File
+  Explorer's Open in OS Default Program; a UNC link keeps the rows above (081 FR-054).)*
 
   | Item | Offered when |
   |---|---|

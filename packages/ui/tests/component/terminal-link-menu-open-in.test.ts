@@ -6,9 +6,9 @@ import { mountEditor, type EditorHarness } from './helpers/mount-editor.js';
 import { TerminalPanel } from '../../src/renderer/terminal/terminal-panel.js';
 
 /**
- * 045 FR-170 row 2 — a TERMINAL's Link menu offers **Open In ▸ <editor name>** for every open editor
- * (T277), from the same `linkOpenInEditors` the editor's menu reads, and each Open In row performs its
- * own route.
+ * 081 FR-050 — a TERMINAL's Link menu over a local file offers the File Explorer's **Open In ▸** for that
+ * file, built by the explorer's own `openInRows`, and each row performs the explorer's route: an editor
+ * target opens the file, Terminal ▸ a flavour opens a shell in the file's folder.
  *
  * `link-position-open.test.ts`'s harness: a real `TerminalPanel` beside a mounted editor (`p-ed`,
  * titled "Panel 1", showing `notes.md`), with only `useTerminal` stubbed — it would mount xterm and
@@ -49,6 +49,8 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+const BASH = { id: 'bash', label: 'Bash', defaultShellArguments: '' };
+
 async function mountBoth(fooIsOpen = false) {
   const notifyTyped = vi.fn();
   const resolve = vi.fn(
@@ -72,7 +74,8 @@ async function mountBoth(fooIsOpen = false) {
     throng: {
       panel: { notifyDestroyed: vi.fn(), notifyRenamed: vi.fn(), notifyTyped },
       links: { resolve, reveal: async () => ({ ok: true as const }), open: async () => ({ ok: true as const }) },
-      terminal: {},
+      // 033 FR-030 — the flavour catalogue Open In ▸ Terminal offers.
+      terminal: { listFlavours: async () => [BASH] },
     },
     extras: [createElement(TerminalPanel, { key: 'term', panel: terminalPanel, tabId: 't1', projectRoot: ROOT })],
   });
@@ -106,8 +109,9 @@ function menuItem(label: string): HTMLElement {
   return el;
 }
 
+/** Once main has answered, open Open In ▸ and answer its rows' labels. */
 async function openInRows(): Promise<string[]> {
-  await waitFor(() => expect(menuItem('Open In').getAttribute('aria-disabled')).toBe('false'));
+  await waitFor(() => expect(menuItem('Find in File Explorer').getAttribute('aria-disabled')).toBe('false'));
   menuItem('Open In').click();
   const flyout = await waitFor(() => {
     const el = document.querySelector<HTMLElement>('[data-testid="submenu-Open In"]');
@@ -119,37 +123,35 @@ async function openInRows(): Promise<string[]> {
   );
 }
 
-describe('the terminal Link menu — Open In ▸ names every open editor (FR-170 row 2)', () => {
-  it('New Editor, Active Editor, then the open editor by its panel name', async () => {
+describe('the terminal Link menu — Open In ▸ is the File Explorer’s (081 FR-050)', () => {
+  it('the File Explorer’s rows for an in-project file, after one resolution', async () => {
     const m = await mountBoth();
     rightClickTerminal();
-    expect(await openInRows()).toEqual(['New Editor', 'Active Editor', 'Panel 1']);
+    expect(await openInRows()).toEqual([
+      'OS File Explorer',
+      'Open in OS Default Program',
+      'Last Active Editor',
+      'New Editor',
+      'Terminal',
+      'Search',
+    ]);
     expect(m.resolve).toHaveBeenCalledTimes(1);
   });
 
-  it('the named row opens the file INTO that editor', async () => {
-    const m = await mountBoth();
-    rightClickTerminal();
-    await openInRows();
-    menuItem('Panel 1').click();
-
-    await waitFor(() => expect(m.h.view().state.doc.toString()).toBe('export const foo = 1;\n'));
-    expect(m.notifyTyped).not.toHaveBeenCalled();
-  });
-
-  it('a file already open anywhere: one Current Editor row, the named editor disabled (060 FR-045)', async () => {
+  it('a file already open anywhere: one Current Editor row, which opens no new panel (060 FR-045)', async () => {
     const m = await mountBoth(true);
     rightClickTerminal();
-    expect(await openInRows()).toEqual(['Current Editor', 'Panel 1']);
-    expect(menuItem('Panel 1').getAttribute('aria-disabled')).toBe('true');
+    const rows = await openInRows();
+    expect(rows).toContain('Current Editor');
+    expect(rows).not.toContain('New Editor');
     menuItem('Current Editor').click();
-    // It takes the active-editor route (main's one-buffer check focuses the holder of an open file —
+    // It takes the last-active route (main's one-buffer check focuses the holder of an open file —
     // the fake main here does not model that), so no new editor panel is created.
     await waitFor(() => expect(m.h.calls.load).toHaveBeenCalled());
     expect(m.notifyTyped).not.toHaveBeenCalled();
   });
 
-  it('New Editor opens a NEW editor panel, and the named editor keeps its file', async () => {
+  it('New Editor opens a NEW editor panel, and the open editor keeps its file', async () => {
     const m = await mountBoth();
     rightClickTerminal();
     await openInRows();
@@ -158,4 +160,22 @@ describe('the terminal Link menu — Open In ▸ names every open editor (FR-170
     await waitFor(() => expect(m.notifyTyped).toHaveBeenCalledWith(expect.any(String), 'editor', { filePath: FOO }));
     expect(m.h.calls.load).not.toHaveBeenCalled();
   });
+
+  it('Terminal ▸ a flavour opens a shell in the linked file’s folder (033 FR-031)', async () => {
+    const m = await mountBoth();
+    rightClickTerminal();
+    await openInRows();
+    menuItem('Terminal').click();
+    await waitFor(() => expect(document.querySelector('[data-testid="menu-item-Bash"]')).not.toBeNull());
+    menuItem('Bash').click();
+
+    await waitFor(() =>
+      expect(m.notifyTyped).toHaveBeenCalledWith(
+        expect.any(String),
+        'terminal',
+        expect.objectContaining({ flavourId: 'bash', startDirectory: 'C:/proj/src' }),
+      ),
+    );
+  });
 });
+

@@ -98,6 +98,11 @@ const resolvedFile: ResolvedLink = {
   preview: 'enabled',
 };
 
+/** A row of the menu's Open In ▸ submenu, by label. */
+function openInRow(items: readonly MenuAction[] | undefined, label: string): MenuAction | undefined {
+  return items?.find((i) => i.label === 'Open In')?.submenu?.find((i) => i.label === label);
+}
+
 function baseArgs(over: Partial<PreviewLinkMenuArgs> = {}): PreviewLinkMenuArgs {
   return {
     x: 1,
@@ -129,20 +134,17 @@ describe('openPreviewLinkMenu — SC-025: the same Link menu, per fixture (FR-17
     expect(opened).toBe(true);
     expect(resolve).toHaveBeenCalledTimes(1);
     expect(resolve.mock.calls[0]?.[0]).toMatchObject({ text: resolvedFile.path, kind: 'fileHyperlink' });
-    // Rows 5/6 are not drawn yet (FR-170c) — main has not answered.
-    expect(opener.opened[0]?.map((i) => i.label)).not.toContain('Open in OS Default Program');
+    // 081 FR-051 — before main answers, the default-program row is drawn inside Open In ▸, disabled.
+    const TOP = ['Open Link', 'Open In', 'Find in File Explorer', 'Copy Link to Clipboard'];
+    expect(opener.opened[0]?.map((i) => i.label)).toEqual(TOP);
+    expect(openInRow(opener.opened[0], 'Open in OS Default Program')?.disabled).toBe(true);
 
     await waitFor(() => expect(opener.updated).toHaveLength(1));
-    const filled = opener.updated[0]?.[1]?.map((i) => i.label);
-    expect(filled).toEqual([
-      'Open Link',
-      'Open In',
-      'Open Preview',
-      'Find in File Explorer',
-      'Open in OS Explorer',
-      'Open in OS Default Program',
-      'Copy Link to Clipboard',
-    ]);
+    const filled = opener.updated[0]?.[1];
+    expect(filled?.map((i) => i.label)).toEqual(TOP);
+    // 081 FR-050 — the File Explorer's OS and preview rows, now inside Open In ▸.
+    expect(openInRow(filled, 'Open in OS Default Program')?.disabled).toBeFalsy();
+    expect(openInRow(filled, 'New Preview Panel')?.disabled).toBeFalsy();
   });
 
   it('068 FR-006: a resolved wikilink’s menu resolves and copies the file main answered, not candidate 0', async () => {
@@ -174,9 +176,13 @@ describe('openPreviewLinkMenu — SC-025: the same Link menu, per fixture (FR-17
     });
 
     await waitFor(() => expect(opener.updated).toHaveLength(1));
-    // Out of project once resolved: rows 2/3 (Open In / Open Preview) are REMOVED, not disabled.
-    const filled = opener.updated[0]?.[1]?.map((i) => i.label);
-    expect(filled).toEqual(['Open Link', 'Open in OS Explorer', 'Open in OS Default Program', 'Copy Link to Clipboard']);
+    // Out of project once resolved: Open In ▸ holds the two OS rows only (081 FR-051, FR-052).
+    const filled = opener.updated[0]?.[1];
+    expect(filled?.map((i) => i.label)).toEqual(['Open Link', 'Open In', 'Copy Link to Clipboard']);
+    expect(filled?.find((i) => i.label === 'Open In')?.submenu?.map((i) => i.label)).toEqual([
+      'OS File Explorer',
+      'Open in OS Default Program',
+    ]);
   });
 
   it('a `heading` link maps to the anchor rows — Open Link and Copy Link to Clipboard only, no resolve', () => {
@@ -253,7 +259,7 @@ describe('openPreviewLinkMenu — SC-025: the same Link menu, per fixture (FR-17
     for (const target of ['D:\\elsewhere\\', 'D:\\proj\\']) {
       const opener = fakeOpener();
       openPreviewLinkMenu(baseArgs({ link: { kind: 'outside', target }, opener }));
-      expect(opener.opened[0]?.map((i) => i.label)).toEqual(['Open Link', 'Open in OS Explorer', 'Copy Link to Clipboard']);
+      expect(opener.opened[0]?.map((i) => i.label)).toEqual(['Open Link', 'Open In', 'Copy Link to Clipboard']);
     }
   });
 
@@ -318,7 +324,7 @@ describe('in a mounted panel', () => {
     }
   });
 
-  it('a `file` link’s Link menu sends throng:links:resolve and offers Open In / Open Preview once it answers', async () => {
+  it('a `file` link’s Link menu sends throng:links:resolve and offers Open In ▸ New Preview Panel once it answers', async () => {
     const m = await mountMarkdownPreview('# T\n\n[Other](other.md)\n', 'D:/proj/docs/a.md');
     try {
       m.links.resolve.mockResolvedValue({
@@ -329,7 +335,8 @@ describe('in a mounted panel', () => {
       fireEvent.contextMenu(other, { clientX: 20, clientY: 20 });
       await screen.findByTestId('menu-item-Open Link');
       await waitFor(() => expect(m.links.resolve).toHaveBeenCalledTimes(1));
-      await screen.findByTestId('menu-item-Open Preview');
+      fireEvent.click(await screen.findByTestId('menu-item-Open In'));
+      await waitFor(() => expect(screen.getByTestId('menu-item-New Preview Panel').getAttribute('aria-disabled')).toBe('false'));
     } finally {
       m.unmount();
     }
