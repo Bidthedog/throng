@@ -12,6 +12,38 @@ Each record is an HTML comment, so read this file as source rather than rendered
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 7.4.1 → 7.5.0
+Bump rationale: MINOR. Issue #717 (Tweak, maintainer-agreed): the Preferences fold headings' "Fold section" /
+                "Unfold section" hover popup repeated what the heading already shows and got in the way of the
+                pointer moving down the list. The maintainer chose to amend the rule rather than log a known gap.
+                Development Workflow & Quality Gates › Action controls gains "Exception — disclosure headings": a
+                fold/expand control whose own visible text names what it opens need not carry a hover title; its
+                accessible name is that text, and its open state is shown by its chevron and aria-expanded.
+                Argued against the project's own test. Not MAJOR: no previously-compliant work becomes
+                non-compliant, and the exception is bounded to controls whose visible text already carries what
+                the title would say, as 7.1.0's bounded CI exception was. Not PATCH: it changes what the rule
+                requires of a class of controls. A bounded exception that adds no obligation sits with MINOR.
+Modified principles: none.
+Modified sections: Development Workflow & Quality Gates › Action controls (new exception bullet, here and in
+                throng-renderer-ui/references/constitution-ux.md).
+Added sections: none. Removed sections: none.
+Audit (2026-11-24): covered and now titled none: the Preferences fold headings
+                (`packages/ui/src/renderer/preferences/fold-heading.tsx`). Covered and unchanged, as the exception
+                permits rather than requires: the markdown preview's callout title row (`callout-dom.ts`). Not
+                covered, because the chevron is a button of its own with no text: the explorer tree's twisty, the
+                Find in Files group chevron, the heading outline's toggle and the markdown fold gutter; each keeps
+                its hover title.
+Enforcement: `packages/ui/tests/component/preferences-fold-heading.test.ts` asserts the fold heading carries no
+                title, open or folded. No unit guard enforces titles on icon buttons; none needed changing.
+Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — name no control
+                titling; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Deferred: none.
+-->
+
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 7.4.0 → 7.4.1
 Bump rationale: PATCH. The maintainer (2026-11-20 13:05): "The constitution is still too long, though.
                 Do what you can to reduce it whilst not losing any salient information", by the method

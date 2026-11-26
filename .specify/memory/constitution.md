@@ -1,31 +1,24 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 7.4.1 → 7.5.0
-Bump rationale: MINOR. Issue #717 (Tweak, maintainer-agreed): the Preferences fold headings' "Fold section" /
-                "Unfold section" hover popup repeated what the heading already shows and got in the way of the
-                pointer moving down the list. The maintainer chose to amend the rule rather than log a known gap.
-                Development Workflow & Quality Gates › Action controls gains "Exception — disclosure headings": a
-                fold/expand control whose own visible text names what it opens need not carry a hover title; its
-                accessible name is that text, and its open state is shown by its chevron and aria-expanded.
-                Argued against the project's own test. Not MAJOR: no previously-compliant work becomes
-                non-compliant, and the exception is bounded to controls whose visible text already carries what
-                the title would say, as 7.1.0's bounded CI exception was. Not PATCH: it changes what the rule
-                requires of a class of controls. A bounded exception that adds no obligation sits with MINOR.
-Modified principles: none.
-Modified sections: Development Workflow & Quality Gates › Action controls (new exception bullet, here and in
-                throng-renderer-ui/references/constitution-ux.md).
+Version change: 7.5.0 → 7.6.0
+Bump rationale: MINOR. Spec 080 (#477, maintainer-agreed): Help opens the online guide with **F1**, the
+                standard Help key. The maintainer chose it in 080's clarification of 2026-11-25 ("A": F1,
+                live everywhere except a terminal, so F1 still reaches a program running there). Principle
+                IV's chord tiers judge no function key, but their recorded-exception list is exhaustive and
+                says an addition MUST be justified in the spec that ships it and recorded here; F1 is added
+                beside F2, F3, F11 and Shift+F10. Not MAJOR: no previously-compliant work becomes
+                non-compliant. Not PATCH: the exhaustive list changes. A bounded exception that adds no
+                obligation sits with MINOR, as 5.10.0's `panel.toggleMaximise` did.
+Modified principles: IV (Modifier tiers › Recorded exceptions: `help.open` `F1`).
 Added sections: none. Removed sections: none.
-Audit (2026-11-24): covered and now titled none: the Preferences fold headings
-                (`packages/ui/src/renderer/preferences/fold-heading.tsx`). Covered and unchanged, as the exception
-                permits rather than requires: the markdown preview's callout title row (`callout-dom.ts`). Not
-                covered, because the chevron is a button of its own with no text: the explorer tree's twisty, the
-                Find in Files group chevron, the heading outline's toggle and the markdown fold gutter; each keeps
-                its hover title.
-Enforcement: `packages/ui/tests/component/preferences-fold-heading.test.ts` asserts the fold heading carries no
-                title, open or folded. No unit guard enforces titles on icon buttons; none needed changing.
-Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — name no control
-                titling; no edit.
+Terminal tiers: unaffected. `help.open` is scoped to every surface but a terminal (080 FR-010), so F1 is
+                never taken from a shell and needs no terminal-tier entry.
+Enforcement: `packages/core/tests/unit/keybindings-tiers.test.ts` (TIER_EXCEPTIONS gains `help.open|F1`);
+                `packages/core/tests/unit/keybindings-080.test.ts` asserts the scope excludes `terminal` and F1
+                resolves to nothing there.
+Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — name no chord;
+                no edit.
            ✅ .specify/extensions.yml — no constitution hooks.
 Deferred: none.
 -->
@@ -225,6 +218,8 @@ able to guess its modifiers. The binding detail of the rules below is in the
     046 carries it as a question for the maintainer.)*
   - **`panel.toggleMaximise` `Alt+Shift+Enter`** (spec 054), outside the tiers for the same reason,
     by the maintainer's decision; its terminal-tier entry is above.
+  - **`help.open` `F1`** (spec 080), the standard Help key, by the maintainer's decision. It is never
+    live in a terminal, so it needs no terminal-tier entry.
 - **The tiers never override the terminal tiers above.** A reserved chord stays untakeable whatever
   tier it is in, and a shadowable chord still needs a recorded exception; which modifier-encoded
   chords stay subject to the terminal tiers is in the `throng-terminal-pty` skill
@@ -639,4 +634,4 @@ Rationale: an installed build has no console, so the log is the only thing a use
   is kept in [`constitution-history.md`](constitution-history.md), newest first. This file carries
   only the latest amendment's report.
 
-**Version**: 7.5.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-24
+**Version**: 7.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-25
