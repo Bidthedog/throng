@@ -66,6 +66,7 @@ import {
 import { ChangeSet, type Text } from '@codemirror/state';
 import { DocumentAuthority } from './document-authority.js';
 import { namesPath } from './shared-file-watcher.js';
+import { EXTERNAL_DELETE_SETTLE_MS } from './external-delete-settle.js';
 import type { DropDecision } from '@throng/core';
 import type { EditorService, LoadResult, ReadNotice, SaveResult } from './editor-service.js';
 
@@ -288,6 +289,12 @@ interface CoordDoc {
   /** Watch on the doc's folder for external changes (soft detection, FR-028). */
   watch?: Disposable;
   recoveryTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * 081 FR-013 (contracts/settle-window.md) — the watched path failed to read and nothing has reported it yet. On
+   * fire the path is read again: back, and the ordinary change path runs; still gone, and `markDeleted` reports it.
+   * Replaced by a newer failed read, cleared by a read that succeeds, by `beginMove` and with the watch.
+   */
+  deleteSettle?: ReturnType<typeof setTimeout>;
   /**
    * What the {@link DocumentLifecycleListener} was last told about this panel's document (044 u4).
    *
@@ -975,7 +982,10 @@ export class EditorCoordinator {
       if (!abs) continue;
       // A folder's move takes every document beneath it (FR-005) — by IDENTITY, never by raw
       // spelling: these paths come from `node:path.join`, the doc's came from the tree (FR-007).
-      if (absPaths.some((p) => isUnderPath(abs, p))) doc.movePending = true;
+      if (absPaths.some((p) => isUnderPath(abs, p))) {
+        doc.movePending = true;
+        this.clearDeleteSettle(doc); // 081 — the bracket owns the window from here, so no timer outlasts it
+      }
     }
   }
 
@@ -2895,9 +2905,17 @@ export class EditorCoordinator {
   private disposeWatch(doc: CoordDoc): void {
     doc.watch?.dispose();
     doc.watch = undefined;
+    this.clearDeleteSettle(doc);
   }
 
-  private async onDiskChange(panelId: string, watchedPath: string): Promise<void> {
+  private clearDeleteSettle(doc: CoordDoc): void {
+    if (doc.deleteSettle === undefined) return;
+    clearTimeout(doc.deleteSettle);
+    doc.deleteSettle = undefined;
+  }
+
+  /** `settled`: this read is the settle timer's own, so a path still gone is reported now (081 FR-013). */
+  private async onDiskChange(panelId: string, watchedPath: string, settled = false): Promise<void> {
     const doc = this.docs.get(panelId);
     if (!doc || doc.absPath !== watchedPath) return; // stale watch after a re-point
     // In the encoding the user chose, while it still reads (059 FR-028); detected otherwise.
@@ -2920,6 +2938,8 @@ export class EditorCoordinator {
     // is the `terminate-all` accident in miniature (FR-011). `markMoved` re-watches what moved, and a panel left
     // on a restored path reads it fresh.
     if (doc.movePending) return;
+    // The path reads: whatever a settle timer was waiting to report is not true (081 FR-013).
+    if (res.ok) this.clearDeleteSettle(doc);
     if (res.ok && (doc.unloadable || doc.fileMissing)) {
       this.pathCameBack(doc, res);
       return;
@@ -2930,7 +2950,23 @@ export class EditorCoordinator {
       // untyped `neverRead` document alone (the FR-106d stand-in, a failed restore): its file was already
       // gone, so there is no buffer to keep, and a file that later appears is still adopted by the
       // `res.ok` branch above. One rule for the watch and for File Explorer's delete.
-      if (!doc.fileMissing) this.markDeleted([doc.absPath]);
+      if (doc.fileMissing) return;
+      /*
+       * 081 FR-013 — not yet. Another program that deletes a file and writes it again (an agent, a formatter)
+       * leaves a gap this read falls into, and reporting it force-dirtied a clean buffer and raised the notice and
+       * the banner over a file back on disk a moment later (#728). The path must stay gone for the settle window;
+       * a newer failed read restarts it. The timer is no bracket substitute: throng's own moves never get here
+       * (`movePending` above), and `markDeleted` stays immediate for File Explorer's delete (FR-014).
+       */
+      if (!settled) {
+        this.clearDeleteSettle(doc);
+        doc.deleteSettle = setTimeout(() => {
+          doc.deleteSettle = undefined;
+          void this.onDiskChange(panelId, watchedPath, true);
+        }, EXTERNAL_DELETE_SETTLE_MS);
+        return;
+      }
+      this.markDeleted([doc.absPath]);
       return;
     }
     /**

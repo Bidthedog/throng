@@ -7,6 +7,7 @@ import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { EditorService } from '../../src/main/editor-service.js';
 import { EditorCoordinator, type DocMeta } from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
+import { EXTERNAL_DELETE_SETTLE_MS } from '../../src/main/external-delete-settle.js';
 import { NavigationHistoryService } from '../../src/main/navigation-history-service.js';
 import { manualWatcher } from './helpers/preview-harness.js';
 import { editDocument } from './helpers/edit-document.js';
@@ -317,7 +318,10 @@ describe('a load with a history intent moves only (FR-102)', () => {
     let watcher: ReturnType<typeof manualWatcher>;
     let dirtyRelays: boolean[];
 
+    // 081 FR-013 — past the settle window too: a path the watch finds gone is reported only once it has stayed gone,
+    // so an assertion that the stand-in stays clean means nothing until that report could have landed.
     const letTheWatchLand = async (): Promise<void> => {
+      await new Promise((r) => setTimeout(r, EXTERNAL_DELETE_SETTLE_MS));
       for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
     };
 

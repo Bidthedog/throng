@@ -1005,7 +1005,7 @@ export function useEditor(params: UseEditorParams): void {
    */
   const formatCommands = useRef<FormatCommands>({
     pick: (mode: EncodingPickerMode): void => {
-      if (mode === 'reopen' && (!configRef.current.filePath || fileMissingRef.current)) return;
+      if (mode === 'reopen' && (!configRef.current.filePath || fileMissingRef.current || historyStandInRef.current)) return;
       requestEncodingPicker(panelId, mode);
     },
     convert: (target) => void getEditorActions(panelId)?.convertLineEndings?.(target),
@@ -1207,6 +1207,10 @@ export function useEditor(params: UseEditorParams): void {
   const unloadableRef = useRef(false);
   /** WHY, where this view was the one that tried to read it (030 FR-052) — see `unloadableDetail`. */
   const unloadableDetailRef = useRef<string | undefined>(undefined);
+  /** The refusal reason behind `unloadableDetail` (081 FR-010) — see `EditorUiState.unloadableReason`. */
+  const unloadableReasonRef = useRef<string | undefined>(undefined);
+  /** The panel shows a Back/Forward stand-in for a gone path (081 FR-012) — see `EditorUiState.historyStandIn`. */
+  const historyStandInRef = useRef(false);
   /**
    * This panel's INITIAL open has not answered yet (#369) — see `EditorUiState.openPending`.
    *
@@ -1256,6 +1260,8 @@ export function useEditor(params: UseEditorParams): void {
       fileMissing: fileMissingRef.current,
       unloadable: unloadableRef.current,
       unloadableDetail: unloadableRef.current ? unloadableDetailRef.current : undefined,
+      unloadableReason: unloadableRef.current ? unloadableReasonRef.current : undefined,
+      historyStandIn: unloadableRef.current && historyStandInRef.current,
       openPending: openPendingRef.current,
       ownerProjectId: metaRef.current.ownerProjectId,
       movedOut: movedOutRef.current,
@@ -1325,6 +1331,8 @@ export function useEditor(params: UseEditorParams): void {
       fileMissingRef.current = false;
       unloadableRef.current = false;
       unloadableDetailRef.current = undefined;
+      unloadableReasonRef.current = undefined;
+      historyStandInRef.current = false;
       openPendingRef.current = false;
       configRef.current = { ...configRef.current, movedOut: true };
     } else {
@@ -1722,6 +1730,8 @@ export function useEditor(params: UseEditorParams): void {
       fileMissingRef.current = false;
       unloadableRef.current = false; // the path read, so whatever the banner was about is over
       unloadableDetailRef.current = undefined;
+      unloadableReasonRef.current = undefined;
+      historyStandInRef.current = false;
       // A file opened in place is this project's own file: the moved-out state belongs to the document it left.
       if (movedOutRef.current) {
         applyMovedOut(false);
@@ -1745,11 +1755,17 @@ export function useEditor(params: UseEditorParams): void {
        * view like any other), so this panel now holds THAT file — in the could-not-read state a restore
        * reaches for the same condition: the banner, naming it, for as long as it is true. The banner is the
        * condition's one surface, so no second, one-shot notice is raised beside it.
+       *
+       * 081 FR-012 — `fileMissing` stays false, as main keeps it for the stand-in (`replaceDoc`), and the panel is
+       * marked as a stand-in so the tab-open scan skips it. Setting `fileMissing` here made the next tab change
+       * report a path the user only stepped through (#728).
        */
       configRef.current = { ...configRef.current, filePath: absPath };
       ws.updatePanelConfig(panelId, { filePath: absPath });
-      fileMissingRef.current = true;
+      fileMissingRef.current = false;
       unloadableRef.current = true;
+      historyStandInRef.current = true;
+      unloadableReasonRef.current = loaded.reason;
       unloadableDetailRef.current = missingFileDetail(
         { filePath: absPath, reason: loaded.reason },
         win()?.osName ?? 'windows',
@@ -1791,6 +1807,8 @@ export function useEditor(params: UseEditorParams): void {
     fileMissingRef.current = false;
     unloadableRef.current = false;
     unloadableDetailRef.current = undefined;
+    unloadableReasonRef.current = undefined;
+    historyStandInRef.current = false;
     publishState();
     // The bytes decide the encoding and the name decides the language — both may have changed
     // while the path was unreadable (FR-002a).
@@ -2215,7 +2233,7 @@ export function useEditor(params: UseEditorParams): void {
                     return {
                       encoding: {
                         current: { encoding: enc, hasBom: bom },
-                        canReopen: !!cfg.filePath && !fileMissingRef.current && !movedOutRef.current,
+                        canReopen: !!cfg.filePath && !fileMissingRef.current && !historyStandInRef.current && !movedOutRef.current,
                         change: (c: { encoding: EncodingId; hasBom: boolean }) =>
                           void changeEncoding(c.encoding, c.hasBom),
                         openReopenPicker: () => requestEncodingPicker(panelId, 'reopen'),
@@ -2572,7 +2590,11 @@ export function useEditor(params: UseEditorParams): void {
       // The backing file was deleted (FR-099): the document stays dirty (there is no version of it
       // on disk) so the buffer survives and a save re-creates the file. The tab-open watcher (not
       // this event) raises the notice.
-      if (msg.deleted === true) fileMissingRef.current = true;
+      if (msg.deleted === true) {
+        fileMissingRef.current = true;
+        unloadableReasonRef.current = 'missing'; // 081 FR-010 — a delete is the one verdict whose reason is known
+        historyStandInRef.current = false;
+      }
       // …and the file CAME BACK (024 US3, #85 — a delete that was undone). The document is backed
       // again, so the missing-file flag goes; whether it is still DIRTY was decided by the authority
       // (it compared the restored file with this buffer) and arrives with the message. Leaving the
@@ -2597,6 +2619,15 @@ export function useEditor(params: UseEditorParams): void {
         // view happened to remember from an earlier read is dropped rather than shown beside a
         // verdict it may no longer belong to.
         unloadableDetailRef.current = undefined;
+        /*
+         * 081 FR-010 — the reason is kept across a reason-less `unloadable: true`: `verifyPath` re-confirms the
+         * condition this view's own read named (a folder stays a folder), and dropping it made the scan call that
+         * folder missing. A verdict that the path reads again ends both.
+         */
+        if (!msg.unloadable) {
+          unloadableReasonRef.current = undefined;
+          historyStandInRef.current = false;
+        }
         publishState();
       }
       // throng moved the file, and this document went with it (019, FR-002). Its PATH changed and
@@ -2813,6 +2844,16 @@ export function useEditor(params: UseEditorParams): void {
         // load, so without adopting the authority's answer the editor would quietly go back to
         // presenting remembered text as the file (027 / #161).
         unloadableRef.current = !!existing.unloadable;
+        /*
+         * 081 FR-010, FR-012 — the reason and the stand-in mark are this panel's own, learnt by the view that read
+         * the path; the authority's answer carries neither. The store outlives an unmount (a tab switch, a drag), so
+         * a remount onto the same unreadable path keeps them, and the scan on the tab's next activation still words
+         * a folder as a folder and still skips a stand-in.
+         */
+        const kept = getEditorState(panelId);
+        const sameCondition = !!existing.unloadable && kept?.unloadable === true && kept.filePath === (existing.absPath ?? null);
+        unloadableReasonRef.current = sameCondition ? kept.unloadableReason : undefined;
+        historyStandInRef.current = sameCondition && kept.historyStandIn === true;
         // 050 R18 — the authority's word on it joins the persisted one: a remount reads it.
         if (existing.movedOut === true || movedOutRef.current) applyMovedOut(true);
         replacedRef.current = existing.replaced === true;
@@ -2917,6 +2958,8 @@ export function useEditor(params: UseEditorParams): void {
           fileMissingRef.current = false;
           unloadableRef.current = false;
           unloadableDetailRef.current = undefined;
+          unloadableReasonRef.current = undefined;
+          historyStandInRef.current = false;
           if (recovered && recovered.text !== loaded.text) {
             // Unsaved edits survived a restart — restore them INTO THE AUTHORITY, dirty against the
             // disk file. Restoring them into this view alone would make it disagree with the
@@ -2940,6 +2983,8 @@ export function useEditor(params: UseEditorParams): void {
           unloadableRef.current = true;
           // …and WHY, in the same words the notice's own row carries (FR-052/FR-048a). This view is
           // the one that tried to read the path, so it is the only place the reason exists at all.
+          unloadableReasonRef.current = loaded.reason; // 081 FR-010 — the scan words its notice from this
+          historyStandInRef.current = false;
           unloadableDetailRef.current = missingFileDetail(
             { filePath: cfg.filePath ?? null, reason: loaded.reason },
             win()?.osName ?? 'windows',

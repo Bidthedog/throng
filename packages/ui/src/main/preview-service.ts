@@ -86,6 +86,7 @@ import type { EditorService, LoadResult } from './editor-service.js';
 import type { MovePair } from './files-service.js';
 import type { PreviewLookup, PreviewRunRef } from './preview-protocol.js';
 import { namesPath } from './shared-file-watcher.js';
+import { EXTERNAL_DELETE_SETTLE_MS } from './external-delete-settle.js';
 
 /**
  * How long an `open` holds a path for the panel it asked a window to place (contracts/preview-ipc.md
@@ -235,6 +236,11 @@ interface PreviewRun {
   lastViewer: number;
   /** An in-app move of this file is in progress (FR-013c): its absence is the move, not a delete. */
   movePending: boolean;
+  /**
+   * 081 FR-013 (contracts/settle-window.md) — the watch read the file as gone and nothing has said so yet. On fire
+   * the file is read again. Replaced by a newer gone read, cleared by any other read, by `beginMove` and with the watch.
+   */
+  deleteSettle?: ReturnType<typeof setTimeout>;
   /** Bumped by every disk read and every change of source, so a stale read lands nowhere. */
   readSeq: number;
   /** Bumped by every link navigation, so one overtaken by a later one while it read changes nothing. */
@@ -1155,6 +1161,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     run.scheduler = null;
     run.timing = null;
     if (run.source.kind === 'disk') run.source.watch.dispose();
+    this.clearDeleteSettle(run);
     run.readSeq += 1;
     run.movePending = false;
     run.notice = null;
@@ -1310,6 +1317,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     for (const run of this.runs.values()) {
       if (run.source.kind === 'disk' && absPaths.some((p) => isUnderPath(run.filePath, p))) {
         run.movePending = true;
+        this.clearDeleteSettle(run); // 081 — the bracket owns the window from here
       }
     }
   }
@@ -1383,6 +1391,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     run.readSeq += 1; // a read still in flight describes where the file was
     if (!backInside) {
       if (run.source.kind === 'disk') run.source.watch.dispose();
+    this.clearDeleteSettle(run);
       run.source = { kind: 'disk', watch: { dispose: () => {} } };
       run.movedOut = true;
       this.rebind(run, next, { rewriteHistory: false, claim: false, movedOut: wasOut ? undefined : true });
@@ -1724,6 +1733,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private dropRun(run: PreviewRun): void {
     run.scheduler?.cancel();
     if (run.source.kind === 'disk') run.source.watch.dispose();
+    this.clearDeleteSettle(run);
     run.readSeq += 1;
     this.runs.delete(run.panelId);
     const key = canon(run.filePath);
@@ -1900,6 +1910,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private makeParented(run: PreviewRun, documentPanelId: string): void {
     if (this.deps.registry.get(run.providerId)?.kind === 'binary') return; // FR-073: always standalone
     if (run.source.kind === 'disk') run.source.watch.dispose();
+    this.clearDeleteSettle(run);
     run.readSeq += 1;
     run.movePending = false;
     run.source = { kind: 'document', documentPanelId };
@@ -1972,6 +1983,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   /** (Re)watch the run's folder and make the disk its source. */
   private watchDisk(run: PreviewRun): void {
     if (run.source.kind === 'disk') run.source.watch.dispose();
+    this.clearDeleteSettle(run);
     const watchedPath = run.filePath;
     const watch = this.deps.fileWatcher.watch(dirname(watchedPath), (_path, batch) => {
       if (this.runs.get(run.panelId) !== run || run.filePath !== watchedPath) return; // a stale watch
@@ -2000,6 +2012,12 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       return null;
     }
     return size > limit ? { kind: 'too-large', size, limit, limitKey: maxFileBytesKeyFor(this.deps.registry, providerId) } : null;
+  }
+
+  private clearDeleteSettle(run: PreviewRun): void {
+    if (run.deleteSettle === undefined) return;
+    clearTimeout(run.deleteSettle);
+    run.deleteSettle = undefined;
   }
 
   private readDisk(run: PreviewRun): Promise<DiskRead> {
@@ -2071,7 +2089,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
    * (a refresh, a change of source); `repeat` marks an unchanged notice as a repeat so it flashes
    * (FR-026). Returns the update sent, or `null` when the read was stale or changed nothing.
    */
-  private async readAndApply(run: PreviewRun, opts: { force: boolean; repeat: boolean }): Promise<PreviewUpdate | null> {
+  private async readAndApply(
+    run: PreviewRun,
+    opts: { force: boolean; repeat: boolean; settled?: boolean },
+  ): Promise<PreviewUpdate | null> {
     if (run.movedOut) return null; // 050 FR-035 — reads nothing
     const seq = ++run.readSeq;
     const path = run.filePath;
@@ -2082,6 +2103,21 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     if (!read.ok) {
       // An in-app move in progress: the file is in flight, not deleted (FR-013c).
       if (run.movePending) return null;
+      /*
+       * 081 FR-013 — the watch found the file gone: wait the settle window before saying so. Another program that
+       * deletes a file and writes it again leaves a gap this read falls into, and the preview said "no longer
+       * exists" over a file back on disk a moment later (#728). Only the watch's own read (`force` false) waits: a
+       * refresh or a change of source is the user asking, and is answered now.
+       */
+      if (read.notice.kind === 'deleted' && !opts.force && opts.settled !== true && run.notice?.kind !== 'deleted') {
+        this.clearDeleteSettle(run);
+        run.deleteSettle = setTimeout(() => {
+          run.deleteSettle = undefined;
+          void this.readAndApply(run, { force: false, repeat: false, settled: true });
+        }, EXTERNAL_DELETE_SETTLE_MS);
+        return null;
+      }
+      this.clearDeleteSettle(run);
       if (run.notice?.kind === read.notice.kind) {
         if (opts.repeat) return this.emit(run, null, { ...read.notice, repeat: true });
         return opts.force ? this.emit(run, null) : null;
@@ -2090,6 +2126,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       return this.emit(run, null);
     }
 
+    this.clearDeleteSettle(run); // the file reads, so whatever a settle timer was waiting to say is not true
     const notice = this.providerNotice(run);
     const contentChanged = !sameContent(run.lastSent, read.content);
     const noticeChanged = run.notice?.kind !== notice?.kind;

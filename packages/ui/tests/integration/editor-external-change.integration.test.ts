@@ -52,6 +52,9 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  // Destroy the documents first: removing `root` under a live watch reads as an outside delete, and the settle
+  // timer (081 FR-013) would report it after this test ended, snapshotting into a recovery folder already removed.
+  for (const id of ['p1', 'p2', 'p3']) coord.destroy(id);
   await rm(root, { recursive: true, force: true });
   await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
@@ -219,5 +222,6 @@ describe('an open document is not re-read for changes to other files (#482)', ()
     await until(() => (own.getContent('p9')?.text === 'v2\n' ? true : undefined));
     expect(own.getContent('p9')?.text).toBe('v2\n');
     expect(reads, 'the counter never saw a read, so the zero above proves nothing').toBeGreaterThan(0);
+    own.destroy('p9');
   });
 });
