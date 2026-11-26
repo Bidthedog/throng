@@ -62,6 +62,12 @@ config root, `THRONG_HOTRELOAD_DEBOUNCE_MS` tightens the watcher for tests.
 `icon-section.tsx`, `form-controls.tsx`, `map-control.tsx`, `pickers.tsx`, `capture-modal.tsx`,
 `row-actions.tsx`, `reset-notice.tsx`.
 
+**Sending the user to a setting, key binding or theme setting** — always
+`window.throng.openPreferences(tab, key)` from a renderer, or `openPreferences(tab, deps, key)` in main: the
+key is a setting key, an action id or a theme setting key (or a group name). The tab unfolds the row's
+sections and scrolls to it through `use-reveal-row.ts` (080 FR-064). Never open Preferences bare and leave
+the user to find the row, and never write a second reveal.
+
 **Generated** — `npm run generate:defaults` runs `scripts/generate-shipped-defaults.mjs`; regenerate
 rather than editing the generated output.
 

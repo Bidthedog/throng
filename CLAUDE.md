@@ -154,6 +154,9 @@ skill's stop conditions. `docs/releasing.md` is the overview.
 `gh pr create` / `gh pr edit` and every release tag. `README.md` is a short entry point; every other
 topic has one home under `docs/`, indexed by `docs/README.md`, each page opening with a breadcrumb.
 `packages/ui/tests/unit/docs-currency.test.ts` enforces the mechanical half in the gate.
+**Load `throng-guide` before writing or reviewing a page under `site/guide/`** (the user guide on throng-ide.com); it
+owns the page shape and voice. **Load `throng-guide-upkeep` for every change a user can see** (setting, binding,
+command, theme setting, panel or preview type, workflow): it lists the help that must change in the same PR.
 
 ## Area skills
 
