@@ -84,6 +84,9 @@ const SHORT_CONNECT_MS = 100;
  */
 const LIVE_CONNECT_MS = 300;
 
+/** The host's pause between connect attempts (pty-agent-host.ts `CONNECT_RETRY_MS`). */
+const CONNECT_RETRY_MS = 200;
+
 /** Enough past a connect lapse for the host to have published it (the lapse is a timer, not an event we can await). */
 const lapsed = (connectMs: number): Promise<void> => delay(connectMs + 150);
 
@@ -389,21 +392,27 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       host.onData(handle, (chunk) => signals.chunks.push(chunk));
       host.onExit(handle, (e) => signals.exits.push(e));
 
-      await waitForSignal(signals, SHORT_READY_MS * 3);
+      try {
+        // start() after a lapse retries with a fresh connect budget (#556), so the lapse it waits
+        // for is a whole budget away, plus at most one retry interval of timer slip (#723: a
+        // readiness-sized wait lost that race on a loaded macOS runner).
+        await waitForSignal(signals, LIVE_CONNECT_MS + CONNECT_RETRY_MS + GRACE_MS);
 
-      expect(
-        signals.chunks.join(''),
-        "launch #2's lapse must not quote launch #1's reason",
-      ).not.toMatch(/launch #1 died/);
-      expect(
-        signals.chunks.join(''),
-        'the lapse must still be reported — just without a borrowed explanation',
-      ).toMatch(CONNECT_LAPSE);
-
-      host.dispose();
-      for (const s of sockets) s.destroy();
+        expect(
+          signals.chunks.join(''),
+          "launch #2's lapse must not quote launch #1's reason",
+        ).not.toMatch(/launch #1 died/);
+        expect(
+          signals.chunks.join(''),
+          'the lapse must still be reported — just without a borrowed explanation',
+        ).toMatch(CONNECT_LAPSE);
+      } finally {
+        // A failed assertion must not leave a live host logging into the next test (#723).
+        host.dispose();
+        for (const s of sockets) s.destroy();
+      }
     },
-    LIVE_CONNECT_MS * 2 + GRACE_MS + SHORT_READY_MS * 3 + 7_000,
+    LIVE_CONNECT_MS * 3 + CONNECT_RETRY_MS + GRACE_MS * 2 + 7_000,
   );
 
   it(
