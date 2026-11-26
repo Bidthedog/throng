@@ -5,7 +5,8 @@ name: Pages
 # signing key (FR-006, FR-008). A bundle that cannot be fetched fails the job, and Pages keeps serving what it had.
 #
 # Runs on master only: the github-pages Environment accepts the default branch. A published release dispatches it from
-# release.yml's deploy-repositories job, with --ref master; a site change is dispatched by hand the same way.
+# release.yml's deploy-repositories job, with --ref master. Whatever dispatches it, the site it builds is the newest
+# release's tree (080 FR-002b): the user guide and every page describe that release, and say which it is.
 
 on:
   # Dispatch only (072 FR-010): a merge to master starts nothing. A site change goes live when someone dispatches this
@@ -32,12 +33,31 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+      # 080 FR-002b: every deployment builds the whole site from the newest published release's tag, prereleases
+      # included, never from master between releases. No release, or a failed lookup, fails the job here and Pages keeps
+      # serving what it had. (Supersedes 064 user story 4: a site change now goes live with the next release.)
+      - name: Find the release to build
+        id: release
+        run: |
+          tag="$(node scripts/site.mjs latest-tag)"
+          echo "Building throng-ide.com from ${tag}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+      - name: Check out that release
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+      # The guide is rendered with markdown-it, a workspace dependency; scripts stay off, so nothing native is built.
+      - name: Install the build's dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Assemble
-        run: node scripts/site.mjs assemble --out _site
+        run: node scripts/site.mjs assemble --out _site --version "${{ steps.release.outputs.tag }}"
       # The page's script and stylesheet are kept readable in site/; only the deployed copies are minified.
-      # esbuild is pinned and fetched alone, so the job still installs none of the workspace's dependencies.
+      # esbuild is pinned and fetched alone.
       - name: Minify the script and stylesheet
         run: npx --yes esbuild@0.28.2 _site/assets/site.js _site/assets/site.css --minify --outdir=_site/assets --allow-overwrite
+      # The guide's search index (080 FR-002c): static, chunked, built here; only pages marked data-pagefind-body are indexed.
+      - name: Index the guide for search
+        run: npx --yes pagefind@1.3.0 --site _site
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
