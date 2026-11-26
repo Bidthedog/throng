@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -105,6 +105,24 @@ describe('GitIgnoreOracle', () => {
     const { oracle, spawns } = probe();
     expect([...(await oracle.ignored(repo, []))]).toEqual([]);
     expect(spawns()).toBe(0);
+  });
+
+  it.skipIf(process.platform === 'win32')('never runs a command the repository configures as its fsmonitor', async () => {
+    const hostile = join(base, 'hostile');
+    const marker = join(base, 'fsmonitor-ran');
+    mkdirSync(hostile, { recursive: true });
+    git(hostile, 'init', '-q');
+    write(join(hostile, '.gitignore'), '*.log\n');
+    const hook = join(base, 'fsmonitor-hook.sh');
+    write(hook, `#!/bin/sh\ntouch '${marker}'\n`);
+    execFileSync('chmod', ['+x', hook]);
+    write(join(hostile, 'a.log'));
+    git(hostile, 'add', '.gitignore');
+    git(hostile, 'config', 'core.fsmonitor', hook);
+
+    const { oracle } = probe();
+    expect([...(await oracle.ignored(hostile, ['a.log']))]).toEqual(['a.log']);
+    expect(existsSync(marker), 'the repository-configured fsmonitor command ran').toBe(false);
   });
 
   it('asks git once for a listing of one folder', async () => {

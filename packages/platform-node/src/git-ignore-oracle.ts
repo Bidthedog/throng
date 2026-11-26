@@ -97,9 +97,11 @@ export class GitIgnoreOracle implements IgnoreOracle {
     return new Promise((resolve) => {
       const cwd = parent === '' ? root : join(root, ...parent.split('/'));
       // child-exempt: a failed start or a non-zero exit is the callback's error, answered empty and logged once per root below.
+      // `core.fsmonitor` off: a repository's own config can name a command for it, and opening a cloned project in
+      // throng must never run one.
       this.exec(
         this.git,
-        ['-C', cwd, 'check-ignore', '-z', '--stdin'],
+        ['-c', 'core.fsmonitor=false', '-C', cwd, 'check-ignore', '-z', '--stdin'],
         { input: names.join('\0') + '\0', maxBuffer: MAX_OUTPUT, windowsHide: true },
         (error, stdout, stderr) => {
           if (!error) return resolve(stdout.split('\0').filter((name) => name !== ''));
