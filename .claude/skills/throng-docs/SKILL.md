@@ -1,6 +1,6 @@
 ---
 name: throng-docs
-description: Keep throng's documentation set current and in its agreed shape — README.md as a short, enticing entry point, and one home per topic under docs/ (installation, quick-start, key-bindings, preferences, environment, architecture, testing, releasing, and the docs index), all linked by breadcrumbs and inline links. USE THIS EVERY TIME documentation is written, moved or reviewed, and ALWAYS before a pull request is created or its description is rewritten, before a release is tagged (throng-release calls it), and whenever a change adds, renames or removes a key binding, a setting, an environment variable, a package, a process, a command or a user-visible feature — "update the docs", "the README is out of date", "document this setting", "where should this go in the docs", "audit the docs", "docs currency", "prepare the PR". Do NOT use it for spec artifacts under specs/ (Spec Kit owns those), CHANGELOG.md release notes (throng-release owns those), or CONTRIBUTING.md's process rules (edit that file directly).
+description: Keep throng's documentation set current and in its agreed shape — README.md as a short, enticing entry point, and one home per topic under docs/ (installation, key-bindings, preferences, environment, architecture, testing, releasing, and the docs index), all linked by breadcrumbs and inline links. USE THIS EVERY TIME documentation is written, moved or reviewed, and ALWAYS before a pull request is created or its description is rewritten, before a release is tagged (throng-release calls it), and whenever a change adds, renames or removes a key binding, a setting, an environment variable, a package, a process, a command or a user-visible feature — "update the docs", "the README is out of date", "document this setting", "where should this go in the docs", "audit the docs", "docs currency", "prepare the PR". Do NOT use it for spec artifacts under specs/ (Spec Kit owns those), CHANGELOG.md release notes (throng-release owns those), or CONTRIBUTING.md's process rules (edit that file directly).
 ---
 
 # Maintaining throng's documentation
@@ -18,8 +18,9 @@ other file mentions it in a clause and links there. The rules below are the main
 | `docs/installation.md` | Which install guide to read, and running from source | Anything specific to installing on one system |
 | `docs/install-windows.md` | Installing on Windows: a quick start first, then downloads, verification, install, first launch, upgrade, downgrade, uninstall | Feature or settings detail |
 | `docs/install-linux.md` | Installing on Linux: a quick start first, then the package repositories, downloads, sandbox, upgrade, downgrade, removal | Feature or settings detail |
-| `docs/quick-start.md` | "Getting started for dummies": a short whistle-stop tour, high to medium detail, of how to start and get around; one section per major feature, updated as features are added | Exhaustive binding or settings lists (link to key-bindings.md / preferences.md) |
-| `docs/key-bindings.md` | Every default key binding, by group, with its action id, chord(s), scope and one-line description; the tier convention; multi-key chords; non-US layouts; rebinding | Settings detail |
+| `site/guide/` | The user guide, published at throng-ide.com/guide from the latest release tag: task pages (`guide/quick-start.md` is the tour), each `## ` task in `GUIDE_MAP`. Written with `throng-guide` | Reference detail: every setting lives in `docs/preferences.md`, every binding in `docs/key-bindings.md`, which the guide links |
+| `docs/key-bindings.md` | Every default key binding, by group, one `###` section each: label, action id, its metadata description as lead, chord(s), scope, then detail; the tier convention; multi-key chords; non-US layouts; rebinding | Settings detail |
+| `docs/theme-settings.md` | Every theme setting (token), by theme area, one `###` section each: label, key, its metadata description as lead, then detail | Theme choice and management (preferences.md) |
 | `docs/preferences.md` | Every preference by group, with its key, default, allowed values and what it does; themes, icon packs, config file locations | Key bindings |
 | `docs/environment.md` | Every environment variable, by audience (running the app, development, testing). A variable that overrides an app setting is *listed* and linked to its preferences.md entry, never described again | Setting descriptions |
 | `docs/install-macos.md` | Installing on macOS: a quick start first, then the first-launch step, downloads, the `throng` command, upgrade and removal | Feature or settings detail |
@@ -63,7 +64,8 @@ constitution, Development Workflow & Quality Gates).
    `npx vitest run --project unit packages/ui/tests/unit/docs-currency.test.ts`. It is also in the
    gate, so a red one blocks the merge.
 4. **The judgement pass** the test cannot do: README still reads as a pitch and stays within its
-   job; quick-start still covers every major feature at tour depth; nothing in one file restates
+   job; the guide (`site/guide/`) teaches every user-visible change as a task, or the PR body carries
+   `No user-facing change: <reason>`; nothing in one file restates
    another's detail.
 5. **Say what you checked** in the PR description's *Documentation* checklist, per file.
 

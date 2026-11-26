@@ -63,7 +63,7 @@ How prerelease suffixes are compared and published: [references/versioning.md](r
 ## The shape of it
 
 ```
-preflight → branch → dependency sweep (own commit) → CHANGELOG → version bump → docs
+preflight → branch → dependency sweep (own commit) → CHANGELOG → version bump → docs and guide
   → test-suite audit → local checks → commit → PR (CI verdict) → pipeline.yml (full) → merge → tag
   → release.yml (on-master → full pipeline: every test, package, reconcile, verify every combination,
   coexistence, render body → sign → publish → repositories) → target milestone's description
@@ -264,7 +264,7 @@ how. If anything moved that a user would notice, it gets an entry in this releas
 patch sweep that clears no advisory and changes no behaviour needs no entry, and saying so in the
 commit message is enough.
 
-## 6. Documentation currency — the step that gets skipped
+## 6. Documentation and guide currency — the step that gets skipped
 
 The constitution requires the docs to be current with any user-facing, setup, architecture or
 capability change, and a release is the last place that debt can be repaid cheaply. Do it on the
@@ -272,6 +272,26 @@ release branch, **before the gate and the tag**.
 
 **Load the `throng-docs` skill and run its audit** — it owns what each doc must hold and how to check
 it. Say in the PR which files needed nothing.
+
+**Then prove the user guide current for this release** — its text and its screenshots, against everything
+a user can see that changed since the previous tag:
+
+1. **List the changes.** The `### Added`, `### Changed` and `### Removed` entries of this release's
+   `CHANGELOG.md` section, and the user-visible surfaces in `git diff --stat <previous-tag>..HEAD -- packages/*/src`
+   (settings, bindings, commands, menu items, panel and preview types, theme settings, dialogs, workflows).
+2. **Check the text.** Load `throng-guide-upkeep` and confirm, for each change, everything its table says must
+   change (the task's steps and breadcrumb, the reference section, the guide map, the one-line description).
+   Fix what lags on the release branch, written by `throng-guide`. Then run upkeep's *The checks that hold it*.
+3. **Check the screenshots.** `npm run guide:screens-stale -- --since <previous-tag>` lists every screenshot
+   whose screen (its source, named in `site/guide/images/screens.json`) changed since the previous release while
+   the image did not, and exits 1. Re-run `npm run guide:screenshots` on the release branch, commit the images,
+   and run the check again until it exits 0 (`throng-guide` owns the generator, the cases and the map). Open
+   each changed image and confirm it shows what its task's steps say. A change to a pictured surface with no
+   screenshot case gets one.
+4. **Say it in the PR**: which guide pages changed, which screenshots were regenerated, or "guide current, no
+   change needed".
+
+A release whose guide lags a change it ships does not tag.
 
 Two things the audit does not cover, because they belong to this skill:
 
@@ -307,7 +327,7 @@ already become slow. Do it on the release branch, alongside the docs audit, **be
 
 ```sh
 npm run build                                                   # release-notes.mjs imports @throng/core
-node scripts/release-notes.mjs render --version <version>       # exit 0, and READ what it prints
+node scripts/release-notes.mjs render --version <version> --guide-links  # exit 0, and READ what it prints; exit 5 names an Added/Changed entry with no guide link (080 FR-019): link it to its guide task
 npx vitest run --project contract product-version
 npx vitest run --project unit release-notes-cli
 npm run lint

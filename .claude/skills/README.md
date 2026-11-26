@@ -27,6 +27,8 @@ parallelism, never the default route into an area.
 | `throng-testing` | running suites and hands-on sessions; E2E harness knowledge in `references/e2e-harness.md` |
 | `throng-release` | cutting a release; build, packaging and CI knowledge in `references/build-and-packaging.md` |
 | `throng-docs` | the documentation set and its audit before every PR and release |
+| `throng-guide` | the user guide under `guide/` (throng-ide.com/guide): page shape, voice, the guide map |
+| `throng-guide-upkeep` | every user-visible change: which guide task, map entry, reference section and description it must update |
 | `throng-clear-dev-state` | wiping a dev instance's processes and data |
 | `speckit-*` | the Spec Kit commands |
 
