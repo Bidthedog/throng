@@ -64,35 +64,35 @@ const ROLE_CONTEXT: Record<TypographyRole, string> = {
 
 /** The concrete surface each role paints, woven into every field description. */
 const ROLE_SURFACE: Record<TypographyRole, string> = {
-  paneTitle: 'the PROJECTS, TERMINALS and FILE EXPLORER headings that sit atop each sidebar pane',
-  tab: 'the name on each tab in the tab strip',
-  panel: 'the name in a workspace panel’s own header bar',
-  paneText: 'the body text of every pane and panel — empty states, hints and list rows (never a header)',
-  projectName: 'a project’s name in the sidebar list',
-  projectPath: 'the folder path shown beneath a project’s name',
-  editor: 'the text you are editing in an Editor panel',
-  terminal: 'the output and input in a Terminal panel',
-  button: 'the label on every text button in the application',
+  paneTitle: 'the heading atop each sidebar pane',
+  tab: 'the name on each tab',
+  panel: 'the name in a panel’s header bar',
+  paneText: 'the body text of panes and panels',
+  projectName: 'a project’s name in the sidebar',
+  projectPath: 'a project’s folder path',
+  editor: 'the text in an Editor panel',
+  terminal: 'the text in a Terminal panel',
+  button: 'every text button’s label',
 };
 
 /** field → (property suffix for the label, description template built from the role surface). */
 const FIELD_COPY: Record<string, { property: string; describe: (surface: string) => string }> = {
   family: {
     property: 'Font',
-    describe: (s) => `The typeface used for ${s}. Leave it empty to follow the theme’s base font.`,
+    describe: (s) => `The typeface for ${s}. Empty follows the theme’s base font.`,
   },
   sizePx: {
     property: 'Font Size',
-    describe: (s) => `How large ${s} is drawn, in pixels. Leave it unset to track the theme’s base size.`,
+    describe: (s) => `Size of ${s} in pixels. Unset tracks the theme’s base size.`,
   },
   weight: {
+    // 080 FR-013 — the note that most fonts ship only two weights lives in the theme settings reference.
     property: 'Weight',
-    describe: (s) =>
-      `How heavy ${s} is drawn, from 100 to 900. Leave it unset to track the theme’s base weight. Most fonts ship only two weights, so nearby values can look identical unless the font is variable.`,
+    describe: (s) => `Weight of ${s}, 100 to 900. Unset tracks the theme’s base weight.`,
   },
   case: {
     property: 'Casing',
-    describe: (s) => `Leave ${s} as written, or force it to Title Case, lower case or UPPER CASE.`,
+    describe: (s) => `Casing of ${s}: as written, Title Case, lower case or UPPER CASE.`,
   },
   italic: { property: 'Italic', describe: (s) => `Slant ${s}.` },
   underline: { property: 'Underline', describe: (s) => `Rule a line beneath ${s}.` },
@@ -125,17 +125,17 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.sidebarBg': {
     label: 'Side Panel Background',
     description:
-      'The surface behind the left side panel that holds the projects and sub-workspaces lists, and behind the File Explorer pane.',
+      'The surface behind the projects and sub-workspaces lists, and behind the File Explorer pane.',
   },
   'colours.surface': {
     label: 'Panel Surface',
     description:
-      'The body of a workspace panel, and the card a dialog, modal or notice is drawn on — lifted clear of the page beneath it.',
+      'The body of a workspace panel, and the card under a dialog, modal or notice.',
   },
   'colours.surfaceActive': {
     label: 'Active Surface',
     description:
-      'Whatever is currently chosen — the open project, the active tab, a highlighted row — and the card a menu or dropdown floats on.',
+      'Whatever you have chosen, such as the active tab, and the card under a menu or dropdown.',
   },
   'colours.inputSurface': {
     label: 'Field Surface',
@@ -148,12 +148,12 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.menuItemHoverSurface': {
     label: 'Menu Highlight',
     description:
-      'The band that follows the pointer down a list of entries. Leave it empty and it takes the open project’s own colour.',
+      'The band that follows the pointer down a list of entries. Empty takes the open project\'s colour.',
   },
   'colours.linkUnderline': {
     label: 'Link Underline',
     description:
-      'The dashed underline that marks a link in an editor or a terminal. Unset, it follows the accent colour.',
+      'The dashed underline marking a link in an editor or terminal. Unset, it follows the accent colour.',
   },
   'colours.linkUnderlineHover': {
     label: 'Link Hover Underline',
@@ -165,7 +165,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.linkHintBackground': {
     label: 'Popup Background',
     description:
-      'Every tooltip, hover popover and hint — the hint a plain click on a link shows among them. Unset, it follows the raised surface colour.',
+      'Every tooltip, hover popover and hint. Unset, it follows the raised surface colour.',
   },
   'colours.linkHintText': {
     label: 'Popup Text',
@@ -177,12 +177,12 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.accentText': {
     label: 'Highlighted Option Text',
-    description: 'The text of a menu or dropdown option while it is hovered or selected.',
+    description: 'The text of a menu or dropdown option while you hover over or select it.',
   },
   'colours.dangerText': {
     label: 'Danger Text',
     description:
-      'The text or glyph on a red danger background WHILE HOVERED — the window Close button’s ✕ and the “remove” ✕ on a keybinding — kept readable against the red. It shows only on that hover.',
+      'The text or glyph on a red danger background while hovered, such as the window Close button\'s cross.',
   },
   // These name the EDITOR's scrollbar, and say so. A setting that claims to colour every scrollbar in
   // the application, while the only classic bar the application actually draws is the editor's, is a
@@ -190,112 +190,112 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.scrollbarTrack': {
     label: 'Scrollbar Track',
     description:
-      'The channel a scrollbar slides along, on every scrollable surface in the application — panes, lists, editors, dialogs and the terminal.',
+      'The channel a scrollbar slides along, on every scrollable surface in the application.',
   },
   'colours.scrollbarThumb': {
     label: 'Scrollbar Thumb',
     description:
-      'The draggable part you grab to move through a long list or file — on every scrollbar in the application.',
+      'The draggable part of every scrollbar, grabbed to move through a long list or file.',
   },
   'colours.fileIconCode': {
     label: 'Code File Icons',
     description:
-      'The colour of the File Explorer and Find in Files icons for source code in a programming language, such as TypeScript, Python or C#. Leave it empty and they take the Icon Colour.',
+      'Icons for source code, such as TypeScript, Python or C#. Empty takes the Icon Colour.',
   },
   'colours.fileIconMarkup': {
     label: 'Markup File Icons',
     description:
-      'The colour of the File Explorer and Find in Files icons for web pages and their styles: HTML, CSS and Sass. Leave it empty and they take the Icon Colour.',
+      'Icons for web pages and their styles: HTML, CSS and Sass. Empty takes the Icon Colour.',
   },
   'colours.fileIconData': {
     label: 'Data File Icons',
     description:
-      'The colour of the File Explorer and Find in Files icons for data and settings files: JSON, YAML and other configuration, spreadsheets, databases and SQL. Leave it empty and they take the Icon Colour.',
+      'Icons for data and settings files, spreadsheets, databases and SQL. Empty takes the Icon Colour.',
   },
   'colours.fileIconDocument': {
     label: 'Document File Icons',
     description:
-      'The colour of the File Explorer and Find in Files icons for plain text, Markdown and diffs. Leave it empty and they take the Icon Colour.',
+      'Icons for plain text, Markdown and diffs. Empty takes the Icon Colour.',
   },
   'colours.fileIconMedia': {
     label: 'Media File Icons',
     description:
-      'The colour of the File Explorer and Find in Files icons for images, sound, video, fonts and 3D models. Leave it empty and they take the Icon Colour.',
+      'Icons for images, sound, video, fonts and 3D models. Empty takes the Icon Colour.',
   },
   'colours.fileIconArchive': {
     label: 'Archive File Icons',
     description:
-      'The colour of the File Explorer and Find in Files icons for archives and installers. Leave it empty and they take the Icon Colour.',
+      'Icons for archives and installers. Empty takes the Icon Colour.',
   },
   'colours.fileIconScript': {
     label: 'Script File Icons',
     description:
-      'The colour of the File Explorer and Find in Files icons for shell and PowerShell scripts, keys and certificates. Leave it empty and they take the Icon Colour.',
+      'Icons for shell and PowerShell scripts, keys and certificates. Empty takes the Icon Colour.',
   },
   'colours.fileIconOther': {
     label: 'Other File Icons',
     description:
-      'The colour of the File Explorer and Find in Files icon for a file whose kind throng does not recognise. Leave it empty and it takes the Icon Colour, like the folders.',
+      'The icon for a file whose kind throng does not recognise. Empty takes the Icon Colour.',
   },
   'colours.pictureCanvas': {
     label: 'Picture Preview Background',
     description:
-      'The background an Image or SVG preview draws its picture on, filling the panel around it. Leave it empty and it is the editor background a shade toward the text colour, so the picture\'s edges stand out.',
+      'The background an Image or SVG preview draws its picture on. Empty derives it from the editor.',
   },
   'colours.pictureHatch': {
     label: 'Picture Transparency Marker',
     description:
-      'The colour of the diagonal hatching drawn behind the transparent parts of a picture in a preview. Leave it empty and it is mixed from the editor background and text colour. Turn the hatching off per preview type with its Hatch transparent areas setting.',
+      'The hatching behind transparent parts of a picture in a preview. Empty mixes the editor colours.',
   },
   // 075 FR-021 — the seven callout colour roles. Each names the callout types it colours (registry, FR-019).
   'colours.calloutNeutral': {
     label: 'Neutral Callout Accent',
     description:
-      'The border, icon and title of note and quote callouts in a document preview, and the tint behind them.',
+      'The border, icon, title and tint of note and quote callouts in a document preview.',
   },
   'colours.calloutInfo': {
     label: 'Information Callout Accent',
     description:
-      'The border, icon and title of abstract, info and todo callouts in a document preview, and the tint behind them.',
+      'The border, icon, title and tint of abstract, info and todo callouts in a document preview.',
   },
   'colours.calloutAccent': {
     label: 'Highlight Callout Accent',
     description:
-      'The border, icon and title of tip and example callouts in a document preview, and the tint behind them.',
+      'The border, icon, title and tint of tip and example callouts in a document preview.',
   },
   'colours.calloutSuccess': {
     label: 'Success Callout Accent',
     description:
-      'The border, icon and title of success callouts in a document preview (also written check or done), and the tint behind them.',
+      'The border, icon, title and tint of success callouts in a document preview.',
   },
   'colours.calloutQuestion': {
     label: 'Question Callout Accent',
     description:
-      'The border, icon and title of question callouts in a document preview (also written help or faq), and the tint behind them.',
+      'The border, icon, title and tint of question callouts in a document preview.',
   },
   'colours.calloutWarning': {
     label: 'Warning Callout Accent',
     description:
-      'The border, icon and title of warning callouts in a document preview (also written caution, attention or warn), and the tint behind them.',
+      'The border, icon, title and tint of warning callouts in a document preview.',
   },
   'colours.calloutDanger': {
     label: 'Danger Callout Accent',
     description:
-      'The border, icon and title of failure, danger and bug callouts in a document preview, and the tint behind them.',
+      'The border, icon, title and tint of failure, danger and bug callouts in a document preview.',
   },
   'colours.titleBarSurface': {
     label: 'Title Bar Background',
     description:
-      'The bar across the top of every window, under its title and window controls. Leave it empty and the bar is a shade apart from the window background, lighter on a dark theme and darker on a light one.',
+      'The bar across the top of every window. Empty sets it a shade apart from the window background.',
   },
   'colours.iconButtonSurface': {
     label: 'Icon Button Background',
     description:
-      'What an icon button sits on before you point at it, in every window. Leave it empty and icon buttons show only their icon until the pointer reaches them.',
+      'What an icon button sits on before you point at it. Empty shows its icon alone until then.',
   },
   'colours.iconColour': {
     label: 'Icon Colour',
-    description: 'Ink for the artwork. Leave it empty and every glyph simply takes the colour of whatever holds it.',
+    description: 'Ink for the artwork. Leave it empty and each glyph takes the colour of whatever holds it.',
   },
   'colours.text': {
     label: 'Primary Text',
@@ -308,7 +308,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.accent': {
     label: 'Primary Accent',
     description:
-      'The default highlight for focused controls, links and selected items. Note: while a project is open the app paints most of these with THAT project’s own colour instead, so this shows through mainly when no project is open.',
+      'The default highlight for focused controls, links and selected items, when no project is open.',
   },
   'colours.danger': {
     label: 'Danger Accent',
@@ -317,26 +317,26 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.success': {
     label: 'Success Accent',
     description:
-      'The green cue for a healthy state: the small “loaded this session” dot on a project or sub-workspace row, and the edge of a success notice.',
+      'The green cue for a healthy state, such as a project\'s loaded dot and a success notice\'s edge.',
   },
   'colours.warning': {
     label: 'Warning Accent',
     description:
-      'The amber cue for something that went ahead but not as asked — the edge of a warning notice, such as a panel name that had to be adjusted because it was already taken.',
+      'The amber cue for something that went ahead but not as asked, such as a warning notice\'s edge.',
   },
   'colours.attentionMark': {
     label: 'Attention Marker',
     description:
-      'The colour of the circle on a panel, tab, project or category that needs you, and of the count on the taskbar icon. Its number is drawn in black or white, whichever reads on it. Distinct from the brief flash a panel gives when it is brought into view.',
+      'The circle on a panel, tab, project or category that needs you, and the count on the taskbar icon.',
   },
   'colours.railBg': {
     label: 'Collapsed Rail Background',
-    description: 'The narrow strip shown when a side pane is collapsed, carrying its expand toggle.',
+    description: 'The narrow strip a collapsed side pane leaves, carrying its expand toggle.',
   },
   'colours.categoryHeaderBackground': {
     label: 'Category Header Background',
     description:
-      'The strip behind a category name in the Projects pane, including the default category’s own header. Unset, it follows the raised surface colour.',
+      'The strip behind a category name in the Projects pane. Unset, it follows the raised surface colour.',
   },
   'colours.border': {
     label: 'Interface Border',
@@ -381,7 +381,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.editorSelectionInactive': {
     label: 'Editor Inactive Selection',
     description:
-      'A quieter highlight that keeps a selection visible in an editor or preview after you click into another panel, until you change it.',
+      'A quieter highlight that keeps an editor or preview selection visible while another panel is active.',
   },
   'colours.editorGutterBg': {
     label: 'Editor Gutter Background',
@@ -394,7 +394,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.unsavedDot': {
     label: 'Unsaved Changes Marker',
     description:
-      'The dot on a tab, panel, or project that has edits not yet written to disk, and the editor file and type pills.',
+      'The dot on a tab, panel or project with unsaved edits, and the editor file and type pills.',
   },
   // Syntax highlighting (016). Each names what the colour paints in real code, so a theme author
   // can picture the result without knowing a single grammar's node names.
@@ -405,12 +405,12 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.syntaxString': {
     label: 'String Text',
-    description: 'Quoted text written directly into the code, including its quote marks.',
+    description: 'Quoted text in the code, quote marks included.',
   },
   'colours.syntaxComment': {
     label: 'Comment Text',
     description:
-      'Notes written for people rather than the machine — usually quieter than the code around them.',
+      'Notes in the code for the people who read it, often quieter than the code around them.',
   },
   'colours.syntaxNumber': {
     label: 'Number Text',
@@ -422,7 +422,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.syntaxFunction': {
     label: 'Function Name Text',
-    description: 'The names of functions and methods, both where they are defined and where they are called.',
+    description: 'The names of functions and methods, where code defines them and where it calls them.',
   },
   'colours.syntaxVariable': {
     label: 'Variable Name Text',
@@ -435,7 +435,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.syntaxPunctuation': {
     label: 'Punctuation Text',
     description:
-      'The structural marks that hold code together — brackets, braces, commas and semicolons.',
+      'The marks that hold code together: brackets, braces, commas and semicolons.',
   },
   'colours.syntaxInvalid': {
     label: 'Invalid Code Text',
@@ -447,7 +447,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.editorStatusStripBg': {
     label: 'Panel Status Bar Surface',
     description:
-      'The bar along the bottom of editor and preview panels — not the application status bar at the foot of the window.',
+      'The bar along the bottom of editor and preview panels, not the window\'s status bar.',
   },
   'colours.editorStatusStripFg': {
     label: 'Panel Status Bar Text',
@@ -455,52 +455,52 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.editorStatusStripHover': {
     label: 'Panel Status Bar Hover Background',
-    description: 'Behind a panel status bar control while the pointer is over it, showing it can be clicked.',
+    description: 'Behind a panel status bar control while the pointer is over it, to show you can click it.',
   },
   'colours.searchMatch': {
     label: 'Search Match Highlight',
     description:
-      'The surface tinting every occurrence of the search term in an editor or a terminal, behind text that must stay readable.',
+      'The surface tinting every occurrence of the search term in an editor or a terminal.',
   },
   'colours.searchMatchCurrent': {
     label: 'Current Match Highlight',
     description:
-      'The stronger surface marking the one match you are presently sitting on, so it stands out from the others.',
+      'The stronger surface marking the one match you are on, so it stands out from the others.',
   },
   'colours.searchMatchCurrentBorder': {
     label: 'Current Match Border',
     description:
-      'The line drawn around the match you are presently on, keeping it identifiable even on a busy surface.',
+      'The line drawn around the match you are on, keeping it identifiable on a busy surface.',
   },
   'colours.searchMatchBorder': {
     label: 'Search Match Border',
     description:
-      'The thin line drawn around every other match in an editor or a preview, so each one stands clear of the page around it.',
+      'The thin line drawn around every other match in an editor or a preview.',
   },
   'colours.searchMatchOccurrence': {
     label: 'Selection Occurrence Highlight',
     description:
-      'The soft tint on every other place the selected text appears in the editor or preview you are working in.',
+      'The soft tint on the other places the selected text appears in the editor or preview.',
   },
   'colours.searchMatchOccurrenceInactive': {
     label: 'Inactive Selection Occurrence Highlight',
     description:
-      'A weaker version of that tint, shown while the panel holding the selection is not the one you are working in.',
+      'A weaker version of that tint, shown while the panel holding the selection is not active.',
   },
   'colours.activePanelBorder': {
     label: 'Active Pane Highlight',
     description:
-      'The outline marking the pane or panel you are working in — the File Explorer pane and workspace panels alike. While a project is open it is painted with THAT project’s colour, so this value shows mainly when no project is open.',
+      'The outline marking the pane or panel you are working in, when no project\'s colour replaces it.',
   },
   'colours.activePanelBorderInactive': {
     label: 'Inactive Pane Highlight',
     description:
-      'The dimmed active-pane highlight, shown while this window is in the background so the marker stays visible without competing for attention.',
+      'The dimmed active-pane highlight, shown while this window is in the background.',
   },
   // — Buttons (021, US7). Three types, six tokens each — replacing the single legacy button pair. —
   'colours.confirmButtonBg': {
     label: 'Confirm Button Background',
-    description: 'The resting surface of a confirming button — Save, OK, Apply — on a dialog or form.',
+    description: 'The resting surface of a confirming button (Save, OK, Apply) on a dialog or form.',
   },
   'colours.confirmButtonHoverBg': {
     label: 'Confirm Button Hover Background',
@@ -524,7 +524,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.cancelButtonBg': {
     label: 'Cancel Button Background',
-    description: 'The resting surface of a dismissing button — Cancel, Close, Clear — on a dialog or form.',
+    description: 'The resting surface of a dismissing button (Cancel, Close, Clear) on a dialog or form.',
   },
   'colours.cancelButtonHoverBg': {
     label: 'Cancel Button Hover Background',
@@ -548,7 +548,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.destroyButtonBg': {
     label: 'Destroy Button Background',
-    description: 'The resting surface of a destructive button — Delete, Reset, Terminate — on a dialog or form.',
+    description: 'The resting surface of a destructive button (Delete, Reset, Terminate) on a dialog or form.',
   },
   'colours.destroyButtonHoverBg': {
     label: 'Destroy Button Hover Background',
@@ -595,20 +595,20 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'sizes.iconPx': {
     label: 'Icon Size',
     description:
-      'How large every icon in the application is drawn. Independent of any font size — icons used to grow and shrink with the text of whatever surface they happened to sit on.',
+      'The size of every icon in throng, whatever the font size.',
   },
   'sizes.scrollbarPx': {
     label: 'Scrollbar Width',
     description:
-      'How thick a scrollbar is. The browser engine offers only “thin” or “auto” for its own scrollbars, so this is a real measurement rather than a choice between two.',
+      'How thick a scrollbar is, as a real measurement.',
   },
   'colours.errorSurface': {
     label: 'Error Notice Surface',
     description:
-      'The card an error message sits on. It has its own colour so a failure stands out from every other card in the application — a red edge on the usual background is a thin line in the corner of the screen, which is not where “your save failed” belongs.',
+      'The card an error message sits on, so a failure stands out from every other card.',
   },
   'colours.errorText': {
     label: 'Error Notice Text',
-    description: 'The words on an error card, chosen to read clearly against its background.',
+    description: 'The words on an error card, picked to read against its background.',
   },
 };

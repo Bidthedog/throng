@@ -31,5 +31,5 @@ export const mermaidProvider: PreviewProviderDescriptor = {
   print: 'document',
   enabledLabel: 'Preview .mmd files',
   enabledDescription:
-    'Offer previews of standalone Mermaid files (.mmd and .mermaid). When off, every preview of these files closes and their preview commands are shown disabled. Mermaid diagrams inside a Markdown preview are not affected: Markdown: Render Mermaid diagrams controls those.',
+    'Offer previews of .mmd and .mermaid files. Markdown\'s Render Mermaid diagrams covers the rest.',
 };

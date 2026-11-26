@@ -6,7 +6,7 @@
  * handler cannot be driven at all. Nothing about what the menu draws changed — no label, no icon,
  * no action, no test identifier (N6, FR-053).
  *
- * **The five preferences/diagnostic/about items are all `application`** — one section, no internal
+ * **The preferences/diagnostic/Resource Monitor/Help/About items are all `application`** — one section, no internal
  * divider. FR-052 originally asked for the preferences trio to be separated from the diagnostic and
  * About items, which FR-050 forbids: a divider is drawn only at a real section boundary, and there
  * is none here. Both FR-052 and US5 AS-5 were corrected on 2026-08-15; this is the corrected shape,
@@ -51,6 +51,8 @@ export interface CogMenuActions {
   /** 055 FR-056 — opens the Resource Monitor in the main window (the cog is a main-window control). */
   openResourceMonitor: () => void;
   openAbout: () => void;
+  /** 080 FR-010 — opens the guide's start page in the OS browser (F1 is its accelerator). */
+  openHelp: () => void;
   /**
    * The live keybindings. 046 iterate round 2 (FR-113) removed this builder's only reader of it (the
    * Zoom row's `controlTitle` hover text); kept on the interface rather than pulled, since
@@ -102,6 +104,15 @@ export function cogMenuItems(actions: CogMenuActions): MenuAction[] {
     icon: 'resourceMonitor',
     section: 'application',
     onClick: () => actions.openResourceMonitor(),
+  });
+  // 080 FR-010 — Help, ahead of About: both answer "what is this?", and F1 (`help.open`) is the
+  // accelerator over this row. `application` like its neighbours, so no divider is drawn.
+  items.push({
+    label: 'Help',
+    testId: 'cog-menu-help',
+    icon: 'help',
+    section: 'application',
+    onClick: () => actions.openHelp(),
   });
   items.push({
     label: 'About throng',

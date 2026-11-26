@@ -16,6 +16,7 @@ import {
   reservedThemeNames,
   setAtPath,
   themeTokenDiffersFromEntry,
+  themeTokenHelpUrl,
   type FieldDescriptor,
   type IconKey,
   type Theme,
@@ -25,12 +26,15 @@ import { writeConfig, scheduleWrite, debounce } from '../config/write-config.js'
 import { createApplyClient } from './apply-client.js';
 import { ThemeTokenControl } from './pickers.js';
 import { foldKey, groupDescriptors, type DescriptorGroup } from './group-descriptors.js';
+import { useRevealRow, type RevealRequest } from './use-reveal-row.js';
 import { Subsection } from './subsection.js';
 import { FoldAllButtons, FoldHeading } from './fold-heading.js';
 import { useTabFolding } from './use-preference-folds.js';
 import { RowActions } from './row-actions.js';
 import { IconSection } from './icon-section.js';
 import { IconButton } from '../common/icon-button.js';
+import { HelpLink, helpUrlOrNone } from '../common/help-link.js';
+import { effectiveHelpBase } from '../help/help-opener.js';
 import { Icon } from '../common/icon.js';
 import { ROW_ACTION_TOKENS } from './row-action-tokens.js';
 import { useConfirm } from '../confirm-dialog.js';
@@ -132,7 +136,8 @@ type NameFlow = { mode: 'clone' | 'rename'; source: string } | null;
  */
 const ACTIVE_THEME_PATH = ['appearance', 'theme'] as const;
 
-export function ThemesTab(): ReactElement {
+/** `focusSection` (080 FR-064): a theme setting (by key) or a group to unfold and scroll to. */
+export function ThemesTab({ focusSection }: { focusSection?: RevealRequest } = {}): ReactElement {
   const settings = useAppSettings();
   const activeTheme = useActiveTheme();
   const activeName = settings.appearance.theme;
@@ -169,6 +174,10 @@ export function ThemesTab(): ReactElement {
     [applied, allGroups, matches],
   );
   const { folds, countOf } = useTabFolding('themes', query, applied, allGroups, groups, EXTRA_FOLD_KEYS);
+  useRevealRow(focusSection, THEME_TOKEN_FIELDS, allGroups, folds, {
+    row: (key) => `theme-row-${key}`,
+    group: (group) => `settings-group-${group}`,
+  });
 
   /**
    * The icon section is part of the theme, so it is part of the search (FR-021). It used to sit
@@ -775,7 +784,15 @@ export function ThemesTab(): ReactElement {
     return (
             <div className="settings-row" key={d.key} data-testid={`theme-row-${d.key}`}>
               <div className="settings-row__meta">
-                <label className="settings-row__label">{d.label}</label>
+                {/* 080 FR-028 — the (?) beside the token's title, in the label line. */}
+                <div className="settings-row__title">
+                  <label className="settings-row__label">{d.label}</label>
+                  <HelpLink
+                    url={helpUrlOrNone(() => themeTokenHelpUrl(d.key, effectiveHelpBase()))}
+                    label={d.label}
+                    testId={`help-link-theme-${d.key}`}
+                  />
+                </div>
                 <p className="settings-row__desc">{d.description}</p>
               </div>
               <div className="settings-row__control">

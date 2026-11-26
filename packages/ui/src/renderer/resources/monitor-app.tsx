@@ -35,6 +35,9 @@ import { ContextMenuProvider } from '../context-menu-provider.js';
 import { useNoDropNavigation } from '../common/no-drop-navigation.js';
 import { ConfirmProvider } from '../confirm-dialog.js';
 import { NotificationProvider } from '../common/notification.js';
+import { LinkPromptHost } from '../link-prompt/link-prompt-host.js';
+import { OpenExternalFailedNotice } from '../common/open-external-failed-notice.js';
+import { useHelpKey } from '../help/use-help-key.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { windowTitle } from '../common/window-title.js';
 import { HoverSuppression } from '../common/use-hover-suppression.js';
@@ -107,6 +110,7 @@ function useSaveView(enabled: boolean): void {
 }
 
 function MonitorShell(): ReactElement {
+  useHelpKey(); // 080 FR-010 — F1 opens the guide (this window mounts no window dispatcher)
   const theme = useActiveTheme();
   const settings = useResourceMonitorSettings();
   // Only whether there is a first frame: the shell is not redrawn for the captures after it (D3).
@@ -225,6 +229,9 @@ export function MonitorApp(): ReactElement {
   return (
     <ConfigProvider>
       <NotificationProvider>
+        {/* 080 FR-011 — Help the OS could not open in the browser. */}
+        <OpenExternalFailedNotice />
+        <LinkPromptHost />
         <ConfirmProvider>
           <ContextMenuProvider>
             <MonitorShell />

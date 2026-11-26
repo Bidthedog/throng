@@ -15,7 +15,10 @@ import { ConfirmProvider, useConfirm } from '../confirm-dialog.js';
 // `useNotify` is gone from this file with the toast it raised: an invalid JSON document is reported
 // by the editor that holds it, once, and not by every caller that bounced off it (032).
 import { NotificationProvider } from '../common/notification.js';
+import { LinkPromptHost } from '../link-prompt/link-prompt-host.js';
+import { OpenExternalFailedNotice } from '../common/open-external-failed-notice.js';
 import { useConfigWriteFailureNotices } from '../config/config-write-notices.js';
+import { useHelpKey } from '../help/use-help-key.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { windowTitle } from '../common/window-title.js';
 import { HoverSuppression } from '../common/use-hover-suppression.js';
@@ -52,6 +55,7 @@ export type { PreferencesTab } from './preferences-toolbar.js';
 export { isPreferencesTab } from './preferences-toolbar.js';
 
 function PreferencesShell({ initialTab, initialSection }: { initialTab: Tab; initialSection?: string }): ReactElement {
+  useHelpKey(); // 080 FR-010 — F1 opens the guide (this window mounts no window dispatcher)
   const [tab, setTab] = useState<Tab>(initialTab);
   // 068: a Settings section to open and scroll to — from the URL on open, or pushed by main into a reused
   // window. The nonce makes each request distinct, so asking for the same section again scrolls again.
@@ -385,9 +389,9 @@ function PreferencesShell({ initialTab, initialSection }: { initialTab: Tab; ini
             ) : tab === 'settings' ? (
               <SettingsTab {...(section ? { focusSection: section } : {})} />
             ) : tab === 'keybindings' ? (
-              <KeybindingsTab />
+              <KeybindingsTab {...(section ? { focusSection: section } : {})} />
             ) : (
-              <ThemesTab />
+              <ThemesTab {...(section ? { focusSection: section } : {})} />
             )}
           </div>
         </div>
@@ -428,6 +432,9 @@ export function PreferencesApp({ initialTab, initialSection }: { initialTab: Tab
        * failure in any other window is.
        */}
       <NotificationProvider>
+        {/* 080 FR-011 — Help or a setting's (?) the OS could not open in the browser. */}
+        <OpenExternalFailedNotice />
+        <LinkPromptHost />
         <ConfirmProvider>
           <ContextMenuProvider>
             {/* ResetNoticeProvider is a thin ADAPTER over the notification model now — it keeps the

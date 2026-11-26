@@ -36,21 +36,21 @@ export const csvProvider: PreviewProviderDescriptor = {
   wrapToggle: true,
   lockToggles: true,
   enabledDescription:
-    'Offer the CSV Preview Editor, the editable grid for .csv files. When off, every CSV Preview Editor closes (asking first about unsaved changes) and the preview commands for these files are shown disabled; a CSV still opens in the text editor.',
+    'Offer the CSV Preview Editor, the editable grid for .csv files. Off closes it.',
   // FR-036a, FR-036b, FR-060a — the cell dialog for long values.
   settings: [
     {
       leaf: 'editLongCellsInDialog',
       label: 'Edit long cells in a dialog',
       description:
-        'Open a cell longer than the threshold in a dialog holding an editor, instead of editing it in place, and offer Edit in Dialog… on every cell. Each CSV Preview Editor can turn the dialog on or off for itself from its status bar; a panel that has not follows this setting.',
+        'Edit a cell longer than the threshold in a dialog instead of in place.',
       control: 'toggle',
       default: true,
     },
     {
       leaf: 'longCellThreshold',
       label: 'Long cell threshold',
-      description: 'A cell with more characters than this opens in the cell dialog when you double-click it or press F2 or Enter on it.',
+      description: 'A cell with more characters than this opens in the cell dialog when you edit it.',
       control: 'number',
       default: CSV_LONG_CELL_THRESHOLD.shipped,
       min: CSV_LONG_CELL_THRESHOLD.min,
@@ -66,7 +66,7 @@ export const csvProvider: PreviewProviderDescriptor = {
       leaf: 'multiLineCellsInDialog',
       label: 'Edit multi-line cells in a dialog',
       description:
-        'Open a cell holding a line break in the cell dialog however short it is. When off, such a cell opens there only when it is longer than the threshold.',
+        'Open a cell holding a line break in the cell dialog, however short it is.',
       control: 'toggle',
       default: true,
     },
@@ -75,7 +75,7 @@ export const csvProvider: PreviewProviderDescriptor = {
       leaf: 'wrapCells',
       label: 'Wrap cells',
       description:
-        'Show every cell in full: line breaks kept, each value wrapped to its column, and every row as tall as its tallest cell. Each CSV Preview Editor can turn wrapping on or off for itself from its status bar; a panel that has not follows this setting. Wrapping changes only how the grid draws and never edits the file.',
+        'Show every cell in full: line breaks kept, values wrapped, rows as tall as their tallest cell.',
       control: 'toggle',
       default: false,
     },
@@ -84,7 +84,7 @@ export const csvProvider: PreviewProviderDescriptor = {
       leaf: 'lockFirstRow',
       label: 'Lock first row',
       description:
-        'Keep the first row directly under the column letters however far the table is scrolled down, set apart by a line. Each CSV Preview Editor can turn the lock on or off for itself from its status bar; a panel that has not follows this setting. Locking changes only how the grid draws and never edits the file.',
+        'Keep the first row in view however far you scroll down.',
       control: 'toggle',
       default: false,
     },
@@ -92,7 +92,7 @@ export const csvProvider: PreviewProviderDescriptor = {
       leaf: 'lockFirstColumn',
       label: 'Lock first column',
       description:
-        'Keep the first column beside the row numbers however far the table is scrolled across, set apart by a line. Each CSV Preview Editor can turn the lock on or off for itself from its status bar; a panel that has not follows this setting. Locking changes only how the grid draws and never edits the file.',
+        'Keep the first column in view however far you scroll across.',
       control: 'toggle',
       default: false,
     },

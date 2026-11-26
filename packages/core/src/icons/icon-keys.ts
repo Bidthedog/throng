@@ -139,6 +139,8 @@ export const ICON_KEYS = [
   'refresh',
   'navigateBack',
   'navigateForward',
+  // 080 FR-051 — the Help window's Open in browser.
+  'openInBrowser',
   'syncScroll',
   'unload',
   'category',
@@ -477,6 +479,8 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on the button at the top left of an editor or preview panel, and its menu row, that returns the panel to the file it showed before.',
   navigateForward:
     'The icon on the button at the top left of an editor or preview panel, and its menu row, that moves the panel on again to a file you stepped back from.',
+  openInBrowser:
+    'The icon on the Help window\'s Open in browser button, which opens the page it shows on throng-ide.com in your web browser.',
   syncScroll:
     'The icon on the Synchronise Scrolling button on the editor\'s and the preview\'s status bars, and on the Synchronise Scrolling menu rows, that turns scrolling an editor and its preview together on or off.',
   unload:
@@ -520,7 +524,7 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
   searchExclusions:
     'The icon on the Find in Files toggle that switches the search exclusion list on or off for that panel.',
   help:
-    'The icon on the Resource Monitor control that explains what it shows and how to use it.',
+    'The icon on a control that opens help: the Resource Monitor\'s guide, the help button beside a setting, and the title-bar menu\'s Help row.',
   activate:
     'The icon on the Resource Monitor control that goes to the project, tab or panel a row names, bringing its window forward.',
   resourceHideEnded:

@@ -234,6 +234,7 @@ previewSpreadsheet.svg - The icon that names a Spreadsheet preview: at the head 
 refresh.svg - The icon on the preview panel menu row that reads the file or its open document again and redraws the preview straight away.
 navigateBack.svg - The icon on the button at the top left of an editor or preview panel, and its menu row, that returns the panel to the file it showed before.
 navigateForward.svg - The icon on the button at the top left of an editor or preview panel, and its menu row, that moves the panel on again to a file you stepped back from.
+openInBrowser.svg - The icon on the Help window's Open in browser button, which opens the page it shows on throng-ide.com in your web browser.
 syncScroll.svg - The icon on the Synchronise Scrolling button on the editor's and the preview's status bars, and on the Synchronise Scrolling menu rows, that turns scrolling an editor and its preview together on or off.
 unload.svg - The icon on a project's two Unload context-menu rows, which detach it from the window without deleting anything on disk.
 category.svg - The icon on a project's Move to Category context-menu row, which reassigns it to a different category.
@@ -255,7 +256,7 @@ busy.svg - The icon on the Find in Files cancel control while a search is runnin
 groupFolderTree.svg - The icon on the Find in Files control that arranges results in the File Explorer’s folder tree.
 projectSettings.svg - The icon on the File Explorer control that opens the active project’s settings — what it hides from the tree and from Find in Files.
 searchExclusions.svg - The icon on the Find in Files toggle that switches the search exclusion list on or off for that panel.
-help.svg - The icon on the Resource Monitor control that explains what it shows and how to use it.
+help.svg - The icon on a control that opens help: the Resource Monitor's guide, the help button beside a setting, and the title-bar menu's Help row.
 activate.svg - The icon on the Resource Monitor control that goes to the project, tab or panel a row names, bringing its window forward.
 resourceHideEnded.svg - The icon on the Resource Monitor control that hides processes that have ended.
 resourceNetwork.svg - The icon on the Resource Monitor's "order by Network" choice.

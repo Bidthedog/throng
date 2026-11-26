@@ -10,6 +10,7 @@ import { PanelNameClient } from './state/panel-name-client.js';
 import { ProjectsProvider } from './state/projects-store.js';
 import { SubWorkspacesProvider } from './state/subworkspaces-store.js';
 import { ConfirmProvider } from './confirm-dialog.js';
+import { LinkPromptHost } from './link-prompt/link-prompt-host.js';
 import { ReplaceAllPrompt } from './search/replace-all-prompt.js';
 import { TerminalTitleContextFeeder } from './terminal/title-context.js';
 import { NotificationProvider } from './common/notification.js';
@@ -165,6 +166,8 @@ export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElemen
                 <PrintSavedNotice />
                 <SubWorkspaceApp subWorkspaceId={id} />
                 <LinkHint />
+                {/* 080 FR-070 — a link followed in this window asks here. */}
+                <LinkPromptHost />
               </ProjectsProvider>
             </ContextMenuProvider>
           </ConfirmProvider>

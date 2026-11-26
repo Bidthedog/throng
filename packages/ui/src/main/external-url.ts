@@ -44,6 +44,15 @@ export function isSafePreviewLinkUrl(url: unknown): url is string {
 }
 
 /** The subset of `ipcMain` this registers on. */
+/** 080 FR-011 — main → the window whose open failed: `{ url, reason }`. */
+export const OPEN_EXTERNAL_FAILED_CHANNEL = 'throng:openExternal:failed';
+
+/** The part of an IPC event's sender a failed open reports through. */
+interface OpenExternalSender {
+  isDestroyed(): boolean;
+  send(channel: string, payload: unknown): void;
+}
+
 export interface OpenExternalIpcMain {
   on(channel: string, listener: (event: unknown, url: unknown) => void): void;
 }
@@ -82,18 +91,28 @@ export function registerOpenExternalIpc(
    */
   log: (line: string) => void = () => {},
 ): void {
-  const handOverAndOpen = (url: string): void => {
+  /**
+   * 080 FR-011, constitution XIII — a browser that will not start leaves a trace: one log line with the
+   * reason, and the window that asked is told so it can raise one notice naming the URL (its Copy puts
+   * the URL on the clipboard, which is how the user still reaches the page).
+   */
+  const handOverAndOpen = (event: unknown, url: string): void => {
     log(`open-external: ${url}`);
     foregroundHandoff.allow();
-    void shell.openExternal(url);
+    shell.openExternal(url).catch((error: unknown) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      log(`open-external failed: ${url}: ${reason}`);
+      const sender = (event as { sender?: OpenExternalSender } | undefined)?.sender;
+      if (sender && !sender.isDestroyed()) sender.send(OPEN_EXTERNAL_FAILED_CHANNEL, { url, reason });
+    });
   };
   // The licence link opens in the user's default browser — no in-app navigation, so the sandboxed About
   // window is never replaced by a view of gnu.org — and so does a terminal's link (024 US7).
-  ipc.on('throng:openExternal', (_event, url) => {
-    if (isSafeExternalUrl(url)) handOverAndOpen(url);
+  ipc.on('throng:openExternal', (event, url) => {
+    if (isSafeExternalUrl(url)) handOverAndOpen(event, url);
   });
-  ipc.on('throng:preview:openExternal', (_event, url) => {
-    if (isSafePreviewLinkUrl(url)) handOverAndOpen(url);
+  ipc.on('throng:preview:openExternal', (event, url) => {
+    if (isSafePreviewLinkUrl(url)) handOverAndOpen(event, url);
   });
 }
 

@@ -452,6 +452,21 @@
   color: var(--text-dim, var(--text));
 }
 
+/* 080 FR-027 — the label line: the title and its (?) side by side, the (?) vertically centred on the text. */
+.settings-row__title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 080 FR-014 — the (?) to this entry of the reference: a small icon control beside the title. */
+.settings-row__help {
+  flex: none;
+  align-self: center;
+  margin: 0;
+}
+
 /* 039 FR-008a — why a control is inert, under its description.
    Marked with a leading rule rather than a colour: this is a CONDITION, not a failure (throng
    is simply not elevated), so it must not borrow the warning palette. It reads as a footnote to

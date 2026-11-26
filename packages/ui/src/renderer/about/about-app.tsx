@@ -1,6 +1,10 @@
 import { useEffect, useState, type MouseEvent, type ReactElement } from 'react';
 import { ConfigProvider, useActiveTheme } from '../config/config-store.js';
 import { useNoDropNavigation } from '../common/no-drop-navigation.js';
+import { NotificationProvider } from '../common/notification.js';
+import { LinkPromptHost } from '../link-prompt/link-prompt-host.js';
+import { OpenExternalFailedNotice } from '../common/open-external-failed-notice.js';
+import { useHelpKey } from '../help/use-help-key.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { TitleBar } from '../title-bar/title-bar.js';
 import './about.css';
@@ -47,6 +51,7 @@ interface AboutInfo {
 const AGPL_URL = 'https://www.gnu.org/licenses/agpl-3.0.html';
 
 function AboutShell(): ReactElement {
+  useHelpKey(); // 080 FR-010 — F1 opens the guide (this window mounts no window dispatcher)
   const theme = useActiveTheme();
   const [info, setInfo] = useState<AboutInfo>({
     version: '',
@@ -221,7 +226,12 @@ export function AboutApp(): ReactElement {
   useNoDropNavigation();
   return (
     <ConfigProvider>
-      <AboutShell />
+      <NotificationProvider>
+        {/* 080 FR-011 — a licence link or Help the OS could not open in the browser. */}
+        <OpenExternalFailedNotice />
+        <LinkPromptHost />
+        <AboutShell />
+      </NotificationProvider>
     </ConfigProvider>
   );
 }

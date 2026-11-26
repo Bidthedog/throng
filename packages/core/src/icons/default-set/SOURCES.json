@@ -414,6 +414,9 @@
     "navigateForward": {
       "lucide": "arrow-right"
     },
+    "openInBrowser": {
+      "lucide": "external-link"
+    },
     "syncScroll": {
       "lucide": "link"
     },

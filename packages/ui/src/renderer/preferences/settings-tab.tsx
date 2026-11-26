@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   SETTINGS_METADATA,
   descriptorsForThisPlatform,
@@ -21,6 +21,8 @@ import type { DetectedFlavourDto } from '../global.js';
 import { useAppSettings } from '../config/config-store.js';
 import { debounce } from '../config/write-config.js';
 import { IconButton } from '../common/icon-button.js';
+import { HelpLink, helpUrlOrNone } from '../common/help-link.js';
+import { effectiveHelpBase } from '../help/help-opener.js';
 import { useConfirm, type ConfirmOptions } from '../confirm-dialog.js';
 import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
@@ -28,13 +30,14 @@ import { RowActions } from './row-actions.js';
 import { FieldNote, SettingControl } from './form-controls.js';
 import { FileManagerItemControl } from './file-manager-item-control.js';
 import { FormHistoryControl } from './form-history-control.js';
+import { useRevealRow } from './use-reveal-row.js';
 import { foldKey, groupDescriptors } from './group-descriptors.js';
 import { Subsection } from './subsection.js';
 import { FoldAllButtons, FoldHeading } from './fold-heading.js';
 import { useTabFolding, type FoldCount } from './use-preference-folds.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { createApplyClient } from './apply-client.js';
-import { logCaught } from '@throng/core';
+import { logCaught, settingHelpUrl } from '@throng/core';
 
 /**
  * 069 FR-067, FR-068 — the File Manager item sits under General as its last subgroup, and folds like one. It is
@@ -249,35 +252,10 @@ export function SettingsTab({
     fileManagerAvailable ? EXTRA_FOLD_KEYS : NO_EXTRA_FOLD_KEYS,
   );
 
-  // 068 — open and scroll to the requested section. Sections start folded (056 FR-016), so a link that only
-  // scrolled would land on a closed heading: unfold first, and scroll once the unfolded section has rendered
-  // (this effect runs again after the toggle lands, and `handled` makes the scroll happen once per request).
-  const handledSection = useRef<number | null>(null);
-  useEffect(() => {
-    if (!focusSection || handledSection.current === focusSection.nonce) return;
-    const setting = metadata.find((d) => d.key === focusSection.name);
-    const group = setting?.group ?? focusSection.name;
-    if (!allGroups.some((g) => g.group === group)) {
-      handledSection.current = focusSection.nonce;
-      return;
-    }
-    // Outermost first: one fold per render, and the effect runs again once each has landed.
-    const keys = [foldKey(group)];
-    if (setting?.subgroup !== undefined) keys.push(foldKey(group, setting.subgroup));
-    if (setting?.subgroup !== undefined && setting.subsection !== undefined) {
-      keys.push(foldKey(group, setting.subgroup, setting.subsection));
-    }
-    const folded = keys.find((k) => folds.isFolded(k));
-    if (folded !== undefined) {
-      folds.toggle(folded);
-      return;
-    }
-    handledSection.current = focusSection.nonce;
-    const testId = setting ? `setting-${setting.key}` : `settings-group-${group}`;
-    const target = [...document.querySelectorAll<HTMLElement>('[data-testid]')].find(
-      (el) => el.getAttribute('data-testid') === testId,
-    );
-    target?.scrollIntoView({ block: setting ? 'center' : 'start' });
+  // 068, 080 FR-064 — open and scroll to the requested section or setting, through the shared reveal.
+  useRevealRow(focusSection, metadata, allGroups, folds, {
+    row: (key) => `setting-${key}`,
+    group: (group) => `settings-group-${group}`,
   });
 
   // Dynamic options for the theme selector (the themes present on disk).
@@ -714,7 +692,13 @@ export function SettingsTab({
               data-inert={isInert(d) ? 'true' : 'false'}
               title={inertReason(d) ?? d.description}
             >
-              {d.control === 'toggle' ? <span className="settings-row__leaf-label">{d.label}</span> : null}
+              {d.control === 'toggle' ? (
+                <>
+                  <span className="settings-row__leaf-label">{d.label}</span>
+                  {/* 080 FR-027 — a toggle leaf's title is its own label, so its (?) sits right after it. */}
+                  <HelpLink url={helpUrlOrNone(() => settingHelpUrl(d.key, effectiveHelpBase()))} label={d.label} testId={`help-link-${d.key}`} />
+                </>
+              ) : null}
               <SettingControl
                 descriptor={d}
                 value={shownValue(d)}
@@ -724,6 +708,11 @@ export function SettingsTab({
                 asks={(v) => silenceConfirmation(d, v, settings) !== null}
                 onCommit={(v) => commit(d, v)}
               />
+              {/* 080 FR-014 — each leaf is its own setting (007 FR-025a), so each has its own (?). A leaf with
+                  no label of its own is titled by the row, so its (?) follows its control. */}
+              {d.control === 'toggle' ? null : (
+                <HelpLink url={helpUrlOrNone(() => settingHelpUrl(d.key, effectiveHelpBase()))} label={d.label} testId={`help-link-${d.key}`} />
+              )}
             </div>
           ))}
         </div>
@@ -778,7 +767,13 @@ export function SettingsTab({
     return (
             <div className="settings-row" key={d.key} data-testid={`setting-${d.key}`}>
               <div className="settings-row__meta">
-                <label className="settings-row__label">{d.label}</label>
+                {/* 080 FR-027 — the (?) sits beside the title, in the label line, not after the description. Drawn
+                    here, in the row `descriptorsForThisPlatform` already filtered, so a setting hidden on this
+                    platform has no (?) either. */}
+                <div className="settings-row__title">
+                  <label className="settings-row__label">{d.label}</label>
+                  <HelpLink url={helpUrlOrNone(() => settingHelpUrl(d.key, effectiveHelpBase()))} label={d.label} testId={`help-link-${d.key}`} />
+                </div>
                 <p className="settings-row__desc">
                   {d.description}
                   {/* 077 FR-003 — a size row says what its MB means, once, with its description. */}

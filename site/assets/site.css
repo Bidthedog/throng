@@ -42,9 +42,13 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px s
 .skip:focus { left: 16px; top: 12px; background: var(--ink-3); padding: 8px 14px; border-radius: 6px; z-index: 1; }
 
 /* Header */
-/* The header stays in view; its background runs the full width of the window, past the column. */
-header.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 18px 0; background: var(--ink); box-shadow: 0 0 0 100vmax var(--ink); clip-path: inset(0 -100vmax); transition: border-color 0.2s; border-bottom: 1px solid transparent; }
-header.top.scrolled { border-bottom-color: var(--line); }
+/* The header stays in view; its background runs the full width of the window, past the column. The border image
+   paints that band as ink overflow, which neither scrolls the page sideways nor clips what hangs below the header
+   (the guide's search results do). Brand on the left; everything else is one group on the right, so the site nav
+   ends in the same place on every page (080 FR-029). */
+header.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; min-height: 84px; padding: 18px 0; background: var(--ink); border-image: conic-gradient(var(--ink) 0 0) fill 0 / / 0 100vmax; transition: box-shadow 0.2s; }
+header.top.scrolled { box-shadow: 0 1px 0 var(--line); }
+header.top .brand { margin-right: auto; }
 
 /* Back to the top, once the page has scrolled past its first screen */
 .to-top { position: fixed; right: 20px; bottom: 20px; z-index: 10; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--ink-3); border: 1px solid var(--line); color: var(--text); font-size: 22px; text-decoration: none; box-shadow: 0 10px 30px -10px #000; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; }
@@ -147,14 +151,116 @@ footer { border-top: 1px solid var(--line); padding: 28px 0 48px; color: var(--m
 footer p { margin: 0 0 4px; }
 footer a { color: var(--muted); }
 
+/* The release this site was built from (080 FR-002b), in the header and the footer */
+.site-version { color: var(--muted); font: 13px/1 var(--mono); }
+header.top .site-version { margin-left: 22px; }
+.site-version:empty { display: none; }
+
+/* The user guide (080): the home page's header and footer, a page list beside the page, one search field */
+.guide-search { width: 260px; min-width: 0; }
+/* Pagefind's own stylesheet loads after this one, so these rules out-rank it on specificity, not order. */
+header.top .guide-search .pagefind-ui__search-input { height: 44px; color: var(--text); background: var(--ink-3); border: 1px solid var(--line); border-radius: 8px; font: 15px var(--sans); }
+header.top .guide-search .pagefind-ui__search-input::placeholder { color: var(--muted); opacity: 1; }
+header.top .guide-search .pagefind-ui__search-input:focus { outline: 2px solid var(--amber); outline-offset: 2px; }
+header.top .guide-search .pagefind-ui__form::before { background-color: var(--muted); top: 15px; }
+/* FR-035 — the clear control is a small round icon button inside the field, not Pagefind's word "clear" */
+header.top .guide-search .pagefind-ui__search-clear { top: 50%; right: 8px; width: 28px; height: 28px; padding: 0; transform: translateY(-50%); border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 0; cursor: pointer; }
+header.top .guide-search .pagefind-ui__search-clear::before { content: '×'; display: block; font: 600 20px/28px var(--sans); text-align: center; }
+header.top .guide-search .pagefind-ui__search-clear:hover { color: var(--text); background: var(--ink-2); }
+header.top .guide-search .pagefind-ui__search-clear:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; color: var(--text); }
+/* The results: a panel under the header, as wide as the column, scrolling on its own while the page keeps its scroll.
+   --header-h is the header's measured height (site.js); 84px is its height when nothing wraps. */
+header.top .guide-search .pagefind-ui__drawer { position: fixed; z-index: 20; top: var(--header-h, 84px); left: max(24px, 50% - 566px); right: max(24px, 50% - 566px); max-height: calc(100dvh - var(--header-h, 84px) - 16px); overflow-y: auto; overscroll-behavior: contain; display: block; margin: 0; padding: 6px 22px 18px; background: var(--ink-2); border: 1px solid var(--line); border-radius: 0 0 10px 10px; box-shadow: 0 24px 48px -16px #000; }
+header.top .guide-search .pagefind-ui__drawer.pagefind-ui__hidden { display: none; }
+header.top .guide-search .pagefind-ui__results-area { margin-top: 10px; }
+header.top .guide-search .pagefind-ui__message { color: var(--muted); font-size: 14px; padding: 8px 0; height: auto; }
+header.top .guide-search .pagefind-ui__result-link { color: var(--text); }
+header.top .guide-search .pagefind-ui__result-excerpt, header.top .guide-search .pagefind-ui__result-nested .pagefind-ui__result-excerpt { color: var(--muted); }
+header.top .guide-search mark { background: none; color: var(--amber); font-weight: 700; }
+header.top .guide-search .pagefind-ui__button { color: var(--text); background: var(--ink-3); border-color: var(--line); }
+/* FR-039 — the page column holds the footer, so the grid runs to the end of the document: the page list, sticky
+   below the header and exactly as tall as the rest of the window, never moves, and scrolls on its own. */
+.guide { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 48px; }
+/* FR-068 — where the page sits in the guide, above its heading */
+.page-trail { margin: 0 0 10px; font-size: 14px; color: var(--muted); }
+.page-trail ol { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.page-trail li + li::before { content: '›'; margin-right: 6px; color: var(--muted); }
+.page-trail a { margin: 0; color: var(--muted); text-decoration: none; } /* not the header's nav a margin */
+.page-trail a:hover { color: var(--text); text-decoration: underline; }
+.page-trail [aria-current='page'] { color: var(--text); }
+/* FR-066 — a website page in the guide's frame (the sitemap) has no page list beside it */
+.guide--single { grid-template-columns: minmax(0, 1fr); }
+.guide-nav { position: sticky; top: var(--header-h, 84px); align-self: start; height: calc(100dvh - var(--header-h, 84px)); padding: 32px 0 24px; overflow-y: auto; overscroll-behavior: contain; font-size: 15px; }
+.guide-body { min-width: 0; padding-top: 32px; }
+.guide-body > footer { margin-top: 72px; }
+.guide-nav ul { list-style: none; margin: 0; padding: 0; }
+.guide-nav a { display: block; margin: 0; padding: 5px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+.guide-nav a:hover { color: var(--text); background: var(--ink-3); }
+.guide-nav a[aria-current='page'] { color: var(--text); background: var(--ink-3); box-shadow: inset 3px 0 0 var(--teal); }
+/* The references (FR-026): a second group under a rule, each one expanding to its section pages */
+.guide-nav > ul > li:not(:has(> details)) + li:has(> details) { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.guide-nav__ref > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; list-style: none; }
+.guide-nav__ref > summary::-webkit-details-marker { display: none; }
+.guide-nav__ref > summary::after { content: ''; flex: none; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform 0.15s; }
+.guide-nav__ref[open] > summary::after { transform: rotate(45deg); }
+.guide-nav__ref > summary:hover, .guide-nav__ref[open] > summary { color: var(--text); }
+.guide-nav__ref > summary:hover { background: var(--ink-3); }
+.guide-nav__ref > summary:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.guide-nav__ref ul { margin: 2px 0 8px 12px; padding-left: 6px; border-left: 1px solid var(--line); font-size: 14px; }
+.guide-nav__ref a { padding: 3px 10px; }
+.guide-main { min-width: 0; max-width: 46em; }
+.guide-main h1 { font-size: clamp(30px, 3.4vw, 44px); letter-spacing: -0.03em; line-height: 1.1; margin: 0 0 18px; }
+.guide-main h2 { font-size: 26px; letter-spacing: -0.02em; margin: 48px 0 12px; }
+.guide-main h3, .guide-main h4 { font-size: 19px; margin: 32px 0 8px; }
+.guide-main code { font: 0.92em var(--mono); background: var(--term); padding: 1px 5px; border-radius: 4px; }
+.guide-main pre { background: var(--term); padding: 14px 16px; border-radius: 8px; overflow-x: auto; }
+.guide-main pre code { padding: 0; background: none; }
+.guide-main blockquote { margin: 18px 0; padding: 10px 16px; border-left: 3px solid var(--teal); background: var(--ink-3); border-radius: 0 6px 6px 0; }
+.guide-main blockquote p { margin: 0; }
+.guide-main table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 15px; margin: 16px 0; }
+.guide-main th, .guide-main td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+/* FR-036, FR-037 — every screenshot fills the column and opens in the enlarge modal */
+.guide-main a.zoom { display: block; margin: 18px 0; cursor: zoom-in; }
+.guide-main img { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); }
+/* GitHub alerts (D2): one accent each, carried by the rule, the title and a faint wash */
+.callout { --callout: var(--teal); margin: 20px 0; padding: 12px 16px 12px 18px; border-left: 3px solid var(--callout); background: color-mix(in srgb, var(--callout) 8%, var(--ink)); border-radius: 0 8px 8px 0; }
+.callout--note { --callout: var(--violet); }
+.callout--tip { --callout: var(--teal); }
+.callout--warning { --callout: var(--amber); }
+.callout p { margin: 0; }
+.callout p + p, .callout p + ul, .callout p + ol { margin-top: 8px; }
+.callout .callout__title { color: var(--callout); font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+/* A reference's own page lists its section pages */
+.guide-sections { list-style: none; padding: 0; margin: 24px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.guide-sections a { display: block; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; }
+.guide-sections a:hover { border-color: var(--teal); background: var(--ink-2); }
+.guide-page { --pagefind-ui-scale: 0.8; --pagefind-ui-primary: var(--teal); --pagefind-ui-text: var(--text); --pagefind-ui-background: var(--ink-3); --pagefind-ui-border: var(--line); --pagefind-ui-tag: var(--term); --pagefind-ui-font: var(--sans); }
+
 @media (max-width: 860px) {
+  .guide { grid-template-columns: 1fr; gap: 24px; }
+  .guide-nav { position: static; height: auto; padding: 24px 0 0; overflow: visible; }
+  .guide-body { padding-top: 0; }
+  .guide-search { width: auto; flex: 1 1 140px; margin-left: 16px; }
   .hero, .feature { grid-template-columns: 1fr; gap: 32px; }
   .feature:nth-of-type(even) .shot { order: 0; }
   nav a:not(:last-child) { display: none; }
 }
+/* Too narrow for the search beside the brand: it takes a row of its own under it */
+@media (max-width: 560px) {
+  .guide-page header.top { flex-wrap: wrap; row-gap: 10px; }
+  .guide-page header.top .guide-search { order: 1; flex: 1 0 100%; margin-left: 0; }
+}
+/* 080 FR-062 — the Help window's link popover: one, bottom left, fading in and out with the hover. */
+.link-status { position: fixed; left: 8px; bottom: 8px; z-index: 20; max-width: min(70vw, 640px); display: flex; gap: 8px; align-items: baseline; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--ink-2); color: var(--text); font: 13px/1.4 var(--sans); box-shadow: 0 10px 30px -10px #000; pointer-events: none; opacity: 0; transition: opacity 0.15s ease-out; }
+.link-status.shown { opacity: 1; }
+.link-status__kind { flex: none; color: var(--teal); font-weight: 600; }
+.link-status--external .link-status__kind { color: var(--amber); }
+.link-status__address { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
+
 @media (prefers-reduced-motion: reduce) {
+  .link-status { transition: none; }
   html { scroll-behavior: auto; }
-  .to-top, header.top { transition: none; }
+  .to-top, header.top, .guide-nav__ref > summary::after { transition: none; }
   .lightbox[open], .lightbox[open]::backdrop, .lightbox.closing, .lightbox.closing::backdrop { animation: none; }
   .lightbox__close, html.js .shot img, .tablist button { transition: none; }
   html.js .panel.entering { animation: none; }

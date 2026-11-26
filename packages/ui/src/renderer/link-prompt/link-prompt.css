@@ -1,0 +1,18 @@
+/*
+ * 080 FR-063, FR-070 — the address in the external-link prompt. The dialog itself is the common confirm dialog's
+ * (`.modal` in theme.css); only the address needs its own look: the editor font, on the input surface, wrapping
+ * anywhere so a long address never widens the dialog.
+ */
+.link-prompt__url {
+  display: block;
+  margin-top: 8px;
+  max-height: 8em;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--throng-colour-border);
+  background: var(--throng-colour-inputSurface);
+  font-family: var(--throng-font-editor-family, monospace);
+  overflow-wrap: anywhere;
+  user-select: text;
+}

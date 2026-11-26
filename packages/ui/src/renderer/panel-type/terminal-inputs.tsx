@@ -1,5 +1,7 @@
 import type { ReactElement } from 'react';
-import { hostTraits } from '@throng/core';
+import { helpUrl, hostTraits } from '@throng/core';
+import { HelpLink } from '../common/help-link.js';
+import { effectiveHelpBase } from '../help/help-opener.js';
 import type { FlavourOption, PanelTypeValues } from '@throng/core';
 import { HistoryInput } from './history-input.js';
 import { useFormHistory } from './use-form-history.js';
@@ -51,6 +53,16 @@ export function TerminalInputs({
 
   return (
     <div className="panel-type-form__inputs" data-testid="terminal-inputs">
+      {/* 080 FR-017 — the form's flavour, shell and startup options are taught under Change how a terminal is set up. */}
+      <div className="panel-type-form__help">
+        <span>Terminal settings</span>
+        <HelpLink
+          url={helpUrl({ page: 'terminals', anchor: 'change-how-a-terminal-is-set-up' }, { base: effectiveHelpBase() })}
+          label="Terminal settings"
+          testId="help-link-terminal-form"
+          className="icon-button panel-type-form__help-link"
+        />
+      </div>
       <label className="panel-type-form__field">
         <span>Flavour</span>
         {flavours.length === 0 ? (
