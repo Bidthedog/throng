@@ -11,7 +11,7 @@ Pick your system. No Node.js, compiler or other runtime is needed for any downlo
 | macOS on Apple silicon, current or previous release | [Installing on macOS](install-macos.md), best endeavours: checked by automated tests only |
 
 Once it is running, the
-[quick start](quick-start.md) takes it from there. Each guide also covers opening a folder as a project from your file
+[Quick start](../site/guide/quick-start.md) takes it from there. Each guide also covers opening a folder as a project from your file
 manager, or with `throng <path>`.
 
 ## Running from source

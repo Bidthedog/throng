@@ -24,7 +24,7 @@ sudo dnf install throng
 ```
 
 throng then appears in your applications, and `throng` works in a shell. Later releases arrive with your ordinary
-system updates. Next, take the [tour](quick-start.md). What differs on Linux is listed in [Linux](linux.md).
+system updates. Next, take the [tour](../site/guide/quick-start.md). What differs on Linux is listed in [Linux](linux.md).
 
 ## The package repository
 

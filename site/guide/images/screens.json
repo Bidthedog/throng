@@ -1,0 +1,31 @@
+{
+  "$comment": "080 FR-067: which screen each guide screenshot shows, as the source it is drawn from. A folder ends in /. scripts/guide-screens-stale.mjs reports an image whose screen changed since a release while the image did not. everyScreen is drawn in every shot.",
+  "everyScreen": [
+    "packages/core/src/config/default-themes/",
+    "packages/ui/src/renderer/theme.css",
+    "packages/ui/src/renderer/theme/",
+    "packages/ui/src/renderer/title-bar/"
+  ],
+  "screens": {
+    "attention/see-what-needs-you.png": ["packages/ui/src/renderer/attention/", "packages/ui/src/renderer/statusbar/", "packages/ui/src/renderer/workspace/", "packages/ui/src/renderer/panes/"],
+    "csv-and-spreadsheets/preview-a-csv.png": ["packages/ui/src/renderer/preview/providers/csv/", "packages/ui/src/renderer/preview/blocks/", "packages/ui/src/renderer/panes/"],
+    "editing/open-a-file.png": ["packages/ui/src/renderer/editor/", "packages/ui/src/renderer/panes/"],
+    "files/browse-your-project.png": ["packages/ui/src/renderer/explorer/", "packages/ui/src/renderer/sidebar/", "packages/ui/src/renderer/workspace/"],
+    "files/right-click-a-file.png": ["packages/ui/src/renderer/explorer/", "packages/ui/src/renderer/context-menu-provider.tsx", "packages/ui/src/renderer/sidebar/"],
+    "finding/search-the-whole-project.png": ["packages/ui/src/renderer/find-in-files/", "packages/ui/src/renderer/panes/"],
+    "images-pdfs-svg-html/preview-an-image.png": ["packages/ui/src/renderer/preview/providers/image/", "packages/ui/src/renderer/panes/"],
+    "key-bindings/change-a-key-binding.png": ["packages/ui/src/renderer/preferences/", "packages/core/src/config/keybindings-metadata.ts"],
+    "layout/split-the-workspace.png": ["packages/ui/src/renderer/panes/", "packages/ui/src/renderer/grid/", "packages/ui/src/renderer/context-menu-provider.tsx", "packages/ui/src/renderer/workspace/"],
+    "markdown/preview-markdown.png": ["packages/ui/src/renderer/preview/providers/markdown/", "packages/ui/src/renderer/preview/blocks/", "packages/ui/src/renderer/panes/"],
+    "preferences/change-a-setting.png": ["packages/ui/src/renderer/preferences/", "packages/core/src/config/settings-metadata.ts"],
+    "previews/open-a-preview.png": ["packages/ui/src/renderer/preview/", "packages/ui/src/renderer/explorer/", "packages/ui/src/renderer/context-menu-provider.tsx"],
+    "projects/add-a-project.png": ["packages/ui/src/renderer/sidebar/", "packages/ui/src/renderer/workspace/"],
+    "quick-start/find-your-way-around-the-window.png": ["packages/ui/src/renderer/workspace/", "packages/ui/src/renderer/sidebar/", "packages/ui/src/renderer/explorer/", "packages/ui/src/renderer/panes/", "packages/ui/src/renderer/grid/", "packages/ui/src/renderer/statusbar/", "packages/ui/src/renderer/editor/", "packages/ui/src/renderer/terminal/"],
+    "resources/see-what-throng-is-using.png": ["packages/ui/src/renderer/resources/"],
+    "sub-workspaces/move-panels-to-another-window.png": ["packages/ui/src/renderer/panes/", "packages/ui/src/renderer/context-menu-provider.tsx"],
+    "terminals/choose-your-shell.png": ["packages/ui/src/renderer/panel-type/", "packages/ui/src/renderer/panes/"],
+    "terminals/open-a-terminal.png": ["packages/ui/src/renderer/terminal/", "packages/ui/src/renderer/panes/"],
+    "themes-and-icons/choose-a-theme.png": ["packages/ui/src/renderer/preferences/", "packages/core/src/config/theme-metadata.ts"],
+    "troubleshooting/find-your-version.png": ["packages/ui/src/renderer/about/"]
+  }
+}

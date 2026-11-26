@@ -76,6 +76,9 @@ anything.
 E2E runs open **real, on-screen windows** — there is no headless mode
 ([why](../.claude/skills/throng-testing/references/no-headless.md)).
 
+`npm run guide:screenshots` uses the same harness but is not a test: it writes the user guide's screenshots
+(see [Releasing](releasing.md)). Its spec lives outside `tests/e2e`, so no E2E run, tag or budget includes it.
+
 The full suites — `npm run gate`, `npm run test:e2e` and a `vitest run --project <p>` with no path —
 are not run on a workstation: they pin every core for most of an hour. Where each kind of run is
 allowed to happen, and the loop that goes with it, is *Where a test is allowed to run* in the
@@ -87,7 +90,7 @@ The environment variables that tune a run (tier, workers, retries, opt-in suites
 
 | Workflow | Runs on | What it runs | Fails fast |
 | --- | --- | --- | --- |
-| `ci.yml` | every push to a pull request, drafts included | lint and type-check, unit, component, contract and the `critical-path` integration subset, on Linux, in parallel; one `CI verdict` check. A pull request that changes only files no job reads (the list is in `scripts/ci-changes.mjs`) skips them, and its verdict passes | no: every job runs to completion |
+| `ci.yml` | every push to a pull request, drafts included | lint and type-check, unit, component, contract and the `critical-path` integration subset, on Linux, in parallel; one `CI verdict` check. A pull request that changes only files no job reads (the list is in `scripts/ci-changes.mjs`) skips them, and its verdict passes. A pull request that changes app source but neither `site/guide/` nor a reference fails the verdict unless its description carries `No user-facing change: <reason>` (`scripts/guide-pr-check.mjs`) | no: every job runs to completion |
 | `pipeline.yml` | nightly on master, and on dispatch | every layer on Windows, Linux and macOS, every E2E test sharded per platform, `@admin`, calibration, and every artifact built and verified; publishes nothing | dispatch: yes; nightly: no, it reports every failure on one issue |
 | `release.yml` | a pushed `v*` tag only | the full pipeline, then signing, publishing and the package repositories | yes |
 
