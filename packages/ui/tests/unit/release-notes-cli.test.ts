@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { declareArtifactSet, lookupReleaseNotes } from '@throng/core';
+import { declareArtifactSet, guideLinkRefusals, lookupReleaseNotes } from '@throng/core';
 
 // @ts-expect-error — plain-JS build/CI script, imported for its pure command decision.
 import { runReleaseNotes } from '../../../../scripts/release-notes.mjs';
@@ -112,6 +112,28 @@ describe('release-notes render — the MSI and the verification gaps (058 FR-032
   });
 });
 
+/** 080 FR-019 — the release being cut links each Added and Changed entry to a guide task. */
+describe('release-notes render --guide-links (080 FR-019)', () => {
+  const withAdded = `# Changelog\n\n## 1.2.3\n\n### Added\n- Something new with no guide link.\n\n### Fixed\n- A real fix.\n`;
+
+  it('exits 5 naming the entry when an Added entry links no guide task', () => {
+    const r = runReleaseNotes({ argv: ['render', '--version', '1.2.3', '--guide-links'], ...BASE, changelog: withAdded });
+    expect(r.code).toBe(5);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toContain('Something new with no guide link.');
+  });
+
+  it('leaves the rule off without the flag, as the nightly preview of a published version renders', () => {
+    const r = runReleaseNotes({ argv: ['render', '--version', '1.2.3'], ...BASE, changelog: withAdded });
+    expect(r.code).toBe(0);
+  });
+
+  it('passes notes with only Fixed entries', () => {
+    const r = runReleaseNotes({ argv: ['render', '--version', '1.2.3', '--guide-links'], ...BASE });
+    expect(r.code).toBe(0);
+  });
+});
+
 describe("this repository's CHANGELOG.md (042 FR-003/FR-005)", () => {
   const changelog = readFileSync(join(repoRoot, 'CHANGELOG.md'), 'utf8');
   const version = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).version;
@@ -129,5 +151,12 @@ describe("this repository's CHANGELOG.md (042 FR-003/FR-005)", () => {
   it('keeps its own guidance in an HTML comment, so it can never reach a release body', () => {
     const r = lookupReleaseNotes(changelog, version);
     expect(JSON.stringify(r.found)).not.toMatch(/RECONSTRUCTED|HOW THIS FILE IS USED/);
+  });
+
+  // 080 FR-019 — caught when the entry is written, not when the release refuses it.
+  it('links every Unreleased Added and Changed entry to a task of the user guide', () => {
+    const r = lookupReleaseNotes(changelog.replace(/^## Unreleased/m, '## 0.0.0-unreleased'), '0.0.0-unreleased');
+    if (r.found === null) return; // an empty Unreleased section has nothing to link
+    expect(guideLinkRefusals(r.found)).toEqual([]);
   });
 });

@@ -223,7 +223,7 @@ describe('what ships (FR-005, FR-041, FR-050)', () => {
     const markdown = SETTINGS_METADATA.find((d) => d.key === 'editor.previews.providers.markdown.enabled') as FieldDescriptor;
     expect(markdown.label).toBe('Markdown: Enabled');
     expect(markdown.description).toBe(
-      'Offer previews of Markdown files. When off, every preview of these files closes and their preview commands are shown disabled.',
+      'Offer previews of Markdown files. Off closes them and disables their preview commands.',
     );
   });
 

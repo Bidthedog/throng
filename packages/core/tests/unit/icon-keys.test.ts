@@ -26,7 +26,7 @@ const EXPECTED_KEYS = [
   // 073 under 074 FR-103: the CSV and Spreadsheet preview icons.
   'previewCsv', 'previewSpreadsheet',
   'refresh', 'navigateBack',
-  'navigateForward', 'syncScroll', 'unload', 'category', 'foldSectionExpanded',
+  'navigateForward', 'openInBrowser', 'syncScroll', 'unload', 'category', 'foldSectionExpanded',
   'foldSectionCollapsed', 'foldPreviewExpanded', 'foldPreviewCollapsed', 'panelMaximise',
   'panelRestore', 'diagramFit', 'diagramZoomReset', 'diagramFullPane', 'pageLayoutSingle', 'pageLayoutTwo', 'pageLayoutWrap', 'warning', 'whitespace',
   'busy', 'groupFolderTree', 'projectSettings', 'searchExclusions', 'help', 'activate',
@@ -52,9 +52,9 @@ describe('icon keys (069 FR-010 to FR-012)', () => {
   // 074 FR-103 added a preview icon per shipped preview type, beside `preview`.
   // 075 FR-024 added the thirteen callout icons, FR-063 `print`, and FR-068a `pagePrevious` and `pageNext`.
   // 078 FR-013 added `wcagConformant`, the Themes picker's mark for a theme that meets WCAG AA.
-  it('is the 193 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076, thirteen from 073 (the CSV cell dialog toggle, the grid menu icons, the CSV and Spreadsheet preview icons and the workbook Read-only marker), nine from 074, sixteen from 075 and one from 078', () => {
+  it('is the 194 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076, thirteen from 073 (the CSV cell dialog toggle, the grid menu icons, the CSV and Spreadsheet preview icons and the workbook Read-only marker), nine from 074, sixteen from 075, one from 078 and one from 080 (Open in browser)', () => {
     expect([...ICON_KEYS]).toEqual(EXPECTED_KEYS);
-    expect(ICON_KEYS).toHaveLength(193);
+    expect(ICON_KEYS).toHaveLength(194);
     expect(ICON_KEYS).not.toContain('notifications');
   });
 

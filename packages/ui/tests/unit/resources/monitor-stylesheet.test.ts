@@ -5,7 +5,7 @@
  * resolves no cascade, so a rule's effect is not claimed here (MT-16 is the visual proof); what is claimed is
  * that the rules exist and say what the requirement says. They were component tests that mounted nothing: each
  * is moved here unchanged from the file that still holds the monitor's rendered claims for the same area
- * (`monitor-height`, `breakdown-columns`, `breakdown-header`, `breakdown`, `help-panel`, `info-helper`,
+ * (`monitor-height`, `breakdown-columns`, `breakdown-header`, `breakdown`, `info-helper`,
  * `monitor-layout`, `status-resources`). The interaction-state rules (hover, focus ring, body columns) are
  * `monitor-css.test.ts`'s; the heat scale is `heat.test.ts`.
  */
@@ -111,21 +111,9 @@ describe('the monitor window\'s other stylesheet claims', () => {
     expect(/\.monitor-body__help\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/justify-self:\s*end/);
   });
 
-  it('shows the help panel in the popover style with no glow (FR-119; was help-panel)', () => {
-    // The panel's own rule is the last `.monitor-help {`; the first is the shared surface it is grouped into.
-    const own = [...css.matchAll(/\n\.monitor-help\s*\{([^}]*)\}/g)].pop()?.[1] ?? '';
-    expect(own).toMatch(/width:/);
-    expect(own).not.toMatch(/color-mix/);
-    expect(own).not.toMatch(/box-shadow/);
-    expect(own).not.toMatch(/background/);
-    // The surface itself is the attention popover's, shared in one rule.
-    expect(/\n((?:\.[\w-]+,\n)*\.attention-popover(?:,\n\.[\w-]+)*)\s*\{/.exec(css)?.[1] ?? '').toContain('.monitor-help');
-  });
-
   it('is a floating surface in the attention popover\'s style, not a glow (FR-119; was info-helper)', () => {
     const shared = /\n((?:\.[\w-]+,\n)*\.attention-popover(?:,\n\.[\w-]+)*)\s*\{/.exec(css)?.[1] ?? '';
     expect(shared).toContain('.info-helper-popover');
-    expect(shared).toContain('.monitor-help');
     expect(shared).toContain('.status-popover');
   });
 

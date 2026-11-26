@@ -311,7 +311,7 @@ const ALLOWED: readonly Allowed[] = [
   {
     file: `${CORE_SRC}/config/theme-copy.ts`,
     kind: 'literal',
-    token: 'The colour of the File Explorer and Find in Files icons for plain text, Markdown and diffs. Leave it empty and they take the Icon Colour.',
+    token: 'Icons for plain text, Markdown and diffs. Empty takes the Icon Colour.',
     reason: 'user-facing copy for the Document File Icons colour, naming Markdown as one of the kinds it colours; it selects nothing',
   },
   ...allow(
@@ -396,7 +396,7 @@ const ALLOWED: readonly Allowed[] = [
   ...allow(`${CORE_SRC}/config/settings-metadata.ts`, 'literal', [
     'editor.markdownSectionsOpen',
     'Markdown sections open',
-    'How a Markdown document’s heading sections start out, in the editor and in a fresh preview: expanded, or collapsed. Collapse All / Expand All and per-section folding still work either way.',
+    "How a Markdown document's heading sections start out, in the editor and a fresh preview.",
   ], `${SECTION_FOLDING} — the setting's descriptor and its user-facing copy`),
   ...allow(`${CORE_SRC}/config/settings-metadata.ts`, 'identifier', ['MARKDOWN_SECTIONS_OPEN'], `${SECTION_FOLDING} — the setting's descriptor constant`),
   ...allow(`${CORE_SRC}/config/settings-metadata.ts`, 'identifier', ['markdown'], '054 FR-051 — files the Markdown-editor setting above in the Markdown preview subsection of Preferences; layout only, it selects no provider behaviour and a new provider needs no edit'),
@@ -440,6 +440,26 @@ const ALLOWED: readonly Allowed[] = [
    * provider needs no edit here.
    */
   ...allow(`${CORE_SRC}/preview/wiki-links.ts`, 'literal', ['.md', '.markdown'], 'the note extensions a `[[wikilink]]` target resolves to (047 FR-048) — Markdown syntax, not a provider selection'),
+
+  /*
+   * 080 FR-004a — the guide map is an index of the user guide: its Markdown page, the task headings that name
+   * Markdown, and the ids each task teaches. It selects nothing; docs-currency.test.ts requires every preview
+   * provider to appear in it, so a new provider is ADDED here as data, never branched on.
+   */
+  ...allow(
+    `${CORE_SRC}/help/guide-map.ts`,
+    'literal',
+    [
+      'markdown',
+      'Markdown',
+      'fold-markdown-sections',
+      'Fold Markdown sections',
+      'write-markdown-and-see-it-rendered',
+      'Write Markdown and see it rendered',
+      ...FOLD_COMMANDS,
+    ],
+    'the user guide’s index (080 FR-004a): page slugs, task headings and the ids each task teaches — data, not a provider selection',
+  ),
 ];
 
 const isAllowed = (hit: Hit): boolean =>

@@ -406,6 +406,7 @@ const cogMenu = (): MenuAction[] =>
     openLogs: noop,
     openResourceMonitor: noop,
     openAbout: noop,
+    openHelp: noop,
     keybindings: DEFAULT_KEYBINDINGS,
   });
 
@@ -1646,10 +1647,10 @@ describe('the cog menu’s Application section is one group, therefore no divide
 
   // 057 FR-082 made the pinned five six (Go to Next Marked Panel); FR-106 (round 3, which supersedes
   // FR-082) takes it back out to a marked project's context menu. 055 (FR-056) adds Resource Monitor,
-  // so the pinned shape is six.
-  it('draws six Application items and nothing between them', () => {
+  // so the pinned shape is six; 080 FR-010 adds Help, so it is seven.
+  it('draws seven Application items and nothing between them', () => {
     const application = cog().filter((i) => i.section === 'application');
-    expect(application.map((i) => i.section)).toEqual(Array(6).fill('application'));
+    expect(application.map((i) => i.section)).toEqual(Array(7).fill('application'));
     expect(separatorIndices(application)).toEqual([]);
     // Still ONE section for the whole menu: the new row adds no boundary.
     expect(separatorIndices(cog())).toEqual([]);
@@ -1663,8 +1664,28 @@ describe('the cog menu’s Application section is one group, therefore no divide
       'cog-menu-logs',
       // 055 FR-056 — after Open Logs Folder and before About.
       'cog-resource-monitor',
+      // 080 FR-010 — Help, immediately before About.
+      'cog-menu-help',
       'cog-menu-about',
     ]);
+  });
+
+  // 080 FR-010 — the cog's route to the guide; F1 is its accelerator.
+  it('has a Help item, in the application section with the help icon, whose click opens help', () => {
+    const openHelp = vi.fn();
+    const items = cogMenuItems({
+      openPreferences: noop,
+      openLogs: noop,
+      openResourceMonitor: noop,
+      openAbout: noop,
+      openHelp,
+      keybindings: DEFAULT_KEYBINDINGS,
+    });
+    const help = items.find((i) => i.testId === 'cog-menu-help');
+    expect(help).toMatchObject({ label: 'Help', icon: 'help', section: 'application' });
+    expect(items.indexOf(help!)).toBe(items.findIndex((i) => i.testId === 'cog-menu-about') - 1);
+    help!.onClick();
+    expect(openHelp).toHaveBeenCalledTimes(1);
   });
 });
 

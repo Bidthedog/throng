@@ -43,6 +43,7 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'view.toggleExplorer': 'tier1',
   // 055 R12 — window-level like the pane toggles; Ctrl+Shift+Alt+Y is free in every scope.
   'view.resourceMonitor': 'tier1',
+  'help.open': 'tier1', // 080: the application tier; its F1 is a recorded exception (constitution 7.6.0)
   'project.next': 'tier1',
   'project.previous': 'tier1',
   'focus.explorer': 'tier1',
@@ -186,6 +187,8 @@ const TIER_EXCEPTIONS: ReadonlySet<string> = new Set([
   'editor.columnSelectLeft|Shift+Alt+ArrowLeft',
   'editor.columnSelectRight|Shift+Alt+ArrowRight',
   'panel.toggleMaximise|Shift+Alt+Enter',
+  // 080 FR-010, constitution 7.6.0 — Help's standard key, never live in a terminal.
+  'help.open|F1',
 ]);
 
 const GESTURE_NAMES = new Set(['WheelUp', 'WheelDown', 'MiddleClick']);
@@ -342,6 +345,7 @@ describe('the FR-101 tier guard', () => {
       'view.toggleProjects': ['Ctrl+Shift+Alt+J'],
       'view.toggleExplorer': ['Ctrl+Shift+Alt+K'],
       'view.resourceMonitor': ['Ctrl+Shift+Alt+Y'], // 055, 062 FR-034a
+      'help.open': ['F1'], // 080 FR-010
       'project.next': ['Ctrl+Shift+Alt+PageDown'],
       'project.previous': ['Ctrl+Shift+Alt+PageUp'],
       'focus.explorer': ['Ctrl+Shift+Alt+M'],

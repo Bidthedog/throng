@@ -42,6 +42,7 @@
     "fileop-undo.e2e.ts": "FOCUS",
     "find-in-files-subworkspace.e2e.ts": "FOCUS",
     "goto-line-keybinding.e2e.ts": "FOCUS",
+    "help-window.e2e.ts": "FOCUS",
     "icon-colour.e2e.ts": "FOCUS",
     "icon-sets.e2e.ts": "FOCUS",
     "keybindings.e2e.ts": "UNATTRIBUTED",

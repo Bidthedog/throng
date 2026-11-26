@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeReleaseBody, declareArtifactSet, lookupReleaseNotes } from '../../src/index.js';
-import type { ReleaseArtifact } from '../../src/index.js';
+import {
+  NO_USER_VISIBLE_CHANGES,
+  composeReleaseBody,
+  declareArtifactSet,
+  guideLinkRefusals,
+  helpUrl,
+  lookupReleaseNotes,
+  startPageUrl,
+} from '../../src/index.js';
+import type { ReleaseArtifact, ReleaseNotes } from '../../src/index.js';
 
 /**
  * 042 FR-001 to FR-010 — a release body says what changed in that release, above an INVARIANT
@@ -379,5 +387,62 @@ describe('composeReleaseBody — the size cap (042 FR-010)', () => {
     const small = lookupReleaseNotes(CHANGELOG, '1.2.3').found!;
     const fits = composeReleaseBody({ notes: small, artifacts: ARTIFACTS, commitSha: COMMIT });
     expect(fits).not.toMatch(/CHANGELOG\.md for the rest/i);
+  });
+});
+
+/** 080 FR-019 (research R11) — every Added or Changed entry links the guide task that teaches it. */
+describe('guideLinkRefusals (080 FR-019)', () => {
+  const task = helpUrl({ page: 'terminals', anchor: 'open-a-terminal' });
+  const start = helpUrl({ page: 'index', anchor: 'get-help-from-inside-throng' });
+  const notes = (sections: Array<[string, string[]]>): ReleaseNotes => ({
+    version: '1.0.0',
+    sections: sections.map(([heading, entries]) => ({ heading, entries })),
+    isEmptyByDeclaration: false,
+  });
+
+  it('accepts Added and Changed entries that link a guide task, the start page included', () => {
+    expect(
+      guideLinkRefusals(
+        notes([
+          ['Added', [`Help ([guide](${start}))`]],
+          ['Changed', [`Terminals open faster (${task})`]],
+        ]),
+      ),
+    ).toEqual([]);
+  });
+
+  it('refuses an Added or Changed entry with no guide link, naming the entry', () => {
+    const refusals = guideLinkRefusals(
+      notes([
+        ['Added', ['A brand new thing that nobody has documented anywhere in the guide yet, at all']],
+        ['Changed', [`Fine (${task})`, 'Another undocumented change']],
+      ]),
+    );
+    expect(refusals).toHaveLength(2);
+    expect(refusals[0]).toContain('A brand new thing that nobody has documented anywhere in the');
+    expect(refusals[0]).not.toContain('at all');
+    expect(refusals[1]).toContain('Another undocumented change');
+  });
+
+  it("takes a bare link to the guide's start page as prose: it neither satisfies the rule nor breaks it", () => {
+    const home = startPageUrl();
+    expect(guideLinkRefusals(notes([['Added', [`See [the guide](${home}) and ${task}`]]]))).toEqual([]);
+    expect(guideLinkRefusals(notes([['Added', [`See [the guide](${home})`]]]))).toHaveLength(1);
+  });
+
+  it('refuses a guide link to a task the guide map does not have, naming the link', () => {
+    const bogus = task.replace('open-a-terminal', 'no-such-task');
+    const refusals = guideLinkRefusals(notes([['Added', [`Thing (${bogus})`]]]));
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toContain(bogus);
+  });
+
+  it('exempts Fixed, Removed and Known issues, and the no-change line', () => {
+    expect(
+      guideLinkRefusals(notes([['Fixed', ['A bug']], ['Removed', ['A thing']], ['Known issues', ['An issue']]])),
+    ).toEqual([]);
+    expect(
+      guideLinkRefusals({ ...notes([['', [NO_USER_VISIBLE_CHANGES]]]), isEmptyByDeclaration: true }),
+    ).toEqual([]);
   });
 });

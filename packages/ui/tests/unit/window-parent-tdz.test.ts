@@ -74,10 +74,17 @@ describe('secondary windows resolve their parent without touching a const in its
     ).toEqual([]);
   });
 
-  it('routes BOTH secondary windows through the accessor', () => {
-    // Preferences and About are the two windows parented to the main one. Counting them keeps a
-    // third from being added with a fresh copy of the original mistake.
+  it('routes every secondary window through the accessor', () => {
+    // Preferences and About are parented to the main one, the Help window (080 FR-048) is placed over it, and the
+    // external-link prompt (080 FR-063) falls back to it when no throng window has focus.
+    // Counting them keeps another from being added with a fresh copy of the original mistake.
     const uses = [...MAIN.matchAll(/getMainWindow\s*:\s*currentMainWindow\b/g)];
-    expect(uses).toHaveLength(2);
+    expect(uses).toHaveLength(4);
+  });
+
+  it('closes the Help window when the main window closes (080 FR-054)', () => {
+    // The Help window is unparented so it is never kept on top (FR-048), so nothing closes it for free: the main
+    // window, the master of every window throng opens, must close it on its own `closed`.
+    expect(MAIN).toMatch(/mainWindow\.on\(\s*'closed'\s*,\s*\(\)\s*=>\s*\{[^}]*closeHelpWindow\(\)/);
   });
 });

@@ -174,3 +174,63 @@ describe('registerOpenExternalIpc — the foreground is handed on (044 FR-119)',
     expect(order).toEqual([]);
   });
 });
+
+/** 080 FR-011, constitution XIII — a browser that cannot be started is logged and reported, never silent. */
+describe('registerOpenExternalIpc — a failed open', () => {
+  function failing(): {
+    lines: string[];
+    sent: Array<{ channel: string; payload: unknown }>;
+    send: (url: string, destroyed?: boolean) => Promise<void>;
+  } {
+    const listeners = new Map<string, (event: unknown, url: unknown) => void>();
+    const lines: string[] = [];
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    let rejection: Promise<void> = Promise.resolve();
+    const shell: IShellIntegration = {
+      revealInFileManager: async () => {},
+      openFolder: async () => {},
+      openExternal: (url: string) => {
+        rejection = Promise.reject(new Error(`no handler for ${url}`));
+        return rejection;
+      },
+    };
+    registerOpenExternalIpc(
+      { on: (channel, listener) => void listeners.set(channel, listener) },
+      shell,
+      { allow: () => true },
+      (line) => lines.push(line),
+    );
+    return {
+      lines,
+      sent,
+      send: async (url, destroyed = false) => {
+        const sender = {
+          isDestroyed: () => destroyed,
+          send: (channel: string, payload: unknown) => sent.push({ channel, payload }),
+        };
+        listeners.get('throng:openExternal')?.({ sender }, url);
+        await rejection.catch(() => {});
+        await new Promise((r) => setTimeout(r, 0));
+      },
+    };
+  }
+
+  it('logs the URL and the reason, and asks the window that asked to say so', async () => {
+    const { lines, sent, send } = failing();
+    await send('https://example.test/guide/');
+    expect(lines).toContain('open-external failed: https://example.test/guide/: no handler for https://example.test/guide/');
+    expect(sent).toEqual([
+      {
+        channel: 'throng:openExternal:failed',
+        payload: { url: 'https://example.test/guide/', reason: 'no handler for https://example.test/guide/' },
+      },
+    ]);
+  });
+
+  it('still logs when the window has gone, and sends it nothing', async () => {
+    const { lines, sent, send } = failing();
+    await send('https://example.test/', true);
+    expect(lines.some((l) => l.startsWith('open-external failed: https://example.test/'))).toBe(true);
+    expect(sent).toEqual([]);
+  });
+});

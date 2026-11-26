@@ -318,6 +318,8 @@ export interface AppOptions {
    * 2026-11-22 (074 FR-016, amended). An app already running uses {@link markdownOpensInEditor}.
    */
   markdownOpensIn?: 'editor';
+  /** 080 FR-063 — keep the external-link prompt the app would show; the harness turns it off otherwise. */
+  externalLinkPrompt?: boolean;
 }
 
 /** A running app, plus the teardown that `runApp` would otherwise have done for you. */
@@ -723,6 +725,10 @@ async function launchApp(opts: AppOptions): Promise<{
         // OS resource is not the suite's to write. The shipped path is untouched — a real terminal
         // still records history, which is what recall and Ctrl+R are for.
         THRONG_TEST_SHELL_HISTORY: 'off',
+        // 080 FR-063 — the external-link prompt is on by default, and every link spec counts the opens it
+        // makes. Off for every app unless a spec asks for it (`externalLinkPrompt: true`); the setting itself
+        // still governs it in the app, and the shipped default is untouched.
+        ...(opts.externalLinkPrompt === true ? {} : { THRONG_E2E_LINK_PROMPT: 'off' }),
         // 056 FR-016 — Preferences sections start FOLDED for a real user, but about 20 specs open
         // Preferences on a fresh profile and drive rows inside sections. This seam makes main add
         // `foldDefault=open` to the Preferences window's URL, so they see every section open, as they

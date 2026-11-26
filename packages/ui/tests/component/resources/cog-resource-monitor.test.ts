@@ -43,7 +43,9 @@ describe('the cog menu lists Resource Monitor (FR-056)', () => {
 
     const ids = screen.getAllByRole('menuitem').map((el) => el.getAttribute('data-testid'));
     expect(ids.indexOf('cog-resource-monitor')).toBe(ids.indexOf('cog-menu-logs') + 1);
-    expect(ids.indexOf('cog-resource-monitor')).toBe(ids.indexOf('cog-menu-about') - 1);
+    // 080 FR-010 — Help sits between Resource Monitor and About.
+    expect(ids.indexOf('cog-resource-monitor')).toBe(ids.indexOf('cog-menu-help') - 1);
+    expect(ids.indexOf('cog-menu-help')).toBe(ids.indexOf('cog-menu-about') - 1);
     // One section: the menu has no divider anywhere.
     expect(document.querySelectorAll('[role="separator"]')).toHaveLength(0);
   });

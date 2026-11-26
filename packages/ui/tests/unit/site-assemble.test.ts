@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // @ts-expect-error — plain-JS build/CI script.
-import { assembleSite } from '../../../../scripts/site.mjs';
+import { assembleSite, latestReleaseTag } from '../../../../scripts/site.mjs';
 
 /**
  * 064 FR-008, SC-004. A Pages deployment replaces the whole site, so each one has to bring the repositories with it.
@@ -147,3 +147,78 @@ describe.skipIf(process.platform === 'win32')('assembleSite (064 FR-008)', () =>
     expect(existsSync(join(out, 'stale.html'))).toBe(false);
   });
 });
+
+/** 080 FR-002b — every deployment builds from the newest published release, never from master. */
+describe('latestReleaseTag (080 FR-002b)', () => {
+  it('is the newest published v* release, a prerelease included, a draft never', () => {
+    expect(
+      latestReleaseTag([
+        release('1.0.0-beta2'),
+        { ...release('1.0.0-beta4'), draft: true },
+        release('1.0.0-beta3'),
+        release('0.9.0', false),
+      ]),
+    ).toBe('v1.0.0-beta3');
+  });
+
+  it('ignores a tag that is not a version', () => {
+    expect(latestReleaseTag([release('1.0.0-beta2'), { tag_name: 'nightly', draft: false, assets: [] }])).toBe(
+      'v1.0.0-beta2',
+    );
+  });
+
+  it('refuses when nothing is published, rather than falling back to master', () => {
+    expect(() => latestReleaseTag([{ ...release('1.0.0'), draft: true }])).toThrow(
+      /no published release to build the site from/,
+    );
+  });
+});
+
+/** 080 FR-002, FR-002a, FR-002b, SC-006 — the guide joins the site, and every page says which release it is. */
+describe.skipIf(process.platform === 'win32')('assembleSite with the guide (080)', () => {
+  const FIXTURES = join(__dirname, '../fixtures/guide');
+
+  it('builds the guide and the three references with their section pages, and stamps one version on every page but the repositories', async () => {
+    const out = join(root, 'out');
+    const source = join(root, 'site');
+    cpSync(join(FIXTURES, 'site'), source, { recursive: true });
+    writeFileSync(join(source, 'throng-repo-key.asc'), 'public key');
+    mkdirSync(join(source, 'apt'), { recursive: true });
+    writeFileSync(join(source, 'apt', 'note.html'), '<p>repository</p>');
+    cpSync(join(FIXTURES, 'guide'), join(source, 'guide'), { recursive: true });
+    await assembleSite({
+      source,
+      out,
+      version: '1.0.0-beta3',
+      guide: { guideSource: join(source, 'guide'), docsSource: join(FIXTURES, 'docs'), tag: 'v1.0.0-beta3' },
+      listReleases: async () => [],
+      fetchBundle: async () => '',
+    });
+    expect(existsSync(join(out, 'guide', 'terminals', 'index.html'))).toBe(true);
+    // site/guide/ is source: rendered, never served as Markdown.
+    expect(existsSync(join(out, 'guide', 'terminals.md'))).toBe(false);
+    for (const ref of ['preferences/general', 'key-bindings/view', 'theme-settings/main-panel--workspace']) {
+      expect(existsSync(join(out, 'guide', 'reference', ...ref.split('/'), 'index.html')), ref).toBe(true);
+      expect(existsSync(join(out, 'guide', 'reference', ref.split('/')[0] as string, 'index.html')), ref).toBe(true);
+    }
+    const pages = htmlFiles(out).filter((p) => !/[\\/](apt|rpm)[\\/]/.test(p));
+    expect(pages.length).toBeGreaterThan(3);
+    for (const page of pages) {
+      const labels = [...readFileSync(page, 'utf8').matchAll(/data-site-version>([^<]*)</g)].map((m) => m[1]);
+      expect(labels.length, page).toBeGreaterThan(0);
+      expect(new Set(labels), page).toEqual(new Set(['v1.0.0-beta3']));
+    }
+  });
+
+  it('leaves the guide out when it is not asked for, as a release from before the guide does', async () => {
+    const out = join(root, 'out');
+    await assembleSite({ source: writeSite(), out, listReleases: async () => [], fetchBundle: async () => '' });
+    expect(existsSync(join(out, 'guide'))).toBe(false);
+  });
+});
+
+function htmlFiles(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.html'))
+    .map((e) => join(e.parentPath, e.name));
+}

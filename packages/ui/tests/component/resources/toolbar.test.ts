@@ -224,14 +224,8 @@ describe('every control is a themeable icon control with a hover title (FR-055)'
   it('gives every button an icon and a title, and every select a title', async () => {
     await mount();
     for (const button of screen.getAllByRole('button')) {
-      // The one recorded exception (055 FR-119, sixth feedback): a "?" helper opens its words on click and has
-      // no hover title of its own — but it keeps an accessible name, and it is still an icon.
-      if (button.classList.contains('info-helper')) {
-        expect(button.getAttribute('aria-label'), `a helper with no name: ${button.outerHTML}`).toBeTruthy();
-        expect(button.getAttribute('title')).toBeNull();
-        expect(button.querySelector('.icon')).not.toBeNull();
-        continue;
-      }
+      // The "?" helpers are help links now (080 FR-046), so they carry a hover title like every other control;
+      // 055 FR-119's no-title exception went with their popovers.
       expect(button.getAttribute('title'), `a button with no title: ${button.outerHTML}`).toBeTruthy();
       expect(button.querySelector('.icon'), `a button with no icon: ${button.outerHTML}`).not.toBeNull();
     }
