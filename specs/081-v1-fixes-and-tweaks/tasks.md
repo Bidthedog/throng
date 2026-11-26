@@ -25,7 +25,7 @@ None. The stories share no prerequisite; each phase stands alone.
 - [ ] T005 [US1] Wait the connect budget + one retry interval + grace for the lapse, and dispose the host in
       `finally` in the tests that build a live server — `packages/daemon/tests/integration/pty-agent-launch-timeout.integration.test.ts`
 - [ ] T006 [US1] Bound the inner `project-new` click inside `createProject`'s `toPass` with `{ timeout: 2_000 }`,
-      and make `launchApp` wait for the renderer-ready marker after `firstWindow()` (R2) — `packages/ui/tests/e2e/harness.ts`
+      and wait for `project-new` to be visible on its own budget before the first click (R2) [derived: in `createProject`, not `launchApp`, since some specs launch without a projects pane] — `packages/ui/tests/e2e/harness.ts`
 - [ ] T007 [US1] Re-run T002's loop green, then dispatch `pipeline.yml` stress runs (`-f stress_spec=… -f
       stress_rounds=20`) for the integration test on macOS and the FR-000a E2E on Linux (SC-001) — no file
 
