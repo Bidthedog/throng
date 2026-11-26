@@ -148,10 +148,13 @@ test('an external link asks first; Cancel opens nothing and Open opens it (FR-06
         return true;
       });
     // FR-070 — the prompt is drawn inline in the window the link was followed in: here, the Help window's own page.
-    const helpPage = () => own.app.windows().find((p) => p.url().includes('help=1'))!;
+    const helpPage = () => own.app.windows().find((p) => p.url().includes('help=1'));
     const prompt = async () => {
-      await expect(helpPage().getByTestId('link-prompt')).toBeVisible({ timeout: 15_000 });
-      return helpPage();
+      // Playwright registers the Help window's page some time after the window opens: wait for it before asking it.
+      await expect.poll(() => helpPage() !== undefined, { timeout: 15_000 }).toBe(true);
+      const page = helpPage()!;
+      await expect(page.getByTestId('link-prompt')).toBeVisible({ timeout: 15_000 });
+      return page;
     };
 
     await expect.poll(clickGitHub, { timeout: 15_000 }).toBe(true);

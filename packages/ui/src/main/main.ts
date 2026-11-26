@@ -3396,6 +3396,8 @@ if (isPrimaryInstance)
     }
     // 070 FR-028: on macOS a close with no quit in progress leaves throng in the Dock, renderer and layout alive.
     if (macLifecycle?.onMainWindowClose() === 'hide') {
+      // 080 FR-054 — the window is only hidden, so `closed` never fires: Help, unparented, closes here with it.
+      closeHelpWindow();
       mainWindow.hide();
       return;
     }
