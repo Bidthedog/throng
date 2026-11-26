@@ -58,8 +58,26 @@ export function focusLinkPrompt(): void {
   win.focus();
 }
 
-/** Which window asks: the focused throng window, else the main window. */
+/** The window a link is being followed in, named by a caller that knows it (`openFromWindow`). */
+let origin: BrowserWindow | null = null;
+
+/**
+ * Run `open` (which ends in `openExternal`) as a link followed in `win`, so its prompt asks that window, whichever
+ * window has focus. The Help window's links leave from its guide view, which focus does not always name. The prompt
+ * reads the window as it starts, so it is named only for the call.
+ */
+export function openFromWindow<T>(win: BrowserWindow | null, open: () => T): T {
+  origin = win;
+  try {
+    return open();
+  } finally {
+    origin = null;
+  }
+}
+
+/** Which window asks: the one a caller named, else the focused throng window, else the main window. */
 function askingWindow(deps: LinkPromptDeps): BrowserWindow | undefined {
+  if (origin && !origin.isDestroyed()) return origin;
   const focused = BrowserWindow.getFocusedWindow();
   if (focused && !focused.isDestroyed()) return focused;
   const main = deps.getMainWindow();
@@ -68,6 +86,7 @@ function askingWindow(deps: LinkPromptDeps): BrowserWindow | undefined {
 
 /** Ask the window the link was followed in; resolves `'open'` or `'cancel'`. */
 export async function askToOpenLink(deps: LinkPromptDeps, url: string): Promise<LinkPromptAnswer> {
+  // Read before the first await, while a caller's `openFromWindow` still names the window.
   const win = askingWindow(deps);
   // No window to ask is no one to say yes: the link does not open.
   if (!win) return 'cancel';
