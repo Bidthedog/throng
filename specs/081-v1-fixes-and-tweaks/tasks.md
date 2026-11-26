@@ -19,14 +19,15 @@ None. The stories share no prerequisite; each phase stands alone.
 
 - [ ] T002 [US1] Reproduce the lapse-wait race: run the "does not attribute a previous launch attempt's reason"
       test in a 50-round loop under CPU load, and record the failure rate — `packages/daemon/tests/integration/pty-agent-launch-timeout.integration.test.ts`
-- [ ] T003 [US1] Add a unit test that a connect lapse fires within one retry interval of its budget, failing today
-      (R1) — `packages/daemon/tests/unit/pty-agent-host-lapse.test.ts`
+- [ ] T003 [US1] [derived] The local loop does not reproduce the CI margin; reproduce deterministically instead by
+      shrinking the test's wait to the nominal lapse (450 ms) and observing the CI assertion fail, then restore — `packages/daemon/tests/integration/pty-agent-launch-timeout.integration.test.ts`
 - [ ] T004 [US1] Clamp the connect retry delay to `Math.min(RETRY_MS, deadline - now)` — `packages/daemon/src/pty-agent-host.ts`
 - [ ] T005 [US1] Wait the connect budget + one retry interval + grace for the lapse, and dispose the host in
-      `finally` in every test of the file — `packages/daemon/tests/integration/pty-agent-launch-timeout.integration.test.ts`
+      `finally` in the tests that build a live server — `packages/daemon/tests/integration/pty-agent-launch-timeout.integration.test.ts`
 - [ ] T006 [US1] Bound the inner `project-new` click inside `createProject`'s `toPass` with `{ timeout: 2_000 }`,
       and make `launchApp` wait for the renderer-ready marker after `firstWindow()` (R2) — `packages/ui/tests/e2e/harness.ts`
-- [ ] T007 [US1] Re-run T002's loop and record 50/50 — no file
+- [ ] T007 [US1] Re-run T002's loop green, then dispatch `pipeline.yml` stress runs (`-f stress_spec=… -f
+      stress_rounds=20`) for the integration test on macOS and the FR-000a E2E on Linux (SC-001) — no file
 
 ## Phase 4: US2 — Couldn't-open notices that are true (P1, #728)
 
@@ -38,7 +39,8 @@ None. The stories share no prerequisite; each phase stands alone.
       until Focus Mode ends, then exactly one (FR-012a) — `packages/ui/tests/component/missing-file-watcher-hidden.test.ts`
 - [ ] T011 [P] [US2] Failing integration test: an external delete then re-create within 200 ms produces no
       `deleted` relay, no force-dirty and a reload; a delete not re-created produces one `markDeleted` after
-      `EXTERNAL_DELETE_SETTLE_MS`; `beginMove` still needs no timer — `packages/ui/tests/integration/editor-external-delete-settle.integration.test.ts`
+      `EXTERNAL_DELETE_SETTLE_MS`; `beginMove` still needs no timer; the re-create case loops 20 times (SC-002). Each
+      US2 test names in its title which #728 candidate cause it covers (FR-015) — `packages/ui/tests/integration/editor-external-delete-settle.integration.test.ts`
 - [ ] T012 [P] [US2] Failing integration test: the same two cases for a standalone Markdown preview — `packages/ui/tests/integration/preview-external-delete-settle.integration.test.ts`
 - [ ] T013 [US2] Add `unloadableReason` and `historyStandIn` to the editor UI state ("Set with `unloadableDetail`;
       kept when an authority `unloadable` verdict carries no reason; cleared with `unloadable`") — `packages/ui/src/renderer/editor/editor-state.ts`
@@ -57,9 +59,9 @@ None. The stories share no prerequisite; each phase stands alone.
 ## Phase 5: US3 — Tables survive a background reload (P1, #730)
 
 - [ ] T020 [US3] Failing component test: `applyTableLayout` on a zero-width host, then a width of 800 and
-      `relayoutTables`, gives the widths a fresh layout at 800 gives — `packages/ui/tests/component/preview-table-layout.test.ts`
+      `relayoutTables`, gives the widths a fresh layout at 800 gives, each within 1 px (SC-004) — `packages/ui/tests/component/preview-table-layout.test.ts`
 - [ ] T021 [US3] Failing component test: a Markdown body redrawn while `clientWidth` is 0 runs a full measure when
-      its ResizeObserver next reports a width — `packages/ui/tests/component/markdown-body-table-layout.test.ts`
+      its ResizeObserver next reports a width, and a resize-handle drag afterwards starts from the measured width (FR-021) — `packages/ui/tests/component/markdown-body-table-layout.test.ts`
 - [ ] T022 [US3] Skip measurement on a box-less host and return a needs-measure result; treat cached
       `available === 0` the same — `packages/ui/src/renderer/preview/table-layout.ts`
 - [ ] T023 [US3] Track needs-measure in a ref and run `applyTableLayout` instead of `relayoutTables` on the 0 → W
@@ -85,7 +87,7 @@ None. The stories share no prerequisite; each phase stands alone.
       `packages/ui/src/renderer/preview/preview-panel.tsx`
 - [ ] T034 [US4] E2E: a highlighted table row's cell rects equal its unhighlighted rects (`@extended @editor`),
       added to the existing preview scroll spec, e2e budget re-seeded — `packages/ui/tests/e2e/preview-scroll.e2e.ts`, `packages/ui/tests/e2e/e2e-budget.json`
-- [ ] T035 [US4] Supersession note on 073 FR-033e pointing to 081 FR-032 — `specs/073-*/spec.md`
+- [ ] T035 [US4] Supersession note on 073 FR-033e pointing to 081 FR-032 — `specs/073-csv-spreadsheet-previews/spec.md`
 
 ## Phase 7: US5 — One-click Open and Find on title bars (P2, #725)
 
@@ -101,7 +103,7 @@ None. The stories share no prerequisite; each phase stands alone.
       calling the same handlers as the menu rows — `packages/ui/src/renderer/workspace/panel-header-file-icons.tsx`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`
 - [ ] T041 [US5] Update every test asserting the old label or counting header controls
       (`preview-header-actions`, `menu-sections`, `panel-header-save-icons`, `panel-header-menu-open-default`,
-      `explorer-follow-active-editor.e2e`, `panel-header-narrow.e2e`) — `packages/ui/tests/**`
+      `explorer-follow-active-editor.e2e`, `panel-header-narrow.e2e`); no E2E test is added or removed, so `e2e-budget.json` is unchanged — `packages/ui/tests/**`
 - [ ] T042 [US5] Supersession note on 046's menu label pointing to 081 FR-044 — `specs/046-side-panes-and-project-list/spec.md`
 
 ## Phase 8: US6 — The same Open In menu on a link (P2, #731)
@@ -130,7 +132,7 @@ None. The stories share no prerequisite; each phase stands alone.
 ## Phase 10: US8 — Ignored entries read as secondary (P2, #729)
 
 - [ ] T054 [P] [US8] Failing integration test for the git oracle against a fixture repo: ignored file, ignored
-      folder with a trailing `/`, a tracked sibling, a non-repo root (empty, one log line), empty input (no spawn) — `packages/platform-node/tests/integration/git-ignore-oracle.integration.test.ts`
+      folder with a trailing `/`, a tracked sibling, a path matched only by `.git/info/exclude`, a nested repository answering its own rules, a non-repo root (empty, one log line however many calls), empty input (no spawn) — `packages/platform-node/tests/integration/git-ignore-oracle.integration.test.ts`
 - [ ] T055 [P] [US8] Failing component test: ignored rows carry the modifier, descendants of an ignored folder
       inherit it, the answer arriving late fades in, a `.gitignore` change re-asks — `packages/ui/tests/component/explorer-ignored-fade.test.ts`
 - [ ] T056 [P] [US8] Failing unit test: the 078 gate blends faded tree text at the default opacity over the tree
@@ -138,7 +140,7 @@ None. The stories share no prerequisite; each phase stands alone.
 - [ ] T057 [US8] Add the `IgnoreOracle` interface — `packages/core/src/abstractions/ignore-oracle.ts`
 - [ ] T058 [US8] Implement it over `git check-ignore -z --stdin` off-loop — `packages/platform-node/src/git-ignore-oracle.ts`
 - [ ] T059 [US8] Wire the oracle in main's composition root and expose `throng:files:ignored` — `packages/ui/src/main/main.ts`, `packages/ui/src/main/files-ipc.ts`, `packages/ui/src/main/files-service.ts`, preload/IPC contract
-- [ ] T060 [US8] Add the ignored-entry opacity token ("number, 0.2–1, step 0.05, default 0.6") with metadata,
+- [ ] T060 [US8] Add the ignored-entry opacity token ("number, 0.2–1, step 0.05, default 0.6"; if a bundled theme fails T056 at 0.6, the default rises in 0.05 steps until every theme passes, and the value is recorded in research R11) with metadata,
       copy and CSS var, and the gate pairing — `packages/core/src/config/theme.ts`, `theme-metadata.ts`, `theme-copy.ts`, `theme-quality.ts`
 - [ ] T061 [US8] Ask after each listing and on a `.gitignore` change; add `.tree-row--ignored` — `packages/ui/src/renderer/explorer/use-explorer-data.ts`, `tree-node.tsx`, `explorer.css`
 
@@ -147,19 +149,21 @@ None. The stories share no prerequisite; each phase stands alone.
 - [ ] T062 [P] [US9] Failing unit test: writing a value at row `records` pads to `model.width`, keeps the line
       ending, and keeps the trailing-line-ending state (FR-081a both ways) — `packages/core/tests/unit/csv-edit.test.ts`
 - [ ] T063 [P] [US9] Failing component test: the grid shows an entry row with no number; typing writes one line and
-      shows a new entry row; one undo removes it; Cut and Insert Row Above are disabled on it; selecting writes nothing — `packages/ui/tests/component/csv-entry-row.test.ts`
+      shows a new entry row; one undo removes it; Cut and Insert Row Above are disabled on it; selecting writes nothing; a multi-row paste writes every row and leaves one entry row; a CSV with no rows shows only the entry row — `packages/ui/tests/component/csv-entry-row.test.ts`
 - [ ] T064 [US9] Pad appended records to `model.width` — `packages/core/src/csv/csv-edit.ts`
 - [ ] T065 [US9] Draw `records + 1` rows with the entry row muted and unnumbered, and let selection reach it — `packages/ui/src/renderer/grid/data-grid.tsx`, `packages/ui/src/renderer/grid/grid-selection.ts`
 - [ ] T066 [US9] Route entry-row edits and pastes through `setCells`, and disable Cut and Insert Row Above on it — `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`
-- [ ] T067 [US9] Note on 073 FR-038 pointing to 081 FR-083 — `specs/073-*/spec.md`
+- [ ] T067 [US9] Note on 073 FR-038, FR-037c and FR-037f pointing to 081 FR-083 — `specs/073-csv-spreadsheet-previews/spec.md`
 
 ## Phase 12: US10 — Focus Mode looks the same on every panel (P3, #727)
 
 - [ ] T068 [US10] Failing component test: a terminal status bar in Focus Mode carries the strip class and badge;
-      outside Focus Mode it does not; with the bar hidden nothing renders — `packages/ui/tests/component/focus-mode-indicator.test.ts`
+      outside Focus Mode it does not; with the bar hidden nothing renders; the 078 gate pairs the toggle and flavour-label colours with the highlight background in every bundled theme (FR-091) — `packages/ui/tests/component/focus-mode-indicator.test.ts`
 - [ ] T069 [US10] Move the highlight rule to a selector on the modifier class alone — `packages/ui/src/renderer/editor/editor.css`
 - [ ] T070 [US10] Add the class and badge to the terminal status bar, `position: relative`, and the toggle colour
       override — `packages/ui/src/renderer/terminal/terminal-status-bar.tsx`, `packages/ui/src/renderer/terminal/terminal.css`
+- [ ] T074 [US10] Audit every panel type with a status strip (editor, text and binary previews, maximise layer,
+      terminal, placeholder) and record the checked list for the PR body (FR-093) — `specs/081-v1-fixes-and-tweaks/research.md`
 
 ## Phase 13: Polish
 

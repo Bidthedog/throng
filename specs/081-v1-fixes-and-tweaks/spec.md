@@ -35,7 +35,7 @@ this spec records what must hold when the branch merges, and every supersession 
 - Q: When the CSV file has no final newline and the user writes into the entry row, what happens to the final
   newline? → A: The file keeps its convention. A line separator (the file's own line ending) goes before the new row,
   and no final newline follows it. A file that had a final newline keeps one after the new row. (FR-081a)
-- Q: When an editor's file really is missing but the editor is hidden (inactive stack slot, behind Focus Mode), when
+- Q: When an editor's file really is missing but the editor is hidden by Focus Mode, when
   is the user told? → A: The notice is deferred until that panel is next shown, then raised once. (FR-012a)
 - Q: How are entries drawn while git has not yet answered which are ignored? → A: Unfaded at once; the ignored ones
   fade in when git answers. The tree never waits on git. (FR-072a)
@@ -82,7 +82,7 @@ be driven from a terminal with `rm f; sleep 0.2; printf 'x\n' > f` (inside the 5
    says it is a folder, and nothing calls it missing.
 2. **Given** a panel the user cannot see or a path they only stepped through in Back/Forward history, **When** a tab
    activates, **Then** no notice names it.
-3. **Given** a hidden panel whose file is really missing, **When** the user brings that panel into view, **Then** one
+2a. **Given** a hidden panel whose file is really missing, **When** the user brings that panel into view, **Then** one
    notice names it (FR-012a).
 3. **Given** a file open in an editor and in a Markdown preview, **When** another program deletes it and writes it
    again within the settle window, **Then** no notice and no banner appear, a clean buffer stays clean, and both
@@ -303,7 +303,7 @@ Terminals do not. Every panel type with a status strip gains the same highlight.
   the `path-missing` cause, so it never supersedes the File Explorer's report as an absent folder would (030 FR-029,
   FR-034a).
 - **FR-012**: A notice MUST name only editor panels the user can find and open in the tab it names. A panel hidden
-  by Focus Mode (the workspace has no other way to hide a panel in a shown tab; research R4), and a path the user only passed through in Back/Forward history
+  by Focus Mode, the only way a panel in a shown tab is hidden (research R4), and a path the user only passed through in Back/Forward history
   (044 FR-106d) that is no longer the panel's file, MUST NOT raise one.
 - **FR-012a** *(Q3, 2026-11-26)*: A hidden editor panel whose file really cannot be opened MUST have its notice
   deferred until the panel is next shown, and then raised once, naming that panel. If the file opens by then, no
