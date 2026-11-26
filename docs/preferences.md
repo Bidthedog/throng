@@ -559,6 +559,19 @@ Select the active editor's file in File Explorer, opening its folders to show it
 
 **Default:** on · **Values:** on · off
 
+### Follow the active preview
+
+**Cog › Settings › File Explorer**
+
+`explorer.autoRevealActivePreview`
+
+Select the active preview's source file in File Explorer, opening its folders to show it.
+
+Focus stays in the preview, and a preview of a file outside the project leaves the tree as it is. It works
+independently of Follow the active editor.
+
+**Default:** on · **Values:** on · off
+
 ### Copy-drag modifier
 
 **Cog › Settings › File Explorer**
