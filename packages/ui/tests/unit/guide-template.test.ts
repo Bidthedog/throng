@@ -125,7 +125,8 @@ describe('an outline page (FR-033)', () => {
       const terminalsSource = join(dir, 'src', 'guide', 'terminals.md');
       writeFileSync(
         terminalsSource,
-        readFileSync(terminalsSource, 'utf8').replace('order: 2\n', 'order: 2\nstatus: outline\n'),
+        // Either line ending: a Windows checkout has CRLF, where a '\n' match never lands and the page ships unmarked.
+        readFileSync(terminalsSource, 'utf8').replace(/order: 2(\r?\n)/, 'order: 2$1status: outline$1'),
       );
       await expect(
         buildGuide({
