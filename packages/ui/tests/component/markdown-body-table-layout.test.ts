@@ -7,6 +7,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initialFold, setSection } from '@throng/core';
 import { MarkdownBody } from '../../src/renderer/preview/providers/markdown/markdown-body.js';
 import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.js';
 
@@ -142,18 +143,21 @@ describe('a body redrawn while it has no box (081 FR-020, FR-021)', () => {
 
   const colWidths = (host: HTMLElement): number[] =>
     [...host.querySelectorAll<HTMLElement>('table > colgroup > col')].map((c) => parseFloat(c.style.width));
+  /** What `display: none` covers in the shipped CSS: a hidden block, a collapsed callout's body, a closed `<details>`. */
+  const boxless = (el: Element): boolean =>
+    !shown || el.closest('[hidden], [data-callout-collapsed] > [data-callout-body], details:not([open]) > :not(summary)') !== null;
 
   beforeEach(() => {
     shown = false;
     fireResize = null;
     onLayoutRead = () => {};
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width(this: HTMLElement) {
       onLayoutRead();
-      return shown ? 800 : 0;
+      return boxless(this) ? 0 : 800;
     });
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect(this: Element) {
       onLayoutRead();
-      if (!shown) return new DOMRect(0, 0, 0, 0);
+      if (boxless(this)) return new DOMRect(0, 0, 0, 0);
       if (this.tagName === 'TD' || this.tagName === 'TH') return new DOMRect(0, 0, (this.textContent ?? '').length * 8, 20);
       if (this instanceof HTMLElement && this.style.width.endsWith('ch')) return new DOMRect(0, 0, parseFloat(this.style.width) * 8, 20);
       return new DOMRect(0, 0, 0, 0);
@@ -259,5 +263,68 @@ describe('a body redrawn while it has no box (081 FR-020, FR-021)', () => {
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 340 }));
     window.dispatchEvent(new MouseEvent('pointerup', { clientX: 340 }));
     expect(colWidths(host)[0]).toBeCloseTo(expected[0]! + 40, 0);
+  });
+
+  /*
+   * 081 FR-020 — the same zeros inside a fold that hides a table at the draw: a collapsed callout, or a closed
+   * `<details>`. Opening it changes the body's height, not its width, so no resize says so: the open itself lays out
+   * the tables that were waiting, and only those (Principle XII).
+   */
+  const quoted = (text: string): string => text.split('\n').map((line) => `> ${line}`).join('\n');
+
+  async function drawnShown(text: string, panelId = 'p1'): Promise<HTMLElement> {
+    shown = true;
+    render(createElement(MarkdownBody, props(text, { panelId })));
+    const host = screen.getByTestId(`preview-markdown-${panelId}`);
+    await waitFor(() => expect(host.querySelector('table')).not.toBeNull(), COLD);
+    await settle();
+    return host;
+  }
+
+  it('a table in a callout collapsed at the draw gets a fresh open\'s widths and its handle once the callout opens', async () => {
+    const open = await drawnShown(`> [!note]+ Report\n${quoted(TABLE)}`, 'open');
+    const expected = colWidths(open);
+    expect(expected.every((w) => w > 0), 'the open callout measured real widths').toBe(true);
+    cleanup();
+
+    const host = await drawnShown(`> [!note]- Report\n${quoted(TABLE)}`);
+    host.querySelector<HTMLElement>('[data-callout-title]')!.click();
+    await settle();
+
+    const got = colWidths(host);
+    expect(got).toHaveLength(expected.length);
+    got.forEach((w, i) => expect(Math.abs(w - expected[i]!), `column ${i}: ${w} vs ${expected[i]}`).toBeLessThanOrEqual(1));
+    expect(host.querySelectorAll('.preview-table-resize-handle')).toHaveLength(1);
+  });
+
+  it('a table in a closed <details> is laid out when it opens', async () => {
+    const host = await drawnShown(`<details><summary>More</summary>\n\n${TABLE}\n\n</details>`);
+    const details = host.querySelector('details')!;
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+    await settle();
+    expect(colWidths(host).every((w) => w > 0) && colWidths(host).length === 2, `widths ${colWidths(host).join(', ')}`).toBe(true);
+  });
+
+  it('a table in a section collapsed at the draw is laid out when the section opens', async () => {
+    const doc = `## One\n\n${TABLE}\n\n## Two\n\nText.`;
+    shown = true;
+    const collapsed = setSection(initialFold('expanded'), 'one', true);
+    const { rerender } = render(createElement(MarkdownBody, props(doc, { gutter: true, foldState: collapsed })));
+    const host = screen.getByTestId('preview-markdown-p1');
+    await waitFor(() => expect(host.querySelector('table')).not.toBeNull(), COLD);
+    await settle();
+    rerender(createElement(MarkdownBody, props(doc, { gutter: true, foldState: initialFold('expanded') })));
+    await settle();
+    expect(colWidths(host).length === 2 && colWidths(host).every((w) => w > 0), `widths ${colWidths(host).join(', ')}`).toBe(true);
+  });
+
+  it('opening a callout with no table waiting reads no layout at all', async () => {
+    const host = await drawnShown(`> [!note]- Plain\n> Just text.\n\n${TABLE}`);
+    let reads = 0;
+    onLayoutRead = () => void (reads += 1);
+    host.querySelector<HTMLElement>('[data-callout-title]')!.click();
+    await settle();
+    expect(reads, 'layout reads forced by opening a callout with nothing waiting').toBe(0);
   });
 });

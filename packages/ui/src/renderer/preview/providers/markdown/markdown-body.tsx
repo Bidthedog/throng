@@ -129,7 +129,8 @@ import { BlockIndex } from './block-index.js';
 import { useSyncMarkFrom } from '../../sync-mark-store.js';
 import { applyWikiResolution, WIKI_INDEX_ATTRIBUTE } from './wikilinks.js';
 import type { WikiHrefTarget } from './pipeline.js';
-import { createCalloutFolds, revealCalloutsAt, type CalloutFolds } from './callout-dom.js';
+import { CALLOUT_BODY_ATTRIBUTE } from './callout-markup.js';
+import { CALLOUT_COLLAPSED_ATTRIBUTE, createCalloutFolds, revealCalloutsAt, type CalloutFolds } from './callout-dom.js';
 import { hasMath, showMathPending } from './math-dom.js';
 import { showImagesPending } from '../../loading-placeholder.js';
 import { applyImageEmbedResolution, EMBED_ATTRIBUTE, embedReadRefOf, embedRefOf } from './embeds.js';
@@ -138,10 +139,12 @@ import { tooLargeDetail } from '../../preview-notice.js';
 import {
   applyTableLayout,
   chToPx,
+  layoutWaitingTables,
   measureColumns,
   measureTables,
   relayoutTables,
   type TableHandSet,
+  type TableLayoutOptions,
 } from '../../table-layout.js';
 // The rendered document's own styles (fix round 1, item 2): loaded with this body's chunk, not with
 // the panel chrome's `preview.css`, which never mentions a provider (FR-070).
@@ -198,6 +201,15 @@ function wikiTargetKey(target: WikiHrefTarget): string {
 
 const TABLE_LAYOUT_DEBOUNCE_MS = 120;
 const TABLE_RESIZE_DEBOUNCE_MS = 150;
+
+/** 081 FR-020 — a collapsed callout's body is `display: none` (markdown.css), so its tables wait for it to open. */
+const calloutHides = (el: Element): boolean =>
+  el.hasAttribute(CALLOUT_BODY_ATTRIBUTE) && el.parentElement?.hasAttribute(CALLOUT_COLLAPSED_ATTRIBUTE) === true;
+
+/** The table layout this body runs, over the hand-set widths it keeps (`tableHandSetRef`). */
+function tableOptions(handSet: Map<number, TableHandSet>): TableLayoutOptions {
+  return { measure: measureColumns, measureAll: measureTables, minLegiblePx: chToPx, handSet, hides: calloutHides };
+}
 
 const FRONT_MATTER_CLASS = 'preview-markdown__front-matter';
 
@@ -593,6 +605,9 @@ export function MarkdownBody({
   const foldsChanged = useCallback((): void => {
     blockIndex.current?.invalidate();
     indicator.current?.apply(syncMarkRef.current);
+    // 081 FR-020 — an open gives the tables inside it a box; a draw still pending lays them out anyway.
+    const body = bodyRef.current;
+    if (body !== null && tableLayoutTimer.current === null) layoutWaitingTables(body, tableOptions(tableHandSetRef.current));
   }, []);
   calloutFoldsRef.current ??= createCalloutFolds(foldsChanged);
   const calloutIconFor = useCallback((key: IconKey): string => resolveIcon(themeRef.current, setsRef.current, key), []);
@@ -637,7 +652,7 @@ export function MarkdownBody({
    * below) is what "dropped on navigation" (FR-064) means.
    */
   const tableLayoutOptions = useCallback(
-    () => ({ measure: measureColumns, measureAll: measureTables, minLegiblePx: chToPx, handSet: tableHandSetRef.current }),
+    () => tableOptions(tableHandSetRef.current),
     [],
   );
   /**
@@ -1186,10 +1201,12 @@ export function MarkdownBody({
     drawFoldGutter(body, lastHeadingsRef.current);
     // A fold changed which blocks are hidden.
     blockIndex.current?.invalidate();
+    // 081 FR-020 — a section opened over a table the draw left waiting: lay it out now.
+    if (tableLayoutTimer.current === null) layoutWaitingTables(body, tableLayoutOptions());
     indicator.current?.apply(syncMarkRef.current);
     // 048 FR-083 — fold state seeded late (main's answer after the draw) is a settle point too.
     reanchor(scrollerOf(body));
-  }, [foldState, gutter, theme, sets, drawFoldGutter, reanchor]);
+  }, [foldState, gutter, theme, sets, drawFoldGutter, reanchor, tableLayoutOptions]);
 
   // 073 FR-033d — the sync mark moved or faded: the indicator beside the block holding its line, in the gutter only.
   useEffect(() => {
