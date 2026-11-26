@@ -5,12 +5,12 @@ Spec: `specs/080-help-and-wiki/spec.md`
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
 | MT-01 | The guide site: look, version, navigation and search | signed off | 5f0979e41830 | 2026-11-26 | |
-| MT-02 | Help from the cog menu and F1, in every window | needs retest | 5f0979e41830 | 2026-11-26 | 79e4f036 touched packages/ui/src/main/help-window.ts |
+| MT-02 | Help from the cog menu and F1, in every window | signed off | a0953ef0ba92 | 2026-11-26 | |
 | MT-03 | The (?) beside every setting | signed off | 5f0979e41830 | 2026-11-26 | |
 | MT-04 | The references, split into pages | signed off | 5f0979e41830 | 2026-11-26 | |
 | MT-05 | The (?) on key bindings and theme settings | signed off | 5f0979e41830 | 2026-11-26 | |
 | MT-06 | Every guide page, complete | signed off | 5f0979e41830 | 2026-11-26 | |
-| MT-07 | The Help window | needs retest | 49246f133c93 | 2026-11-26 | 79e4f036 touched packages/ui/src/main/help-window.ts |
+| MT-07 | The Help window | signed off | a0953ef0ba92 | 2026-11-26 | |
 
 ## MT-01: The guide site: look, version, navigation and search
 
