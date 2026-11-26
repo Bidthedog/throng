@@ -605,7 +605,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'sizes.ignoredEntryOpacity': {
     label: 'Ignored Entry Opacity',
     description:
-      'How strongly the File Explorer draws a file or folder git ignores. Lower fades it further; 1 draws it like any other.',
+      'How strongly the File Explorer draws what git ignores; 1 draws it like any other entry.',
   },
   'colours.errorSurface': {
     label: 'Error Notice Surface',

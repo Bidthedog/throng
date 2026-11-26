@@ -301,7 +301,10 @@ function placementForToken(key: string): ThemePlacement | undefined {
   // and an 'Icons' group here would collide with the icon section's own 'Icons' heading.
   if (key === 'sizes.iconPx' || key === 'sizes.scrollbarPx') return { group: 'General' };
   // 081 FR-071 — the fade on an entry git ignores belongs to the tree it is drawn in.
-  if (key === 'sizes.ignoredEntryOpacity') return { group: 'File Explorer' };
+  if (key === 'sizes.ignoredEntryOpacity') {
+    const group = 'File Explorer';
+    return { group };
+  }
   if (key.startsWith('colours.')) {
     const name = lastSegment(key);
     // The three-type button model (021, FR-027): each token sits in its type's subsection of General →

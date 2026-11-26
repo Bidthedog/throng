@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { GitIgnoreOracle, execFileOffLoop, type GitIgnoreOracleOptions } from '@throng/platform-node';
+import { skipOnWindows } from '@throng/core/testing';
 
 /**
  * 081 US8, FR-070 / FR-073, contract `ignore-oracle.md` — git answers which explorer entries it ignores.
@@ -107,7 +108,7 @@ describe('GitIgnoreOracle', () => {
     expect(spawns()).toBe(0);
   });
 
-  it.skipIf(process.platform === 'win32')('never runs a command the repository configures as its fsmonitor', async () => {
+  it.skipIf(skipOnWindows('the fsmonitor hook is a /bin/sh script with an execute bit'))('never runs a command the repository configures as its fsmonitor', async () => {
     const hostile = join(base, 'hostile');
     const marker = join(base, 'fsmonitor-ran');
     mkdirSync(hostile, { recursive: true });

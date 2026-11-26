@@ -1221,7 +1221,9 @@ The colour of the File Explorer and Find in Files icon for a file whose kind thr
 
 `sizes.ignoredEntryOpacity`
 
-How strongly the File Explorer draws a file or folder git ignores. Lower fades it further; 1 draws it like any other.
+How strongly the File Explorer draws what git ignores; 1 draws it like any other entry.
+
+Lower values fade an ignored file or folder further.
 
 ## Projects / sidebar
 
