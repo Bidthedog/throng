@@ -2808,6 +2808,10 @@ found and is kept as written.*
   offers Open Link and Copy Link to Clipboard only.*
 - **FR-170**: The Link menu MUST offer, in this order, each only where offered:
 
+  *(Superseded in part by 081 FR-050 – FR-053: for a local file or folder, the Open In, Open Preview, Open in OS
+  Explorer and Open in OS Default Program rows move into one **Open In ▸** submenu built from the File Explorer's,
+  under its labels. FR-170a/FR-170c/FR-170e's omission and disabled rules still apply inside it.)*
+
   | Item | Offered when |
   |---|---|
   | **Open Link** | Always. Runs FR-157 / FR-160; shows the Open Link chord where one is bound in that panel type (FR-031's amendment) |

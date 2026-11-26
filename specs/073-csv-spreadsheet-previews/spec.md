@@ -715,7 +715,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
   centre of the view being scrolled — the row or line under the middle of its visible area, past any locked row —
   and its counterpart in the other view, wherever that sits in its viewport. Synchronise Scrolling itself still keeps
   the two views' tops in step (FR-033c, 044 FR-114); the highlight is a visual guide only. CSV and Markdown alike.
-  *(Supersedes FR-033d's "the record or line at the scrolled view's top".)*
+  *(Supersedes FR-033d's "the record or line at the scrolled view's top".)* *(Superseded in part by 081 FR-032: a
+  blank line at the centre marks the next non-blank line and its block, or the previous one at the document's end.)*
 - **FR-033f** *(Q40, 2026-11-20)*: A **Scroll-sync highlight duration** preference MUST exist under Editor → Previews
   (`editor.previews.syncHighlightSeconds`), in seconds, shipping **1.5**, from 0 to 10 in steps of 0.5, rendered and
   documented as every preference is. The in-step highlight (FR-033d) MUST fade that long after the last scroll, in the
@@ -811,6 +812,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-038**: A row header's right-click menu MUST offer **Insert Row Above** and **Insert Row Below**; a
   column header's MUST offer **Insert Column Left** and **Insert Column Right**. Each MUST also be a
   bindable command acting on the active cell (every panel action has a menu item, and the reverse).
+  *(Refined by 081 FR-080 – FR-083: the grid also shows a view-only entry row after the last record, which typing
+  or pasting into (FR-037c/FR-037f) writes to the document; Cut and Insert Row Above are drawn disabled on it.)*
 - **FR-038a** *(Q16, 2026-11-19)*: While the clipboard holds whole rows or whole columns last copied or cut
   from a CSV grid, a row header's menu MUST also offer **Insert Copied Rows Above** and **Insert Copied
   Rows Below**, and a column header's **Insert Copied Columns Left** and **Insert Copied Columns Right**,

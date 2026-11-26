@@ -9,7 +9,7 @@ Format: `- [ ] T### [P?] [US#] description — path`
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm the fast baseline is green (lint, typecheck, unit, component) before any change — no file
+- [x] T001 Confirm the fast baseline is green (lint, typecheck, unit, component) before any change — no file
 
 ## Phase 2: Foundational
 
@@ -17,14 +17,14 @@ None. The stories share no prerequisite; each phase stands alone.
 
 ## Phase 3: US1 — A green nightly pipeline (P1, #723)
 
-- [ ] T002 [US1] Reproduce the lapse-wait race: run the "does not attribute a previous launch attempt's reason"
+- [x] T002 [US1] Reproduce the lapse-wait race: run the "does not attribute a previous launch attempt's reason"
       test in a 50-round loop under CPU load, and record the failure rate — `packages/daemon/tests/integration/pty-agent-launch-timeout.integration.test.ts`
-- [ ] T003 [US1] [derived] The local loop does not reproduce the CI margin; reproduce deterministically instead by
+- [x] T003 [US1] [derived] The local loop does not reproduce the CI margin; reproduce deterministically instead by
       shrinking the test's wait to the nominal lapse (450 ms) and observing the CI assertion fail, then restore — `packages/daemon/tests/integration/pty-agent-launch-timeout.integration.test.ts`
-- [ ] T004 [US1] Clamp the connect retry delay to `Math.min(RETRY_MS, deadline - now)` — `packages/daemon/src/pty-agent-host.ts`
-- [ ] T005 [US1] Wait the connect budget + one retry interval + grace for the lapse, and dispose the host in
+- [x] T004 [US1] Clamp the connect retry delay to `Math.min(RETRY_MS, deadline - now)` — `packages/daemon/src/pty-agent-host.ts`
+- [x] T005 [US1] Wait the connect budget + one retry interval + grace for the lapse, and dispose the host in
       `finally` in the tests that build a live server — `packages/daemon/tests/integration/pty-agent-launch-timeout.integration.test.ts`
-- [ ] T006 [US1] Bound the inner `project-new` click inside `createProject`'s `toPass` with `{ timeout: 2_000 }`,
+- [x] T006 [US1] Bound the inner `project-new` click inside `createProject`'s `toPass` with `{ timeout: 2_000 }`,
       and wait for `project-new` to be visible on its own budget before the first click (R2) [derived: in `createProject`, not `launchApp`, since some specs launch without a projects pane] — `packages/ui/tests/e2e/harness.ts`
 - [ ] T007 [US1] Re-run T002's loop green, then dispatch `pipeline.yml` stress runs (`-f stress_spec=… -f
       stress_rounds=20`) for the integration test on macOS and the FR-000a E2E on Linux (SC-001) — no file
@@ -87,7 +87,7 @@ None. The stories share no prerequisite; each phase stands alone.
       `packages/ui/src/renderer/preview/preview-panel.tsx`
 - [ ] T034 [US4] E2E: a highlighted table row's cell rects equal its unhighlighted rects (`@extended @editor`),
       added to the existing preview scroll spec, e2e budget re-seeded — `packages/ui/tests/e2e/preview-scroll.e2e.ts`, `packages/ui/tests/e2e/e2e-budget.json`
-- [ ] T035 [US4] Supersession note on 073 FR-033e pointing to 081 FR-032 — `specs/073-csv-spreadsheet-previews/spec.md`
+- [x] T035 [US4] Supersession note on 073 FR-033e pointing to 081 FR-032 — `specs/073-csv-spreadsheet-previews/spec.md`
 
 ## Phase 7: US5 — One-click Open and Find on title bars (P2, #725)
 
@@ -104,7 +104,7 @@ None. The stories share no prerequisite; each phase stands alone.
 - [ ] T041 [US5] Update every test asserting the old label or counting header controls
       (`preview-header-actions`, `menu-sections`, `panel-header-save-icons`, `panel-header-menu-open-default`,
       `explorer-follow-active-editor.e2e`, `panel-header-narrow.e2e`); no E2E test is added or removed, so `e2e-budget.json` is unchanged — `packages/ui/tests/**`
-- [ ] T042 [US5] Supersession note on 046's menu label pointing to 081 FR-044 — `specs/046-side-panes-and-project-list/spec.md`
+- [x] T042 [US5] Supersession note on 046's menu label pointing to 081 FR-044 — `specs/046-side-panes-and-project-list/spec.md`
 
 ## Phase 8: US6 — The same Open In menu on a link (P2, #731)
 
@@ -117,7 +117,7 @@ None. The stories share no prerequisite; each phase stands alone.
 - [ ] T046 [US6] Build the link menu's Open In submenu from `openInRows` with absolute-path ops — `packages/ui/src/renderer/links/link-menu.ts`, `packages/ui/src/renderer/links/file-link-menu.ts`
 - [ ] T047 [US6] Update the link and explorer menu tests for the moved rows (`core link-menu`, `link-*`,
       `terminal-file-link-menu`, `preview-link-menu`, `editor-content-menu`, `explorer-open-in-*`) — `packages/core/tests/**`, `packages/ui/tests/**`
-- [ ] T048 [US6] Supersession note on 045's top-level link rows pointing to 081 FR-053 — `specs/045-clickable-file-links/spec.md`
+- [x] T048 [US6] Supersession note on 045's top-level link rows pointing to 081 FR-053 — `specs/045-clickable-file-links/spec.md`
 
 ## Phase 9: US7 — Follow the active preview (P2, #724)
 
@@ -153,7 +153,7 @@ None. The stories share no prerequisite; each phase stands alone.
 - [ ] T064 [US9] Pad appended records to `model.width` — `packages/core/src/csv/csv-edit.ts`
 - [ ] T065 [US9] Draw `records + 1` rows with the entry row muted and unnumbered, and let selection reach it — `packages/ui/src/renderer/grid/data-grid.tsx`, `packages/ui/src/renderer/grid/grid-selection.ts`
 - [ ] T066 [US9] Route entry-row edits and pastes through `setCells`, and disable Cut and Insert Row Above on it — `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`
-- [ ] T067 [US9] Note on 073 FR-038, FR-037c and FR-037f pointing to 081 FR-083 — `specs/073-csv-spreadsheet-previews/spec.md`
+- [x] T067 [US9] Note on 073 FR-038, FR-037c and FR-037f pointing to 081 FR-083 — `specs/073-csv-spreadsheet-previews/spec.md`
 
 ## Phase 12: US10 — Focus Mode looks the same on every panel (P3, #727)
 
