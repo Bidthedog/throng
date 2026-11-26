@@ -62,7 +62,29 @@ describe('csvSetCells', () => {
     const text = 'a,b\r\n';
     expect(edit(text, (m) => csvSetCells(m, text, [{ row: 2, col: 1, value: 'z' }]))).toBe('a,b\r\n\r\n,z\r\n');
     const bare = 'a,b';
-    expect(edit(bare, (m) => csvSetCells(m, bare, [{ row: 1, col: 0, value: 'x' }]))).toBe('a,b\nx');
+    expect(edit(bare, (m) => csvSetCells(m, bare, [{ row: 1, col: 0, value: 'x' }]))).toBe('a,b\nx,');
+  });
+
+  // 081 FR-081, FR-081a — the entry row (row index `records`) becomes one record of the file's width.
+  it('pads a record written at the entry row to the full width, after a final line ending', () => {
+    const text = 'a,b,c\r\n1,2,3\r\n';
+    expect(edit(text, (m) => csvSetCells(m, text, [{ row: 2, col: 1, value: 'x' }]))).toBe('a,b,c\r\n1,2,3\r\n,x,\r\n');
+  });
+
+  it('writes the entry row after the file\'s own line ending with none after it, when the file has no final one', () => {
+    const text = 'a;b;c\n1;2;3';
+    expect(edit(text, (m) => csvSetCells(m, text, [{ row: 2, col: 0, value: 'x' }]))).toBe('a;b;c\n1;2;3\nx;;');
+  });
+
+  it('pads the entry row to the widest record when the last record is short', () => {
+    const text = 'a,b,c\n1\n';
+    expect(edit(text, (m) => csvSetCells(m, text, [{ row: 2, col: 0, value: 'x' }]))).toBe('a,b,c\n1\nx,,\n');
+  });
+
+  it('writes nothing for an empty value in the entry row', () => {
+    const text = 'a,b\n1,2\n';
+    const m = parseCsv(text);
+    expect(csvSetCells(m, text, [{ row: 2, col: 0, value: '' }])).toEqual([]);
   });
 
   it('writes the first field of an empty text', () => {

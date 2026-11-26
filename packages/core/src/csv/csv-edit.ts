@@ -75,7 +75,8 @@ export function csvSetCells(model: CsvModel, text: string, edits: readonly CsvCe
   const newRows: { row: number; cols: Map<number, string> }[] = [];
   for (const [row, cols] of byRow) {
     if (row >= model.records) {
-      newRows.push({ row, cols });
+      // An empty value in a record that does not exist yet writes nothing (081 FR-082).
+      if ([...cols.values()].some((v) => v !== '')) newRows.push({ row, cols });
       continue;
     }
     const count = recordFieldCount(model, row);
@@ -109,7 +110,8 @@ export function csvSetCells(model: CsvModel, text: string, edits: readonly CsvCe
         lines.push('');
         continue;
       }
-      const maxCol = Math.max(...[...cols].filter(([, v]) => v !== '').map(([c]) => c), 0);
+      // A new record has the file's width (081 FR-081), or more where a value lies past it.
+      const maxCol = Math.max(...[...cols].filter(([, v]) => v !== '').map(([c]) => c), model.width - 1, 0);
       const fields: string[] = [];
       for (let col = 0; col <= maxCol; col++) fields.push(encodeCsvField(cols.get(col) ?? '', d));
       lines.push(fields.join(d));

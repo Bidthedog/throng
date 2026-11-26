@@ -387,6 +387,8 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         // taken for the cut's and undone by Esc. A row cut is armed before main answers (its text may arrive first)
         // and disarmed if main refused it.
         if (sel.rows === true) {
+          // 081 FR-082 — the entry row alone holds no record to remove.
+          if (range.top >= rowCount) return;
           const mark = { before, after: null };
           cutMark.current = mark;
           void send({ kind: 'deleteRows', from: range.top, count: Math.min(range.bottom, rowCount - 1) - range.top + 1 }).then((applied) => {
@@ -565,11 +567,15 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         );
       }
       if (target.kind === 'row') {
+        // 081 FR-083 — the entry row is not a line of the file: the operations that need a real row draw disabled.
+        const onEntryRow = target.row >= rowCount;
+        const needsRealRow = onEntryRow ? { disabled: true, title: 'This row is not in the file yet. Type into it to add it.' } : {};
+        const rowClipboard = clipboard(true).map((item) => (item.label === 'Cut' ? { ...item, ...needsRealRow } : item));
         items.push(
-          insert[0]!,
+          { ...insert[0]!, ...needsRealRow },
           insert[1]!,
           ...insertCopied,
-          ...clipboard(true),
+          ...rowClipboard,
           { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open, shortcut: chord('preview.goToHeading') },
         );
       } else if (target.kind === 'column') {
@@ -619,7 +625,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       items.push(gridPrintRow(chord('preview.print'), onPrint));
       openMenu(point.x, point.y, items);
     },
-    [cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, editorRouteParented, history, insertColumn, insertRows, keybindings, onOpenInEditor, onPrint, openCellDialog, openMenu, pasteFromMenu, resetWidth, save, saveAs, widths],
+    [cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, editorRouteParented, history, insertColumn, insertRows, keybindings, onOpenInEditor, onPrint, openCellDialog, openMenu, pasteFromMenu, resetWidth, rowCount, save, saveAs, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard
@@ -690,6 +696,9 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         ref={gridRef}
         testId={`csv-grid-${panelId}`}
         rowCount={rowCount}
+        // 081 FR-080 — one empty row to type into after the last record; the document gains it only when a value is
+        // written there (setCells at row `rowCount`, padded to the file's width by csvSetCells).
+        entryRow
         colCount={colCount}
         getCell={getCell}
         editable
