@@ -39,6 +39,9 @@ const errorText = (error: unknown): string => (error instanceof Error ? error.me
 /** Documented defaults, used when a caller constructs the host without budgets. */
 export const DEFAULT_AGENT_BUDGETS: AgentBudgets = { connectMs: 15_000, readyMs: 15_000 };
 
+/** Pause between connect attempts while the agent's pipe is not yet listening. */
+const CONNECT_RETRY_MS = 200;
+
 /**
  * Daemon-side proxy `IPtyHost` (FR-025c) that hosts terminals in the **de-elevated
  * PTY agent** instead of in-process. It creates the named-pipe server, launches the
@@ -213,7 +216,10 @@ export class PtyAgentHost implements IPtyHost {
       // A retry after a lapse found nobody on the pipe: only now launch again (#556).
       if (onFirstMiss) onFirstMiss();
       if (Date.now() < deadline) {
-        this.retryTimer = setTimeout(() => this.connectWithRetry(deadline), 200);
+        // Never sleep past the deadline: the last attempt lands on it, so a lapse is reported at
+        // its budget rather than up to one retry interval late (#723).
+        const pause = Math.max(0, Math.min(CONNECT_RETRY_MS, deadline - Date.now()));
+        this.retryTimer = setTimeout(() => this.connectWithRetry(deadline), pause);
         return;
       }
       // The budget has lapsed: the agent is never going to arrive (a de-elevated launch
