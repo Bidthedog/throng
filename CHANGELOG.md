@@ -29,6 +29,17 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+
+- A user guide on [throng-ide.com](https://throng-ide.com/guide/), built from each release and searchable, teaching
+  throng task by task from a new [Quick start](https://throng-ide.com/guide/quick-start/#add-your-first-project).
+  **F1**, or **Help** in the cog menu, opens it in throng's own Help window, from the guide shipped with your copy, so it works offline; a terminal keeps F1 for its program.
+  ([guide](https://throng-ide.com/guide/#get-help-from-inside-throng), [#477](https://github.com/Bidthedog/throng/issues/477), [#693](https://github.com/Bidthedog/throng/issues/693))
+- Every setting, key binding and theme setting in Preferences has a one-line description and a **?** beside its
+  name that opens its own section of the reference, now split into a page per section. Panel types, the terminal
+  form, the Projects pane and Find in Files carry a **?** to the guide task that teaches them.
+  ([guide](https://throng-ide.com/guide/preferences/#find-a-setting), [#477](https://github.com/Bidthedog/throng/issues/477))
+
 ## 1.0.0-beta2 — 2026-11-23
 
 ### Added

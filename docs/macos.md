@@ -26,6 +26,9 @@ Application shortcuts use Cmd where Windows uses Ctrl, so `Ctrl+Shift+T` is `Shi
 Ctrl, so `Ctrl+C` and `Ctrl+R` reach your shell. Where macOS keeps a Cmd shortcut for itself, throng uses another one:
 the list is in [key bindings](key-bindings.md#on-macos).
 
+**F1** opens Help. On a keyboard whose top row is set to brightness and media keys, press **Fn+F1**, or rebind Help
+in Preferences → Key Bindings.
+
 Option types the characters your keyboard layout puts on it. To make it the Meta key in terminals instead, turn on
 [Use Option as Meta](preferences.md).
 
@@ -71,21 +74,17 @@ A hosted test machine cannot show these, so they rely on your reports:
   the app, and decoding a Finder copy is checked against the real pasteboard, but not the two together.
 - How the app looks and feels: fonts, spacing, the window buttons, the menu bar and the Dock.
 
-## Coverage of the quick start
+## Coverage of the Quick start
 
-Each part of the [quick start](quick-start.md), and what proves it on macOS:
+Each task of the guide's [Quick start](../site/guide/quick-start.md), and what proves it on macOS. The guide's other
+pages go deeper into the same features, proved by the same tests:
 
-| Quick start section | Proved on macOS by |
+| Quick start task | Proved on macOS by |
 |---|---|
-| Before you start | [Installing on macOS](install-macos.md); the release checks of each download |
-| First launch | `macos-smoke.e2e.ts`; the release checks (Open Anyway is [not checked](#not-checked-by-the-automated-tests)) |
-| 1. Create a project | the `@core` lane on macOS |
-| 2. Lay out the workspace | the `@core` lane on macOS; `macos-window.e2e.ts` |
-| 3. Run a terminal | `macos-terminal.e2e.ts`; the terminal contract and soak tests on macOS |
-| 4. Edit files | the `@core` lane on macOS; `macos-files.e2e.ts` |
-| Files and your operating system | `macos-files.e2e.ts`; the trash and file-list pasteboard contract tests on macOS (Finder drag is [not checked](#not-checked-by-the-automated-tests)) |
-| 5. Find things | the `@core` lane on macOS |
-| 6. Tear off a sub-workspace | `macos-window.e2e.ts` |
-| 7. Make it yours | the `@core` lane on macOS; the key bindings tests for macOS |
-| 8. See what throng is using | the process metrics contract and accuracy tests on macOS |
-| Getting help | nothing macOS-specific |
+| Install throng | [Installing on macOS](install-macos.md); the release checks of each download (Open Anyway is [not checked](#not-checked-by-the-automated-tests)) |
+| Find your way around the window | `macos-smoke.e2e.ts`; `macos-window.e2e.ts` |
+| Add your first project | the `@core` lane on macOS |
+| Open a terminal in your project | `macos-terminal.e2e.ts`; the terminal contract and soak tests on macOS |
+| Open and edit a file | the `@core` lane on macOS; `macos-files.e2e.ts`; the trash and file-list pasteboard contract tests on macOS (Finder drag is [not checked](#not-checked-by-the-automated-tests)) |
+| Split the workspace and add a tab | the `@core` lane on macOS; `macos-window.e2e.ts` |
+| Where to go next | nothing macOS-specific; the [Resource Monitor](../site/guide/resources.md) is proved by the process metrics contract and accuracy tests on macOS |

@@ -18,7 +18,7 @@ something is wrong, please [open an issue](https://github.com/Bidthedog/throng/i
 4. Open **System Settings → Privacy & Security**, scroll to **Security**, and choose **Open Anyway** beside the message
    about throng. Confirm, and throng opens. macOS remembers the choice, so later launches open straight away.
 
-Next, take the [tour](quick-start.md). What differs on macOS is listed in [macOS](macos.md).
+Next, take the [tour](../site/guide/quick-start.md). What differs on macOS is listed in [macOS](macos.md).
 
 ## Why macOS asks
 

@@ -9,7 +9,7 @@
    **Run anyway**.
 3. Choose **Only for me**, and open throng from the Start menu.
 
-Then take the [tour](quick-start.md). The rest of this page covers the other downloads, installing for everyone,
+Then take the [tour](../site/guide/quick-start.md). The rest of this page covers the other downloads, installing for everyone,
 unattended installs, upgrading and removing throng. On Linux, see [installing on Linux](install-linux.md).
 
 ## Before you start
@@ -131,7 +131,7 @@ for one (pass `REBOOT=Force` to have it restart); `740` the setup was asked for 
 
 Launch throng — from the Start-menu shortcut, the portable file, or `throng.exe` in the extracted folder.
 Create a project and spawn a terminal; everything works with nothing else installed. See the
-[quick start](quick-start.md) for the tour.
+[Quick start](../site/guide/quick-start.md) for the tour.
 
 Your data — projects, layouts, settings, keybindings, custom themes, the edit list — is stored in your
 **profile** (`%APPDATA%\throng` and `%USERPROFILE%\.throng`), **outside** the install folder. That is why

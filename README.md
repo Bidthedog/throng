@@ -88,9 +88,10 @@ automated tests only, [**macOS**](docs/install-macos.md) on Apple silicon. Mac b
    from the [Releases page](https://github.com/Bidthedog/throng/releases), for just you or for everyone on the machine.
    On [Linux](docs/install-linux.md), add the `apt` or `dnf` repository once, and upgrades arrive with your system
    updates. On [macOS](docs/install-macos.md), drag the app from the disk image into Applications. No prerequisites; [installation](docs/installation.md) also covers running from source.
-2. **Take the tour** — the [quick start](docs/quick-start.md) goes from first launch to a working
-   project in a few minutes.
-3. **Go deeper** — every guide is listed in the [docs index](docs/README.md): key bindings,
+2. **Take the tour** — the [Quick start](https://throng-ide.com/guide/quick-start/) goes from first launch to a
+   working project in a few minutes, and the [user guide](https://throng-ide.com/guide/) teaches the rest, task by
+   task. Press **F1** in throng to open it.
+3. **Go deeper** — every reference is listed in the [docs index](docs/README.md): key bindings,
    preferences, environment variables, architecture, testing and releasing.
 
 Running from a clone instead:

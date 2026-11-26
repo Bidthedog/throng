@@ -148,11 +148,27 @@ in the repository. Each index points at its release's assets.
   `throng-repo-index-<version>.tar.gz` when it creates the release, because a published release is immutable. Once the
   release is out, `deploy-repositories` deploys the site. A full release updates both channels, and a prerelease updates
   only `prerelease`.
-- **A change under `site/`** deploys with the next release, or sooner by dispatching `pages.yml`, with no key, because each
-  deployment reads the signed bundles back from the releases. Nothing deploys on a merge.
-- **The website** is `site/index.html`, at the site root. `npm run site:preview` serves `site/` on
-  `http://127.0.0.1:8080/` and publishes nothing; the package indexes are absent from a preview. The deployment minifies
-  the page's script and stylesheet; `site/` keeps them readable.
+- **Every deployment builds from the newest published release's tag**, prereleases included, never from `master`: a
+  change under `site/`, `site/guide/` or the references goes live with the next release. Dispatching `pages.yml` rebuilds
+  that same tag, with no key, because each deployment reads the signed bundles back from the releases. Nothing deploys on
+  a merge, and with no release published the deployment fails rather than build `master`.
+- **The website** is `site/index.html`, at the site root, and the **user guide** is `site/guide/` with
+  [`preferences.md`](preferences.md), [`key-bindings.md`](key-bindings.md) and [`theme-settings.md`](theme-settings.md) as its
+  references (each `##` section a page of its own), built into `/guide/`,
+  every page carrying the release's version, and indexed for search by Pagefind. `npm run site:preview` builds both into a
+  temporary folder and serves it on `http://127.0.0.1:8080/`, with search when Pagefind is installed, and publishes
+  nothing; the package indexes are absent from a preview. The deployment minifies the page's script and stylesheet;
+  `site/` keeps them readable.
+- **How the version reaches each page.** Nothing in the repository holds it. `pages.yml` asks `site.mjs latest-tag`
+  for the newest published release's tag, checks that tag out, and runs `site.mjs assemble --version <tag>`. The
+  assembler drops the leading `v` and writes `v<version>` into every empty `data-site-version` slot: the label in the
+  header and the footer of `site/index.html`, which every guide page lifts. A preview
+  stamps `vdev`.
+- **The guide's screenshots** are generated, never captured by hand: `npm run build`, then `npm run guide:screenshots`
+  drives the built app through the E2E harness (`packages/ui/tests/guide-screenshots/`) and rewrites `site/guide/images/`. It
+  is not part of the E2E suite; re-run it whenever a page's screenshot no longer matches the app.
+- **Each `### Added` and `### Changed` entry links the guide task that teaches it.** The release renders its notes with
+  `--guide-links` and refuses an entry without one; a unit test holds `## Unreleased` to the same rule.
 
 `verify-repositories` proves the route before publication: install, upgrade through a newer index, channel separation, and
 refusal of tampered and unsigned indexes. `scripts/repo-signing-key.sh` creates the key, once. Replacing it means every
