@@ -1236,6 +1236,9 @@ export function MarkdownBody({
    * resizing pauses. A notification whose width did not change (the tables' own height changing, say)
    * does nothing, so the layout can never feed its own trigger. A draw still pending will measure at the
    * new width anyway, so a resize defers to it.
+   *
+   * 081 FR-020 (#730) — a draw made while the body had no box (collapsed, or its tab behind) measured nothing, and
+   * `relayoutTables` measures it in full on the resize that first gives it a width: the 0 → W change, once.
    */
   useEffect(() => {
     const body = bodyRef.current;

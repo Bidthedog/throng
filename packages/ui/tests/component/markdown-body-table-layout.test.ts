@@ -4,9 +4,9 @@
  * mounted body — that it calls `applyTableLayout` after every draw (jsdom has no real layout, so every
  * measured width is degenerate zero, but the `<colgroup>`/handles it built from that answer are not).
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MarkdownBody } from '../../src/renderer/preview/providers/markdown/markdown-body.js';
 import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.js';
 
@@ -32,6 +32,9 @@ const TABLE_DOC = '| a | b |\n|---|---|\n| 1 | 2 |';
 afterEach(() => vi.restoreAllMocks());
 
 describe('MarkdownBody lays out tables after every draw (T065/T066)', () => {
+  // A body on screen has a width; jsdom gives every element 0, which is what a body with no box reads (081 FR-020).
+  beforeEach(() => void vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800));
+
   it('applies a colgroup to a rendered table', async () => {
     render(createElement(MarkdownBody, props(TABLE_DOC)));
     const host = screen.getByTestId('preview-markdown-p1');
@@ -117,5 +120,144 @@ describe('MarkdownBody lays out tables after every draw (T065/T066)', () => {
     );
     await waitFor(() => expect(host.textContent).toContain('x'));
     await waitFor(() => expect(host.querySelector('table > colgroup')?.children).toHaveLength(3));
+  });
+});
+
+/**
+ * 081 FR-020, FR-021, SC-004 (#730) — a preview redrawn while it has no box (its panel collapsed, its tab behind; the
+ * file rewritten by another program) lays its tables out, once shown, as a fresh open of the same text does, and a
+ * column's resize handle then drags from that width.
+ *
+ * jsdom has no layout, so the browser is played by stubs that answer as one does: every element is 800 px wide while
+ * the preview is shown and 0 while it is not, and every width the shipped measurer reads (a clone's cells, `8ch`) is
+ * 0 while hidden and its text at 8 px a character once shown. The ResizeObserver is a fake the test fires.
+ */
+describe('a body redrawn while it has no box (081 FR-020, FR-021)', () => {
+  const PROSE = 'A long prose cell that wraps across the panel, as the generated report in the issue has. '.repeat(5);
+  const TABLE = `| Field | Detail |\n|---|---|\n| MT-01 | ${PROSE} |\n| Owner | ${PROSE} |`;
+  let shown = false;
+  let fireResize: (() => void) | null = null;
+  /** Called on every layout read the stubs answer; T024 counts the ones a browser would have to lay out for. */
+  let onLayoutRead: () => void = () => {};
+
+  const colWidths = (host: HTMLElement): number[] =>
+    [...host.querySelectorAll<HTMLElement>('table > colgroup > col')].map((c) => parseFloat(c.style.width));
+
+  beforeEach(() => {
+    shown = false;
+    fireResize = null;
+    onLayoutRead = () => {};
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => {
+      onLayoutRead();
+      return shown ? 800 : 0;
+    });
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect(this: Element) {
+      onLayoutRead();
+      if (!shown) return new DOMRect(0, 0, 0, 0);
+      if (this.tagName === 'TD' || this.tagName === 'TH') return new DOMRect(0, 0, (this.textContent ?? '').length * 8, 20);
+      if (this instanceof HTMLElement && this.style.width.endsWith('ch')) return new DOMRect(0, 0, parseFloat(this.style.width) * 8, 20);
+      return new DOMRect(0, 0, 0, 0);
+    });
+    const callbacks: (() => void)[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: () => void) {
+          callbacks.push(cb);
+          fireResize = () => callbacks.forEach((c) => c());
+        }
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Past the draw's table layout and any resize debounce. */
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 400));
+
+  async function freshOpenWidths(): Promise<number[]> {
+    shown = true;
+    const { unmount } = render(createElement(MarkdownBody, props(TABLE, { panelId: 'fresh' })));
+    const host = screen.getByTestId('preview-markdown-fresh');
+    await waitFor(() => expect(host.querySelector('table > colgroup')).not.toBeNull(), COLD);
+    const widths = colWidths(host);
+    unmount();
+    return widths;
+  }
+
+  async function redrawnHiddenThenShown(text = TABLE, aroundShow: (show: () => Promise<void>) => Promise<void> = (show) => show()): Promise<HTMLElement> {
+    shown = false;
+    render(createElement(MarkdownBody, props(text)));
+    const host = screen.getByTestId('preview-markdown-p1');
+    await waitFor(() => expect(host.querySelector('table')).not.toBeNull(), COLD);
+    await settle();
+    await aroundShow(async () => {
+      shown = true;
+      fireResize!();
+      await settle();
+    });
+    return host;
+  }
+
+  /**
+   * 081 T024, Principle XII "Measured, not assumed" — the re-measure on the 0 → W change costs a FIXED number of forced
+   * layouts, however many tables the document has: the #730 report's shape (14 two-column tables, 182 rows, prose cells
+   * up to ~500 characters) costs what one table does. A forced layout is a layout read with a DOM write pending since
+   * the read before it (a MutationObserver's queue says whether one is), counted from the moment the body is shown.
+   */
+  it('re-measures the #730 document shape in a fixed number of forced layouts, the same as one table', async () => {
+    const report = Array.from({ length: 14 }, (_, t) =>
+      [`| Field | Detail |`, '|---|---|', ...Array.from({ length: 12 }, (_, r) => `| F${t}-${r} | ${'prose '.repeat(r * 7 + 1)}|`)].join('\n'),
+    ).join('\n\n');
+    expect((report.match(/^\|/gm) ?? []).length - 14 /* delimiter rows */).toBe(182);
+
+    const forcedLayouts = async (text: string): Promise<{ layouts: number; reads: number }> => {
+      let layouts = 0;
+      let reads = 0;
+      const mo = new MutationObserver(() => {});
+      await redrawnHiddenThenShown(text, async (show) => {
+        mo.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+        let dirty = true; // showing the body is itself a change the first read lays out for
+        onLayoutRead = () => {
+          reads += 1;
+          if (mo.takeRecords().length > 0) dirty = true;
+          if (dirty) layouts += 1;
+          dirty = false;
+        };
+        await show();
+        onLayoutRead = () => {};
+        mo.disconnect();
+      });
+      cleanup();
+      return { layouts, reads };
+    };
+
+    const one = await forcedLayouts(TABLE);
+    const fourteen = await forcedLayouts(report);
+    // Measured 2026-11-26 for the PR (081 T024): 5 forced layouts for one table (8 reads), and 5 for the 14-table,
+    // 182-row shape (240 reads, every one inside those 5). A change that reads per table or per token breaks the next line.
+    expect(fourteen.layouts).toBe(one.layouts);
+    expect(fourteen.layouts).toBeLessThanOrEqual(5);
+  }, 30_000);
+
+  it('lays its tables out, once shown, with a fresh open\'s column widths, each within 1 px (SC-004)', async () => {
+    const expected = await freshOpenWidths();
+    expect(expected.every((w) => w > 0), 'the fresh open measured real widths').toBe(true);
+    const host = await redrawnHiddenThenShown();
+    const got = colWidths(host);
+    expect(got).toHaveLength(expected.length);
+    got.forEach((w, i) => expect(Math.abs(w - expected[i]!), `column ${i}: ${w} vs ${expected[i]}`).toBeLessThanOrEqual(1));
+  });
+
+  it('drags a column from that width: 40 px right makes the first column 40 px wider (FR-021)', async () => {
+    const expected = await freshOpenWidths();
+    const host = await redrawnHiddenThenShown();
+    const handle = host.querySelector<HTMLElement>('.preview-table-resize-handle')!;
+    handle.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 300, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 340 }));
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 340 }));
+    expect(colWidths(host)[0]).toBeCloseTo(expected[0]! + 40, 0);
   });
 });

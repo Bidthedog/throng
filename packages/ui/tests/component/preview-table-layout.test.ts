@@ -457,3 +457,73 @@ describe('applyTableLayout — idempotent across repeated calls (a settings chan
     expect(t.querySelectorAll(`.${RESIZE_HANDLE_CLASS}`)).toHaveLength(1);
   });
 });
+
+/**
+ * 081 FR-020, SC-004 (#730) — a Markdown file rewritten while its preview is out of view (a collapsed panel, a tab
+ * behind) is redrawn into a host with no box, where a browser measures every width as 0: each column's intrinsic
+ * sizes, `8ch`, every token. Laid out from those zeros, the tables came back wrong when the preview was shown again.
+ * The stand-in measurer answers as a browser does: zeros while the host has no width, the real profiles once it has.
+ */
+describe('a table laid out while its host has no box (081 FR-020, SC-004)', () => {
+  const PROFILES = [{ min: 60, max: 120 }, { min: 120, max: 4000 }];
+  let width = 0;
+  const widthsOf = (t: HTMLTableElement): number[] =>
+    [...t.querySelectorAll<HTMLElement>(':scope > colgroup > col')].map((c) => parseFloat(c.style.width));
+
+  function mountSized(t: HTMLTableElement): HTMLElement {
+    const host = document.createElement('div');
+    Object.defineProperty(host, 'clientWidth', { get: () => width, configurable: true });
+    host.append(t);
+    document.body.append(host);
+    return host;
+  }
+  const layoutOptions = () => ({
+    measure: vi.fn<ColumnMeasurer>(() => PROFILES.map((p) => (width === 0 ? { min: 0, max: 0 } : p))),
+    minLegiblePx: () => (width === 0 ? 0 : 64),
+    measureToken: (text: string) => (width === 0 ? 0 : text.length * 10),
+    handSet: new Map<number, TableHandSet>(),
+  });
+  const prose = 'A long prose cell that wraps across the panel, as the report in the issue has: '.repeat(6);
+  const rows = (): string[][] => [['Field', 'Detail'], ['MT-01', prose], ['Owner', prose]];
+
+  afterEach(() => {
+    width = 0;
+  });
+
+  it('lays out at its first real width exactly as a fresh layout at that width does, each column within 1 px', () => {
+    width = 800;
+    const fresh = table(rows());
+    applyTableLayout(mountSized(fresh), layoutOptions());
+    const expected = widthsOf(fresh);
+
+    width = 0;
+    const redrawn = table(rows());
+    const host = mountSized(redrawn);
+    const opts = layoutOptions();
+    applyTableLayout(host, opts);
+    width = 800;
+    relayoutTables(host, opts);
+
+    const got = widthsOf(redrawn);
+    expect(got).toHaveLength(expected.length);
+    got.forEach((w, i) => expect(Math.abs(w - expected[i]!), `column ${i}: ${w} vs ${expected[i]}`).toBeLessThanOrEqual(1));
+  });
+
+  it('measures nothing while the host has no box, and says the table still needs measuring', () => {
+    const t = table(rows());
+    const host = mountSized(t);
+    const opts = layoutOptions();
+    expect(applyTableLayout(host, opts)).toEqual({ needsMeasure: true });
+    expect(opts.measure).not.toHaveBeenCalled();
+    expect(t.querySelector('colgroup')).toBeNull();
+  });
+
+  it('a resize that leaves the host box-less measures nothing either', () => {
+    const t = table(rows());
+    const host = mountSized(t);
+    const opts = layoutOptions();
+    applyTableLayout(host, opts);
+    relayoutTables(host, opts);
+    expect(opts.measure).not.toHaveBeenCalled();
+  });
+});

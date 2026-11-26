@@ -239,6 +239,19 @@ interface LaidOutTable {
 
 const laidOut = new WeakMap<HTMLTableElement, LaidOutTable>();
 
+/**
+ * 081 FR-020 (#730) — tables a draw left unmeasured because their host had no box: a preview redrawn while collapsed or
+ * behind another tab, where every width a browser reads is 0. Laid out from those zeros, the columns came back wrong
+ * once the preview was shown, and a resize handle broke the table outright. Such a table is measured at the first
+ * resize that gives its host a width (Principle XII: the 0 → W change, once; never every notification).
+ */
+const awaitingBox = new WeakSet<HTMLTableElement>();
+
+/** What a layout pass did: `needsMeasure` while some table under the root waits for its host to have a box. */
+export interface TableLayoutResult {
+  readonly needsMeasure: boolean;
+}
+
 /** The element a table's width is shared out of — its host, looking past a scroll wrapper this module added. */
 function hostOf(table: HTMLTableElement): HTMLElement | null {
   const parent = table.parentElement;
@@ -291,22 +304,34 @@ function applyWidths(table: HTMLTableElement, entry: LaidOutTable, options: Tabl
  * every token read its own): all writes, then `8ch`, then every width read together, then the held
  * tokens settled, then every table measured together, then every write.
  */
-export function applyTableLayout(root: HTMLElement, options: TableLayoutOptions): void {
-  const prepared = [...root.querySelectorAll<HTMLTableElement>('table')]
+export function applyTableLayout(root: HTMLElement, options: TableLayoutOptions): TableLayoutResult {
+  const all = [...root.querySelectorAll<HTMLTableElement>('table')];
+  // READS — the space each table may take, before anything is written (the host's width does not depend on the table).
+  const availables = all.map(availableFor);
+  let needsMeasure = false;
+  const prepared = all
     .map((table, tableIndex) => {
       clearPreviousLayout(table);
+      awaitingBox.delete(table);
       const count = columnCountOf(table);
-      return count === 0 ? null : { table, tableIndex, count, spans: wrapHyphenatedTokens(table) };
+      if (count === 0) return null;
+      // 081 FR-020 — a host with no box measures every width as 0: leave the table to the resize that gives it one.
+      if (!(availables[tableIndex]! > 0)) {
+        awaitingBox.add(table);
+        needsMeasure = true;
+        return null;
+      }
+      return { table, tableIndex, count, available: availables[tableIndex]!, spans: wrapHyphenatedTokens(table) };
     })
     .filter((p) => p !== null);
-  if (prepared.length === 0) return;
+  if (prepared.length === 0) return { needsMeasure };
 
   const minLegiblePx = options.minLegiblePx(prepared[0]!.table);
 
   // READS — every width this pass needs, with nothing written in between.
   const measureToken = options.measureToken;
-  const read = prepared.map(({ table, spans }) => ({
-    available: availableFor(table),
+  const read = prepared.map(({ available, spans }) => ({
+    available,
     tokens: spans.map((span) => ({
       span,
       width: measureToken
@@ -339,6 +364,7 @@ export function applyTableLayout(root: HTMLElement, options: TableLayoutOptions)
     applyWidths(table, entry, options);
     insertHandles(table, cols, tableIndex, options);
   });
+  return { needsMeasure };
 }
 
 /**
@@ -346,9 +372,16 @@ export function applyTableLayout(root: HTMLElement, options: TableLayoutOptions)
  * rebuilt, and nothing at all for a table whose width did not change (Principle XII). The only reads are
  * the hosts' widths, all taken before anything is written. A table no draw has laid out is left for the
  * next draw.
+ *
+ * 081 FR-020 — the one exception: a table the last draw left waiting for a box (see `awaitingBox`) whose host now has
+ * a width. Nothing was measured for it, so there is nothing to re-share: the whole layout runs again, once, and every
+ * table comes out as a fresh draw at this width would lay it out (SC-004). Hand-set widths survive it (`handSet`).
  */
-export function relayoutTables(root: HTMLElement, options: TableLayoutOptions): void {
-  const tables = [...root.querySelectorAll<HTMLTableElement>('table')].filter((t) => laidOut.has(t));
+export function relayoutTables(root: HTMLElement, options: TableLayoutOptions): TableLayoutResult {
+  const all = [...root.querySelectorAll<HTMLTableElement>('table')];
+  const waiting = all.filter((t) => awaitingBox.has(t));
+  if (waiting.length > 0 && waiting.some((t) => availableFor(t) > 0)) return applyTableLayout(root, options);
+  const tables = all.filter((t) => laidOut.has(t));
   const widths = tables.map(availableFor);
   tables.forEach((table, i) => {
     const entry = laidOut.get(table)!;
@@ -359,6 +392,7 @@ export function relayoutTables(root: HTMLElement, options: TableLayoutOptions): 
     for (const token of entry.tokens) holdToken(token.span, token.width < limit);
     applyWidths(table, entry, options);
   });
+  return { needsMeasure: waiting.length > 0 };
 }
 
 /** `8ch` against `table`'s own font — a transient measuring span, never left in the document. */
