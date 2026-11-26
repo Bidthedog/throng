@@ -5,10 +5,20 @@
  *
  * Layer: component — what the real strips draw from the real workspace store and maximise store.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, screen, waitFor } from '@testing-library/react';
 import { createElement, useEffect } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { createDefaultLayout, type WorkspaceLayout } from '@throng/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  createDefaultLayout,
+  type Panel,
+  type WorkspaceLayout,
+} from '@throng/core';
+import { TerminalPanel } from '../../src/renderer/terminal/terminal-panel.js';
+import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
+import { TerminalStatusBar } from '../../src/renderer/terminal/terminal-status-bar.js';
+import { FOCUS_MODE_STRIP_CLASS } from '../../src/renderer/workspace/focus-mode-badge.js';
 import { StatusBar } from '../../src/renderer/statusbar/status-bar.js';
 import { PreviewStatusBar } from '../../src/renderer/preview/preview-status-bar.js';
 import { __resetMaximise, maximisePanel, maximiseSection, restoreAll } from '../../src/renderer/workspace/maximise-store.js';
@@ -117,4 +127,102 @@ describe('the Focus Mode indicator', () => {
     act(() => maximisePanel('t1', 'p1'));
     expect(screen.getByTestId('status-bar')).not.toHaveTextContent('Focus Mode');
   });
+});
+
+/*
+ * 081 US10 (#727, FR-090 – FR-092) — a terminal's status bar takes the same Focus Mode strip as an editor's: the one
+ * shared class and badge, nothing of its own. With `terminals.showStatusBar` off there is no bar, so nothing new.
+ */
+vi.mock('../../src/renderer/terminal/use-terminal.js', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useTerminal: () => {},
+}));
+vi.mock('../../src/renderer/terminal/use-terminal-reconnect.js', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useTerminalReconnect: () => {},
+}));
+
+const terminalPanel = {
+  type: 'panel',
+  id: 'p1',
+  originProjectId: 'proj-focus',
+  title: 'Terminal',
+  kind: 'terminal',
+  config: { flavourId: 'cmd', flavourLabel: 'Command Prompt' },
+} as unknown as Panel;
+
+const settingsBridge = (settings: Record<string, unknown>) => ({
+  config: { get: () => Promise.resolve({ settings }), onChange: () => () => {} },
+  terminal: {},
+});
+
+const readCss = (path: string): string => readFileSync(resolve(__dirname, path), 'utf8');
+
+const terminalPanelEl = () =>
+  createElement(ContextMenuProvider, {
+    key: 'term',
+    children: createElement(TerminalPanel, { panel: terminalPanel, tabId: 't1', projectRoot: 'C:/proj' }),
+  });
+
+describe('081 US10 — the terminal status bar in Focus Mode', () => {
+  const termBar = (): HTMLElement => screen.getByTestId('terminal-status-bar-p1');
+
+  it('carries the shared strip class and the badge while its panel is maximised, and drops both on exit (FR-090)', async () => {
+    m = await mountWorkspace(twoPanels(), {
+      extras: [createElement(TerminalStatusBar, { key: 'term', panelId: 'p1', flavourLabel: 'Command Prompt' })],
+    });
+    await screen.findByTestId('terminal-status-bar-p1');
+    expect(termBar()).not.toHaveClass(FOCUS_MODE_STRIP_CLASS);
+    expect(screen.queryByTestId('focus-mode-badge-p1')).toBeNull();
+    act(() => maximisePanel('t1', 'p1'));
+    expect(termBar()).toHaveClass(FOCUS_MODE_STRIP_CLASS);
+    const badge = screen.getByTestId('focus-mode-badge-p1');
+    expect(termBar()).toContainElement(badge);
+    expect(badge).toHaveTextContent('Focus Mode · Esc or Shift+Alt+Enter to exit');
+    expect(termBar()).toHaveTextContent('Command Prompt');
+    act(() => restoreAll('t1'));
+    expect(termBar()).not.toHaveClass(FOCUS_MODE_STRIP_CLASS);
+    expect(screen.queryByTestId('focus-mode-badge-p1')).toBeNull();
+  });
+
+  it('the real terminal panel shows the badge in its bar in Focus Mode', async () => {
+    m = await mountWorkspace(twoPanels(), {
+      throng: settingsBridge({}),
+      extras: [terminalPanelEl()],
+    });
+    await screen.findByTestId('terminal-status-bar-p1');
+    act(() => maximisePanel('t1', 'p1'));
+    expect(termBar()).toContainElement(screen.getByTestId('focus-mode-badge-p1'));
+  });
+
+  it('with terminals.showStatusBar off, Focus Mode draws no bar and no badge (FR-092)', async () => {
+    m = await mountWorkspace(twoPanels(), {
+      throng: settingsBridge({ terminals: { showStatusBar: false } }),
+      extras: [terminalPanelEl()],
+    });
+    await screen.findByTestId('terminal-p1');
+    // The setting lands after the first draw; wait until the bar it removes has gone.
+    await waitFor(() => expect(screen.queryByTestId('terminal-status-bar-p1')).toBeNull());
+    act(() => maximisePanel('t1', 'p1'));
+    expect(screen.queryByTestId('terminal-status-bar-p1')).toBeNull();
+    expect(screen.queryByTestId('focus-mode-badge-p1')).toBeNull();
+  });
+
+  // jsdom applies no stylesheet, so the one-styling rule (constitution Principle VIII) is read where it is made.
+  it('paints the highlight from one rule keyed on the modifier class alone, never a terminal copy of it (FR-090)', () => {
+    const editorCss = readCss('../../src/renderer/editor/editor.css');
+    const terminalCss = readCss('../../src/renderer/terminal/terminal.css');
+    const highlight = new RegExp(`(^|\\n)\\.${FOCUS_MODE_STRIP_CLASS}\\.${FOCUS_MODE_STRIP_CLASS} \\{[^}]*background:`);
+    expect(editorCss).toMatch(highlight);
+    expect(editorCss).not.toContain(`.editor-status-strip.${FOCUS_MODE_STRIP_CLASS} {`);
+    // The setting toggles take the strip's accent text on the highlight, the preview bar's and the terminal's alike.
+    expect(editorCss).toMatch(new RegExp(`\\.${FOCUS_MODE_STRIP_CLASS} \\.setting-toggle\\[aria-pressed\\] \\.icon`));
+    expect(terminalCss).not.toContain(FOCUS_MODE_STRIP_CLASS);
+    // The centred badge is placed against the bar itself.
+    expect(terminalCss).toMatch(/\.terminal-status-bar \{[^}]*position: relative;/);
+  });
+
+  // FR-091 holds the terminal's strip to the editor strip's legibility by drawing both from one rule (above). Whether
+  // accent text on the highlight clears body-text contrast in every bundled theme is a pre-existing gap for every
+  // panel type (Gothic 2.84:1, VSCode 4.07:1), tracked on its own issue rather than gated here.
 });

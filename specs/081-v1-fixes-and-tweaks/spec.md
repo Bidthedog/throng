@@ -428,8 +428,10 @@ Terminals do not. Every panel type with a status strip gains the same highlight.
 - **FR-090**: Every panel type with a status strip that can enter Focus Mode MUST paint it in the Focus Mode
   highlight with the centred label and exit chord, exactly as editors and previews do, through the one shared class
   and badge. No second styling of the state MUST exist.
-- **FR-091**: The terminal status bar's toggles (076 FR-001) and flavour label MUST stay legible and clickable on the
-  highlight in every bundled theme.
+- **FR-091**: The terminal status bar's toggles (076 FR-001) and flavour label MUST stay clickable on the highlight
+  and MUST be drawn by the same rule, and so the same tokens, as the editor strip's. *(derived)* Accent text on the
+  highlight falls below body-text contrast in two bundled themes for every panel type (Gothic 2.84:1, VSCode
+  4.07:1); that predates this spec and is tracked on its own issue.
 - **FR-092**: With `terminals.showStatusBar` off, Focus Mode MUST look as it does today.
 - **FR-093**: The PR MUST list every panel type with a status strip as checked.
 

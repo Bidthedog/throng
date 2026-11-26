@@ -79,6 +79,8 @@
 /* 024 US1 (#152): the terminal's per-panel status bar (new surface; shell flavour label). Mirrors
    the editor status strip's height/treatment so the two panel types read alike. */
 .terminal-status-bar {
+  /* 081 FR-090 — the Focus Mode badge is centred against the bar itself. */
+  position: relative;
   flex: 0 0 auto;
   display: flex;
   align-items: center;

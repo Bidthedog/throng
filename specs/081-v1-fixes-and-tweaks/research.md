@@ -141,3 +141,18 @@ Paths are repo-relative. Each entry is Decision / Rationale / Alternatives.
   class alone (no second styling); `terminal.css` gets `position: relative` and a focus-mode override for the
   `.setting-toggle` colours. Audit: editor, text and binary previews, and the maximise layer already comply;
   terminal is the only gap; placeholders have no strip.
+- **R13 audit** (T074, FR-093, 2026-11-26): every surface that draws a panel status strip, read from the code.
+  - [x] Editor (`editor/status-strip.tsx`): class and badge; hidden with `editor.showStatusBar` off, as before.
+  - [x] Text preview (`preview/preview-status-bar.tsx`, text branch): class and badge.
+  - [x] Binary previews, the read-only grid included (same file, the other branch): class and badge. A binary bar
+    with no readout and no read-only marker is not drawn at all, in Focus Mode or out of it (044 FR-015e).
+  - [x] Maximise layer (`workspace/maximise-layer.tsx`): its own strip always carries the class and badge.
+  - [x] Terminal (`terminal/terminal-status-bar.tsx`): class and badge added by T070; no bar with
+    `terminals.showStatusBar` off (FR-092).
+  - [x] Placeholder (`workspace/panel-placeholder.tsx`): draws no status strip, so nothing to paint.
+  - The highlight is one rule in `editor.css` on the modifier class alone; `focus-mode-badge.tsx` imports
+    `editor.css`, so a window with only terminals open still loads it. The setting-toggle colours on the highlight
+    went into the same shared block, not `terminal.css`, so the preview bar's toggles and the terminal's share one
+    styling (Principle VIII). FR-091's gate pairing (`accentText` on `activePanelBorder`) belongs in
+    `theme-quality.ts`; Gothic (2.84:1) and VSCode (4.07:1) fall short of 4.5:1 today, in editors as well as
+    terminals.
