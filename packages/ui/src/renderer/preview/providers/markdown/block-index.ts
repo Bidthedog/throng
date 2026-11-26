@@ -244,15 +244,25 @@ export class BlockIndex {
   }
 
   /**
-   * 073 FR-033d — where a reader sees `line`: {@link elementFor}'s block, or — when a fold hides it — the nearest shown
-   * block before it, the fold that holds it. `null` when no shown block starts at or before `line`.
+   * 073 FR-033d — where a reader sees `line`: the DEEPEST shown block starting on the nearest line at or before it, or —
+   * when a fold hides it — the nearest shown block before it, the fold that holds it. `null` when no shown block starts
+   * at or before `line`.
+   *
+   * 081 FR-031 — deepest, because markdown-it maps one line to several nested blocks: a table's header line to the
+   * `table`, its `thead` and the header `tr`, its first body line to the `tbody` and that row. The outermost of them
+   * marked the whole table, or the whole body, for one row. A table's delimiter line maps to no block, so the nearest
+   * line before it, the header line, names the header row.
    */
   shownElementFor(line: number): HTMLElement | null {
     const built = this.ensure();
     if (built === null) return null;
-    let at = this.firstAtOrBefore(built.all, line);
+    const { all } = built;
+    let at = this.firstAtOrBefore(all, line);
+    if (at === -1) return null;
+    // The blocks on one line sit together in document order, each inside the one before it: the last is the deepest.
+    while (at + 1 < all.length && all[at + 1]!.line === all[at]!.line && all[at + 1]!.parent === at) at += 1;
     while (at !== -1 && this.hidden.has(at)) at -= 1;
-    return at === -1 ? null : built.all[at]!.el;
+    return at === -1 ? null : all[at]!.el;
   }
 
   /**

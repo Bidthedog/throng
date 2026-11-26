@@ -246,6 +246,7 @@ import {
   editorTopLineOf,
   editorCentreLineOf,
   requestEditorTopLine,
+  subscribeEditorScrolled,
   useEditorDocLines,
   useEditorTopLine,
   type EditorTopLine,
@@ -267,7 +268,7 @@ import {
 import { revealNodeAt } from './node-reveal.js';
 import './preview.css';
 import './match-frames.css';
-import { formatGrouped, logCaught, logExpected, pathForms, relPathUnderRoot } from '@throng/core';
+import { formatGrouped, logCaught, logExpected, nonBlankSyncLine, pathForms, relPathUnderRoot } from '@throng/core';
 
 /** The refusals that mean the preview must not be restored here (FR-067). Everything else is kept. */
 const CLEARING_REFUSALS: ReadonlySet<string> = new Set(['no-provider', 'disabled', 'outside-project']);
@@ -296,6 +297,15 @@ const TOP_OF_DOCUMENT = { line: 0, offsetRatio: 0 } as const;
 interface DrawnLines {
   filePath: string;
   lines: number | null;
+}
+
+/**
+ * 081 FR-032 — the line a preview-led sync mark names: `line`, or for a blank line the next non-blank line of the text the
+ * preview holds (the previous one at its end). Split only when a mark is drawn, once a scroll has stopped.
+ */
+function drawnSyncLine(content: PreviewContent | null | undefined, line: number): number {
+  if (content?.kind !== 'text') return line;
+  return nonBlankSyncLine(content.text.split(/\r\n|\r|\n/), line) ?? line;
 }
 
 /** Lines in `text`, counted as CodeMirror and the Markdown pipeline count them: each line-ending style is one break. */
@@ -2086,6 +2096,14 @@ export function PreviewPanel({
     // where the editor is THEN. 073 FR-033e — its centre line, not its top (sync itself keys on the top).
     settleSyncMark(parentId, () => editorCentreLineOf(parentId) ?? editorTopLineOf(parentId)?.line ?? null, highlightMsRef.current);
   }, [parentTop, parentId, syncing]);
+  // 081 FR-032 (R7) — a scroll that moved the editor's centre but not its top line (inside a wrapped line) marks too.
+  useEffect(() => {
+    if (!syncing || parentId === null) return;
+    return subscribeEditorScrolled(parentId, () => {
+      if (lastEditorLine.current === null) return;
+      settleSyncMark(parentId, () => editorCentreLineOf(parentId) ?? editorTopLineOf(parentId)?.line ?? null, highlightMsRef.current);
+    });
+  }, [parentId, syncing]);
   useEffect(() => {
     if (!syncing || parentId === null) return;
     return () => clearSyncMark(parentId);
@@ -2197,7 +2215,8 @@ export function PreviewPanel({
     // 073 FR-033d — this view led: the pair is in step at its top line.
     // 073 FR-033e — the mark names the line at the CENTRE of this view; sync itself keyed on the top.
     // 073 FR-033g — drawn once scrolling has stopped for 300 ms, at the latest place this view reported.
-    settleSyncMark(editor, () => centreLine ?? line, highlightMsRef.current);
+    // 081 FR-032 — a blank line there names the next non-blank line of the text drawn, or the previous one at its end.
+    settleSyncMark(editor, () => drawnSyncLine(stateRef.current?.content, centreLine ?? line), highlightMsRef.current);
     return true;
   }, []);
 
