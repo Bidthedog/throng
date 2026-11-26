@@ -10,7 +10,7 @@ Spec: `specs/080-help-and-wiki/spec.md`
 | MT-04 | The references, split into pages | signed off | 5f0979e41830 | 2026-11-26 | |
 | MT-05 | The (?) on key bindings and theme settings | signed off | 5f0979e41830 | 2026-11-26 | |
 | MT-06 | Every guide page, complete | signed off | 5f0979e41830 | 2026-11-26 | |
-| MT-07 | The Help window | signed off | 5f0979e41830 | 2026-11-26 | |
+| MT-07 | The Help window | needs retest | 5f0979e41830 | 2026-11-26 | 5bb6128a touched packages/ui/src/main/main.ts |
 
 ## MT-01: The guide site: look, version, navigation and search
 
