@@ -26,6 +26,7 @@ import { requestPreviewOpen } from '../preview/open-preview.js';
 import { readPreviewOpenIn } from '../preview/preview-open-in.js';
 import { linkFirstReadingByName } from './path-by-name.js';
 import { openTerminalAt } from './open-terminal-at.js';
+import { readFlavours } from '../panel-type/use-flavours.js';
 import { revealInFileExplorer } from '../explorer/reveal-in-tree.js';
 
 /**
@@ -45,15 +46,9 @@ const NO_SCHEMES: ReadonlySet<string> = new Set();
  * (033 FR-030), read here without a hook because a link menu opens from a callback. Empty on failure, which
  * draws Terminal disabled (FR-035).
  */
-async function readFlavours(): Promise<readonly FlavourOption[]> {
+async function linkFlavours(): Promise<readonly FlavourOption[]> {
   try {
-    const list = (await window.throng?.terminal?.listFlavours?.()) ?? [];
-    return list.map((f) => ({
-      value: f.id,
-      label: f.label,
-      defaultShellArguments: f.defaultShellArguments,
-      reportsDirectory: f.reportsDirectory !== false,
-    }));
+    return await readFlavours();
   } catch (error) {
     logCaught('file-link-menu: list the terminal flavours for Open In ▸ Terminal', error);
     return [];
@@ -306,7 +301,7 @@ export function openFileLinkMenu(args: {
     const opId = args.opener.openMenu(args.x, args.y, buildItems(folder));
     // Open In ▸ Terminal waits on the flavour catalogue, as the File Explorer's does: disabled until it arrives.
     if (!unc && folderInProject) {
-      void readFlavours().then((list) => {
+      void linkFlavours().then((list) => {
         flavours = list;
         args.opener.updateMenu(opId, buildItems(folder));
       });
@@ -323,7 +318,7 @@ export function openFileLinkMenu(args: {
     resolve: async () => {
       const [answer, catalogue] = await Promise.all([
         resolveLinkForMenu(request),
-        unc ? Promise.resolve<readonly FlavourOption[]>([]) : readFlavours(),
+        unc ? Promise.resolve<readonly FlavourOption[]>([]) : linkFlavours(),
       ]);
       flavours = catalogue;
       if (answer.ok) {
