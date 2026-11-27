@@ -84,13 +84,43 @@ function askingWindow(deps: LinkPromptDeps): BrowserWindow | undefined {
   return main && !main.isDestroyed() ? main : undefined;
 }
 
+/**
+ * How long the prompt waits for its window's cover (FR-070) before it asks without one. The Help window's cover is a
+ * still from `capturePage`, which Windows can leave pending for a window it has not painted.
+ */
+export const LINK_PROMPT_COVER_MS = 1_000;
+
+/** The cover's undo, or a no-op once the bound passes; a cover landing after that is undone as it lands. */
+function boundedCover(cover: Promise<() => void>): Promise<() => void> {
+  return new Promise((resolve) => {
+    let late = false;
+    const timer = setTimeout(() => {
+      late = true;
+      resolve(() => undefined);
+    }, LINK_PROMPT_COVER_MS);
+    cover.then(
+      (undo) => {
+        if (late) undo();
+        else {
+          clearTimeout(timer);
+          resolve(undo);
+        }
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(() => undefined);
+      },
+    );
+  });
+}
+
 /** Ask the window the link was followed in; resolves `'open'` or `'cancel'`. */
 export async function askToOpenLink(deps: LinkPromptDeps, url: string): Promise<LinkPromptAnswer> {
   // Read before the first await, while a caller's `openFromWindow` still names the window.
   const win = askingWindow(deps);
   // No window to ask is no one to say yes: the link does not open.
   if (!win) return 'cancel';
-  const uncover = deps.cover ? await deps.cover(win) : () => undefined;
+  const uncover = deps.cover ? await boundedCover(deps.cover(win)) : () => undefined;
   const contents: WebContents = win.webContents;
   const id = nextId++;
   const reply = await new Promise<LinkPromptReply>((resolve) => {

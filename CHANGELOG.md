@@ -31,14 +31,6 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Added
 
-- A user guide on [throng-ide.com](https://throng-ide.com/guide/), built from each release and searchable, teaching
-  throng task by task from a new [Quick start](https://throng-ide.com/guide/quick-start/#add-your-first-project).
-  **F1**, or **Help** in the cog menu, opens it in throng's own Help window, from the guide shipped with your copy, so it works offline; a terminal keeps F1 for its program.
-  ([guide](https://throng-ide.com/guide/#get-help-from-inside-throng), [#477](https://github.com/Bidthedog/throng/issues/477), [#693](https://github.com/Bidthedog/throng/issues/693))
-- Every setting, key binding and theme setting in Preferences has a one-line description and a **?** beside its
-  name that opens its own section of the reference, now split into a page per section. Panel types, the terminal
-  form, the Projects pane and Find in Files carry a **?** to the guide task that teaches them.
-  ([guide](https://throng-ide.com/guide/preferences/#find-a-setting), [#477](https://github.com/Bidthedog/throng/issues/477))
 - Editor and preview title bars have **Open in OS Default Program** and **Find in File Explorer** buttons; the panel
   menu's Reveal File in File Explorer is now called Find in File Explorer. ([guide](https://throng-ide.com/guide/layout/#read-a-panels-header), [#725](https://github.com/Bidthedog/throng/issues/725))
 - **Follow the active preview** (Preferences › Settings › File Explorer, on by default) reveals a preview's file in
@@ -60,6 +52,48 @@ What changed in each release of throng, written for someone deciding whether to 
   their column handles work. ([#730](https://github.com/Bidthedog/throng/issues/730))
 - The Synchronise Scrolling highlight no longer shifts a table row's layout, marks the right row from the editor
   side, and marks the next line when a scroll stops on a blank line. ([#733](https://github.com/Bidthedog/throng/issues/733))
+
+## 1.0.0-beta3 — 2026-11-27
+
+### Added
+
+- A user guide on [throng-ide.com](https://throng-ide.com/guide/), built from each release and searchable, teaching
+  throng task by task from a new [Quick start](https://throng-ide.com/guide/quick-start/#add-your-first-project).
+  **F1**, or **Help** in the cog menu, opens it in throng's own Help window, from the guide shipped with your copy, so it works offline; a terminal keeps F1 for its program.
+  ([guide](https://throng-ide.com/guide/#get-help-from-inside-throng), [#477](https://github.com/Bidthedog/throng/issues/477), [#693](https://github.com/Bidthedog/throng/issues/693))
+- Every setting, key binding and theme setting in Preferences has a one-line description and a **?** beside its
+  name that opens its own section of the reference, now split into a page per section. Panel types, the terminal
+  form, the Projects pane and Find in Files carry a **?** to the guide task that teaches them.
+  ([guide](https://throng-ide.com/guide/preferences/#find-a-setting), [#477](https://github.com/Bidthedog/throng/issues/477))
+- Every bundled everyday theme meets WCAG AA contrast, and the Themes picker marks each theme that does. The
+  notification count is readable on every theme. ([guide](https://throng-ide.com/guide/themes-and-icons/#check-a-theme-is-readable), [#61](https://github.com/Bidthedog/throng/issues/61), [#716](https://github.com/Bidthedog/throng/issues/716))
+- A project row's menu offers **Open in OS Explorer** and **Copy Path**. ([guide](https://throng-ide.com/guide/projects/#open-a-projects-folder-or-copy-its-path), [#681](https://github.com/Bidthedog/throng/issues/681))
+- Every clickable link's menu offers **Find in File Explorer**. ([guide](https://throng-ide.com/guide/editing/#follow-links-in-your-files), [#714](https://github.com/Bidthedog/throng/issues/714))
+- The Projects and Sub-workspaces headers carry count pills, and a collapsed Projects pane shows its attention
+  total. ([guide](https://throng-ide.com/guide/projects/#read-a-projects-row-at-a-glance), [#715](https://github.com/Bidthedog/throng/issues/715))
+
+### Changed
+
+- Preferences search needs every word you type and lists the best matches first. ([guide](https://throng-ide.com/guide/preferences/#find-a-setting), [#270](https://github.com/Bidthedog/throng/issues/270))
+- The Themes editor nests its blocks under the same headings throughout. ([guide](https://throng-ide.com/guide/themes-and-icons/#make-your-own-theme), [#319](https://github.com/Bidthedog/throng/issues/319))
+- Copy Path lists your OS's path forms first, with a line between the groups. ([guide](https://throng-ide.com/guide/projects/#open-a-projects-folder-or-copy-its-path), [#713](https://github.com/Bidthedog/throng/issues/713))
+- Preferences fold headings no longer show a Fold/Unfold popup on hover. ([guide](https://throng-ide.com/guide/preferences/#change-a-setting), [#717](https://github.com/Bidthedog/throng/issues/717))
+- A shell throng has no flavour for starts as a login shell, as PowerShell now does on macOS. ([guide](https://throng-ide.com/guide/terminals/#choose-your-shell))
+
+### Fixed
+
+- A save that fails part-way leaves the file as it was, and keys typed during a save stay unsaved rather than lost. ([#706](https://github.com/Bidthedog/throng/issues/706))
+- The Themes JSON editor keeps an unsaved edit when the active theme changes elsewhere. ([#707](https://github.com/Bidthedog/throng/issues/707))
+- Undoing a delete on Windows restores the latest Recycle Bin copy. ([#708](https://github.com/Bidthedog/throng/issues/708))
+- Image hover text in a Markdown preview shows in throng's popup, not the OS tooltip. ([#718](https://github.com/Bidthedog/throng/issues/718))
+- Binary files such as PDFs are no longer offered the editor; they open in their preview or your OS program. ([#719](https://github.com/Bidthedog/throng/issues/719))
+- Open in OS Default Program from the File Explorer or Quick Open opens the file. ([#720](https://github.com/Bidthedog/throng/issues/720))
+- A rename Windows cannot hold is refused with the reason, and a case-only rename undoes on a case-insensitive volume.
+- A Replace whose folder holds the item being moved in is refused.
+- A paste larger than the daemon's request line reaches the terminal whole.
+- A terminal at a Windows drive root reports `C:\`, not `C:`.
+- An emoji-named folder keeps its files' state through a rename.
+- Escape cancels a sub-workspace drag cleanly.
 
 ## 1.0.0-beta2 — 2026-11-23
 

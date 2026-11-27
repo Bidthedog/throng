@@ -67,6 +67,15 @@ function applyBootstrapTheme(): boolean {
 /** 066 T026 — the panel-throw dev seam, carried by the theme bootstrap reply; false when main cannot be asked. */
 const testPanelThrow = applyBootstrapTheme();
 
+// 080 FR-063 — the link prompt's asks, held from the preload's start until the page subscribes (`linkPrompt.onAsk`).
+type LinkPromptRequest = { id: number; url: string };
+let linkPromptAsker: ((request: LinkPromptRequest) => void) | null = null;
+const linkPromptWaiting: LinkPromptRequest[] = [];
+ipcRenderer.on('throng:linkPrompt:ask', (_event: unknown, request: LinkPromptRequest) => {
+  if (linkPromptAsker) linkPromptAsker(request);
+  else linkPromptWaiting.push(request);
+});
+
 contextBridge.exposeInMainWorld('throng', {
   // The host OS family, so the renderer can render paths with native separators
   // (FR-101) — Windows uses '\\', everything else '/'.
@@ -499,11 +508,15 @@ contextBridge.exposeInMainWorld('throng', {
   },
   // 080 FR-063 — the external-link prompt: the address it asks about, and the user's answer.
   // 080 FR-070 — the external-link prompt, shown inline in the window main asks.
+  // An ask can arrive before the page subscribes (the Help window's toolbar page mounts after its guide can take a
+  // click), so the preload listens from the start and hands the first subscriber whatever is waiting.
   linkPrompt: {
     onAsk: (cb: (request: { id: number; url: string }) => void) => {
-      const handler = (_event: unknown, request: { id: number; url: string }): void => cb(request);
-      ipcRenderer.on('throng:linkPrompt:ask', handler);
-      return () => ipcRenderer.removeListener('throng:linkPrompt:ask', handler);
+      linkPromptAsker = cb;
+      for (const request of linkPromptWaiting.splice(0)) cb(request);
+      return () => {
+        if (linkPromptAsker === cb) linkPromptAsker = null;
+      };
     },
     answer: (id: number, reply: 'open' | 'cancel' | 'preferences') => ipcRenderer.send('throng:linkPrompt:answer', id, reply),
   },
