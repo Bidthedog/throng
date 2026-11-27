@@ -223,8 +223,9 @@ faded rows keep their hue and stay selectable.
 2. **Given** an ignored folder, **When** it is expanded, **Then** everything beneath it is faded.
 3. **Given** `.gitignore` edited to add or remove a pattern, **When** the explorer's watch fires, **Then** the fade
    updates with no reload.
-4. **Given** a project that is not a git repository, or no git, **When** the tree renders, **Then** nothing fades and
-   no notice appears.
+4. **Given** a project that is not a git repository but has a `.gitignore`, **When** the tree renders, **Then** the
+   entries its patterns match fade, read from the project root.
+5. **Given** no git installed, **When** the tree renders, **Then** nothing fades and no notice appears.
 
 ---
 
@@ -401,7 +402,10 @@ Terminals do not. Every panel type with a status strip gains the same highlight.
   folder's listing loads or changes, and asked again for every listed entry when the explorer's watch reports a change
   to a `.gitignore`. Calls MUST be batched per listing and debounced like the watch. A change to `.git/info/exclude`
   or the global excludes file is picked up the next time a listing loads or the tree refreshes.
-- **FR-073**: Outside a git repository, or with git unavailable, nothing MUST fade and no notice MUST appear.
+- **FR-073** *(amended 2026-11-27, maintainer review)*: A project that is not a git repository MUST still have its
+  `.gitignore` files applied, read from the project root, with nothing written into the project. With git unavailable,
+  nothing MUST fade and no notice MUST appear. (It first said nothing fades outside a repository; the maintainer
+  created a `.gitignore` in a non-repository project and expected the fade.)
 - **FR-074**: What the File Explorer shows and hides (`explorer.excludeGlobs`, 062 FR-051), and Quick Open's and Find
   in Files' scope, MUST be unchanged.
 
@@ -417,8 +421,9 @@ Terminals do not. Every panel type with a status strip gains the same highlight.
   line ending after it. In a file with a final newline, the row is written after that newline and followed by one.
 - **FR-082**: Clicking, selecting or moving through the entry row with the keyboard MUST write nothing.
 - **FR-083**: The entry row MUST look not yet part of the file (a muted or absent row number, from existing theme
-  tokens). Cut and Insert Row Above (the row-header operations that need a real row; the menu has no Delete Row)
-  MUST be drawn disabled on it, never hidden (Principle VI). This
+  tokens). Cut, Insert Row Above and Delete Row (the row-header operations that need a real row) MUST be drawn
+  disabled on it, never hidden (Principle VI); in a file with no records Insert Row Above is enabled there, since it
+  adds the first record (amended 2026-11-27, maintainer review: Delete Row/Column and blank-file inserts). This
   refines 073 FR-038 and FR-037c/FR-037f; 073's spec gains a note pointing here.
 - **FR-084**: Empty rows already in the document, Insert Row Above/Below, paste past the last row, the file's line
   endings and final newline, and the read-only spreadsheet preview MUST be unchanged.

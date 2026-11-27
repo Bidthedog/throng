@@ -532,7 +532,18 @@ checks. They fail and name the setting.
   what the setting does and at most one essential qualifier (such as "Applies after a restart"). Every
   lower-level detail (examples, how it interacts with other settings, platform differences) moves into
   its `docs/preferences.md` section. A check MUST fail the build when a description exceeds 100
-  characters, naming the setting.
+  characters, naming the setting. *(Amended 2026-11-27, maintainer's v1 review: the description says, in
+  plain words, what ticking the setting or choosing its value does, so it is clear at once without the
+  reference; no internal terms and no qualifier that needs the reference to make sense. Every setting's
+  section in `docs/preferences.md` carries at least one paragraph of detail after that line: what the
+  setting means to throng, the features it feeds and how it interacts with other settings. A check fails
+  the build for a section with no such paragraph. This supersedes, for where the fact is written and
+  nothing else, each requirement that put a detail in a setting's description: 068 FR-051 and FR-052 (the
+  Claude Code resume), 057 FR-061 and FR-065 (how late Command finished can be), 045 FR-080a and FR-080c
+  (`FORCE_HYPERLINK` and terminals already running), the link timeout's network and restart notes, the
+  known-extensions dot and case rule, 040 FR-034 as amended by 044 FR-118f (hiding the status bar wins, and
+  terminals have their own), and 054 FR-052 (the "Open previews in" sentence, now "Where <Type> previews
+  open…"). Each fact now lives in the setting's `docs/preferences.md` section.)*
 - **FR-014**: Every setting row MUST show a (?) control that opens that setting's section of the
   preferences reference on the site. The control is a themeable icon control with a hover title naming
   where it goes, and is reachable from the keyboard.

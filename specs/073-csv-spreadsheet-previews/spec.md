@@ -563,7 +563,10 @@ Markdown and Mermaid pattern, each setting working as labelled.
   for an expanded row, 2026-11-19; refined by FR-013 while Wrap is on in a CSV Preview Editor.)*
 - **FR-005**: Every cell value MUST be rendered as text, never interpreted as markup, a link or a formula.
 - **FR-006**: Columns MUST be resizable by dragging the header strip's column edge, and by keyboard from
-  the column header's menu (**Column Width…**).
+  the column header's menu (**Column Width…**). *(Amended 2026-11-27, maintainer's v1 review: Column Width… and
+  the counted inserts ask in a modal over the grid's own panel. A scrim covers the grid and takes every press, the
+  prompt sits in its middle with its number selected, Tab stays inside it, and Esc closes it. Other panels stay
+  usable.)*
 - **FR-006a** *(Q13, 2026-11-19)*: A column header's right-click menu MUST offer **Reset Size**, returning
   the column to the default width and removing its stored width (FR-040). A row header's menu MUST offer
   **Reset Size**, collapsing an expanded row (FR-012) to one line. Both grids.
@@ -587,6 +590,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-008b** *(Q22, 2026-11-19)*: Clicking the corner cell where the column letters meet the row numbers MUST
   select every cell, exactly as Select All does, without scrolling. It MUST be a named control ("Select all")
   showing a pointer cursor; a right-click on it selects every cell and opens the selection's menu. Both grids.
+  *(Amended 2026-11-27, maintainer's v1 review: the corner's menu is its own. It offers what acts on every cell
+  and on the file, and nothing that acts on the active cell, a row or a column: no Paste, Insert, Edit in
+  Dialog…, Column Width… or Select All.)*
 - **FR-009**: The grid's code, the CSV parser and the workbook library MUST load only when a grid is
   first needed; application startup MUST load none of it (as 054 FR-047 does for diagrams).
 - **FR-010**: Every library this feature adds MUST meet #10's bar: actively maintained, under a licence
@@ -749,7 +755,10 @@ Markdown and Mermaid pattern, each setting working as labelled.
   from a text editor" for Save As; Revert still is.)*
 - **FR-036**: Editing a cell: typing on a selected cell or pressing F2 or Enter MUST open an in-cell
   editor; Enter commits and moves down, Tab commits and moves right, Esc cancels. Delete on a cell
-  selection MUST clear their values.
+  selection MUST clear their values. *(Amended 2026-11-27, maintainer review on 081: Tab moves right and wraps to
+  the next row's first cell, Shift+Tab moves left and wraps to the previous row's last cell, in and out of the
+  cell editor; Tab at the grid's last cell and Shift+Tab at the first both stay, since Tab never takes focus out of a
+  panel on its own — amended again the same day.)*
 - **FR-036a** *(Q17, 2026-11-19)*: With **Edit long cells in a dialog** on, double-click, F2 and Enter on a
   cell whose value is longer than **Long cell threshold** characters MUST open a modal **cell dialog** in
   place of the in-cell editor; typing a character on a cell still opens the in-cell editor. Every cell's
@@ -807,6 +816,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-037g** *(Q20, 2026-11-19)*: Every grid menu item with a sensible picture MUST show a themeable icon
   in the menu's icon column, as the File Explorer's menus do: an existing icon key where one fits, a new
   drawn key otherwise. Items with no sensible picture keep the empty icon column. Both grids.
+- **FR-037j** *(maintainer's v1 review, 2026-11-27)*: The grid menus MUST hold every insert in one **Insert ▸**
+  submenu and the copy variants in one **Copy as ▸** submenu straight after **Copy**. **Undo** and **Redo** MUST
+  sit on every CSV grid menu, in a group of their own directly below the clipboard group, the place every
+  context menu in the app gives them. **Clear Cells** MUST show **Del**, the key the grid clears with; it is the
+  grid's own key, not a rebindable command. Both grids, where the row exists.
 - **FR-037h** *(Q23, 2026-11-19)*: The row header and column header menus MUST NOT offer **Select Row** or
   **Select Column**: opening either menu has already selected the row or column. Both grids.
 - **FR-038**: A row header's right-click menu MUST offer **Insert Row Above** and **Insert Row Below**; a
@@ -895,7 +909,11 @@ Markdown and Mermaid pattern, each setting working as labelled.
 - **FR-050c** *(maintainer's design, approved 2026-11-20)*: A spreadsheet preview's grid menus MUST show
   **Cut**, **Paste** and **Insert Row Above / Below**, **Insert Column Left / Right** — the editing rows a CSV
   grid's menus carry — present but disabled, each giving FR-050a's hover as its reason; **Copy** stays
-  enabled. *(Supersedes FR-037e's "the read-only spreadsheet preview offers Copy only".)*
+  enabled. *(Supersedes FR-037e's "the read-only spreadsheet preview offers Copy only".)* *(Superseded
+  2026-11-27, maintainer's v1 review: workbooks stay read-only in throng, so no state of the application could
+  enable those rows, and the constitution's "absent when meaningless" rule takes them off. The menus offer Copy,
+  Copy as ▸, Select All, Go to Row…, the column width rows and Print… only. The grid draws its values in the
+  theme's muted text colour to show they cannot be edited; cells still select, and Copy still works.)*
 - **FR-051**: The preview MUST show a sheet switcher listing every sheet in the file's order, hidden
   sheets included and marked hidden, opening on the workbook's first visible sheet. Switching sheet MUST
   keep each sheet's scroll position for the life of the panel.

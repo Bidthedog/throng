@@ -2,23 +2,43 @@
 
 ## Menus (right-click, Shift+F10 or the menu key)
 
-**Cell (CSV Preview Editor)** — sections in this order:
+*(Rewritten 2026-11-27, maintainer's v1 review — FR-037j, FR-008b, FR-050c. Earlier amendment notes are kept below
+the tables.)*
+
+**Cell (CSV Preview Editor)** — sections in this order, a divider between groups:
 
 | Section | Items |
 |---|---|
-| Edit | Undo · Redo |
-| Content | Cut · Copy · Copy as Rich Text · Copy as Plain Text · Paste · Clear Cells · Select All |
-| Insert | Insert Row Above · Insert Row Below · Insert Column Left · Insert Column Right |
+| Content | Cut · Copy · Copy as ▸ (Rich Text, Plain Text) · Paste · Select All · Clear Cells (Del) |
+| | Undo · Redo |
+| | Edit in Dialog… (FR-036a) |
+| | Save · Save As… |
+| Create | Insert ▸ (Row Above, Row Below, Column Left, Column Right · Rows Above…, Rows Below…, Columns Left…, Columns Right…) |
+| Navigate | Go to Row… · Open in Editor (opens the editor, or goes to the open one) · Print… |
 | View & state | Column Width… |
-| File | Save |
-| Navigate | Open in Editor / Go to Editor (044 FR-015) |
 
-**Row header (gutter)**: Insert Row Above · Insert Row Below · Cut (removes the rows) · Copy · Paste · Reset Row Height (FR-006b). No Select Row (FR-037h).
-**Column header**: Insert Column Left · Insert Column Right · Cut (clears values) · Copy · Paste · Column Width… · Reset Column Width (FR-006b). No Select Column (FR-037h).
+**Row header (gutter)**: Cut (removes the rows) · Copy · Copy as ▸ · Paste · Clear Cells · Delete Row(s) | Undo ·
+Redo | Insert ▸ (Row Above, Row Below · Rows Above…, Rows Below… · Copied Rows Above/Below while whole rows are on
+the clipboard) | Go to Row… · Open in Editor · Print…. No Select Row (FR-037h), no Reset Row Height (FR-006c).
+
+**Column header**: Cut (clears values) · Copy · Copy as ▸ · Paste · Clear Cells · Delete Column(s) | Undo · Redo |
+Insert ▸ (Column Left, Column Right · Columns Left…, Columns Right… · Copied Columns Left/Right) | Open in Editor ·
+Print… | Column Width… · Reset Column Width. No Select Column (FR-037h).
+
+**Select-all corner** (FR-008b): Cut · Copy · Copy as ▸ · Clear Cells | Undo · Redo | Save · Save As… | Go to Row… ·
+Open in Editor · Print…. Nothing that acts on the active cell, a row or a column.
+
 *(Amended 2026-11-19: FR-037e, FR-006a.)*
+*(Amended 2026-11-27, maintainer review on 081: Delete Row(s) and Delete Column(s) act on whole selected rows or columns, one undo step each, and are drawn disabled with the reason otherwise; a file keeps at least one column. A blank file takes Insert Row and Insert Column, writing records of empty fields. Later the same day: the deletes appear only on the row and column header menus, never on the cell or select-all menu (an exception to drawn-disabled, at the maintainer's request); the header menus carry Clear Cells; the counted inserts ask how many, 1 to 10,000, each one undo step. Commands `grid.deleteRows` and `grid.deleteColumns`, unbound.)*
 
-**Spreadsheet preview**: cell menu with Copy · Copy as Rich Text · Copy as Plain Text · Select All; column
-header with Column Width… only. Nothing that edits.
+**The number prompt** (Column Width…, the counted inserts): a modal over the grid's own panel. A scrim covers the
+grid and takes every press; the prompt sits in its middle with its number selected; Tab stays inside it; Enter
+applies; Esc or Cancel closes. Other panels stay usable (FR-006, amended 2026-11-27).
+
+**Spreadsheet preview** (read-only, FR-050c as superseded 2026-11-27): cell and row header menus with Copy ·
+Copy as ▸ · Select All · Go to Row… · Print…; column header with Copy · Copy as ▸ · Column Width… · Reset Column
+Width · Print…; the corner with Copy · Copy as ▸ · Go to Row… · Print…. Nothing that edits, not even disabled. Its
+values are drawn in the theme's muted text colour.
 
 Copy follows `editor.previews.copyFormat` (044 FR-035b); the two named variants copy in their format
 whatever it says (the constitution's *a preference picks the default; the menu offers every variant*).
@@ -31,6 +51,12 @@ whatever it says (the constitution's *a preference picks the default; the menu o
 | `grid.insertRowBelow` | Insert Row Below | — | preview |
 | `grid.insertColumnLeft` | Insert Column Left | — | preview |
 | `grid.insertColumnRight` | Insert Column Right | — | preview |
+| `grid.insertRowsAbove` | Insert Rows Above… | — | preview |
+| `grid.insertRowsBelow` | Insert Rows Below… | — | preview |
+| `grid.insertColumnsLeft` | Insert Columns Left… | — | preview |
+| `grid.insertColumnsRight` | Insert Columns Right… | — | preview |
+| `grid.deleteRows` | Delete Rows | — | preview |
+| `grid.deleteColumns` | Delete Columns | — | preview |
 
 They ship unbound (no chord collides), act on the active cell of the focused CSV Preview Editor, and are
 inert elsewhere.
@@ -40,9 +66,9 @@ inert elsewhere.
 | Key | Does |
 |---|---|
 | Arrows, Page Up/Down, Home/End, Ctrl+Home/End | move the active cell; with Shift, extend the selection |
-| Tab / Shift+Tab | move right / left |
+| Tab / Shift+Tab | move right / left, wrapping between rows; Tab at the last cell and Shift+Tab at the first both stay |
 | Enter, F2, or typing a character | open the cell editor (typing replaces the value) |
-| In the cell editor: Enter / Tab / Esc | commit and move down / commit and move right / cancel |
+| In the cell editor: Enter / Tab / Shift+Tab / Esc | commit and move down / commit and move right / commit and move left / cancel |
 | In the cell editor: Shift+Enter or Alt+Enter | insert a line break in the value |
 | Delete | clear the selected cells |
 | Ctrl+C / Ctrl+X / Ctrl+V | copy / cut / paste (the platform clipboard gestures) |

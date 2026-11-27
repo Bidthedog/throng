@@ -26,6 +26,10 @@ heading line, that heading's section. Before the first heading the section items
 Find… (navigate) and Go to Heading… (navigate) beside Back/Forward. Principle VI: every command
 reachable by chord is on a menu.
 
+*Superseded in part 2026-11-27 (the maintainer's v1 review): Go to Heading… moved to View & state,
+group `panelType`, the rows only that panel type has, after the file's Navigate rows. Find… stays in
+Navigate.*
+
 ## Editor body menu (`editor/content-menu.ts`), Markdown documents only
 
 The same four fold rows as the preview body menu, in viewState, computed at the clicked position;

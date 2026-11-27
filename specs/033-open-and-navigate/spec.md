@@ -63,7 +63,7 @@ issues.
 - Q: How is Quick Open's "this editor / new editor" target choice presented, given the shared picker is a title, an input and a list? → A: **A two-option control at the TOP of the modal, above the typeahead input.** Its options are the **currently active editor** and **a new editor panel in this tab**, preselected from the "Open files in" preference. The typeahead input holds focus on open; **Shift+Tab** moves to the control, where **Space or Enter changes the value**. Opening is always **Enter with a file highlighted in the list** — Enter on the control never opens a file. *(Mechanism corrected 2026-08-15: this said the control is "last in the tab order". It renders above the input and is therefore **first**, which is why Shift+Tab reaches it. Same keystroke, same result, opposite mechanism — see FR-010a.)*
 - Q: What happens when Go To Line is invoked while a find bar is open in the same editor? → A: **The find bar stays open and simply loses focus.** It keeps its query, match count and highlights; the Go To Line modal opens on top and takes focus, and dismissing or confirming it returns focus to the editor rather than to the find bar. **A find bar closes only when the user closes it or its editor closes** — nothing else, this feature included, may close it.
 - Q: Quick Open is chord-only and discoverable nowhere but the Key Bindings editor. Should it have a visible route? → A: **A Files & Folders toolbar button**, beside the existing Expand / Collapse all controls, tooltipped with its current chord. It sits next to the tree it searches. The cost is accepted and recorded: the pane is hideable, so with Files & Folders closed the chord is again the only route.
-- Q: Planning found three places where this spec contradicts itself or the shipped code. How are they resolved? → A: **All three in favour of FR-047 and the constitution, with the losing text marked superseded rather than deleted.** (1) FR-052's cog row demanded a divider inside a single section, which FR-050 forbids — the cog menu takes **no** divider. (2) FR-052 listed Destroy last for two menus while FR-047 fixes it third; its third column is an **inventory of sections, not an ordering**, and FR-047 remains the only statement of order. (3) SC-011 could not hold literally, because `context-menu-sections.e2e.ts:49` asserts a folder's Open In holds exactly one item and US3 adds a second by design — that assertion is named as a permitted change, so any *unnamed* edit to an existing menu spec is a defect rather than a licence. *(SC-011 later grew to name a **second** permitted change, `menu-keyboard.e2e.ts`, because FR-053a mandates it.)*
+- Q: Planning found three places where this spec contradicts itself or the shipped code. How are they resolved? → A: **All three in favour of FR-047 and the constitution, with the losing text marked superseded rather than deleted.** (1) FR-052's cog row demanded a divider inside a single section, which FR-050 forbids — the cog menu takes **no** divider. (2) FR-052 listed Destroy last for two menus while FR-047 fixes it third; its third column is an **inventory of sections, not an ordering**, and FR-047 remains the only statement of order. (3) SC-011 could not hold literally, because `context-menu-sections.e2e.ts:49` asserts a folder's Open In holds exactly one item and US3 adds a second by design — that assertion is named as a permitted change, so any *unnamed* edit to an existing menu spec is a defect rather than a licence. *(SC-011 later grew to name a **second** permitted change, `menu-keyboard.e2e.ts`, because FR-053a mandates it.)* *(Superseded in part 2026-11-27: constitution v8.0.0 moved Destroy last in every menu, after Application, at the maintainer's v1 review. FR-047 still states the order; it no longer fixes Destroy third.)*
 - Q: The terminal's link items sit above Copy/Paste, which the Content-first vocabulary would forbid. Keep an exception, drop it, or reorder the vocabulary? → A: **Keep the "Contextual" section, leading the menu.** An item qualifies only if it would be **absent were the pointer elsewhere** — that is the test, not "it feels contextual". Demoting the link items was rejected as a behaviour regression shipped under a grouping pass, and reordering the vocabulary was rejected because it would re-order the one menu already grouped.
 - Q: What does each modal's input contain when it opens for the second time? → A: **Empty, in both — plus two new preferences that make each one remember, off by default.** The shipped behaviour is an empty box every time. Two toggles under a new **Editor · Navigation** group, `editor.navigation.rememberQuickOpenQuery` and `editor.navigation.rememberGotoLineNumber`, both defaulting to **off**, let a user opt into the modal reopening with the last value it accepted, fully selected so typing replaces it.
 - Q: Where does keyboard focus land after Open In → Terminal → flavour launches a terminal? → A: **In the new terminal.** The panel is created in the active tab by the same sequence "Open In → New Editor" already uses — added, typed immediately, not opened in rename mode, made the active panel — and it additionally takes DOM focus, so the user can type a command without a further click. The action's whole purpose is a shell here, and the next act is always typing.
@@ -601,16 +601,20 @@ the declared sections, in the declared order, with dividers between them.
   | 0 | **Contextual** | Items present only because of what the pointer is over (a link under the cursor). Lead the menu when present. The test is **"would this item be absent if the pointer were elsewhere?"** — nothing else qualifies. |
   | 1 | **Content** | Acts on the item's content or its name: Rename, Cut, Copy, Paste, Select All, Undo, Redo |
   | 2 | **Create** | Makes something new: New File, New Folder |
-  | 3 | **Destroy** | Removes something: Delete, Destroy Tab, Destroy other tabs, Destroy Panel |
-  | 4 | **Navigate** | Takes you somewhere, or names where something is: Open In (and its Terminal submenu), Copy Path, Reveal, Expand/Collapse All Children, Go To Line, Sync to |
-  | 5 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Reset Name, Hide in this project |
-  | 6 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
+  | 3 | **Navigate** | Takes you somewhere, or names where something is: Open In (and its Terminal submenu), Copy Path, Reveal, Expand/Collapse All Children, Go To Line, Sync to |
+  | 4 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Reset Name, Hide in this project |
+  | 5 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
+  | 6 | **Destroy** | Removes something: Delete, Destroy Tab, Destroy other tabs, Destroy Panel |
 
   This table is **additive to the constitution's** (Principle VI, v4.6.0), which is **canonical** for
   the sections and their order. The rows here name a few extra items the constitution's examples do
   not — "Destroy other tabs", "Expand/Collapse All Children", Open In's Terminal submenu — because
   this feature introduces them. Where the two ever disagree about a section or its position, the
   constitution wins and this table is the defect.
+
+  *(Superseded in part 2026-11-27 by constitution v8.0.0: at the maintainer's v1 review, Destroy moved
+  from row 3 to the end, after Application, so closing or removing is the last row of every menu. The
+  table above now shows that order; until then Destroy sat between Create and Navigate.)*
 
 - **FR-048**: Every context menu MUST place its items in those sections, in that order, with a divider
   between adjacent sections.
@@ -636,6 +640,10 @@ the declared sections, in the declared order, with dividers between them.
   rows previously listed Destroy last, which contradicted both FR-047 and the constitution — and the
   Files & Folders menu, named in Assumption 7 as the vocabulary's source, has always drawn Delete
   before Open In.)*
+
+  *(Superseded in part 2026-11-27 by constitution v8.0.0: Destroy is now the last section, so the two
+  rows that once listed it last match the order after all, and the Files & Folders menu draws Delete
+  after Open In and Properties. The third column stays an inventory; FR-047 states the order.)*
 
   *(Corrected 2026-08-15, second pass: the terminal row understated the menu twice. Its "Today"
   cell read "rest ungrouped", but `terminal-panel.tsx` already pushes three separators; and its

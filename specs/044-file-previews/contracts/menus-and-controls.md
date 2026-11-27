@@ -9,6 +9,10 @@ row and an exact `shapeOf` pin for each menu below; `panelActions` (`:247-272`) 
 
 Notation: **[D]** disabled when…, **[A]** absent when…, *(chord)* shows the bound chord.
 
+*(Amended 2026-11-27, maintainer's v1 review — 044 FR-012, FR-014, FR-015d and FR-035c as amended: Open Preview
+stays enabled while the file's preview is open and focuses it; the preview's route back is **Open in Editor** in
+both states; the copy variants sit in one **Copy as ▸** submenu after Copy.)*
+
 ---
 
 ## 1. Preview panel — header menu (FR-033)
@@ -17,11 +21,16 @@ Notation: **[D]** disabled when…, **[A]** absent when…, *(chord)* shows the 
 |---|---|
 | **Content** | *(none — Rename is absent, FR-030)* |
 | **Destroy** | **Close Panel** — verb *Close* (011 FR-030; `panelRemovalVerb`, `panel-placeholder.tsx:196`) |
-| **Navigate** | **Reveal File in Files & Folders** · **Open in OS Explorer** · **Open in Editor** / **Go to Editor** [A] binary provider · **Back** *(Alt+Left)* [D] no older entry · **Forward** *(Alt+Right)* [D] no newer entry · **Send to Tab ▸** · **Sync to ▸** |
+| **Navigate** | **Reveal File in Files & Folders** · **Open in OS Explorer** · **Open in Editor** (focuses the parent while parented) [A] binary provider · **Back** *(Alt+Left)* [D] no older entry · **Forward** *(Alt+Right)* [D] no newer entry · **Send to Tab ▸** · **Sync to ▸** |
 | **View & state** | **Refresh** · **Zoom ▸** (Zoom In, Zoom Out, Reset Zoom) · while the failure banner is up: **Try again**, **Copy details**, **Clear panel type** (030 FR-042c) |
 | *2026-09-16* **View & state** | **Refresh** · **Zoom ▸** · **Synchronise Scrolling** *(preview.toggleSyncScroll)* [A] binary provider — checked while on (§10) · then the failure-banner items |
 
 Never present: Rename, Reset Name, Save, Save As…, Revert, Reload from disk, Find.
+
+*Superseded in part 2026-11-27 by constitution v8.0.0 and the maintainer's v1 review: Close Panel
+moved to the end of the menu (Destroy is now last in every menu), and Send to Tab ▸ and Sync to ▸ left
+Navigate for the panel-level View & state group, beside Refresh and Zoom. The header comment of
+`panel-header-menu.ts` holds the current grouping.*
 
 **The failure-banner items do on a preview what they do on an editor**, through the preview's own
 paths. `PanelHeaderMenuArgs.editorFailure` is renamed `panelFailure` (true while the editor's **or**
@@ -46,9 +55,12 @@ Inserted into the existing editor shape (`panel-header-menu.ts:212-305`), Naviga
 
 | Item | State |
 |---|---|
-| **Open Preview** *(preview.open)* | [A] no **text** provider claims the file, no file on disk, or file outside the project (FR-001, FR-004, FR-073); [D] the provider is disabled (FR-062) **or** a preview of the file is open (FR-012) |
+| **Open Preview** *(preview.open)* | [A] no **text** provider claims the file, no file on disk, or file outside the project (FR-001, FR-004, FR-073); [D] the provider is disabled (FR-062). While a preview of the file is open it stays enabled and focuses it (FR-012, amended 2026-11-27) |
 | **Back** *(Alt+Left)* | [D] no older entry |
 | **Forward** *(Alt+Right)* | [D] no newer entry |
+
+*2026-11-27*: Send to Tab ▸ and Sync to ▸ now sit in the panel-level View & state group, not Navigate
+(§1's note); Open Preview, Back and Forward stay in Navigate.
 
 *2026-09-16 (FR-122b)* — **View & state**, after **Zoom ▸** and before the failure-banner items:
 **Synchronise Scrolling** *(preview.toggleSyncScroll)* — [A] exactly where Open Preview is absent;
@@ -67,8 +79,8 @@ as in §2, checked while on (§10).
 | Section | Items |
 |---|---|
 | **Contextual** — only when right-clicking a followable link **with no text selected** | **Open Link** *(Ctrl+Enter)* · **Copy Link Address** |
-| **Content** — [A] when the provider's `textSelection` is false | **Copy** [D] nothing selected · **Copy as Rich Text** [D] nothing selected · **Copy as Plain Text** [D] nothing selected · **Select All** |
-| **Navigate** — [A] binary provider | **Open in Editor** / **Go to Editor** |
+| **Content** — [A] when the provider's `textSelection` is false | **Copy** [D] nothing selected · **Copy as ▸** (Rich Text, Plain Text) [D] nothing selected · **Select All** |
+| **Navigate** — [A] binary provider | **Open in Editor** |
 | *2026-09-16* **View & state** — [A] binary provider | **Synchronise Scrolling** — checked while on (§10, FR-122b). Present whether or not a link or a selection is under the pointer |
 
 - Over an `inert` link, the Contextual section is absent (FR-095).
@@ -140,7 +152,7 @@ FR-023/FR-024) and needs no change to `status-strip-fit.ts`.
 | [A] no text provider claims the file / no file / outside project | not rendered | — |
 | [D] provider disabled | token `preview`, `disabled`, title *Markdown previews are turned off — Preferences → Editor → Previews* (the provider's `displayName`) | — |
 | no preview open | `IconButton` token `preview`, `aria-pressed="false"`, title *Open Preview* | `preview.open` |
-| preview open (any window) | `aria-pressed="true"`, title *Go to Preview* | focus the preview (FR-014); never closes it |
+| preview open (any window) | `aria-pressed="true"`, title *Open Preview* | focus the preview (FR-014); never closes it |
 
 The pressed state reads `preview-open-store` (`throng:preview:openChanged`), so it follows a preview
 opened or closed in another window.
@@ -158,7 +170,7 @@ readouts.** Controls group holds one button:
 | Preview is | Button | Click |
 |---|---|---|
 | standalone | token `editorPanel`, `aria-pressed="false"`, *Open in Editor* | open an editor to the preview's **left** (FR-015c) |
-| parented | token `editorPanel`, `aria-pressed="true"`, *Go to Editor* | focus the parent, its tab and window (FR-015d) |
+| parented | token `editorPanel`, `aria-pressed="true"`, *Open in Editor* | focus the parent, its tab and window (FR-015d) |
 | binary provider | — the status bar is **not rendered** (FR-015e) | — |
 
 **One readout** *(iteration 2026-09-15, FR-118 — supersedes "No readouts" above for this readout only)*:
@@ -175,14 +187,14 @@ hover and focus separately; the chrome resolves them in that order.
 - Text only — no control, so Principle VI's menu-item rule adds nothing, and no icon token.
 - The editor strip's readout class; a target wider than the space left beside the controls group is
   clipped with an ellipsis. The element's text is the whole target, and the controls group is measured
-  whole as before, so *Open in Editor* / *Go to Editor* is never hidden by it.
+  whole as before, so *Open in Editor* is never hidden by it.
 - Rendered only inside the bar, which already follows `editor.showStatusBar`; with the bar hidden the
   link's tooltip (FR-094) is the surface.
 - An image inside a followable link: the readout names the link, and the image carries no tooltip of its
   own (FR-120, security-policy Layer 2).
 
 **Two controls** *(2026-09-16, FR-122c — partly supersedes "Controls group holds one button")*: the
-**scroll-sync toggle** (§10), immediately before the Open in Editor / Go to Editor button, then that
+**scroll-sync toggle** (§10), immediately before the Open in Editor button, then that
 button. Both on every text-provider preview, standalone or parented; the group is measured whole, so the
 readout never pushes either out.
 
@@ -214,7 +226,7 @@ the window's config store.
 | Preview body menu | View & state, last section (§4) | as above |
 | Preview header menu | View & state, after *Zoom ▸*, before the banner items (§1) | as above |
 | Editor status bar | immediately before the preview button (§7) | `IconButton` token `syncScroll`, `aria-pressed` = setting, `title` *Synchronise Scrolling* + ` (<chord>)` when bound, test id `editor-sync-scroll-<panelId>` |
-| Preview status bar | immediately before Open in Editor / Go to Editor (§8) | as above, test id `preview-sync-scroll-<panelId>` |
+| Preview status bar | immediately before Open in Editor (§8) | as above, test id `preview-sync-scroll-<panelId>` |
 | Key binding | editor or preview focused | ships unbound; acts only where a surface above is present |
 
 **Presence** (FR-122a): an editor whose preview affordance is not `absent`; every `text`-provider

@@ -34,12 +34,22 @@ the vocabulary was **derived from** — already ships Delete **before** Open In.
 item is in a section of its own") and AS-4 ("its destructive items are separated from the rest") are
 satisfied by the separation, which says nothing about position.
 
+*Superseded in part 2026-11-27 by constitution v8.0.0 (the maintainer's v1 review): Destroy is now the
+last section of every menu, after Application. The inventory reading still holds; the order it defers
+to has changed, and the tables below show the new one.*
+
 **The cog menu's row could not be satisfied at all (**resolved 2026-08-15** — FR-052 and US5 AS-5 were both corrected; the cog menu is one undivided Application section)**; see the plan's Complexity Tracking. All five items are
 **Application** by FR-047's own table and by the constitution's, and FR-050 permits a divider only at a
 section boundary. This contract implements one Application section and **no divider**, and the
 requirement is raised for amendment before US5 is marked done.
 
 ## 3. Adjudication, menu by menu
+
+*(Amended 2026-11-27, maintainer's v1 review: inside Content, **Undo** and **Redo** form a group of their own
+directly below the clipboard group (Cut, Copy, Copy as ▸, Paste, and Select All where it sits with them), on every
+menu that offers them, so a divider now separates Paste or Select All from Undo. The Files & Folders menu keeps
+Rename in the clipboard group. Copy variants sit in one **Copy as ▸** submenu after Copy. Supersedes the single
+undivided Content group in §3.1 and the editor body row below.)*
 
 `✓` = the item is already in this position; `→` = it moves between sections (permitted — FR-053 protects
 order *within* a section); **bold** = added by this feature.
@@ -50,14 +60,17 @@ order *within* a section); **bold** = added by this feature.
 |---|---|---|
 | Content | Rename, Cut, Copy, Paste, Undo, Redo | ✓ |
 | Create | New File, New Folder | ✓ |
-| Destroy | Delete | ✓ |
 | Navigate | Open In *(+ **Terminal** in its submenu)*, Copy Path, **Collapse All Children**, **Expand All Children** | ✓ |
 | View & state | Hide in this project | ✓ |
+| Destroy | Delete | ✓ *(last since 2026-11-27)* |
 
 **Zero movement.** The four hand-pushed separators become the four derived boundaries and land in the
 same places — which is the evidence that the vocabulary really was derived from this menu. The two
 subtree items follow Copy Path, in FR-047's own listed order, and are drawn **only for a folder**
 (FR-038: a file can never acquire children, so a disabled row would be permanently dead).
+
+*2026-11-27, constitution v8.0.0: Delete moved from after Create to the end of the menu, after
+Properties (067 FR-128). The project root offers no Delete and still ends on Properties.*
 
 ### 3.2 Terminal content menu — *conforms today; one separator disappears*
 
@@ -103,11 +116,27 @@ its current chord via `firstBinding(keybindings, 'navigate.gotoLine')`, supplied
 | Navigate | Reveal File in Files & Folders, Open in OS Explorer, Send to Tab, Sync to | ✓ |
 | View & state | Zoom, Try again, Copy details, Clear panel type, Refresh / redraw terminal | → |
 
+*Superseded 2026-11-27 by constitution v8.0.0 and the maintainer's v1 review, which asked for the
+panel-level rows in one group and Close / Destroy Panel last. The table above is 033's shape. The
+menu now draws, in order (the header comment of `panel-header-menu.ts` is authoritative):*
+
+| Group | Section | Items |
+|---|---|---|
+| The document | Content | Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All |
+| The document's file | Navigate | Find in File Explorer, Open in OS Explorer, Open in OS Default Program, Open Preview / Open in Editor, Find…, Back, Forward, Print… |
+| This panel type only | View & state, group `panelType` | Go to Heading / Page / Row…, Edit Long Cells in Dialog, Wrap, Lock First Row / Column |
+| The panel itself | View & state | Split ▸, Send to Tab, Sync to, Refresh, Reload, Focus Mode, Zoom, Refresh / redraw terminal, Synchronise Scrolling, Flag, Try again, Copy details, Clear panel type |
+| Closing it | Destroy | Close Panel / Destroy Panel, last |
+
+*Split, Send to Tab and Sync to sit with the panel-level rows on the header. Split stays Create in the
+panel content menus (048).*
+
 *048 (FR-016, FR-043): panel Rename (Content) and Reset Name (View & state) are removed with panel
 renaming; the Split submenu joins in Create, and every panel content menu carries it too
 (`specs/048-panel-splitting/contracts/menus-commands-controls.md`).*
 
-The biggest restructure in the feature. *Destroy Panel* moves from last to the middle, which is the
+The biggest restructure in the feature. *Destroy Panel* moved from last to the middle *(and back to
+last on 2026-11-27, above)*, which is the
 fixed order's consequence and the same shape the Files & Folders menu already has. *Reset Name* leaves
 Rename's side for View & state, where the constitution names it explicitly. The editor and terminal
 conditionals are unchanged — an absent item is simply absent from its group, and an empty group draws no
@@ -118,10 +147,11 @@ divider.
 | Section | Items | |
 |---|---|---|
 | Content | Rename | ✓ |
-| Destroy | Destroy Tab, Destroy other tabs | → |
 | Navigate | Sync to | → |
+| Destroy | Destroy Tab, Destroy other tabs | → |
 
-*Sync to* moves from second to last. It is the constitution's own example of a Navigate item.
+*Sync to* is the constitution's own example of a Navigate item. *(2026-11-27, constitution v8.0.0:
+the Destroy rows moved after Sync to, ending the menu. Under 033 Sync to moved from second to last.)*
 
 ### 3.6 Cog menu — *5 items, no dividers today*
 
