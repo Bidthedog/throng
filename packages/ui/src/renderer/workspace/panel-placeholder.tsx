@@ -117,6 +117,7 @@ import { BackForwardButtons } from '../navigation/back-forward-buttons.js';
 import { usePanelHistory } from '../navigation/history-store.js';
 import { navigatePanelHistory } from '../navigation/navigate-history.js';
 import { purgePanelHistory } from '../navigation/purge-history.js';
+import { keepTabInPanel } from '../common/panel-tab-stop.js';
 
 const EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
 
@@ -675,6 +676,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
        * element's pointer-down: the page is another document. Focus moving into the frame is told as a bubbling
        * `focusin` from the frame element (`providers/html/frame-input.ts`, from the frame document's own focusin), so that activates the panel instead.
        */
+      // T11 — Tab and Shift+Tab never move focus out of the panel on their own.
+      onKeyDown={keepTabInPanel}
       onFocus={(e) => {
         if (!(e.target instanceof HTMLIFrameElement)) return;
         ws.setActivePanel(tabId, panel.id);

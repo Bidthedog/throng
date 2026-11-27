@@ -159,6 +159,9 @@ Every move between panels, panes and menus has a chord, so you can leave the mou
 3. Press **Ctrl+Shift+Alt+B**, **N** or **M** to jump to Projects, the workspace or the File Explorer.
 4. Press **Shift+F10** to open the menu for whatever has focus.
 
+**Tab** and **Shift+Tab** move between the controls of the panel you are in and stop at its edges; they never
+take you to another panel.
+
 See [Focus & Zoom](../../docs/key-bindings.md#focus--zoom) for the rest.
 
 ## Close a panel
