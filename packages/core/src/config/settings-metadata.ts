@@ -284,7 +284,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'appearance.theme',
     label: 'Theme',
-    description: 'The active appearance theme applied across the whole app.',
+    description: 'The colour theme throng draws every window in, chosen in the Themes tab.',
     group: 'General',
     subgroup: 'Appearance',
     control: 'select', // options are the themes on disk (populated at runtime)
@@ -596,7 +596,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.openOnClick',
     label: 'Open files with',
-    description: 'Which file-tree click opens a file into the last active editor.',
+    description: 'Whether one click or a double click on a file in File Explorer opens it, or neither does.',
     group: 'File Explorer',
     control: 'select',
     allowedValues: ['single', 'double', 'none'],
@@ -651,7 +651,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'explorer.excludeGlobs',
     label: 'Excluded globs',
-    description: 'Root-relative glob patterns hiding entries from the file tree.',
+    description: 'Files and folders File Explorer hides, as glob patterns relative to the project folder.',
     group: 'File Explorer',
     control: 'array',
     itemControl: 'text',
@@ -680,14 +680,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.openUnsupportedInOs',
     label: 'Open unsupported files in the OS',
     description:
-      'Open a file throng cannot show as text in your OS default program, when its preview is off.',
+      'Open a file throng cannot show in your OS default program, instead of reporting it.',
     group: 'File Explorer',
     control: 'toggle',
   },
   {
     key: 'explorer.dragCopyModifier',
     label: 'Copy-drag modifier',
-    description: 'The modifier key that makes a file-tree drag copy instead of move.',
+    description: 'The key you hold while dragging in File Explorer to copy instead of move.',
     group: 'File Explorer',
     control: 'select',
     allowedValues: DRAG_MODIFIERS,
@@ -695,7 +695,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'explorer.dragMoveModifier',
     label: 'Move-drag modifier',
-    description: 'The modifier key that forces a file-tree drag to move.',
+    description: 'The key you hold while dragging in File Explorer to move instead of copy.',
     group: 'File Explorer',
     control: 'select',
     allowedValues: DRAG_MODIFIERS,
@@ -732,7 +732,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.flavours',
     label: 'Custom terminal flavours',
     description:
-      'User-defined shells shown in the Flavour dropdown (id, label, file, args, default shell arguments).',
+      'Shells you add to the Flavour dropdown, each with its own program and arguments.',
     group: 'Terminal',
     // A structured RECORD table — one row per flavour, one cell per field (019, FR-018/#67).
     //
@@ -754,7 +754,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'terminals.disabledBuiltins',
     label: 'Hidden built-in flavours',
-    description: 'Built-in flavour ids to hide from the Flavour dropdown.',
+    description: 'Built-in shells to leave out of the Flavour dropdown.',
     group: 'Terminal',
     // A MULTI-SELECT over the built-ins this machine actually detected (019, FR-016/FR-017).
     //
@@ -773,7 +773,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.defaultShellArguments',
     label: 'Default shell arguments',
     description:
-      'Shell arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).',
+      'Arguments a shell gets every time it starts, by flavour, such as -NoLogo for pwsh.',
     group: 'Terminal',
     control: 'map',
     columns: [{ label: 'Arguments', control: 'text' }],
@@ -802,7 +802,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.autoSaveDebounceMs',
     label: 'Auto-save delay',
-    description: 'How long after typing stops an auto-save writes.',
+    description: 'How long after you stop typing auto-save writes the file.',
     group: 'Editor',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in ms, shown in s.
@@ -820,7 +820,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.saveAllScope',
     label: 'Save-All scope',
-    description: 'The scope a Ctrl+Shift+S Save-All covers.',
+    description: 'Which editors Save All saves: those in this tab, in this project, or in the whole window.',
     group: 'Editor',
     control: 'select',
     allowedValues: ['tab', 'project', 'all'],
@@ -838,7 +838,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.fallbackEncoding',
     label: 'Fallback encoding',
     description:
-      'The code page for a file with no BOM that is not valid UTF-8 or UTF-16 (what others call ANSI).',
+      'The code page throng reads a file in when it is not UTF-8 or UTF-16, often called ANSI.',
     group: 'Editor',
     control: 'select',
     allowedValues: [...CODE_PAGE_IDS],
@@ -860,7 +860,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // there beside it, still typed, still digit-grouped, for anyone who wants an exact number.
     label: 'Max open file size',
     description:
-      'Files larger than this report "too large" instead of opening.',
+      'The largest file an editor opens. A larger file shows a notice instead.',
     group: 'Editor',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in bytes, shown in MB.
@@ -888,7 +888,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.projectPathDisplay',
     label: 'Project editor path display',
-    description: 'Show a project editor\'s pill as the full path or the file name alone.',
+    description: "Show a project editor's header as the file's path in the project, or its name alone.",
     group: 'Editor',
     control: 'select',
     allowedValues: ['full', 'name'],
@@ -896,7 +896,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.subWorkspacePathDisplay',
     label: 'Sub-workspace editor path display',
-    description: 'Show a sub-workspace editor\'s pill as the full path or the file name alone.',
+    description: "Show a sub-workspace editor's header as the file's full path, or its name alone.",
     group: 'Editor',
     control: 'select',
     allowedValues: ['full', 'name'],
@@ -904,7 +904,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.warnOnMissingFile',
     label: 'Warn on missing file',
-    description: 'Report an editor whose file is missing or deleted.',
+    description: 'Raise a notice for an editor whose file is missing or has been deleted.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -930,7 +930,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.whitespaceHoverNames',
     label: 'Editor whitespace hover names',
     description:
-      'With View Whitespace on, resting the pointer on a marker names its character in a popover.',
+      "Name a whitespace marker's character in a popover when the pointer rests on it.",
     group: 'Editor',
     control: 'toggle',
   },
@@ -987,7 +987,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.showStatusBar',
     label: 'Show panel status bar',
     description:
-      'Off hides the bar in editor and preview panels, whatever the two below. Terminals have their own.',
+      'Show the status bar along the bottom of editor and preview panels.',
     group: 'Editor',
     subgroup: 'Status Bar',
     control: 'toggle',
@@ -996,7 +996,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.statusBar.showCursorPosition',
     label: 'Show cursor position',
     description:
-      'The caret’s line and column, or the source lines a preview selection spans.',
+      "Show the caret's line and column, or the lines a preview selection spans, in the status bar.",
     group: 'Editor',
     subgroup: 'Status Bar',
     control: 'toggle',
@@ -1005,7 +1005,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.statusBar.showCounts',
     label: 'Show character and word counts',
     description:
-      'The document’s lines, characters and words, and how many characters are selected.',
+      "Show the document's line, character and word counts in the status bar.",
     group: 'Editor',
     subgroup: 'Status Bar',
     control: 'toggle',
@@ -1077,7 +1077,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.existenceCheckTimeoutMs',
     label: 'Link resolution timeout',
     description:
-      'How long to resolve a link you follow or its Link menu. Raise it for a slow network; no restart.',
+      "How long throng looks for a link's target when you follow it or open its Link menu.",
     group: 'Editor',
     subgroup: 'Links',
     control: 'slider',
@@ -1093,7 +1093,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.protocolAllowlist',
     label: 'Allowed link protocols',
     description:
-      'URI schemes, besides web links, shown as links in terminals and editors, such as mailto or slack.',
+      'Link types besides web addresses that terminals and editors make clickable, such as mailto.',
     group: 'Editor',
     subgroup: 'Links',
     control: 'array',
@@ -1108,7 +1108,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.links.knownFileExtensions',
     label: 'File extensions that end a spaced path',
     description:
-      'Extensions that end an unquoted path with spaces, in terminals and editors. Any case, dot optional.',
+      'Extensions that mark where an unquoted path with spaces ends, in terminals and editors.',
     group: 'Editor',
     subgroup: 'Links',
     control: 'array',
@@ -1190,7 +1190,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.shellIntegration',
     label: 'Shell integration',
     description:
-      'Ask shells throng cannot watch from outside to report their working directory.',
+      'Let PowerShell and Git Bash report their working directory, so throng follows your cd.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1213,7 +1213,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.defaultRememberCommand',
     label: 'Remember the last running command by default',
     description:
-      'New terminals remember their running command; a Claude Code session as a resume of that session.',
+      'Tick “Remember the last running command” on new terminal panels.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1265,7 +1265,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'terminals.formHistory.maxEntries',
     label: 'Terminal form values remembered',
-    description: 'How many values each field keeps per terminal type.',
+    description: 'How many past values each terminal form field remembers, per terminal type.',
     group: 'Terminal',
     control: 'slider',
     // 077 FR-001, FR-005 — stored in count.
@@ -1304,7 +1304,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.advertiseHyperlinks',
     label: 'Tell programs that links are supported',
     description:
-      'New terminals get FORCE_HYPERLINK=1 unless you set it. Terminals already running are not changed.',
+      'Tell programs in new terminals that they can print clickable links.',
     group: 'Terminal',
     control: 'toggle',
   },
@@ -1365,7 +1365,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.processExited',
     label: 'Program exited',
     description:
-      'Mark a terminal whose program ended without you ending it.',
+      'Mark a terminal for attention when its program ends without you ending it.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1375,7 +1375,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.commandFinished',
     label: 'Command finished',
     description:
-      'Mark a terminal when its foreground command ends, up to two Command tracking intervals late.',
+      'Mark a terminal for attention when the command running in it finishes.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1385,7 +1385,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.bell',
     label: 'Bell',
     description:
-      'Mark a terminal when a program rings the terminal bell. Exact: the program asked for it.',
+      'Mark a terminal for attention when a program in it rings the bell.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1395,7 +1395,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.notification',
     label: 'Program notification',
     description:
-      'Mark a terminal when a program sends a desktop notification request through it.',
+      'Mark a terminal for attention when a program in it sends a desktop notification.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1405,7 +1405,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.progressEnded',
     label: 'Progress ended',
     description:
-      'Mark a terminal when a program reports that its progress completed or failed.',
+      'Mark a terminal for attention when a program in it reports its progress done or failed.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1415,7 +1415,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.unseenOutput',
     label: 'Unseen output',
     description:
-      'Mark a terminal that prints output while it is not the focused panel.',
+      'Mark a terminal for attention when it prints output while you are working elsewhere.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1425,7 +1425,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.attention.signals.outputQuiet',
     label: 'Output went quiet',
     description:
-      'Mark a terminal whose output stops for the quiet time below, after it printed while not focused.',
+      'Mark a terminal for attention when it prints and then stays silent for the quiet time below.',
     group: 'Terminal',
     subgroup: 'Attention',
     control: 'toggle',
@@ -1727,7 +1727,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.useExcludeGlobs',
     label: 'New panels use the exclusions',
     description:
-      'Whether a new Find in Files panel starts with its exclusions toggle on.',
+      'Start each new Find in Files panel with its exclusions toggle on.',
     group: 'Search',
     subgroup: 'Find in Files',
     control: 'toggle',
@@ -1794,7 +1794,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'notifications.os',
     label: 'Operating system notifications',
     description:
-      'Allow throng to send OS notifications at all.',
+      "Let throng send OS notifications. Off sends none, whatever each type's OS Notify says.",
     group: 'Notifications',
     control: 'toggle',
   },

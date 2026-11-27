@@ -325,6 +325,28 @@ describe('the user guide covers the app (080)', () => {
   };
   const leads = (file: string): Map<string, string> =>
     new Map([...sectionsByKey(file)].map(([key, s]) => [key, s.lead]));
+  /**
+   * The maintainer's v1 review (#732): a description says in one line what a setting does, and its Help section
+   * says the rest. Each keyed section, by key, with how many prose paragraphs it holds besides its lead and its
+   * `**Default:** … · **Values:** …` line.
+   */
+  const sectionDetail = (file: string): Map<string, number> => {
+    const lines = read(join(DOCS, file)).split(/\r?\n/);
+    const found = new Map<string, number>();
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!/^#{2,6} /.test(lines[i] as string)) continue;
+      const at = isBreadcrumb((lines[i + 2] ?? '').trim()) ? i + 4 : i + 2;
+      const key = /^`([^`]+)`$/.exec((lines[at] ?? '').trim());
+      if (!key) continue;
+      let end = at + 1;
+      while (end < lines.length && !/^#{1,6} /.test(lines[end] as string)) end += 1;
+      const detail = paragraphs(lines.slice(at + 1, end).join('\n'))
+        .slice(1)
+        .filter((p) => !/^\*\*Default:\*\*/.test(p) && isProse(p));
+      found.set(key[1] as string, detail.length);
+    }
+    return found;
+  };
   const REFERENCES = [
     { file: 'preferences.md', what: 'setting', registry: SETTINGS_METADATA },
     { file: 'key-bindings.md', what: 'key binding', registry: KEYBINDINGS_METADATA },
@@ -339,6 +361,13 @@ describe('the user guide covers the app (080)', () => {
       const differ = ref.registry.filter((d) => lead.has(d.key) && lead.get(d.key) !== d.description).map((d) => d.key);
       expect(differ, `sections whose lead paragraph is not the ${ref.what}'s description`).toEqual([]);
     });
+
+    if (ref.what === 'setting') {
+      it('explains every setting in docs/preferences.md beyond its description and its Default line', () => {
+        const thin = [...sectionDetail(ref.file)].filter(([, detail]) => detail === 0).map(([key]) => key);
+        expect(thin, 'setting sections with no paragraph besides the lead and the Default/Values line').toEqual([]);
+      });
+    }
 
     it(`opens every ${ref.what}'s section in docs/${ref.file} with a bold breadcrumb (080 FR-059)`, () => {
       const crumbless = [...sectionsByKey(ref.file)].filter(([, s]) => !s.crumb).map(([key]) => key);

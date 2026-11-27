@@ -36,7 +36,7 @@ export const htmlProvider: PreviewProviderDescriptor = {
       leaf: 'safeSources',
       label: 'Safe preview sources',
       description:
-        'https sources for an HTML preview\'s stylesheets, fonts and images. Project Settings can add more.',
+        'Sites an HTML preview may load stylesheets, fonts and images from. Project Settings can add more.',
       control: 'list',
       default: SHIPPED_HTML_SAFE_SOURCES,
       // FR-072c — the editor refuses an entry that is not a source, in Project Settings' words.

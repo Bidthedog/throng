@@ -24,5 +24,5 @@ export const svgProvider: PreviewProviderDescriptor = {
   filesNoun: 'SVG files',
   flowingDocument: false,
   maxFileBytesSetting: 'maxFileBytes',
-  settings: [maxFileBytesSetting('SVG', 10 * 1024 * 1024), transparencyHatchSetting('SVGs')],
+  settings: [maxFileBytesSetting('SVG files', 10 * 1024 * 1024), transparencyHatchSetting('SVGs')],
 };

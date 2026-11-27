@@ -296,7 +296,7 @@ export function previewSettingsDescriptors(
       out.push({
         key: providerKey(provider.id, 'openTarget'),
         label: `${provider.displayName}: Open previews in`,
-        description: `Where a ${provider.displayName} preview opens: reuse the last one used in this tab, or a new panel.`,
+        description: `Where ${provider.displayName} previews open: reuse the last one used in this tab, or a new panel.`,
         group: GROUP,
         subgroup: SUBGROUP,
         subsection,

@@ -34,6 +34,7 @@ import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
 import type { FieldDescriptor } from '../../src/config/metadata.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../../src/preview/providers/index.js';
 import { THEME_TOKEN_COPY } from '../../src/config/theme-copy.js';
+import { settingHelp } from './preferences-help.js';
 
 const CURSOR_KEY = 'editor.statusBar.showCursorPosition';
 const COUNTS_KEY = 'editor.statusBar.showCounts';
@@ -103,15 +104,14 @@ describe('the readout toggles are two, not five (FR-032)', () => {
 describe('editor.showStatusBar says what the bar holds and what hiding it does (FR-034)', () => {
   // 044 FR-118f (#637 MT-02) supersedes FR-034's inventory: the bar is a preview's too, and the description is one
   // short sentence naming the panels it covers — and that terminals have their own — rather than listing each control.
+  // #732 — the description says what ticking it does, in one line; the rest is in its Help section.
   it('names the panels whose bar it is, and points terminals at their own setting', () => {
-    const text = descriptor(BAR_KEY).description.toLowerCase();
-    expect(text).toContain('editor and preview panels');
-    expect(text).toContain('terminals have their own');
-    expect(text.length, 'kept short').toBeLessThan(160);
+    expect(descriptor(BAR_KEY).description.toLowerCase()).toContain('editor and preview panels');
+    expect(settingHelp(BAR_KEY).toLowerCase()).toContain('terminals have a bar of their own');
   });
 
   it('states that hiding the bar overrides the individual settings', () => {
-    const text = descriptor(BAR_KEY).description.toLowerCase();
+    const text = settingHelp(BAR_KEY).toLowerCase();
     // The requirement is that the sentence exists, not its wording: hiding must be said to beat
     // whatever the other two say. Without this the user reads two toggles that appear to disagree
     // with a third and has no way to know which wins.

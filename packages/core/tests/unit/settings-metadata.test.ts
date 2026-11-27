@@ -10,6 +10,7 @@ import {
   leavesOf,
   leavesOfDeclared,
 } from '../../src/config/metadata.js';
+import { settingHelp } from './preferences-help.js';
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
@@ -138,9 +139,12 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
 
 describe('terminals.defaultRememberCommand description (068 US5, FR-051, FR-052)', () => {
   it('says a running Claude Code session is remembered as a resume of that session, and nothing about its view', () => {
+    // #732 — the description names the tick it sets; the Claude Code detail lives in its Help section.
     const d = SETTINGS_METADATA.find((x) => x.key === 'terminals.defaultRememberCommand');
-    expect(d?.description).toMatch(/Claude Code session/);
-    expect(d?.description).toMatch(/resume of that session/);
+    const help = settingHelp('terminals.defaultRememberCommand');
+    expect(help).toMatch(/Claude Code session/);
+    expect(help).toMatch(/resume of that session/);
+    expect(help).not.toMatch(/restor|screen|conversation|scrollback|view/i);
     expect(d?.description).not.toMatch(/restor|screen|conversation|scrollback|view/i);
   });
 });
