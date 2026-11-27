@@ -23,7 +23,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@codemirror/search": "^6.7.2",
+    "@codemirror/search": "^6.7.3",
     "@codemirror/state": "^6.7.6",
     "picomatch": "^4.0.7"
   },
