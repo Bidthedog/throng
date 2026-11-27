@@ -168,9 +168,20 @@ function clearPreviousLayout(table: HTMLTableElement): void {
   }
 }
 
+/**
+ * A drag moves the border between `columnIndex` and the column after it, and only that border: the two columns trade
+ * width, so the table keeps the width it had (FR-060) and the border stays under the pointer.
+ *
+ * A table that fits draws wider than its `<col>` widths add up to (`fairColumnWidths` stops each column at its
+ * max-content, and the `width: 100%` fixed-layout table shares the rest out in proportion), so a drag that started
+ * from the `<col>` width jumped on the first move, and every later move was shared out again. The drag starts from
+ * the widths as drawn — one read of the header row, at pointerdown — and writes those to every `<col>`, so nothing is
+ * left over to share out. A move only writes (Principle XII).
+ */
 function attachDrag(
   handle: HTMLElement,
-  col: HTMLTableColElement,
+  table: HTMLTableElement,
+  cols: readonly HTMLTableColElement[],
   tableIndex: number,
   columnIndex: number,
   options: TableLayoutOptions,
@@ -181,18 +192,30 @@ function attachDrag(
     const doc = handle.ownerDocument;
     const win = doc.defaultView;
     const startX = e.clientX;
-    const startWidth = col.getBoundingClientRect().width || parseFloat(col.style.width) || 0;
+    const drawn = [...(table.rows[0]?.cells ?? [])].map((cell) => cell.getBoundingClientRect().width);
+    const starts = cols.map((col, i) => (drawn[i]! > 0 ? drawn[i]! : parseFloat(col.style.width) || 0));
+    cols.forEach((col, i) => (col.style.width = `${starts[i]}px`));
+    const left = starts[columnIndex]!;
+    const right = starts[columnIndex + 1]!;
+    // Neither column is dragged below `8ch`, or below what it already was if a reader made it narrower than that.
+    const floor = laidOut.get(table)?.minLegiblePx ?? 1;
+    const lowest = -(left - Math.min(floor, left));
+    const highest = right - Math.min(floor, right);
 
-    const onMove = (moveEvent: PointerEvent): void => {
-      const next = Math.max(1, Math.round(startWidth + (moveEvent.clientX - startX)));
-      col.style.width = `${next}px`;
+    const set = (index: number, width: number): void => {
+      cols[index]!.style.width = `${width}px`;
       let forTable = options.handSet.get(tableIndex);
       if (!forTable) {
         forTable = new Map();
         options.handSet.set(tableIndex, forTable);
       }
-      forTable.set(columnIndex, next);
-      options.onResize?.(tableIndex, columnIndex, next);
+      forTable.set(index, width);
+      options.onResize?.(tableIndex, index, width);
+    };
+    const onMove = (moveEvent: PointerEvent): void => {
+      const dx = Math.min(highest, Math.max(lowest, moveEvent.clientX - startX));
+      set(columnIndex, left + dx);
+      set(columnIndex + 1, right - dx);
     };
     const onUp = (): void => {
       win?.removeEventListener('pointermove', onMove);
@@ -211,7 +234,7 @@ function insertHandles(table: HTMLTableElement, colgroup: HTMLTableColElement[],
     const handle = table.ownerDocument.createElement('div');
     handle.className = RESIZE_HANDLE_CLASS;
     (cell as HTMLElement).style.position = 'relative';
-    attachDrag(handle, colgroup[columnIndex]!, tableIndex, columnIndex, options);
+    attachDrag(handle, table, colgroup, tableIndex, columnIndex, options);
     cell.append(handle);
   });
 }

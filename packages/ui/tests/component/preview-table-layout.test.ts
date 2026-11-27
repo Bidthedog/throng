@@ -319,6 +319,55 @@ describe('applyTableLayout — resize handles (FR-063/064)', () => {
   });
 });
 
+/**
+ * T2 (v1 review) — "when I resize table cells, the handle jumps; it should stay under the cursor". A table that fits
+ * leaves a surplus (`fairColumnWidths` never widens a column past its max-content), and a `width: 100%`,
+ * `table-layout: fixed` table hands that surplus back to every column in proportion to its `<col>` width. jsdom has no
+ * layout, so the browser is played by a stub that does exactly that: each cell draws at its column's share of the
+ * table, and the table widens only when the columns add up to more than its host.
+ */
+describe('a drag keeps the border under the pointer (T2, FR-063)', () => {
+  function drawLikeABrowser(t: HTMLTableElement, hostWidth: number): () => number[] {
+    const drawn = (): number[] => {
+      const cols = [...t.querySelectorAll<HTMLElement>(':scope > colgroup > col')].map((c) => parseFloat(c.style.width) || 0);
+      const sum = cols.reduce((a, b) => a + b, 0);
+      const tableWidth = t.style.width === '100%' ? Math.max(hostWidth, sum) : parseFloat(t.style.width) || sum;
+      return cols.map((w) => (sum > 0 ? (w * tableWidth) / sum : 0));
+    };
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect(this: Element) {
+      const widths = drawn();
+      const index = this.tagName === 'COL' ? [...this.parentElement!.children].indexOf(this) : (this as HTMLTableCellElement).cellIndex;
+      if ((this.tagName === 'COL' || this.tagName === 'TD' || this.tagName === 'TH') && t.contains(this)) {
+        const left = widths.slice(0, index).reduce((a, b) => a + b, 0);
+        return new DOMRect(left, 0, widths[index] ?? 0, 20);
+      }
+      return new DOMRect(0, 0, 0, 0);
+    });
+    /** Each column border's x, left to right. */
+    return () => drawn().map((_, i, all) => all.slice(0, i + 1).reduce((a, b) => a + b, 0));
+  }
+
+  it.each([40, -40])('the border the reader drags moves by exactly the pointer\'s %i px', (dx) => {
+    const t = table([['a', 'b', 'c'], ['1', '2', '3']]);
+    const host = mount(t, 600);
+    applyTableLayout(host, options(stubMeasure([{ min: 20, max: 100 }, { min: 20, max: 150 }, { min: 20, max: 100 }])));
+    const borders = drawLikeABrowser(t, 600);
+    const before = borders();
+
+    const handle = t.rows[0]!.cells[0]!.querySelector<HTMLElement>(`.${RESIZE_HANDLE_CLASS}`)!;
+    handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: before[0]!, bubbles: true }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: before[0]! + 1, bubbles: true }));
+    expect(borders()[0], 'one pixel of travel moves the border one pixel, with no jump').toBeCloseTo(before[0]! + 1, 0);
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: before[0]! + dx, bubbles: true }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: before[0]! + dx, bubbles: true }));
+
+    const after = borders();
+    expect(after[0], 'the dragged border sits under the pointer').toBeCloseTo(before[0]! + dx, 0);
+    expect(after[2], 'the table still fills its host, no wider (FR-060)').toBeCloseTo(600, 0);
+    expect(after[1], 'the border beyond the neighbour stays where it was').toBeCloseTo(before[1]!, 0);
+  });
+});
+
 describe('relayoutTables — a resize re-shares, it never re-measures (Principle XII, MT-07)', () => {
   const widthsOf = (t: HTMLTableElement): number[] =>
     [...t.querySelectorAll<HTMLElement>(':scope > colgroup > col')].map((c) => parseFloat(c.style.width));

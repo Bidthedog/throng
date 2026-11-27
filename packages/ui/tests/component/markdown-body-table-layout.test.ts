@@ -141,8 +141,14 @@ describe('a body redrawn while it has no box (081 FR-020, FR-021)', () => {
   /** Called on every layout read the stubs answer; T024 counts the ones a browser would have to lay out for. */
   let onLayoutRead: () => void = () => {};
 
+  const colWidthsOf = (colgroup: Element): number[] => [...colgroup.children].map((c) => parseFloat((c as HTMLElement).style.width) || 0);
   const colWidths = (host: HTMLElement): number[] =>
     [...host.querySelectorAll<HTMLElement>('table > colgroup > col')].map((c) => parseFloat(c.style.width));
+  /** A `width: 100%` fixed-layout table shares any width its columns leave over out among them, in proportion. */
+  const drawnWidths = (cols: readonly number[]): number[] => {
+    const sum = cols.reduce((a, b) => a + b, 0);
+    return cols.map((w) => (sum > 0 ? (w * Math.max(800, sum)) / sum : 0));
+  };
   /** What `display: none` covers in the shipped CSS: a hidden block, a collapsed callout's body, a closed `<details>`. */
   const boxless = (el: Element): boolean =>
     !shown || el.closest('[hidden], [data-callout-collapsed] > [data-callout-body], details:not([open]) > :not(summary)') !== null;
@@ -158,7 +164,13 @@ describe('a body redrawn while it has no box (081 FR-020, FR-021)', () => {
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect(this: Element) {
       onLayoutRead();
       if (boxless(this)) return new DOMRect(0, 0, 0, 0);
-      if (this.tagName === 'TD' || this.tagName === 'TH') return new DOMRect(0, 0, (this.textContent ?? '').length * 8, 20);
+      if (this.tagName === 'TD' || this.tagName === 'TH') {
+        // A laid-out table's cell draws at its column's share of the 800 px table (T2: a drag starts from it); a
+        // measuring clone's, at its text.
+        const colgroup = this.closest('table')?.querySelector(':scope > colgroup');
+        if (!colgroup) return new DOMRect(0, 0, (this.textContent ?? '').length * 8, 20);
+        return new DOMRect(0, 0, drawnWidths(colWidthsOf(colgroup))[(this as HTMLTableCellElement).cellIndex] ?? 0, 20);
+      }
       if (this instanceof HTMLElement && this.style.width.endsWith('ch')) return new DOMRect(0, 0, parseFloat(this.style.width) * 8, 20);
       return new DOMRect(0, 0, 0, 0);
     });
@@ -262,7 +274,8 @@ describe('a body redrawn while it has no box (081 FR-020, FR-021)', () => {
     handle.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 300, bubbles: true }));
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 340 }));
     window.dispatchEvent(new MouseEvent('pointerup', { clientX: 340 }));
-    expect(colWidths(host)[0]).toBeCloseTo(expected[0]! + 40, 0);
+    // In the widths the reader sees: the fresh open's first column as drawn, plus the 40 px the pointer moved.
+    expect(drawnWidths(colWidths(host))[0]).toBeCloseTo(drawnWidths(expected)[0]! + 40, 0);
   });
 
   /*
