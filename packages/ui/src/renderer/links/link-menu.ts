@@ -44,7 +44,7 @@ export interface LinkMenuPerformers {
   readonly openInEditor: (target: LinkOpenInTarget) => void | Promise<void>;
   /** FR-034. */
   readonly openInPreview: () => void | Promise<void>;
-  /** #714 — the panel header's Reveal File in File Explorer, on the link's target (file or folder). */
+  /** #714 — the panel header's Find in File Explorer, on the link's target (file or folder). */
   readonly findInExplorer: () => void | Promise<void>;
   /** FR-035 / FR-035a. */
   readonly osExplorer: () => void | Promise<void>;
@@ -84,9 +84,9 @@ export interface LinkMenuBuildArgs {
 }
 
 const ICONS: Partial<Record<LinkRow['id'], IconKey>> = {
-  // Open Link and Open in OS Default Program carry no icon: no open/link token exists (023's rule,
-  // #127) — an icon only where a real token exists, never a lookalike. Find in File Explorer (#714)
-  // carries none either: it wears what the panel header's Reveal File in File Explorer wears, which is none.
+  // Open Link carries no icon: no open/link token exists (023's rule, #127) — an icon only where a real token
+  // exists, never a lookalike. Find in File Explorer (#714) and Open in OS Default Program wear the icons of the
+  // panel header's rows and title-bar buttons of the same names (081 FR-040).
   // These rows are a UNC link's (081 FR-054 keeps them); a local link's Open In ▸ rows carry their own icons.
   openInNew: 'editorPanel',
   openInActive: 'editorPanel',
@@ -94,6 +94,8 @@ const ICONS: Partial<Record<LinkRow['id'], IconKey>> = {
   openInCurrent: 'editorPanel',
   openPreview: 'preview',
   osExplorer: 'folderOpen',
+  findInExplorer: 'findInFileExplorer',
+  osDefaultProgram: 'openInDefaultProgram',
   copyLink: 'copy',
 };
 

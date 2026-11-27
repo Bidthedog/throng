@@ -593,6 +593,12 @@
     },
     "wcagConformant": {
       "lucide": "shield-check"
+    },
+    "openInDefaultProgram": {
+      "lucide": "monitor-up"
+    },
+    "findInFileExplorer": {
+      "lucide": "list-tree"
     }
   }
 }

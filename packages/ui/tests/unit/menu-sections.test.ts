@@ -1112,7 +1112,7 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Destroy Panel',
       '—',
       // Navigate — the two reveal items exist only for a panel with a file behind it.
-      'Reveal File in File Explorer',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       // 044 FR-111 — Back and Forward on every editor, drawn DISABLED at the ends rather than hidden.
@@ -1289,7 +1289,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       '—',
       'Destroy Panel',
       '—',
-      'Reveal File in File Explorer',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Open Preview',
@@ -1413,7 +1413,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Close Panel',
       '—',
-      'Reveal File in File Explorer',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Open in Editor',
@@ -1442,7 +1442,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Close Panel',
       '—',
-      'Reveal File in File Explorer',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Go to Editor',
@@ -1466,7 +1466,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Close Panel',
       '—',
-      'Reveal File in File Explorer',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       // 047 US1/US4 — Find… and Go to Heading… are offered whatever the provider kind (unlike Open in
@@ -1533,7 +1533,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Close Panel',
       '—',
-      'Reveal File in File Explorer',
+      'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Open in Editor',
@@ -1612,7 +1612,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
     expect(find('Refresh')?.icon).toBe('refresh');
     expect(find('Open in Editor')?.icon).toBe('editorPanel');
 
-    for (const label of ['Refresh', 'Open in Editor', 'Forward', 'Reveal File in File Explorer', 'Open in OS Explorer', 'Close Panel']) {
+    for (const label of ['Refresh', 'Open in Editor', 'Forward', 'Find in File Explorer', 'Open in OS Explorer', 'Close Panel']) {
       find(label)?.onClick?.();
     }
     expect(fired).toEqual(['refreshPreview', 'openInEditor', 'navigateForward', 'revealInTree', 'openInOsExplorer', 'destroy']);

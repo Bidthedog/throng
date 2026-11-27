@@ -190,7 +190,7 @@ export function openFileLinkMenu(args: {
       if (!resolvedLink) return;
       void performLinkTarget({ target: 'preview', link: resolvedLink, request, deps });
     },
-    // #714 — the panel header's Reveal File in File Explorer, on the resolved target (or a folder by
+    // #714 — the panel header's Find in File Explorer, on the resolved target (or a folder by
     // grammar's own path). Drawn enabled only for a target inside the project (`buildLinkMenu`).
     findInExplorer: () => {
       const path = resolvedLink?.path ?? folderPath;

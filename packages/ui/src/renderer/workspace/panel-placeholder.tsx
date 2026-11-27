@@ -40,7 +40,7 @@ import { PanelBody } from './panel-body.js';
 import { PanelErrorBoundary } from './panel-error-boundary.js';
 import { TestPanelThrow } from './test-panel-throw.js';
 import { ZoomIndicator, useChangeCue } from './zoom-indicator.js';
-import { panelHeaderMenu, removalVerbFor } from './panel-header-menu.js';
+import { panelFileActionState, panelHeaderMenu, removalVerbFor } from './panel-header-menu.js';
 import { placeholderContentMenu, splitMenuItems } from './split-menu.js';
 import { useSplitMode } from './split-mode.js';
 import { getMaximiseStack, toggleMaximisePanel, useTabMaximise } from './maximise-store.js';
@@ -97,6 +97,7 @@ import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
 import { PanelHeaderSaveIcons } from './panel-header-save-icons.js';
+import { PanelHeaderFileIcons } from './panel-header-file-icons.js';
 import { headerControlsFit, useHeaderWidth } from './panel-header-fit.js';
 import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
 import { useReportSubjectFailure } from './panel-failure-notice.js';
@@ -602,6 +603,34 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   useEffect(() => registerPanelDestroy(panel.id, () => void destroyRef.current()), [panel.id]);
   const attentionMark = usePanelMark(panel.id);
 
+  /*
+   * The panel's own file: what Find in File Explorer and Open in OS Default Program act on. One pair of handlers
+   * for the header menu's rows and the title-bar buttons (081 FR-041). A preview's is the file IT shows; it has
+   * no editor state to read (044 T123).
+   */
+  const ownFilePath = isPreview ? previewFilePath : editorUi?.filePath;
+  const fileActionState = panelFileActionState(!!ownFilePath, isPreview);
+  const findInFileExplorer = (): void => {
+    revealInFileExplorer(ownFilePath);
+  };
+  // 067 FR-016 — the panel's own file, through the link route's OS default program action: main re-checks the
+  // target, and a failure is the one notice a followed link raises.
+  const openOwnFileInDefaultProgram = (): void => {
+    if (!ownFilePath) return;
+    void osLinkActions()
+      .openInOsDefaultProgram({
+        text: ownFilePath,
+        kind: 'detectedPath',
+        panelId: panel.id,
+        originProjectId: panel.originProjectId,
+      })
+      .then((outcome) => {
+        if (!outcome.ok) {
+          reportSubject(linkFailureReport(outcome, { osName: os, projectId: panel.originProjectId }));
+        }
+      });
+  };
+
   return (
     <div
       className={`panel-box${isDragging ? ' panel-box--dragging' : ''}${showsActive ? ' panel-box--active' : ''}${isActiveDimmed ? ' panel-box--active-dimmed' : ''}${isMaximisedPanel ? ' panel-box--maximised' : ''}${hiddenByMaximise ? ' panel-box--maximise-hidden' : ''}`}
@@ -796,6 +825,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                     printable: canPrint(
                       previewProvider,
                     ),
+                    hasFilePath: !!previewFilePath,
                   }
                 : null,
               // 044 FR-002 — an editor's Open Preview, from the same affordance its status-bar button uses.
@@ -865,36 +895,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                     await getEditorActions(panel.id)?.reloadFromDisk();
                   })();
                 },
-                revealInTree: () => {
-                  // 044 T123 — a preview reveals the file IT shows; it has no editor state to read.
-                  revealInFileExplorer(isPreview ? previewFilePath : editorUi?.filePath);
-                },
+                revealInTree: findInFileExplorer,
                 // #273 — the panel's OWN absolute path. See `revealPanelFile` for what this used to
                 // do and why a root-relative path was wrong in two directions at once. A preview's is the
                 // file it shows, which main's confinement check accepts (menus-and-controls.md §1).
                 openInOsExplorer: () => {
                   revealPanelFile(isPreview ? previewFilePath : editorUi?.filePath, window.throng?.files);
                 },
-                // 067 FR-016 — the panel's own file, through the link route's OS default program action: main
-                // re-checks the target, and a failure is the one notice a followed link raises.
-                openInDefaultProgram: () => {
-                  const abs = isPreview ? previewFilePath : editorUi?.filePath;
-                  if (!abs) return;
-                  void osLinkActions()
-                    .openInOsDefaultProgram({
-                      text: abs,
-                      kind: 'detectedPath',
-                      panelId: panel.id,
-                      originProjectId: panel.originProjectId,
-                    })
-                    .then((outcome) => {
-                      if (!outcome.ok) {
-                        reportSubject(
-                          linkFailureReport(outcome, { osName: os, projectId: panel.originProjectId }),
-                        );
-                      }
-                    });
-                },
+                openInDefaultProgram: openOwnFileInDefaultProgram,
                 /*
                  * The BANNER'S retry, not a second call to the same operation.
                  *
@@ -1161,6 +1169,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           </span>
         ) : null}
         <span className="panel-box__actions">
+          {/* 081 FR-040 — Open in OS Default Program and Find in File Explorer, then a separator, at the head. */}
+          {panel.kind === 'editor' || isPreview ? (
+            <PanelHeaderFileIcons
+              panelId={panel.id}
+              state={fileActionState}
+              showOpenInDefaultProgram={settings.explorer.showOpenInOsDefaultProgram}
+              onOpenInDefaultProgram={openOwnFileInDefaultProgram}
+              onFindInFileExplorer={findInFileExplorer}
+            />
+          ) : null}
           {/* 067 FR-069 — an editor's Save and Save As, then the separator, before the common icons. */}
           {/* 073 FR-035a — the CSV Preview Editor edits its document, so it carries the same two controls. They
               run the actions its body registers (`getEditorActions`), exactly as an editor's do. The preview

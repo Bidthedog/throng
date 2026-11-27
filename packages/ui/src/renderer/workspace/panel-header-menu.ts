@@ -14,7 +14,7 @@
  * | Create       | Split ▸ (Split Down, Up, Right, Left — 048)                                         |
  * | Content      | Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All               |
  * | Destroy      | the panel's destroy verb                                                            |
- * | Navigate     | Reveal File in File Explorer, Open in OS Explorer, Send to Tab, Sync to           |
+ * | Navigate     | Find in File Explorer, Open in OS Explorer, Send to Tab, Sync to                  |
  * | View & state | Zoom, Synchronise Scrolling, Flag, Try again, Copy details, Clear panel type,            |
  * |              | Refresh / redraw                                                                    |
  *
@@ -50,6 +50,7 @@
 import {
   firstBinding,
   PREVIEW_KIND,
+  type IconKey,
   type Keybindings,
   type Panel,
   type PanelKind,
@@ -105,7 +106,7 @@ export function removalVerbFor(panel: Panel, ownershipVerb: string): string {
 export interface PanelHeaderEditorState {
   /** Unsaved changes — Revert is disabled without them, and Reload asks before discarding them. */
   dirty: boolean;
-  /** Backed by a path on disk — the two reveal items exist only then, and Reload needs one. */
+  /** Backed by a path on disk — the own-file rows are disabled without one (081 FR-041), and Reload needs one. */
   hasFilePath: boolean;
   /** 050 FR-036 — the file moved to another project: Save is disabled, Save As stays. */
   movedOut?: boolean;
@@ -211,6 +212,8 @@ export interface PanelHeaderPreviewState {
   goTo?: PreviewGoToKind;
   /** 075 FR-062 — whether its provider prints. Absent reads `false`: Print… is drawn disabled with the reason. */
   printable?: boolean;
+  /** 081 FR-041 — the preview knows its file. Absent reads `true`; `false` draws the own-file rows disabled. */
+  hasFilePath?: boolean;
 }
 
 /**
@@ -262,6 +265,52 @@ export interface PanelHeaderMenuArgs {
    */
   maximise?: { maximised: boolean; toggle: () => void } | null;
   actions: PanelHeaderMenuActions;
+}
+
+export const FIND_IN_FILE_EXPLORER_LABEL = 'Find in File Explorer';
+export const OPEN_IN_OS_EXPLORER_LABEL = 'Open in OS Explorer';
+export const OPEN_IN_DEFAULT_PROGRAM_LABEL = 'Open in OS Default Program';
+
+/** Whether the panel's own-file rows and title-bar buttons can act, and the hover text each carries. */
+export interface PanelFileActionState {
+  disabled: boolean;
+  /** The row's or button's hover title: the label, or why it is unavailable. */
+  titleFor: (label: string) => string;
+}
+
+/**
+ * 081 FR-041 — one answer for the menu rows and the title-bar buttons (`panel-header-file-icons.tsx`), so the two
+ * are disabled together and give the same reason. A panel with no file draws them disabled rather than absent
+ * (Principle VI).
+ */
+export function panelFileActionState(hasFilePath: boolean, isPreview: boolean): PanelFileActionState {
+  if (hasFilePath) return { disabled: false, titleFor: (label) => label };
+  const why = isPreview ? 'this preview has no file yet.' : 'this document has no file yet. Save it first.';
+  return { disabled: true, titleFor: (label) => `${label} is unavailable: ${why}` };
+}
+
+/**
+ * The panel's own-file rows in Navigate: Find in File Explorer (081 FR-044, renamed from 046's Reveal File in File
+ * Explorer), Open in OS Explorer, and Open in OS Default Program unless `explorer.showOpenInOsDefaultProgram` is off
+ * (067 FR-021). Each row is drawn disabled with its reason while there is no file (081 FR-041).
+ */
+function fileItems(args: PanelHeaderMenuArgs, state: PanelFileActionState): MenuAction[] {
+  const { actions } = args;
+  const row = (label: string, onClick: () => void, icon?: IconKey): MenuAction => ({
+    label,
+    ...(icon ? { icon } : {}),
+    section: 'navigate',
+    ...(state.disabled ? { disabled: true, title: state.titleFor(label) } : {}),
+    onClick,
+  });
+  const items = [
+    row(FIND_IN_FILE_EXPLORER_LABEL, () => actions.revealInTree(), 'findInFileExplorer'),
+    row(OPEN_IN_OS_EXPLORER_LABEL, () => actions.openInOsExplorer()),
+  ];
+  if (args.showOpenInDefaultProgram ?? true) {
+    items.push(row(OPEN_IN_DEFAULT_PROGRAM_LABEL, () => actions.openInDefaultProgram(), 'openInDefaultProgram'));
+  }
+  return items;
 }
 
 /**
@@ -375,7 +424,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    *
    * Content is EMPTY by construction: a preview is read-only (FR-020) and not renamable (FR-030), so
    * nothing that edits text or a name belongs to it — Rename, Save, Revert and Reload are all absent
-   * rather than disabled. A preview always shows a file, so the two reveal rows are unconditional.
+   * rather than disabled. A preview shows a file, so its own-file rows are live once it knows the path.
    *
    * 047 US1 (FR-007) — Find… IS offered, in `navigate` rather than `content`: a preview's find bar
    * moves through rendered text, not a document to edit, so it sits with the other ways to get
@@ -383,24 +432,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * beside a Save/Revert group this panel does not have.
    */
   if (isPreview) {
-    items.push({
-      label: 'Reveal File in File Explorer',
-      section: 'navigate',
-      onClick: () => actions.revealInTree(),
-    });
-    items.push({
-      label: 'Open in OS Explorer',
-      section: 'navigate',
-      onClick: () => actions.openInOsExplorer(),
-    });
     // 067 FR-016, FR-017 — in the shared preview title menu, so a provider needs no code of its own.
-    if (args.showOpenInDefaultProgram ?? true) {
-      items.push({
-        label: 'Open in OS Default Program',
-        section: 'navigate',
-        onClick: () => actions.openInDefaultProgram(),
-      });
-    }
+    items.push(...fileItems(args, panelFileActionState(args.preview?.hasFilePath ?? true, true)));
     // FR-015b/c/d — the mirror image of an editor's Open Preview. A binary provider has no editor at
     // all (FR-015e), so neither form is offered for one.
     if (args.preview?.providerKind === 'text') {
@@ -554,28 +587,10 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       onClick: () => actions.reloadFromDisk(),
     });
 
-    // US6 (#137) — for a panel backed by an on-disk file: reveal it in throng's own
-    // File Explorer tree, and open its folder in the OS file manager (via the seam).
-    if (editor?.hasFilePath) {
-      items.push({
-        label: 'Reveal File in File Explorer',
-        section: 'navigate',
-        onClick: () => actions.revealInTree(),
-      });
-      items.push({
-        label: 'Open in OS Explorer',
-        section: 'navigate',
-        onClick: () => actions.openInOsExplorer(),
-      });
-      // 067 FR-016, FR-021.
-      if (args.showOpenInDefaultProgram ?? true) {
-        items.push({
-          label: 'Open in OS Default Program',
-          section: 'navigate',
-          onClick: () => actions.openInDefaultProgram(),
-        });
-      }
-    }
+    // US6 (#137) — the panel's file in throng's own File Explorer tree, its folder in the OS file manager (via the
+    // seam), and the file in its OS default program (067 FR-016, FR-021). 081 FR-041: drawn disabled, with the
+    // reason, for a document with no file, where they used to be absent.
+    items.push(...fileItems(args, panelFileActionState(editor?.hasFilePath === true, false)));
 
     /*
      * 044 FR-002 — Open Preview, after the reveal rows and before Send to Tab

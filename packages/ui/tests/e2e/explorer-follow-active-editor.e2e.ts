@@ -321,7 +321,7 @@ test('off: the tree never moves on its own, and the setting re-applies with no r
 
         // The manual route still works while the preference is off (#137).
         await win.getByTestId(`panel-handle-${pidB}`).click({ button: 'right' });
-        await win.getByTestId('menu-item-Reveal File in File Explorer').click();
+        await win.getByTestId('menu-item-Find in File Explorer').click();
         await expect(tree.getByText('deep.txt', { exact: true })).toBeVisible();
         await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
 
