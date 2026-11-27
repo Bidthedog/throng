@@ -354,4 +354,48 @@ describe('on a mounted preview panel', () => {
     await waitFor(() => expect(paintedText()).toEqual(['beta']));
     expect(snapshotPanel(m.id).previewSelection?.text).toBe('beta');
   });
+
+  /*
+   * Maintainer's v1 review, 2026-11-27: with text already selected, the menu's Select All selected nothing new, and
+   * Ctrl+A needed pressing twice. Select All moves focus into the body, and the focus restore put the old selection
+   * back over the new one.
+   */
+  async function drawnWithBeta(): Promise<{ host: HTMLElement; body: HTMLElement }> {
+    m = await mountMarkdownPreview('# Title\n\nalpha beta alpha gamma\n\nsecond paragraph\n');
+    const body = await screen.findByTestId(`preview-body-${m.id}`, {}, COLD);
+    const text = await waitFor(() => {
+      const node = Array.from(body.querySelectorAll('p')).find((p) => p.textContent?.includes('alpha beta'))?.firstChild;
+      if (!node) throw new Error('not drawn yet');
+      return node;
+    });
+    const host = body.closest('[tabindex]') as HTMLElement;
+    act(() => {
+      host.focus();
+      selectText(text, 6, 10);
+    });
+    return { host, body };
+  }
+  const settle = (): Promise<void> => act(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+
+  it('Select All from the menu selects everything over a selection already made', async () => {
+    const { host, body } = await drawnWithBeta();
+    act(() => {
+      host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+    const item = await screen.findByTestId('menu-item-Select All');
+    act(() => item.click());
+    await settle();
+    expect(window.getSelection()!.toString()).toContain('second paragraph');
+    expect(window.getSelection()!.toString()).toBe(body.textContent);
+  });
+
+  it('Ctrl+A selects everything on the first press when focus comes back into the body', async () => {
+    const { host, body } = await drawnWithBeta();
+    act(() => outside().focus());
+    act(() => {
+      host.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(window.getSelection()!.toString()).toBe(body.textContent);
+  });
 });
