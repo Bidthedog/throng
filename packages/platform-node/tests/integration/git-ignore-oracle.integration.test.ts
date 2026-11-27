@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { GitIgnoreOracle, execFileOffLoop, type GitIgnoreOracleOptions } from '@throng/platform-node';
 import { skipOnWindows } from '@throng/core/testing';
@@ -44,7 +44,21 @@ beforeAll(() => {
   git(join(repo, 'nested'), 'init', '-q');
   write(join(repo, 'nested', '.gitignore'), 'out/\n');
   write(join(repo, 'nested', 'scratch.tmp'));
+  // A project that is not a repository, with a root and a nested `.gitignore`.
+  mkdirSync(join(plain, 'docs', 'deep'), { recursive: true });
+  write(join(plain, '.gitignore'), '*.txt\nstray\nout/\n');
+  write(join(plain, 'docs', '.gitignore'), 'draft.md\n');
+  write(join(plain, 'notes.txt'));
+  write(join(plain, 'readme.md'));
+  write(join(plain, 'docs', 'draft.md'));
+  write(join(plain, 'docs', 'final.md'));
+  write(join(plain, 'docs', 'deep', 'more.txt'));
 });
+
+/** Every path under `dir`, relative and sorted. */
+function listTree(dir: string): string[] {
+  return (readdirSync(dir, { recursive: true }) as string[]).map((p) => p.split(sep).join('/')).sort();
+}
 
 afterAll(() => {
   rmSync(base, { recursive: true, force: true });
@@ -54,19 +68,28 @@ interface Probe {
   oracle: GitIgnoreOracle;
   lines: string[];
   spawns: () => number;
+  /** The arguments of every git process started. */
+  gitArgs: (readonly string[])[];
 }
 
 function probe(): Probe {
   const lines: string[] = [];
   let spawns = 0;
+  const gitArgs: (readonly string[])[] = [];
   const options: GitIgnoreOracleOptions = {
     log: (message) => lines.push(message),
+    // The empty repository for a project outside any repository goes in the fixture, which afterAll removes.
+    scratchParent: base,
     exec: (file, args, execOptions, callback) => {
-      spawns += 1;
+      // Git starts only: on macOS the oracle first asks `xcode-select -p` whether the developer tools are installed.
+      if (file === 'git') {
+        spawns += 1;
+        gitArgs.push(args);
+      }
       execFileOffLoop(file, args, execOptions, callback);
     },
   };
-  return { oracle: new GitIgnoreOracle(options), lines, spawns: () => spawns };
+  return { oracle: new GitIgnoreOracle(options), lines, spawns: () => spawns, gitArgs };
 }
 
 describe('GitIgnoreOracle', () => {
@@ -93,13 +116,47 @@ describe('GitIgnoreOracle', () => {
     expect([...answer]).toEqual(['nested/out/']);
   });
 
-  it('answers empty outside a repository, and logs it once for the root however many times it is asked', async () => {
+  it("applies a project's .gitignore files when the project is not a git repository (FR-073)", async () => {
+    // The maintainer's report: a root `.gitignore` of `*.txt` and a stray line, in a folder no repository holds.
+    const { oracle } = probe();
+    expect([...(await oracle.ignored(plain, ['notes.txt', 'readme.md', '.gitignore', 'stray', 'out/']))].sort()).toEqual([
+      'out/',
+      'stray',
+      'notes.txt',
+    ].sort());
+    // A nested `.gitignore` adds its own rules for its folder, and the root's still reach below it.
+    expect([...(await oracle.ignored(plain, ['docs/draft.md', 'docs/final.md', 'docs/deep/more.txt']))].sort()).toEqual([
+      'docs/deep/more.txt',
+      'docs/draft.md',
+    ]);
+  });
+
+  it('makes its empty repository once, and keeps the repository fsmonitor off when asking against it', async () => {
+    const { oracle, gitArgs } = probe();
+    await oracle.ignored(plain, ['notes.txt']);
+    await oracle.ignored(plain, ['docs/draft.md']);
+    expect(gitArgs.filter((args) => args.includes('init'))).toHaveLength(1);
+    const against = gitArgs.filter((args) => args.some((arg) => arg.startsWith('--work-tree=')));
+    expect(against).toHaveLength(2);
+    for (const args of against) expect(args.slice(0, 2)).toEqual(['-c', 'core.fsmonitor=false']);
+    expect(against[0]).toContain(`--work-tree=${plain}`);
+  });
+
+  it('writes nothing into a project that is not a git repository', async () => {
+    const before = listTree(plain);
+    const { oracle } = probe();
+    await oracle.ignored(plain, ['notes.txt', 'docs/draft.md']);
+    expect(listTree(plain)).toEqual(before);
+  });
+
+  it('answers empty for a root that cannot be asked, and logs it once however many times it is asked', async () => {
+    const gone = join(base, 'gone');
     const { oracle, lines } = probe();
-    expect([...(await oracle.ignored(plain, ['a.log']))]).toEqual([]);
-    expect([...(await oracle.ignored(plain, ['b.log', 'c/']))]).toEqual([]);
-    expect([...(await oracle.ignored(plain, ['d.log']))]).toEqual([]);
+    expect([...(await oracle.ignored(gone, ['a.log']))]).toEqual([]);
+    expect([...(await oracle.ignored(gone, ['b.log', 'c/']))]).toEqual([]);
+    expect([...(await oracle.ignored(gone, ['d.log']))]).toEqual([]);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain(plain);
+    expect(lines[0]).toContain(gone);
   });
 
   it('answers empty input without starting git', async () => {

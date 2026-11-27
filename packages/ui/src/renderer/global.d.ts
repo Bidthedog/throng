@@ -510,7 +510,7 @@ declare global {
         ) => Promise<{ entries: FileTreeEntry[] } | FilesFailure>;
         /**
          * 081 US8 — which of these root-relative paths git ignores (a folder with a trailing `/`), spelt as asked.
-         * Empty outside a repository or without git; never rejects.
+         * Empty without git; never rejects.
          */
         ignored?: (relPaths: readonly string[]) => Promise<{ ignored: string[] }>;
         rename: (relPath: string, newName: string) => Promise<FilesOkOrError>;

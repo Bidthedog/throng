@@ -178,7 +178,7 @@ Icons and badges in the tree show each file's kind and state.
 
 1. Read the icon: it shows each file's kind and marks special folders.
 2. A badge marks a symbolic link, and a dot marks unsaved changes.
-3. A faded name is one git ignores, such as build output or a dependency folder. Editing `.gitignore` updates the
-   fade. Outside a git repository nothing is faded.
+3. A faded name is one a `.gitignore` matches, such as build output or a dependency folder, whether or not the
+   project is a git repository. Editing `.gitignore` updates the fade. Without git installed nothing is faded.
 
 Icon sets are chosen in [Themes and icons](themes-and-icons.md).
