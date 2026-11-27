@@ -141,7 +141,8 @@ test('an external link asks first; Cancel opens nothing and Open opens it (FR-06
       own.app.evaluate(async ({ BrowserWindow }) => {
         const w = BrowserWindow.getAllWindows().find((x) => !x.isDestroyed() && x.webContents.getURL().includes('help=1'));
         const view = w?.contentView.children[0] as unknown as { webContents: Electron.WebContents } | undefined;
-        if (!view) return false;
+        // A person clicks a window they can see: the Help window is shown once painted, and its guide has loaded.
+        if (!w || !view || !w.isVisible() || view.webContents.isLoading()) return false;
         await view.webContents.executeJavaScript(
           `new Promise((r) => { const go = () => { const a = document.querySelector('a[href^="https://github.com"]'); if (a) { a.click(); r(true); } else setTimeout(go, 100); }; go(); })`,
         );
