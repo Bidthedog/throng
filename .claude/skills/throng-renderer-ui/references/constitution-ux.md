@@ -49,11 +49,13 @@ application's, not the menu's.
   | 0 | **Contextual** | Items present only because of what the pointer is over. Lead the menu when present. The test is **"would this item be absent if the pointer were elsewhere?"** — nothing else qualifies |
   | 1 | **Content** | Acts on the item's content or its name: Rename, Cut, Copy, Paste, Select All, Undo, Redo |
   | 2 | **Create** | Makes something new: New File, New Folder |
-  | 3 | **Destroy** | Removes something: Delete, Destroy Tab, Destroy Panel |
-  | 4 | **Navigate** | Takes you somewhere, or names where something is: Open In, Copy Path, Reveal, Go To Line, Sync to |
-  | 5 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Hide |
-  | 6 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
+  | 3 | **Navigate** | Takes you somewhere, or names where something is: Open In, Copy Path, Reveal, Go To Line, Sync to |
+  | 4 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Hide |
+  | 5 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
+  | 6 | **Destroy** | Removes something: Delete, Close Panel, Destroy Tab, Destroy Panel. Ends the menu when present |
 
+- Destroy sits last so that closing or removing is the final row of every menu. It was
+  third, after Create, until v8.0.0 (the maintainer's v1 review, 2026-11-27).
 - A divider MUST be drawn only at a real section boundary. A menu whose items fall in one
   section carries none, and no menu may begin or end with one — a divider is the rendering
   of a boundary, never a decoration placed by hand.
@@ -173,6 +175,30 @@ a third over a status figure tells the user these are three kinds of thing when 
 - `packages/ui/tests/unit/popup-style.test.ts` fails the build for a popup that restyles itself,
   one whose root does not wear the shared class, or a window that stops mounting the tooltip. A
   new popup is added to its list in the change that adds it.
+
+## A menu row shows its key
+
+**A menu row shows its key.** A key the user can press instead of opening the menu is only
+learnable if the menu says so, and a row that hides its key on one menu while the same command shows
+it on another teaches nothing about either.
+
+- Every menu row whose command a key performs **in that context** MUST show that key beside its
+  label. Submenu rows count; a submenu's parent row has no key of its own.
+- A **rebindable** command shows the user's current binding, read live from Key Bindings
+  (`firstBinding`), so a rebinding is reflected the next time the menu opens. An **unbound** command
+  shows nothing; a menu never shows a key that does not work.
+- A key the **surface handles itself**, outside Key Bindings — the editor's Ctrl+Z and Ctrl+Y, the
+  grid's Delete, a preview's Ctrl+A — is shown as the fixed key, in the OS's own form.
+- The key shown MUST be the one that performs that command where the menu was opened. A command
+  whose key the surface takes for something else shows nothing there.
+- The fixed keys have one home, `packages/ui/src/renderer/common/fixed-shortcut.ts`, which shows each in
+  the OS's form (Cmd on macOS). A menu row names a fixed key through it, never as a literal string.
+- `packages/ui/tests/unit/menu-shortcuts.test.ts` builds every swept menu with every command bound and
+  fails a row that shows no key unless its `NO_KEY` entry says why, an entry whose reason no longer
+  holds, and a key that is neither a live binding nor a fixed key. A new menu builder is added to its
+  sweep in the change that adds it.
+- **Known gaps:** the Key Bindings tab's chord menu, the Sub-workspaces panel's Minimise/Restore row and
+  the Resource Monitor's node-action menus are built inline and are not yet in the sweep.
 
 ## Quality gate — action controls are themeable icons with hover titles (known gaps included)
 

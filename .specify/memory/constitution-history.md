@@ -12,6 +12,77 @@ Each record is an HTML comment, so read this file as source rather than rendered
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 7.6.0 → 8.0.0 (an earlier 8.0.0 draft, superseded by 7.4.0 before release, sits in
+                constitution-history.md marked as never released; this is the first published 8.0.0)
+Bump rationale: MAJOR. The maintainer's v1 review of 2026-11-27 asked for "Close Panel, Destroy Panel etc"
+                to be the last thing on the menu, and chose every menu over the panel title menu alone.
+                Principle VI's section order moves Destroy from third (after Create) to last (after
+                Application): Contextual, Content, Create, Navigate, View & state, Application, Destroy.
+                Argued against the project's own test:
+                - For MINOR: no section is added or removed, every definition stands, and the shipped
+                  menus already draw the new order (commit 8aa13467, `MENU_SECTION_ORDER` in
+                  packages/core/src/workspace/menu-sections.ts).
+                - For MAJOR, which decides it: the order is part of the rule, and a menu that drew Delete
+                  between Create and Navigate complied with 7.6.0 and fails 8.0.0. The test asks about
+                  previously-compliant work, not about whether the code has caught up, so a redefinition
+                  that makes the 7.6.0 shape non-compliant is MAJOR even when the code moved first. This
+                  is not an additive rule that existing code fails (the MINOR case); it reverses a stated
+                  position.
+Modified principles: VI (One section vocabulary for every menu: the order).
+Modified sections: none outside VI. Added sections: none. Removed sections: none.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › One section vocabulary
+                for every menu: Destroy moved to row 6 and gained Close Panel as an example, the rows
+                between it and Create renumbered, and a bullet recording when Destroy moved.
+Enforcement: packages/core/tests/unit/menu-sections.test.ts pins `MENU_SECTION_ORDER`;
+                packages/ui/tests/unit/menu-sections.test.ts pins each menu's shape;
+                packages/ui/tests/component/explorer-properties-last.test.ts pins the explorer rows ending
+                on Delete. All edited in 8aa13467.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no menu section; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Artifacts: ✅ specs/033-open-and-navigate/spec.md — FR-047's table reordered, superseded-in-part notes on
+                FR-047, FR-052 and the 2026-08-15 Q&A.
+           ✅ specs/033-open-and-navigate/contracts/menu-sections.md — order and per-menu shapes updated.
+           ✅ specs/067-workspace-and-os-integration/spec.md — FR-128 superseded in part: Delete follows
+                Properties on a file or folder row; the root still ends on Properties.
+           ✅ specs/044-file-previews/contracts/menus-and-controls.md,
+              specs/047-markdown-preview-enhancements/contracts/menus-commands-controls.md,
+              specs/048-panel-splitting/contracts/menus-commands-controls.md — dated notes: Close Panel
+                last, Send to Tab / Sync to / Split in the header's panel-level View & state group, Go to
+                Heading in the `panelType` group. Content menus keep Split in Create.
+           ✅ docs/, .claude/skills/ — no other statement of the order found.
+           ⚠ specs/033-open-and-navigate/plan.md › Complexity Tracking ("FR-047 fixes it third") left as
+                the record of the 2026-08-15 decision; the spec's supersession note is the current word.
+Deferred: none.
+-->
+
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: 7.5.0 → 7.6.0
+Bump rationale: MINOR. Spec 080 (#477, maintainer-agreed): Help opens the online guide with **F1**, the
+                standard Help key. The maintainer chose it in 080's clarification of 2026-11-25 ("A": F1,
+                live everywhere except a terminal, so F1 still reaches a program running there). Principle
+                IV's chord tiers judge no function key, but their recorded-exception list is exhaustive and
+                says an addition MUST be justified in the spec that ships it and recorded here; F1 is added
+                beside F2, F3, F11 and Shift+F10. Not MAJOR: no previously-compliant work becomes
+                non-compliant. Not PATCH: the exhaustive list changes. A bounded exception that adds no
+                obligation sits with MINOR, as 5.10.0's `panel.toggleMaximise` did.
+Modified principles: IV (Modifier tiers › Recorded exceptions: `help.open` `F1`).
+Added sections: none. Removed sections: none.
+Terminal tiers: unaffected. `help.open` is scoped to every surface but a terminal (080 FR-010), so F1 is
+                never taken from a shell and needs no terminal-tier entry.
+Enforcement: `packages/core/tests/unit/keybindings-tiers.test.ts` (TIER_EXCEPTIONS gains `help.open|F1`);
+                `packages/core/tests/unit/keybindings-080.test.ts` asserts the scope excludes `terminal` and F1
+                resolves to nothing there.
+Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — name no chord;
+                no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 7.4.1 → 7.5.0
 Bump rationale: MINOR. Issue #717 (Tweak, maintainer-agreed): the Preferences fold headings' "Fold section" /
                 "Unfold section" hover popup repeated what the heading already shows and got in the way of the

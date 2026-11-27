@@ -1,26 +1,40 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 7.5.0 → 7.6.0
-Bump rationale: MINOR. Spec 080 (#477, maintainer-agreed): Help opens the online guide with **F1**, the
-                standard Help key. The maintainer chose it in 080's clarification of 2026-11-25 ("A": F1,
-                live everywhere except a terminal, so F1 still reaches a program running there). Principle
-                IV's chord tiers judge no function key, but their recorded-exception list is exhaustive and
-                says an addition MUST be justified in the spec that ships it and recorded here; F1 is added
-                beside F2, F3, F11 and Shift+F10. Not MAJOR: no previously-compliant work becomes
-                non-compliant. Not PATCH: the exhaustive list changes. A bounded exception that adds no
-                obligation sits with MINOR, as 5.10.0's `panel.toggleMaximise` did.
-Modified principles: IV (Modifier tiers › Recorded exceptions: `help.open` `F1`).
-Added sections: none. Removed sections: none.
-Terminal tiers: unaffected. `help.open` is scoped to every surface but a terminal (080 FR-010), so F1 is
-                never taken from a shell and needs no terminal-tier entry.
-Enforcement: `packages/core/tests/unit/keybindings-tiers.test.ts` (TIER_EXCEPTIONS gains `help.open|F1`);
-                `packages/core/tests/unit/keybindings-080.test.ts` asserts the scope excludes `terminal` and F1
-                resolves to nothing there.
-Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — name no chord;
-                no edit.
+Version change: 8.0.0 → 8.1.0
+Bump rationale: MINOR. The maintainer's v1 review of 2026-11-27 asked that every context menu row whose
+                command has a key show that key, and that this be a constitution rule. Principle VI gains
+                one rule, "A menu row shows its key". Argued against the project's own test:
+                - Not MAJOR: no guarantee is withdrawn or reversed, and no principle is redefined; every
+                  other rule of VI reads as it did.
+                - MINOR, which decides it: a new obligation within an existing principle. Menus that left
+                  a bound command's key off their rows complied with 8.0.0 and fail 8.1.0, which is the
+                  ordinary case for an additive rule.
+                - Not PATCH: it adds an obligation, not a clarification.
+Modified principles: VI (A menu row shows its key: added).
+Modified sections: none outside VI. Added sections: none. Removed sections: none.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › A menu row shows its key
+                (new section): what counts, rebindable versus fixed keys, the context rule, the one home
+                of the fixed keys and the gate.
+Audit before the rule: every context-menu builder was swept on this branch (commits "Show every bound
+                command's key on its menu row" and "Fail a menu row that shows no key and says no reason").
+                The rows that lacked a key were the CSV and spreadsheet grids' Undo, Redo, Cut, Copy, Paste
+                and Select All, the spreadsheet's Go to Row…, the cog menu's Settings, Resource Monitor and
+                Help, and the notification entry's Dismiss. The editor, preview and terminal menus showed
+                Ctrl on macOS, where those surfaces answer to Cmd. All are fixed in the same branch, so the
+                shipped menus comply when the rule lands.
+Enforcement: packages/ui/tests/unit/menu-shortcuts.test.ts builds every swept builder's menus with every
+                command bound and fails a leaf row that shows no key and has no reason in its NO_KEY list,
+                a reason that no longer applies, or a shown key that is neither a live binding nor a fixed
+                key from packages/ui/src/renderer/common/fixed-shortcut.ts.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no menu shortcut; no edit.
            ✅ .specify/extensions.yml — no constitution hooks.
-Deferred: none.
+Artifacts: ✅ docs/key-bindings.md — no statement contradicts the rule.
+           ⚠ Known gaps, recorded in the reference: the Key Bindings tab's chord menu, the Sub-workspaces
+                panel's Minimise/Restore row and the Resource Monitor's node-action menus are not yet in the
+                gate's sweep.
+Deferred: none beyond the gaps above.
 -->
 
 # throng Constitution
@@ -322,8 +336,8 @@ rules below is in the `throng-renderer-ui` skill (`references/constitution-ux.md
   or its content MUST be reachable by a mouse-click or a keyboard command, never only by a route the
   user can hide; the routes, menu-item and Key Bindings editor rules are in the reference.
 - **One section vocabulary for every menu.** Every context menu MUST place its items in these
-  sections, in this order — Contextual, Content, Create, Destroy, Navigate, View & state,
-  Application — with a divider only at a real section boundary, and every menu item MUST declare its
+  sections, in this order — Contextual, Content, Create, Navigate, View & state, Application,
+  Destroy — with a divider only at a real section boundary, and every menu item MUST declare its
   section; the section definitions and divider rules are in the reference.
 - **Disabled when unavailable, absent when meaningless.** A control whose action is temporarily
   unavailable MUST be drawn and disabled; one structurally meaningless for the thing under the
@@ -333,6 +347,10 @@ rules below is in the `throng-renderer-ui` skill (`references/constitution-ux.md
   **Ctrl+click** (**Cmd+click** on macOS), and a plain click MUST NOT navigate, with the keyboard,
   hover and menu rules in the reference. An end-state requirement; known gaps are tracked in the
   reference.
+- **A menu row shows its key.** Every menu row whose command a key performs where the menu
+  was opened MUST show that key: the user's current binding for a rebindable command, the fixed key
+  for one the surface handles itself, and nothing for a command with no key; the rules and the gate
+  are in the reference.
 - **A preference picks the default; the menu offers every variant.** Where a preference decides an
   action's variant, the menu MUST list each variant by name, and a plain item MUST run the
   preference's choice, labelled for the action.
@@ -634,4 +652,4 @@ Rationale: an installed build has no console, so the log is the only thing a use
   is kept in [`constitution-history.md`](constitution-history.md), newest first. This file carries
   only the latest amendment's report.
 
-**Version**: 7.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-25
+**Version**: 8.1.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-27
