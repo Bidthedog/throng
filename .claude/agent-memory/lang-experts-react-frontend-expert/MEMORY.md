@@ -1,2 +1,4 @@
 - [Renderer tests are not typechecked](renderer-test-typecheck-gap.md) — no tsconfig covers packages/ui/tests; verify test-side shapes by hand
+- [Renderer tsc reads core dist](renderer-tsc-reads-core-dist.md) — new core exports error in the renderer pass until core is rebuilt
+- [New icon key build order](new-icon-key-order.md) — SVG + generate:icons before tsc -b core; README line and key count too
 - [macOS lane runs @core](macos-lane-chords.md) — @core specs press app chords as ControlOrMeta; overrides stay Ctrl
