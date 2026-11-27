@@ -16,6 +16,7 @@ import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
 import { requestLanguagePicker } from './picker-request.js';
+import { fixedShortcut } from '../common/fixed-shortcut.js';
 import { outliningSubmenu, type OutliningArgs, type OutliningChords } from '../common/outlining-menu.js';
 
 /**
@@ -294,8 +295,9 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
 
   // Cut/Copy/Paste/Select All/Undo/Redo keep FIXED native chords and are deliberately NOT on the
   // rebindable command list (keybindings.ts, FR-017c) — there is no ActionId to resolve, so the
-  // shortcuts shown here are the literal native bindings the editor is wired to (Ctrl+X/C/V/A and
-  // Mod-z / Mod-y in use-editor.ts). They are display-only, matching what the user actually presses.
+  // shortcuts shown here are the native bindings the editor is wired to (Mod-x/c/v/a, and Mod-z / Mod-y,
+  // Mod-Shift-z on macOS, in use-editor.ts), in this platform's form (`fixedShortcut`: Cmd on macOS).
+  // v1 review (#732): the clipboard rows are one group and Undo / Redo the next, the order every content menu uses.
   return withSplit([
     // Never disabled for want of a selection (FR-012b): with none, they act on the caret's whole
     // line. A greyed-out Copy on the line the user just right-clicked is a refusal to do the
@@ -304,21 +306,24 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       label: 'Cut',
       icon: 'cut' as const,
       section: 'content',
-      shortcut: 'Ctrl+X',
+      group: 'clipboard',
+      shortcut: fixedShortcut('cut'),
       onClick: () => copyOrCut(args, true),
     },
     {
       label: 'Copy',
       icon: 'copy' as const,
       section: 'content',
-      shortcut: 'Ctrl+C',
+      group: 'clipboard',
+      shortcut: fixedShortcut('copy'),
       onClick: () => copyOrCut(args, false),
     },
     {
       label: 'Paste',
       icon: 'paste' as const,
       section: 'content',
-      shortcut: 'Ctrl+V',
+      group: 'clipboard',
+      shortcut: fixedShortcut('paste'),
       onClick: () => {
         void (async () => {
           const entry = await win()?.clipboard?.paste();
@@ -336,7 +341,8 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       label: 'Select All',
       icon: 'selectAll' as const,
       section: 'content',
-      shortcut: 'Ctrl+A',
+      group: 'clipboard',
+      shortcut: fixedShortcut('selectAll'),
       onClick: () => {
         view.dispatch({ selection: EditorSelection.single(0, view.state.doc.length) });
         view.focus();
@@ -346,14 +352,16 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       label: 'Undo',
       icon: 'undo' as const,
       section: 'content',
-      shortcut: 'Ctrl+Z',
+      group: 'history',
+      shortcut: fixedShortcut('undo'),
       onClick: () => win()?.editor?.undo({ panelId, viewId }),
     },
     {
       label: 'Redo',
       icon: 'redo' as const,
       section: 'content',
-      shortcut: 'Ctrl+Y',
+      group: 'history',
+      shortcut: fixedShortcut('redo'),
       onClick: () => win()?.editor?.redo({ panelId, viewId }),
     },
     {
@@ -372,8 +380,9 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
      * 044 FR-002 — Open Preview, in Navigate immediately after Go To Line… (contracts/menus-and-controls.md
      * §3). It moves the user to a rendering of this file rather than changing the file, which is what
      * puts it beside Go To Line. Absent where a preview means nothing (no provider, no file, outside the
-     * project — FR-001, FR-004); DISABLED while the provider is off (FR-062) or the file already has its
-     * one preview (FR-012). Every panel action has a menu item: this is the one for the status-bar button.
+     * project — FR-001, FR-004); DISABLED only while the provider is off (FR-062). v1 review (#732): ENABLED
+     * while the file already has its one preview (FR-012), where `preview.open` focuses that preview. Every
+     * panel action has a menu item: this is the one for the status-bar button.
      */
     ...(args.openPreview !== undefined && args.openPreview.affordance.state !== 'absent'
       ? [
@@ -383,7 +392,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
             icon: previewIconOf(args.openPreview.affordance.provider),
             section: 'navigate' as const,
             shortcut: args.openPreview.chord,
-            disabled: args.openPreview.affordance.state === 'disabled',
+            disabled: args.openPreview.affordance.state === 'disabled' && args.openPreview.affordance.reason === 'provider-disabled',
             onClick: () => args.openPreview?.open(),
           },
         ]

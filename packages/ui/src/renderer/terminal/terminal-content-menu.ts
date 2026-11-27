@@ -23,6 +23,7 @@
  */
 import type { IconKey } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
+import { fixedShortcut } from '../common/fixed-shortcut.js';
 import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 
 export interface TerminalContentMenuActions {
@@ -74,11 +75,11 @@ export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[]
     label: 'Paste',
     icon: 'paste',
     section: 'content',
-    // The paste chord is FIXED (Ctrl+V / Shift+Insert, #142) and lives in the terminal key
-    // handler, not the rebindable keybindings — so the shortcut shown is the literal native
-    // chord, matching what the user presses. Copy has no chord of its own (Ctrl+C is the
+    // The paste chord is FIXED (Ctrl+V / Shift+Insert, #142; Cmd+V on macOS) and lives in the terminal
+    // key handler, not the rebindable keybindings — so the shortcut shown is the native chord, in this
+    // platform's form (`fixedShortcut`). Copy has no chord of its own (Ctrl+C is the
     // shell's interrupt), so it carries no shortcut.
-    shortcut: 'Ctrl+V',
+    shortcut: fixedShortcut('paste'),
     // The SAME paste route as Ctrl+V / Shift+Insert (#142): one implementation reads the
     // clipboard and writes it to the shell exactly once, so no gesture can double-paste and
     // the menu can never drift from the keyboard path.

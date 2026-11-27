@@ -47,6 +47,9 @@ export function chordMatchesShortcut(
  * requirement exists to prevent — the vocabulary lives in `@throng/core` so no menu can hold a
  * different opinion (M1, M7).
  */
+/** The gap a window-height menu keeps from the window's top and bottom edges. */
+const MENU_EDGE_GAP = 4;
+
 export interface MenuAction {
   /** The row's text. */
   label?: string;
@@ -556,14 +559,21 @@ export function ContextMenu({
   // POINT anchor (zero-size rect). Shared with the colour picker via clampToViewport
   // (US11/FR-036). Measured before paint (useLayoutEffect) so it never flashes off-screen.
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y });
+  // A menu taller than its window (a long title menu in a small sub-workspace) is capped at the window's height and
+  // scrolls, so its last rows — Destroy, since 8.0.0 — stay reachable. Only then: a scrolling menu clips the flyouts
+  // its submenus open beside it, so a menu that fits keeps overflowing freely.
+  const [maxHeight, setMaxHeight] = useState<number | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
+    const room = Math.max(0, window.innerHeight - 2 * MENU_EDGE_GAP);
+    const tooTall = el.scrollHeight > room;
+    setMaxHeight(tooTall ? room : null);
     setPos(
       clampToViewport(
         { left: x, top: y, right: x, bottom: y },
-        { width: r.width, height: r.height },
+        { width: r.width, height: tooTall ? room : r.height },
         { width: window.innerWidth, height: window.innerHeight },
       ),
     );
@@ -622,7 +632,7 @@ export function ContextMenu({
       testId={testId}
       isRoot
       rootRef={ref}
-      style={{ left: pos.left, top: pos.top }}
+      style={maxHeight === null ? { left: pos.left, top: pos.top } : { left: pos.left, top: pos.top, maxHeight, overflowY: 'auto' }}
     />
   );
 }

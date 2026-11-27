@@ -151,17 +151,18 @@ const labels = (testId = 'context-menu'): string[] =>
     .map((el) => el.querySelector('.context-menu__label')?.textContent ?? '');
 
 describe('a section boundary is DRAWN as a rule, at the boundary and nowhere else (FR-018a/FR-050)', () => {
-  it('a file row draws four rules, at rows 6, 9, 11 and 14', () => {
+  it('a file row draws five rules, at rows 4, 7, 10, 13 and 15 (Undo / Redo their own group, #732; Delete closes the menu: v1 review T1)', () => {
     /*
-     * The same four indices `menu-sections.test.ts` pins on `withDividers` — asked here of the
+     * The same indices `menu-sections.test.ts` pins on `withDividers` — asked here of the
      * ELEMENTS the component actually put in the list. That the two agree is the point: the pure
      * derivation and the rendering are separate code, and only one of them was ever tested.
      */
     open(explorerFile());
 
-    expect(separatorIndices()).toEqual([6, 9, 11, 14]);
-    // Every action reached the DOM: 18 file-row actions + 4 rules = 22 rows.
-    expect(rows()).toHaveLength(explorerFile().length + 4);
+    // Content (clipboard · history) · Create · Navigate · Hide · Delete, the Destroy section last (v1 review T1, #732).
+    expect(separatorIndices()).toEqual([4, 7, 10, 13, 15]);
+    // Every action reached the DOM: one row per file-row action, plus the five rules.
+    expect(rows()).toHaveLength(explorerFile().length + 5);
   });
 
   it('a rule is not an item: role="separator", never role="menuitem", and no label', () => {
@@ -174,7 +175,7 @@ describe('a section boundary is DRAWN as a rule, at the boundary and nowhere els
     open(explorerFile());
     const rules = rows().filter((el) => el.classList.contains('context-menu__separator'));
 
-    expect(rules).toHaveLength(4);
+    expect(rules).toHaveLength(5);
     for (const rule of rules) {
       expect(rule).toHaveAttribute('role', 'separator');
       expect(rule).toHaveAttribute('aria-hidden');
@@ -186,15 +187,16 @@ describe('a section boundary is DRAWN as a rule, at the boundary and nowhere els
     );
   });
 
-  it('the tree’s empty space draws two rules, and neither opens nor closes the menu (M5)', () => {
+  it('the tree’s empty space draws three rules, and neither opens nor closes the menu (M5)', () => {
     /*
      * The root has no Destroy group and no Hide group. An EMPTY group must draw no rule at all —
-     * which is the difference between two boundaries and four — and the list can therefore neither
+     * which is the difference between three boundaries and five — and the list can therefore neither
      * begin nor end with one. Nothing at any layer asserted the rendered form of that.
      */
     open(explorerRoot());
 
-    expect(separatorIndices()).toEqual([3, 6]);
+    // Paste · Undo, Redo (#732) · New File, New Folder · Navigate.
+    expect(separatorIndices()).toEqual([1, 4, 7]);
     expect(rows()[0]).toHaveClass('context-menu__item');
     expect(rows().at(-1)).toHaveClass('context-menu__item');
   });

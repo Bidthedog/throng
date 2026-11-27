@@ -190,11 +190,12 @@ test('a right-click in the HTML page opens the body menu for the selection there
     return { x: r.left + 10, y: r.top + r.height / 2 };
   });
   await frame.click({ button: 'right', position: point });
-  for (const label of ['Find…', 'Copy', 'Copy as Rich Text', 'Copy as Plain Text', 'Select All', 'Split']) {
+  for (const label of ['Find…', 'Copy', 'Copy as', 'Select All', 'Split']) {
     await expect(win.getByTestId(`menu-item-${label}`), label).toBeVisible();
   }
-  // A selection in the page reached the panel: the copy rows are live, not the empty-selection state.
-  await expect(win.getByTestId('menu-item-Copy as Rich Text')).toHaveAttribute('aria-disabled', 'false');
+  // A selection in the page reached the panel: the copy rows are live, not the empty-selection state. The formats
+  // live in the Copy as ▸ submenu (#732), live with it.
+  await expect(win.getByTestId('menu-item-Copy as')).toHaveAttribute('aria-disabled', 'false');
   await win.getByTestId('menu-item-Select All').click();
   // The whole page, first element to last — whatever an earlier test in this shared app appended to it (the
   // in-place update test types a paragraph into long.html's editor), so the text's last line is not pinned.

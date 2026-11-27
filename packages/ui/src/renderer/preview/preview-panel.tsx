@@ -434,8 +434,8 @@ export interface PreviewPanelProps {
    */
   onClose: () => void;
   /**
-   * 044 FR-015 — the route back to the source: Open in Editor while standalone, Go to Editor while parented
-   * (`runPreviewEditorRoute`). The status bar's button and the body menu's row both call it, as the header
+   * 044 FR-015 — the route back to the source, Open in Editor: the parent focused while parented, else an editor of the
+   * file focused or placed (`runPreviewEditorRoute`). The status bar's button and the body menu's row both call it, as the header
    * menu's row calls the same function. Omitted where no workspace can place an editor: neither is drawn.
    */
   onEditorRoute?: () => void;
@@ -2392,7 +2392,7 @@ export function PreviewPanel({
         : null;
       const editorRoute: PreviewEditorRouteItem | null =
         providerKind === 'text' && onEditorRoute !== undefined
-          ? { parented, run: onEditorRoute, disabled: movedOutRef.current }
+          ? { run: onEditorRoute, disabled: movedOutRef.current }
           : null;
       const items = previewContentMenu({
         selectionEmpty,
@@ -2465,7 +2465,6 @@ export function PreviewPanel({
       selectAll,
       providerKind,
       onEditorRoute,
-      parented,
       keybindings,
       openMenu,
       onToggleSyncScroll,
@@ -2830,7 +2829,7 @@ export function PreviewPanel({
             onToggleTask={onToggleTask}
             // 073 — the grid lays out in JS, so it takes the factor itself; its notice and menu offer the editor route.
             zoom={zoomFactor(panelZoomLevel(panel))}
-            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute, editorRouteParented: parented } : {})}
+            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute } : {})}
             onCopyCapped={onCopyCapped}
             // 075 FR-075b — a grid's own menus carry Print…, the same command as the header's.
             {...(state && canPrint(registry.get(state.providerId)) ? { onPrint: () => void printPanel() } : {})}

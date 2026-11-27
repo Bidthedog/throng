@@ -8,8 +8,8 @@
  * (`clipboard.writeRich`), so a mail composer keeps headings, lists and links while an editor or terminal
  * pastes plain text. *Plain text* puts the text alone (`clipboard.write`). Copy — the menu item, and the
  * platform copy gesture, which is intercepted so the two cannot diverge — uses `editor.previews.copyFormat`,
- * read live; Copy as Rich Text and Copy as Plain Text ignore it (the #394 pattern: a default action with
- * explicit alternatives beside it). All three are disabled while nothing is selected.
+ * read live; Copy as ▸ Rich Text and Plain Text ignore it (the #394 pattern: a default action with
+ * explicit alternatives beside it). Copy and Copy as are disabled while nothing is selected.
  *
  * ══ THE EXPORT PROFILE ══
  *
@@ -83,6 +83,11 @@ async function openBodyMenu(over = 'Release notes'): Promise<void> {
 }
 
 const item = (label: string): HTMLElement => screen.getByTestId(`menu-item-${label}`);
+/** A Copy as ▸ leaf (#732): the submenu opens on a click on its parent, and the leaf keeps its old test id. */
+const copyAs = (format: 'Rich Text' | 'Plain Text'): HTMLElement => {
+  fireEvent.click(item('Copy as'));
+  return item(`Copy as ${format}`);
+};
 const richHtml = (): string => (m!.writeRich.mock.calls.at(-1) as unknown as [{ html: string }])[0].html;
 const richText = (): string => (m!.writeRich.mock.calls.at(-1) as unknown as [{ text: string }])[0].text;
 
@@ -94,23 +99,25 @@ afterEach(() => {
 });
 
 describe('the body menu’s Content section (FR-035, FR-035c)', () => {
-  it('offers Copy, Copy as Rich Text, Copy as Plain Text and Select All', async () => {
+  it('offers Copy, Copy as ▸ (Rich Text, Plain Text) and Select All', async () => {
     await mountDoc();
     selectWhole(markdown());
     await openBodyMenu();
 
-    for (const label of ['Copy', 'Copy as Rich Text', 'Copy as Plain Text', 'Select All']) {
+    for (const label of ['Copy', 'Copy as', 'Select All']) {
       expect(item(label)).toBeInTheDocument();
     }
+    expect(copyAs('Rich Text')).toHaveAttribute('aria-disabled', 'false');
+    expect(item('Copy as Plain Text')).toHaveAttribute('aria-disabled', 'false');
     expect(item('Copy')).toHaveAttribute('aria-disabled', 'false');
   });
 
-  it('disables all three copies while nothing is selected; Select All stays enabled', async () => {
+  it('disables Copy and Copy as while nothing is selected; Select All stays enabled', async () => {
     await mountDoc();
     clearSelection();
     await openBodyMenu();
 
-    for (const label of ['Copy', 'Copy as Rich Text', 'Copy as Plain Text']) {
+    for (const label of ['Copy', 'Copy as']) {
       expect(item(label)).toHaveAttribute('aria-disabled', 'true');
     }
     expect(item('Select All')).toHaveAttribute('aria-disabled', 'false');
@@ -169,7 +176,7 @@ describe('rich text: plain text and export-profile HTML in one write (FR-035a)',
     await mountDoc();
     selectWhole(markdown());
     await openBodyMenu();
-    fireEvent.click(item('Copy as Rich Text'));
+    fireEvent.click(copyAs('Rich Text'));
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalled());
 
     const html = richHtml();
@@ -184,7 +191,7 @@ describe('rich text: plain text and export-profile HTML in one write (FR-035a)',
     await mountDoc();
     selectWhole(markdown());
     await openBodyMenu();
-    fireEvent.click(item('Copy as Rich Text'));
+    fireEvent.click(copyAs('Rich Text'));
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalled());
 
     const doc = new DOMParser().parseFromString(richHtml(), 'text/html');
@@ -204,7 +211,7 @@ describe('rich text: plain text and export-profile HTML in one write (FR-035a)',
     await waitFor(() => expect(markdown().querySelectorAll('code span').length).toBeGreaterThan(0), COLD);
     selectWhole(markdown());
     await openBodyMenu();
-    fireEvent.click(item('Copy as Rich Text'));
+    fireEvent.click(copyAs('Rich Text'));
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalled());
 
     const html = richHtml();
@@ -217,7 +224,7 @@ describe('rich text: plain text and export-profile HTML in one write (FR-035a)',
     await mountDoc();
     selectWhole(screen.getByText('first item'));
     await openBodyMenu();
-    fireEvent.click(item('Copy as Rich Text'));
+    fireEvent.click(copyAs('Rich Text'));
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalled());
 
     expect(richText()).toBe('first item');
@@ -231,7 +238,7 @@ describe('plain text: the text alone (FR-035a)', () => {
     selectWhole(markdown());
     await openBodyMenu();
 
-    fireEvent.click(item('Copy as Plain Text'));
+    fireEvent.click(copyAs('Plain Text'));
 
     await waitFor(() => expect(m!.clipboardWrite).toHaveBeenCalledTimes(1));
     expect(m!.writeRich).not.toHaveBeenCalled();
@@ -259,7 +266,7 @@ describe('Copy and the copy gesture follow editor.previews.copyFormat; the named
     selectWhole(markdown());
     await openBodyMenu();
 
-    fireEvent.click(item('Copy as Rich Text'));
+    fireEvent.click(copyAs('Rich Text'));
 
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalledTimes(1));
     expect(m!.clipboardWrite).not.toHaveBeenCalled();
@@ -416,7 +423,8 @@ describe('fix round 1 (item 2) — an image in a rich copy becomes its alt text'
 
     selectWhole(markdown());
     fireEvent.contextMenu(screen.getByText('Pictures'));
-    fireEvent.click(await screen.findByTestId('menu-item-Copy as Rich Text'));
+    await screen.findByTestId('menu-item-Copy as');
+    fireEvent.click(copyAs('Rich Text'));
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalledTimes(1));
 
     const html = richHtml();
@@ -679,7 +687,7 @@ describe('a diagram in the selection (054 FR-049a)', () => {
     await mountDiagram();
     selectWhole(markdown());
     await openBodyMenu('Before the diagram.');
-    fireEvent.click(item('Copy as Plain Text'));
+    fireEvent.click(copyAs('Plain Text'));
 
     await waitFor(() => expect(m!.clipboardWrite).toHaveBeenCalledTimes(1));
     const text = (m!.clipboardWrite.mock.calls[0] as unknown as [{ text: string }])[0].text;
@@ -692,7 +700,7 @@ describe('a diagram in the selection (054 FR-049a)', () => {
     await mountDiagram();
     selectWhole(markdown());
     await openBodyMenu('Before the diagram.');
-    fireEvent.click(item('Copy as Rich Text'));
+    fireEvent.click(copyAs('Rich Text'));
 
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalledTimes(1));
     const html = richHtml();

@@ -244,15 +244,10 @@ export interface PreviewBodyProps {
    */
   zoom?: number;
   /**
-   * 073 FR-046 — the chrome's Open in Editor / Go to Editor route (044 FR-015), for a body whose own
-   * notice or menu offers it. Optional: a body that offers no such route never calls it.
+   * 073 FR-046 — the chrome's Open in Editor route (044 FR-015), for a body whose own notice or menu offers it: it
+   * goes to the linked editor, or opens or focuses one. Optional: a body that offers no such route never calls it.
    */
   onOpenInEditor?(): void;
-  /**
-   * 044 FR-015 (073 T089) — whether that route goes to an editor this preview is linked to: a body's own menu then
-   * names it **Go to Editor**, as the preview content menu does, else **Open in Editor**.
-   */
-  editorRouteParented?: boolean;
   /**
    * 073 FR-024 (T082) — a grid's Copy or Cut stopped at the cell bound: `copied` of `selected` cells went to the
    * clipboard, and `bound` is the most one copy holds. A cut capped so removes nothing. The chrome says so, naming the

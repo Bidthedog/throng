@@ -1,13 +1,14 @@
 /**
- * A preview's route back to its source: Open in Editor and Go to Editor (044 FR-015b, FR-015c, FR-015d;
- * contracts/menus-and-controls.md §1, §4, §8).
+ * A preview's route back to its source, Open in Editor (044 FR-015b, FR-015c, FR-015d; contracts/menus-and-controls.md
+ * §1, §4, §8). v1 review (#732): one label on every surface, parented or not; the route below decides whether it
+ * focuses an editor or places one.
  *
  * ══ THE MIRROR OF OPEN PREVIEW ══
  *
  * | Preview is   | Route          | What happens                                                              |
  * |--------------|----------------|---------------------------------------------------------------------------|
- * | standalone   | Open in Editor | "Open files in" = Last Active Editor with an editor in the tab: the editor side's own open (`openFileInTab`) puts the file there (075 FR-093b). Otherwise `openInto` first; `focus` → that editor, nothing placed; `open` → a new editor splitting the preview's slot on its LEFT; `refuse` → the refusal notice, nothing placed |
- * | parented     | Go to Editor   | the parent's tab to the front, the parent active and focused; `openInto`'s `focus` answer has main raise the window holding it |
+ * | standalone   | open           | "Open files in" = Last Active Editor with an editor in the tab: the editor side's own open (`openFileInTab`) puts the file there (075 FR-093b). Otherwise `openInto` first; `focus` → that editor, nothing placed; `open` → a new editor splitting the preview's slot on its LEFT; `refuse` → the refusal notice, nothing placed |
+ * | parented     | go to parent   | the parent's tab to the front, the parent active and focused; `openInto`'s `focus` answer has main raise the window holding it |
  *
  * `openInto` is main's one-buffer oracle — the question every editor open asks first (006 FR-011a, 041
  * FR-013) — so a file open in some editor anywhere is never opened a second time from here. Once the new
@@ -136,8 +137,8 @@ export async function goToPreviewParent(
 }
 
 /**
- * The one command the three entry points run (FR-015b): Go to Editor while the preview is parented, Open
- * in Editor while it is standalone — decided from `preview-store` NOW. A preview that is not a preview, or
+ * The one command the three entry points run (FR-015b): the parent focused while the preview is parented, an
+ * editor opened or focused while it is standalone — decided from `preview-store` NOW. A preview that is not a preview, or
  * shows no file, does nothing.
  */
 export function runPreviewEditorRoute(panel: Panel, ws: () => PreviewPlacementWorkspace, editorOpen?: PreviewEditorOpen): void {

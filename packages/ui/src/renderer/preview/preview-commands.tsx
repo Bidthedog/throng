@@ -13,8 +13,8 @@
  * 3. **`place` and `focus`** — main asking this window to put a preview beside a parent it holds, or to
  *    bring one forward (`open-preview.ts`).
  * 4. **`openChanged`** into `preview-open-store`, seeded from main's `openPaths` so a window created
- *    after a preview opened knows about it too. It is what draws the status-bar button pressed and
- *    Open Preview disabled for a preview opened in ANY window (FR-012, FR-014).
+ *    after a preview opened knows about it too. It is what draws the status-bar button pressed for a
+ *    preview opened in ANY window (FR-012, FR-014).
  * 5. **`preview.followLink`** (FR-096c) — scoped to `preview`, shipping as Ctrl+Enter: with a preview
  *    active, the link that has focus in it is followed exactly as a Ctrl+click follows it. The panel does
  *    the following (`preview-panel-handles.ts`); this only resolves the key.

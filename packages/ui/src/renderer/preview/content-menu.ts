@@ -7,8 +7,8 @@
  *
  * | Section    | Items                                                               | When                                   |
  * |------------|---------------------------------------------------------------------|----------------------------------------|
- * | Content    | Copy · Copy as Rich Text · Copy as Plain Text · Select All          | the provider draws selectable text (Select All: a flowing document or a page, FR-085a) |
- * | Navigate   | Open in Editor / Go to Editor                                       | a text provider (never binary, FR-015e) |
+ * | Content    | Copy · Copy as ▸ (Rich Text · Plain Text) · Select All              | the provider draws selectable text (Select All: a flowing document or a page, FR-085a) |
+ * | Navigate   | Open in Editor                                                      | a text provider (never binary, FR-015e) |
  * | View & state | Synchronise Scrolling *(its chord)*, checked while on             | a text provider, whatever is under the pointer (FR-122b) |
  *
  * ══ THIS MENU NO LONGER CARRIES ANY LINK ROW (045 round four, FR-169 – FR-171) ══
@@ -21,9 +21,10 @@
  * open; this builder only ever draws the ordinary one, exactly as `terminal-content-menu.ts` and
  * `editor/content-menu.ts` do.
  *
- * **Content.** Copy uses the `editor.previews.copyFormat` setting; Copy as Rich Text and Copy as Plain Text
+ * **Content.** Copy uses the `editor.previews.copyFormat` setting; the Copy as submenu's Rich Text and Plain Text
  * each copy in their named format whatever the setting — a default action with its explicit alternatives
- * beside it (the #394 pattern, FR-035c). All three are DISABLED, not absent, while nothing is selected:
+ * beside it (the #394 pattern, FR-035c; grouped under one submenu by the v1 review, #732). Copy and Copy as are
+ * DISABLED, not absent, while nothing is selected:
  * selecting text is what enables them. Select All is never disabled. Copy and Select All show the native
  * chords the body answers (Ctrl+C is the intercepted copy gesture, Ctrl+A the body's scoped select-all);
  * like the editor's, they are fixed and not on the rebindable command list.
@@ -36,6 +37,8 @@ import type { MenuAction } from '../workspace/context-menu.js';
 import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 import { outliningSubmenu, type OutliningArgs } from '../common/outlining-menu.js';
 import { copyPathSubmenu, type PathForms } from '../common/copy-path-menu.js';
+import { fixedShortcut } from '../common/fixed-shortcut.js';
+import { copyAsSubmenu } from '../common/copy-as-menu.js';
 
 /** The Content section: present when the provider draws selectable text (`PreviewProviderView.textSelection`). */
 export interface PreviewContentSection {
@@ -54,8 +57,7 @@ export interface PreviewContentSection {
 
 /** The Navigate section's route back to the source: present for a text provider only (FR-015e). */
 export interface PreviewEditorRouteItem {
-  /** Parented → *Go to Editor*; standalone → *Open in Editor*. */
-  parented: boolean;
+  /** *Open in Editor*: focuses the parent or an editor of the file, else places one (`runPreviewEditorRoute`). */
   run: () => void;
   /** 050 R26 — the file moved to another project: the row is drawn disabled. */
   disabled?: boolean;
@@ -212,29 +214,18 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
       label: 'Copy',
       icon: 'copy',
       section: 'content',
-      shortcut: 'Ctrl+C',
+      group: 'clipboard',
+      shortcut: fixedShortcut('copy'),
       disabled: locked || selectionEmpty,
       onClick: () => content.copy(content.copyFormat),
     });
-    items.push({
-      label: 'Copy as Rich Text',
-      icon: 'copy',
-      section: 'content',
-      disabled: locked || selectionEmpty,
-      onClick: () => content.copy('rich'),
-    });
-    items.push({
-      label: 'Copy as Plain Text',
-      icon: 'copy',
-      section: 'content',
-      disabled: locked || selectionEmpty,
-      onClick: () => content.copy('plain'),
-    });
+    items.push(copyAsSubmenu({ section: 'content', group: 'clipboard', disabled: locked || selectionEmpty, copy: content.copy }));
     if (flowing || content.pageSelectAll === true) items.push({
       label: 'Select All',
       icon: 'selectAll',
       section: 'content',
-      shortcut: 'Ctrl+A',
+      group: 'clipboard',
+      shortcut: fixedShortcut('selectAll'),
       ...lockedOut,
       onClick: () => content.selectAll(),
     });
@@ -244,7 +235,7 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
 
   if (editorRoute) {
     items.push({
-      label: editorRoute.parented ? 'Go to Editor' : 'Open in Editor',
+      label: 'Open in Editor',
       icon: 'editorPanel',
       section: 'navigate',
       disabled: editorRoute.disabled === true,

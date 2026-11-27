@@ -461,11 +461,15 @@ describe('Open Preview, in Navigate after Go To Line… (contracts/menus-and-con
     expect(item?.disabled).toBe(true);
   });
 
-  it('is DISABLED while the file already has its one preview (FR-012)', () => {
-    const item = menuWith({ affordance: affordance({ previewOpen: true }), open: () => {} }).find(
+  // v1 review (#732), over FR-012's greyed row: `preview.open` focuses the file's one preview, so the row stays live.
+  it('is ENABLED while the file already has its one preview, and runs the same open (FR-012, #732)', () => {
+    const open = vi.fn();
+    const item = menuWith({ affordance: affordance({ previewOpen: true }), open }).find(
       (m) => m.label === 'Open Preview',
     );
-    expect(item?.disabled).toBe(true);
+    expect(item?.disabled).toBeFalsy();
+    item?.onClick?.();
+    expect(open).toHaveBeenCalledTimes(1);
   });
 });
 

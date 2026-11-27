@@ -24,7 +24,7 @@
  * (`zoom.in` / `zoom.out` / `zoom.reset`) and from the panel header's own Zoom submenu
  * (`panel.zoomIn` / `panel.zoomOut` / `panel.zoomReset`); it simply has no cog-menu mouse route.
  */
-import type { IconKey, Keybindings } from '@throng/core';
+import { firstBinding, type IconKey, type Keybindings } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 /*
  * IMPORTED, not re-declared (Principle VIII). The extraction from `cog-menu.tsx` first wrote
@@ -53,12 +53,7 @@ export interface CogMenuActions {
   openAbout: () => void;
   /** 080 FR-010 — opens the guide's start page in the OS browser (F1 is its accelerator). */
   openHelp: () => void;
-  /**
-   * The live keybindings. 046 iterate round 2 (FR-113) removed this builder's only reader of it (the
-   * Zoom row's `controlTitle` hover text); kept on the interface rather than pulled, since
-   * `cog-menu.tsx` and every fixture that builds `CogMenuActions` still supply one and removing the
-   * field would be churn with no other benefit.
-   */
+  /** The live keybindings: Settings, Resource Monitor and Help show the key bound to each (#732). */
   keybindings: Keybindings;
 }
 
@@ -76,6 +71,8 @@ export function cogMenuItems(actions: CogMenuActions): MenuAction[] {
         // the opening gear repeated, so each says which window it opens.
         icon: item.icon,
         section: 'application',
+        // #732 — Settings shows `app.settings` (Cmd+, on macOS, unbound elsewhere unless the user binds it).
+        ...(item.tab === 'settings' ? { shortcut: firstBinding(actions.keybindings, 'app.settings') } : {}),
         onClick: () => actions.openPreferences(item.tab),
       }),
     ),
@@ -103,6 +100,7 @@ export function cogMenuItems(actions: CogMenuActions): MenuAction[] {
     testId: 'cog-resource-monitor',
     icon: 'resourceMonitor',
     section: 'application',
+    shortcut: firstBinding(actions.keybindings, 'view.resourceMonitor'),
     onClick: () => actions.openResourceMonitor(),
   });
   // 080 FR-010 — Help, ahead of About: both answer "what is this?", and F1 (`help.open`) is the
@@ -112,6 +110,7 @@ export function cogMenuItems(actions: CogMenuActions): MenuAction[] {
     testId: 'cog-menu-help',
     icon: 'help',
     section: 'application',
+    shortcut: firstBinding(actions.keybindings, 'help.open'),
     onClick: () => actions.openHelp(),
   });
   items.push({

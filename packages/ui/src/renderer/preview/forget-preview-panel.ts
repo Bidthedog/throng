@@ -8,8 +8,8 @@
  * path registration and its history in main, and broadcasts `openChanged`; it never prompts and never
  * touches the source document, which is why none of those routes asks anything first. It is idempotent
  * in main, so a window that hears a destroy it caused itself does no harm by repeating it. A route that
- * FORGETS it leaves main believing the file still has its one preview (FR-012): Open Preview greyed and
- * the status-bar button pressed until restart, for a preview nobody can see.
+ * FORGETS it leaves main believing the file still has its one preview (FR-012): the status-bar button
+ * pressed until restart, and Open Preview sent to a preview nobody can see.
  *
  * NOT for an unmount. A view unmounted by a tab switch or a move DETACHES and re-attaches later
  * (`preview-panel.tsx`); calling this then would destroy a preview the user can still see elsewhere.

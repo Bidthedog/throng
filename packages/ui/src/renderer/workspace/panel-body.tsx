@@ -216,7 +216,7 @@ export function PanelBody({
         }}
         // 044 FR-027 — the no-provider notice's Close is the header's Close Panel, not a second route.
         onClose={onDestroy}
-        // 044 FR-015 — Open in Editor / Go to Editor, the one function the header menu runs too. The store
+        // 044 FR-015 — Open in Editor, the one function the header menu runs too. The store
         // is read through a ref when it runs: main's answer arrives renders after the click.
         onEditorRoute={() => runPreviewEditorRoute(panel, () => wsRef.current, previewEditorOpen(() => wsRef.current, openTarget))}
       />

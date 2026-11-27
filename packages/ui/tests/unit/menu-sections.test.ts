@@ -450,7 +450,7 @@ const previewBodyMenu = (over: {
   previewContentMenu({
     selectionEmpty: over.selectionEmpty ?? false,
     content: over.textSelection === false ? null : { copyFormat: 'rich', copy: noop, selectAll: noop },
-    editorRoute: over.route === 'binary' ? null : { parented: over.route === 'parented', run: noop },
+    editorRoute: over.route === 'binary' ? null : { run: noop },
     // 044 FR-122b — every text-provider preview carries Synchronise Scrolling; a binary one does not.
     syncScroll: over.route === 'binary' ? null : { on: false, toggle: noop },
     // 047 US1 (FR-007) — always present, whatever the provider.
@@ -670,7 +670,7 @@ describe('every menu builder declares its sections, and the dividers are derived
  * WHERE the row lands and WHAT it holds — a Split that moved to Navigate would still be a well-formed
  * menu.
  */
-describe('Split sits in Create on every panel menu (048 FR-015)', () => {
+describe('Split sits in Create on every panel content menu, and among the panel-level rows on the header (048 FR-015, v1 review T1)', () => {
   const EXPECTED = ['Split Down', 'Split Up', 'Split Right', 'Split Left'];
   const SPLIT = { panelId: 'p1', keybindings: DEFAULT_KEYBINDINGS };
   const splitRow = (items: MenuAction[]): MenuAction | undefined => items.find((i) => i.label === 'Split');
@@ -718,7 +718,7 @@ describe('Split sits in Create on every panel menu (048 FR-015)', () => {
         previewContentMenu({
           selectionEmpty: false,
           content: { copyFormat: 'rich', copy: noop, selectAll: noop },
-          editorRoute: { parented: false, run: noop },
+          editorRoute: { run: noop },
           syncScroll: { on: false, toggle: noop },
           find: { run: noop },
           goToHeading: { run: noop },
@@ -739,13 +739,14 @@ describe('Split sits in Create on every panel menu (048 FR-015)', () => {
     expect(items.some((i) => (i.label ?? '').startsWith('Split'))).toBe(false);
   });
 
-  it.each(MENUS)('$name: one Split row in create, four children in order, each with its chord', ({ name, build }) => {
+  it.each(MENUS)('$name: one Split row in its section, four children in order, each with its chord', ({ name, build }) => {
     const items = build();
     assertSectioned(items, name);
     const rows = items.filter((i) => i.label === 'Split');
     expect(rows, `${name}: exactly one Split row`).toHaveLength(1);
     const row = splitRow(items)!;
-    expect(row.section).toBe('create');
+    // v1 review T1 supersedes 048 FR-015's section for the panel header alone: there Split is a panel-level row.
+    expect(row.section).toBe(name.startsWith('panel header') ? 'viewState' : 'create');
     expect(row.submenu?.map((i) => i.label)).toEqual(EXPECTED);
     expect(row.submenu?.every((i) => i.section === 'create' && typeof i.shortcut === 'string' && i.shortcut.length > 0)).toBe(
       true,
@@ -778,14 +779,16 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
   /*
    * The evidence that the vocabulary really was derived from this menu (contracts §3.1). These four
    * indices are the four hand-pushed separators the builder carried before US5, counted off the
-   * shipped file: after Redo, after New Folder, after Delete, after Copy Path.
+   * shipped file: after Redo, after New Folder, after Delete, after Copy Path. v1 review T1 moved Delete to the end, so
+   * the boundaries are now after Redo, after New Folder, after Copy Path and before Delete. #732 adds one between Paste
+   * and Undo: the history rows are their own group below the clipboard rows.
    */
-  it('a file row: four dividers, at 6, 9, 11 and 14 (Properties, last, joins View & state: 067 FR-128)', () => {
-    expect(separatorIndices(explorerFile())).toEqual([6, 9, 11, 14]);
+  it('a file row: five dividers, at 4, 7, 10, 13 and 16 (Undo / Redo their own group, #732; Properties joins View & state, 067 FR-128; Delete is last)', () => {
+    expect(separatorIndices(explorerFile())).toEqual([4, 7, 10, 13, 16]);
   });
 
-  it('the empty space (root): two dividers, at 3 and 6 — no Destroy, no Hide, no leading divider', () => {
-    expect(separatorIndices(explorerRoot())).toEqual([3, 6]);
+  it('the empty space (root): three dividers, at 1, 4 and 7 — no Destroy, no Hide, no leading divider', () => {
+    expect(separatorIndices(explorerRoot())).toEqual([1, 4, 7]);
   });
 
   /*
@@ -805,6 +808,7 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
     // Open In → Search. Moved, not duplicated: its absence is part of this shape, not an omission.
     expect(shapeOf(explorerRoot())).toEqual([
       'Paste',
+      '—',
       'Undo',
       'Redo',
       '—',
@@ -835,13 +839,12 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
       'Cut',
       'Copy',
       'Paste',
+      '—',
       'Undo',
       'Redo',
       '—',
       'New File',
       'New Folder',
-      '—',
-      'Delete',
       '—',
       'Open In',
       'Copy Path',
@@ -850,6 +853,9 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
       '—',
       'Hide in this project',
       'Properties',
+      // v1 review T1 — Destroy is the last section of every menu.
+      '—',
+      'Delete',
     ]);
   });
 });
@@ -960,7 +966,7 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
       explorerAffordance({ path: 'D:/project/notes.txt' }),
     ].map((a) => shapeOf(explorerFileWithPreview(a)));
     for (const shape of shapes) expect(shape).toEqual(shapes[0]);
-    expect(separatorIndices(explorerFileWithPreview(explorerAffordance()))).toEqual([6, 9, 11, 14]);
+    expect(separatorIndices(explorerFileWithPreview(explorerAffordance()))).toEqual([4, 7, 10, 13, 16]);
   });
 });
 
@@ -978,7 +984,7 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
  * draws every conditional the editor adds.
  */
 describe('the panel header menu draws exactly the shape contracts/menu-sections.md §3.4 describes', () => {
-  it('an untyped panel: Split · Destroy Panel · Send to Tab (048: no Rename, no Reset Name)', () => {
+  it('an untyped panel: Split · Send to Tab · Destroy Panel (048: no Rename, no Reset Name)', () => {
     /*
      * 043 FR-062a — `Zoom` LEFT this shape, and the requirement is what removed it rather than a
      * tidy-up. The untyped placeholder has no zoom consumer: only `editor-panel.tsx` and
@@ -987,17 +993,17 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
      * greyed row, and `panel-header-zoom-menu.test.ts` holds the general correspondence.
      */
     expect(shapeOf(panelHeader({ panel: panel({}) }))).toEqual([
-      // 048 FR-015 — Split is in Create, the panel's only Create row, and Rename/Reset Name are gone (FR-030).
+      // v1 review T1 — Split and Send to Tab act on the panel itself, so they open the panel-level group. Rename and
+      // Reset Name are gone (048 FR-030).
       'Split',
-      '—',
-      'Destroy Panel',
-      '—',
       // 057 FR-125 (amended 2026-11-07) — no Flag: a blank panel has nothing to draw attention to.
       'Send to Tab',
+      '—',
+      'Destroy Panel',
     ]);
   });
 
-  it('a Find in Files panel: Split · Destroy Panel · Send to Tab · Zoom — Content empty (FR-061)', () => {
+  it('a Find in Files panel: Split · Send to Tab · Zoom · Flag · Destroy Panel — Content empty (FR-061)', () => {
     /*
      * The only shape in the table whose FIRST section is empty, which is why it is pinned: the
      * generic divider rule cannot tell a menu that lost its opening section from one that lost it
@@ -1011,13 +1017,11 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
      */
     expect(shapeOf(panelHeader({ panel: panel({ kind: 'findInFiles' }) }))).toEqual([
       'Split',
-      '—',
-      'Destroy Panel',
-      '—',
       'Send to Tab',
-      '—',
       'Zoom',
       'Flag',
+      '—',
+      'Destroy Panel',
     ]);
   });
 
@@ -1089,7 +1093,7 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
     );
   });
 
-  it('an editor panel backed by a file: Split in Create, Destroy in the middle', () => {
+  it('an editor panel backed by a file: its document rows, then the panel-level rows', () => {
     const shape = shapeOf(
       panelHeader({ panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } }),
     );
@@ -1105,26 +1109,72 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Replace',
       'Replace All',
       '—',
-      // 048 FR-015 — Split, alone in Create, between Content and Destroy.
-      'Split',
-      '—',
-      // Destroy, alone, after Create — the same shape the Files & Folders menu has always had.
-      'Destroy Panel',
-      '—',
-      // Navigate — the two reveal items exist only for a panel with a file behind it.
+      // Navigate — the own-file rows, then Back and Forward (044 FR-111), drawn DISABLED at the ends rather than
+      // hidden. No Open Preview here: this fixture hands the builder no affordance, which is `absent`.
       'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
-      // 044 FR-111 — Back and Forward on every editor, drawn DISABLED at the ends rather than hidden.
-      // No Open Preview here: this fixture hands the builder no affordance, which is `absent`.
       'Back',
       'Forward',
-      'Send to Tab',
       '—',
-      // View & state.
+      // v1 review T1 — the panel-level group: Split and Send to Tab first, then Zoom, and Flag (057 FR-125).
+      'Split',
+      'Send to Tab',
       'Zoom',
-      // 057 FR-125 — Flag closes View & state on every panel.
       'Flag',
+      '—',
+      'Destroy Panel',
+    ]);
+  });
+
+  it('a terminal panel: Find, then the panel-level rows with Refresh / redraw terminal among them', () => {
+    expect(shapeOf(panelHeader({ panel: panel({ kind: 'terminal' }), detach: detachFixture }))).toEqual([
+      'Find',
+      '—',
+      'Split',
+      'Send to Tab',
+      'Sync to',
+      'Zoom',
+      'Refresh / redraw terminal',
+      'Flag',
+      '—',
+      'Destroy Panel',
+    ]);
+  });
+
+  it('a grid preview: its own rows (Go to Row… and the four grid toggles) form one group before the panel-level rows', () => {
+    const items = panelHeader({
+      panel: previewPanel(),
+      preview: {
+        ...binaryPreview,
+        goTo: 'row',
+        cellDialog: { on: false },
+        wrap: { on: true },
+        lockFirstRow: { on: false },
+        lockFirstColumn: { on: false },
+      },
+    });
+    expect(shapeOf(items)).toEqual([
+      'Find in File Explorer',
+      'Open in OS Explorer',
+      'Open in OS Default Program',
+      'Find…',
+      'Back',
+      'Forward',
+      '—',
+      'Go to Row…',
+      'Edit Long Cells in Dialog',
+      'Wrap ✓',
+      'Lock First Row',
+      'Lock First Column',
+      '—',
+      'Split',
+      'Send to Tab',
+      'Refresh',
+      'Zoom',
+      'Flag',
+      '—',
+      'Close Panel',
     ]);
   });
 });
@@ -1269,7 +1319,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
   const row = (items: MenuAction[], label: string): MenuAction | undefined =>
     items.find((i) => i.label === label);
 
-  it('sits them after Open in OS Explorer and before Send to Tab, in that order', () => {
+  it('sits them after Open in OS Explorer, in that order, closing the document rows', () => {
     const items = panelHeader({
       panel: panel({ kind: 'editor' }),
       editor: { dirty: false, hasFilePath: true },
@@ -1285,22 +1335,21 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       'Replace',
       'Replace All',
       '—',
-      'Split',
-      '—',
-      'Destroy Panel',
-      '—',
       'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Open Preview',
       'Back',
       'Forward',
-      'Send to Tab',
       '—',
+      'Split',
+      'Send to Tab',
       'Zoom',
       // 044 FR-122b — after Zoom, exactly where Open Preview is present (§2).
       'Synchronise Scrolling',
       'Flag',
+      '—',
+      'Destroy Panel',
     ]);
   });
 
@@ -1312,7 +1361,11 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       panelFailure: true,
       syncScroll: true,
     });
-    expect(shapeOf(items).slice(shapeOf(items).lastIndexOf('—') + 1)).toEqual([
+    const shape = shapeOf(items);
+    // The panel-level group: from the divider after Forward up to the one before the closing Destroy Panel.
+    expect(shape.slice(shape.indexOf('Forward') + 2, shape.lastIndexOf('—'))).toEqual([
+      'Split',
+      'Send to Tab',
       'Zoom',
       'Synchronise Scrolling ✓',
       'Try again',
@@ -1364,7 +1417,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
     expect(row(none, 'Forward')?.disabled).toBe(true);
   });
 
-  it('Open Preview follows the affordance: enabled, disabled while one is open or the provider is off, absent otherwise', () => {
+  it('Open Preview follows the affordance: enabled, still enabled while one is open, disabled while the provider is off, absent otherwise', () => {
     const base = { panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } };
 
     const enabled = row(panelHeader({ ...base, openPreview: editorAffordance() }), 'Open Preview');
@@ -1372,8 +1425,8 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
     expect(enabled?.section).toBe('navigate');
     expect(enabled?.icon).toBe('previewMarkdown'); // 074 FR-103 — the file type's own preview icon
 
-    // FR-012 — the file already has its one preview.
-    expect(row(panelHeader({ ...base, openPreview: editorAffordance({ previewOpen: true }) }), 'Open Preview')?.disabled).toBe(true);
+    // FR-012 — the file already has its one preview: still live, and `preview.open` focuses it (v1 review, #732).
+    expect(row(panelHeader({ ...base, openPreview: editorAffordance({ previewOpen: true }) }), 'Open Preview')?.disabled ?? false).toBe(false);
     // FR-062 — the provider is disabled: drawn, and disabled.
     expect(row(panelHeader({ ...base, openPreview: editorAffordance({ enabled: false }) }), 'Open Preview')?.disabled).toBe(true);
     // FR-001/FR-004 — no provider claims the file: absent.
@@ -1409,77 +1462,79 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
 describe('a preview panel’s header menu draws exactly contracts/menus-and-controls.md §1 (044 FR-033)', () => {
   it('a standalone text preview: Close · Navigate with Open in Editor, Back, Forward · Refresh, Zoom, Synchronise Scrolling', () => {
     expect(shapeOf(panelHeader({ panel: previewPanel(), preview: textPreview(false) }))).toEqual([
-      'Split',
-      '—',
-      'Close Panel',
-      '—',
       'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Open in Editor',
-      // 047 US1/US4 (FR-007) — always present, beside Back/Forward (contracts/menus-commands-controls.md
+      // 047 US1 (FR-007) — always present, beside Back/Forward (contracts/menus-commands-controls.md
       // "Preview header menu").
       'Find…',
-      'Go to Heading…',
       'Back',
       'Forward',
-      'Send to Tab',
       '—',
+      // v1 review T1 — the panel type's own rows: Go to Heading… here, Go to Page… on a PDF, Go to Row… on a grid.
+      'Go to Heading…',
+      '—',
+      'Split',
+      'Send to Tab',
       'Refresh',
       'Zoom',
       // 044 FR-122b — every text-provider preview (§1, §10).
       'Synchronise Scrolling',
       // 057 FR-125 — Flag, after the preview's own View & state rows.
       'Flag',
+      '—',
+      'Close Panel',
     ]);
   });
 
-  it('a parented text preview goes to its editor instead, and offers Sync to where the window can', () => {
+  it('a parented text preview keeps the Open in Editor label, and offers Sync to where the window can', () => {
     expect(
       shapeOf(panelHeader({ panel: previewPanel(), preview: textPreview(true), detach: detachFixture })),
     ).toEqual([
-      'Split',
-      '—',
-      'Close Panel',
-      '—',
       'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
-      'Go to Editor',
+      // v1 review (#732): one label, parented or not; the row goes to the parent (below).
+      'Open in Editor',
       'Find…',
-      'Go to Heading…',
       'Back',
       'Forward',
+      '—',
+      'Go to Heading…',
+      '—',
+      'Split',
       'Send to Tab',
       'Sync to',
-      '—',
       'Refresh',
       'Zoom',
       'Synchronise Scrolling',
       'Flag',
+      '—',
+      'Close Panel',
     ]);
   });
 
   it('a binary preview offers no route to an editor, and no Synchronise Scrolling (FR-015e, FR-122a)', () => {
     expect(shapeOf(panelHeader({ panel: previewPanel(), preview: binaryPreview, syncScroll: true }))).toEqual([
-      'Split',
-      '—',
-      'Close Panel',
-      '—',
       'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       // 047 US1/US4 — Find… and Go to Heading… are offered whatever the provider kind (unlike Open in
       // Editor, FR-015e).
       'Find…',
-      'Go to Heading…',
       'Back',
       'Forward',
-      'Send to Tab',
       '—',
+      'Go to Heading…',
+      '—',
+      'Split',
+      'Send to Tab',
       'Refresh',
       'Zoom',
       'Flag',
+      '—',
+      'Close Panel',
     ]);
   });
 
@@ -1529,20 +1584,18 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
   it('carries Try again, Copy details and Clear panel type in View & state while its banner is up', () => {
     const items = panelHeader({ panel: previewPanel(), preview: textPreview(false), panelFailure: true });
     expect(shapeOf(items)).toEqual([
-      'Split',
-      '—',
-      'Close Panel',
-      '—',
       'Find in File Explorer',
       'Open in OS Explorer',
       'Open in OS Default Program',
       'Open in Editor',
       'Find…',
-      'Go to Heading…',
       'Back',
       'Forward',
-      'Send to Tab',
       '—',
+      'Go to Heading…',
+      '—',
+      'Split',
+      'Send to Tab',
       'Refresh',
       'Zoom',
       // 044 FR-122b — after Zoom, before the banner items (maintainer's answer, §1).
@@ -1551,6 +1604,8 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       'Copy details',
       'Clear panel type',
       'Flag',
+      '—',
+      'Close Panel',
     ]);
   });
 
@@ -1628,7 +1683,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       preview: textPreview(true),
       actions: { ...panelActions, goToEditor: () => fired.push('goToEditor') },
     });
-    parented.find((i) => i.label === 'Go to Editor')?.onClick?.();
+    parented.find((i) => i.label === 'Open in Editor')?.onClick?.();
     expect(fired.at(-1)).toBe('goToEditor');
   });
 });
@@ -1728,6 +1783,7 @@ describe('045 — the file-link run is one contextual section (FR-031, Principle
       'Copy',
       'Paste',
       'Select All',
+      '—',
       'Undo',
       'Redo',
       '—',
@@ -1793,8 +1849,7 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
   it('with text selected: Content (the three copies and Select All), then Navigate (Find…, Open in Editor), then View & state', () => {
     expect(labelsOf(previewBodyMenu({ route: 'standalone' }))).toEqual([
       'Copy',
-      'Copy as Rich Text',
-      'Copy as Plain Text',
+      'Copy as',
       'Select All',
       '—',
       // 047 US1/US4 (FR-007) — always present, ahead of the editor route in Navigate.
@@ -1807,16 +1862,16 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     ]);
   });
 
-  it('with nothing selected, parented: Content (disabled), then Navigate reads Find…, Go to Heading…, Go to Editor', () => {
+  it('with nothing selected, parented: Content (disabled), then Navigate reads Find…, Go to Heading…, Open in Editor', () => {
     expect(labelsOf(previewBodyMenu({ selectionEmpty: true, route: 'parented' }))).toEqual([
       'Copy',
-      'Copy as Rich Text',
-      'Copy as Plain Text',
+      'Copy as',
       'Select All',
       '—',
       'Find…',
       'Go to Heading…',
-      'Go to Editor',
+      // v1 review (#732): one label, parented or not.
+      'Open in Editor',
       '—',
       'Synchronise Scrolling',
     ]);
@@ -1849,12 +1904,12 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     expect(toggle.calls).toBe(1);
   });
 
-  it('the three copies are disabled while nothing is selected; Select All never is', () => {
+  it('Copy and Copy as, with both its formats, are disabled while nothing is selected; Select All never is', () => {
     const items = previewBodyMenu({ selectionEmpty: true, route: 'standalone' });
     const state = (label: string): boolean | undefined => items.find((i) => i.label === label)?.disabled;
     expect(state('Copy')).toBe(true);
-    expect(state('Copy as Rich Text')).toBe(true);
-    expect(state('Copy as Plain Text')).toBe(true);
+    expect(state('Copy as')).toBe(true);
+    expect(items.find((i) => i.label === 'Copy as')?.submenu?.map((leaf) => leaf.disabled)).toEqual([true, true]);
     expect(state('Select All') ?? false).toBe(false);
   });
 
@@ -1870,8 +1925,7 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
       ['Find…', 'search'],
       ['Go to Heading…', undefined],
       ['Copy', 'copy'],
-      ['Copy as Rich Text', 'copy'],
-      ['Copy as Plain Text', 'copy'],
+      ['Copy as', 'copy'],
       ['Select All', 'selectAll'],
       ['Open in Editor', 'editorPanel'],
       ['Synchronise Scrolling', 'syncScroll'],
@@ -1886,6 +1940,7 @@ describe('the editor content menu closes with Synchronise Scrolling where it off
       'Copy',
       'Paste',
       'Select All',
+      '—',
       'Undo',
       'Redo',
       '—',
@@ -1909,6 +1964,7 @@ describe('Go To Line is on the editor content menu, in Navigate, showing its cur
       'Copy',
       'Paste',
       'Select All',
+      '—',
       'Undo',
       'Redo',
       '—',
@@ -2118,8 +2174,6 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
     'Edit',
     'Rename',
     '—',
-    'Remove',
-    '—',
     // #681 — the project root's two location rows, in the File Explorer's Navigate order.
     'Open in OS Explorer',
     'Copy Path',
@@ -2129,6 +2183,9 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
     defaultAction === 'keepRunning'
       ? 'Unload Project and End Terminals'
       : 'Unload Project and Keep Terminals Running',
+    // v1 review T1 — Destroy is the last section of every menu.
+    '—',
+    'Remove',
   ];
   const OTHER_ROW = (defaultAction: 'keepRunning' | 'endTerminals'): string =>
     defaultAction === 'keepRunning' ? 'Unload Project and End Terminals' : 'Unload Project and Keep Terminals Running';
@@ -2363,7 +2420,7 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
 /**
  * 046 T079/T080, extended by iterate round 1 (checkpoint 2026-09-24; T120, FR-083) — the category
  * header's context menu (`category-menu.ts`, contracts/menus.md §2 and §6, FR-050, FR-053, FR-083).
- * A non-default header draws [content, destroy, **navigate**, viewState] as of this round — `navigate`
+ * A non-default header draws [content, **navigate**, viewState, destroy] (Destroy last since v1 review T1) — `navigate`
  * is NEW (`ORDER` in `menu-sections.ts` places it ahead of `viewState`), holding **Move Category Up**
  * and **Move Category Down**. Up is disabled on the first non-default category, Down on the last;
  * neither is drawn on the default category's menu, whatever its own reorder state — Principle VI's
@@ -2381,7 +2438,7 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
  * LABEL (`Minimise Category` / `Minimise Category ✓`) and the test id is pinned to the bare label so
  * it stays reachable while the state it reports changes.
  */
-describe('046 T120 — the category header menu draws [content, destroy, navigate, viewState] (contracts/menus.md §2, §6, FR-050, FR-053, FR-083)', () => {
+describe('046 T120 — the category header menu draws [content, navigate, viewState, destroy] (contracts/menus.md §2, §6, FR-050, FR-053, FR-083)', () => {
   async function build(opts: {
     isDefault: boolean;
     minimised: boolean;
@@ -2407,18 +2464,18 @@ describe('046 T120 — the category header menu draws [content, destroy, navigat
     });
   }
 
-  it('a non-default category draws Rename Category, Delete Category, Move Category Up/Down and Minimise Category, sectioned [content, destroy, navigate, viewState]', async () => {
+  it('a non-default category draws Rename Category, Delete Category, Move Category Up/Down and Minimise Category, sectioned [content, navigate, viewState, destroy]', async () => {
     const items = await build({ isDefault: false, minimised: false });
 
     expect(shapeOf(items)).toEqual([
       'Rename Category',
       '—',
-      'Delete Category',
-      '—',
       'Move Category Up',
       'Move Category Down',
       '—',
       'Minimise Category',
+      '—',
+      'Delete Category',
     ]);
     assertSectioned(items, 'category menu (non-default)');
     expect(items.find((i) => i.label === 'Rename Category')?.section).toBe('content');
@@ -2519,5 +2576,40 @@ describe('046 T120 — the category header menu draws [content, destroy, navigat
 
     items.find((i) => i.label === 'Rename Category')?.onClick?.();
     expect(onRename).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+/*
+ * v1 review (#732) — every content menu that edits puts Undo / Redo in the same place: a `history` group of their own,
+ * straight below the `clipboard` group (Cut, Copy, Copy as ▸, Paste, and Select All where it sits with them). The CSV
+ * grid's menu uses the same two names. The shapes above pin the dividers; this pins the groups by name, menu by menu.
+ */
+describe('Undo and Redo sit in their own group, immediately below the clipboard group (#732)', () => {
+  const contentRun = (items: MenuAction[]): string[] =>
+    items.filter((i) => i.section === 'content').map((i) => `${i.group ?? '-'}:${i.label ?? ''}`);
+
+  it('the editor content menu: Cut, Copy, Paste, Select All, then Undo, Redo', () => {
+    expect(contentRun(editorMenu())).toEqual([
+      'clipboard:Cut',
+      'clipboard:Copy',
+      'clipboard:Paste',
+      'clipboard:Select All',
+      'history:Undo',
+      'history:Redo',
+    ]);
+  });
+
+  it('the Files & Folders menu: Rename and the clipboard rows, then Undo, Redo — on a file, a folder and the root', () => {
+    const tail = ['clipboard:Paste', 'history:Undo', 'history:Redo'];
+    expect(contentRun(explorerFile())).toEqual(['clipboard:Rename', 'clipboard:Cut', 'clipboard:Copy', ...tail]);
+    expect(contentRun(explorerFolder())).toEqual(['clipboard:Rename', 'clipboard:Cut', 'clipboard:Copy', ...tail]);
+    expect(contentRun(explorerRoot())).toEqual(tail);
+  });
+
+  it('the preview body menu, which has no history: Copy, Copy as ▸ straight after it, then Select All, one group', () => {
+    const items = previewBodyMenu({ route: 'standalone' });
+    expect(contentRun(items)).toEqual(['clipboard:Copy', 'clipboard:Copy as', 'clipboard:Select All']);
+    expect(items.find((i) => i.label === 'Copy as')?.submenu?.map((leaf) => leaf.label)).toEqual(['Rich Text', 'Plain Text']);
   });
 });

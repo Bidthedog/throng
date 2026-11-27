@@ -256,7 +256,7 @@ describe('a moved-out preview (050 FR-035)', () => {
 
     const content = previewContentMenu({
       selectionEmpty: true,
-      editorRoute: { parented: false, run: () => {}, disabled: true },
+      editorRoute: { run: () => {}, disabled: true },
       find: { run: () => {} },
       goToHeading: { run: () => {} },
     } as never) as unknown as { label?: string; disabled?: boolean }[];
@@ -273,7 +273,7 @@ describe('previewContentMenu carries no Contextual section any more (FR-169)', (
     const items = previewContentMenu({
       selectionEmpty: false,
       content: { copyFormat: 'rich', copy: vi.fn(), selectAll: vi.fn() },
-      editorRoute: { parented: false, run: vi.fn() },
+      editorRoute: { run: vi.fn() },
       syncScroll: { on: true, toggle: vi.fn() },
       find: { run: vi.fn() },
       goToHeading: { run: vi.fn() },
@@ -283,7 +283,7 @@ describe('previewContentMenu carries no Contextual section any more (FR-169)', (
     expect(items.map((i) => i.section)).toEqual([
       'navigate',
       'navigate',
-      'content',
+      // Copy, Copy as ▸, Select All (#732: the two formats live in the submenu).
       'content',
       'content',
       'content',
@@ -396,7 +396,7 @@ describe('Synchronise Scrolling on the body menu (FR-122b)', () => {
     const items = previewContentMenu({
       selectionEmpty,
       content: { copyFormat: 'rich', copy: vi.fn(), selectAll: vi.fn() },
-      editorRoute: { parented: false, run: vi.fn() },
+      editorRoute: { run: vi.fn() },
       syncScroll: { on: true, toggle: vi.fn() },
       find: { run: vi.fn() },
       goToHeading: { run: vi.fn() },

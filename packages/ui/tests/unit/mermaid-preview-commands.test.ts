@@ -25,7 +25,7 @@ function previewMenu(flowingDocument: boolean) {
   return previewContentMenu({
     selectionEmpty: false,
     content: { copyFormat: 'rich', copy: () => {}, selectAll: () => {} },
-    editorRoute: { parented: true, run: () => {} },
+    editorRoute: { run: () => {} },
     find: { run: () => {} },
     goToHeading: { run: () => {} },
     flowingDocument,
@@ -54,11 +54,11 @@ describe('isFlowingDocument', () => {
 });
 
 describe('a Mermaid preview’s body menu', () => {
-  it('offers no Select All or Go to Heading, and keeps Go to Editor', () => {
+  it('offers no Select All or Go to Heading, and keeps Open in Editor', () => {
     const l = labels(previewMenu(false));
     expect(l).not.toContain('Select All');
     expect(l).not.toContain('Go to Heading…');
-    expect(l).toContain('Go to Editor');
+    expect(l).toContain('Open in Editor');
   });
 
   it('a Markdown preview keeps both', () => {

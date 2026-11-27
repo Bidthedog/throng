@@ -178,13 +178,15 @@ export function buildContextMenuItems(args: {
    */
   const items: MenuAction[] = [];
   if (!isRoot) {
-    items.push({ label: 'Rename', icon: 'rename', section: 'content', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
+    // Rename shares the clipboard rows' group, so the one divider inside Content is the one above Undo (#732).
+    items.push({ label: 'Rename', icon: 'rename', section: 'content', group: 'clipboard', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
     // 023 (#127): the clipboard actions now have their own theme tokens (cut/copy/paste), so the
     // reserved icon column finally renders a glyph rather than sitting blank.
-    items.push({ label: 'Cut', icon: 'cut', section: 'content', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
-    items.push({ label: 'Copy', icon: 'copy', section: 'content', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
+    items.push({ label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
+    items.push({ label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
-  items.push({ label: pasteText, icon: 'paste', section: 'content', disabled: clipboard === null && !osFiles, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+  items.push({ label: pasteText, icon: 'paste', section: 'content', group: 'clipboard', disabled: clipboard === null && !osFiles, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+  // v1 review (#732): Undo / Redo are their own group, straight below the clipboard group, as in every content menu.
   // 024 US3 (#85): undo/redo the last file OPERATION. Disabled — not hidden — when the stack is
   // empty: an action that exists and is unavailable teaches what the menu can do; one that vanishes
   // teaches nothing (and leaves the user wondering whether undo exists at all).
@@ -192,6 +194,7 @@ export function buildContextMenuItems(args: {
     label: 'Undo',
     icon: 'undo',
     section: 'content',
+    group: 'history',
     disabled: !(undoState?.canUndo ?? false),
     shortcut: sc('file.undo'),
     onClick: () => ops.undoFileOp(),
@@ -200,6 +203,7 @@ export function buildContextMenuItems(args: {
     label: 'Redo',
     icon: 'redo',
     section: 'content',
+    group: 'history',
     disabled: !(undoState?.canRedo ?? false),
     shortcut: sc('file.redo'),
     onClick: () => ops.redoFileOp(),

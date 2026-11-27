@@ -1,5 +1,5 @@
 /**
- * 074 FR-085a — an HTML page's body menu: Find…, Copy, Copy as Rich Text, Copy as Plain Text, Select All and Split,
+ * 074 FR-085a — an HTML page's body menu: Find…, Copy, Copy as ▸ (Rich Text, Plain Text), Select All and Split,
  * as a Markdown preview's body menu offers them — though the page is not a flowing document (no Go to Heading, no
  * Synchronise Scrolling, FR-087).
  *
@@ -20,9 +20,11 @@ const page = (over: Partial<PreviewContentMenuArgs> = {}): PreviewContentMenuArg
 });
 
 describe('an HTML page’s body menu (FR-085a)', () => {
-  it('offers Find…, the three copies, Select All and Split — and no Go to Heading', () => {
-    const labels = previewContentMenu(page()).map((m) => m.label);
-    expect(labels).toEqual(expect.arrayContaining(['Find…', 'Copy', 'Copy as Rich Text', 'Copy as Plain Text', 'Select All', 'Split']));
+  it('offers Find…, Copy, Copy as ▸ with both formats, Select All and Split — and no Go to Heading', () => {
+    const rows = previewContentMenu(page());
+    const labels = rows.map((m) => m.label);
+    expect(labels).toEqual(expect.arrayContaining(['Find…', 'Copy', 'Copy as', 'Select All', 'Split']));
+    expect(rows.find((r) => r.label === 'Copy as')?.submenu?.map((m) => m.label)).toEqual(['Rich Text', 'Plain Text']);
     expect(labels).not.toContain('Go to Heading…');
   });
 
@@ -30,7 +32,7 @@ describe('an HTML page’s body menu (FR-085a)', () => {
     const args = page();
     const rows = previewContentMenu(args);
     rows.find((r) => r.label === 'Select All')!.onClick!();
-    rows.find((r) => r.label === 'Copy as Rich Text')!.onClick!();
+    rows.find((r) => r.label === 'Copy as')!.submenu!.find((r) => r.label === 'Rich Text')!.onClick!();
     rows.find((r) => r.label === 'Copy')!.onClick!();
     expect(args.content!.selectAll).toHaveBeenCalled();
     expect(vi.mocked(args.content!.copy).mock.calls).toEqual([['rich'], ['plain']]);

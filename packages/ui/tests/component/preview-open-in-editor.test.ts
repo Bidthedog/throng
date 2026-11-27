@@ -1,6 +1,6 @@
 /**
- * 044 T113 — Open in Editor and Go to Editor, a preview's route back to its source (FR-015b, FR-015c,
- * FR-015d; contracts/menus-and-controls.md §1, §4, §8).
+ * 044 T113 — Open in Editor, a preview's route back to its source (FR-015b, FR-015c, FR-015d;
+ * contracts/menus-and-controls.md §1, §4, §8). One label whether or not the preview is parented (v1 review, #732).
  *
  * ══ THE MIRROR OF OPEN PREVIEW ══
  *
@@ -10,7 +10,7 @@
  * twice — and only on `open` splits the preview's slot with a new editor on the LEFT. The preview then
  * becomes parented in place (FR-013a), which is main's business and not asserted here.
  *
- * A parented preview's Go to Editor focuses the parent: its tab to the front, the panel active and
+ * A parented preview's Open in Editor focuses the parent: its tab to the front, the panel active and
  * focused, and — through the same `openInto`, whose `focus` answer has main raise the window holding the
  * editor — its window.
  *
@@ -318,7 +318,7 @@ describe('the status bar, the body menu and the header menu reach the one route 
     await waitFor(() => expect(openInto()).toHaveBeenCalledWith(expect.objectContaining({ absPath: FILE })));
   });
 
-  it('parented, all three read Go to Editor — and the header’s focuses the parent through openInto', async () => {
+  it('parented, all three still read Open in Editor — and the header’s focuses the parent through openInto', async () => {
     const mounted = await mountText();
     const { id } = mounted;
     const ws = mounted.ws();
@@ -332,14 +332,16 @@ describe('the status bar, the body menu and the header menu reach the one route 
       previewUpdate({ panelId: id, providerId: 'testText', filePath: FILE, revision: 2, content: null, parent: { panelId: parentId, title: 'notes' } }),
     );
 
-    await waitFor(() => expect(screen.getByTestId(`preview-editor-${id}`)).toHaveAccessibleName('Go to Editor'));
+    // Parented: the button draws pressed, its name unchanged (#732).
+    await waitFor(() => expect(screen.getByTestId(`preview-editor-${id}`)).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByTestId(`preview-editor-${id}`)).toHaveAccessibleName('Open in Editor');
 
     fireEvent.contextMenu(screen.getByTestId(`preview-body-${id}`));
-    expect(await screen.findByTestId('menu-item-Go to Editor')).toBeInTheDocument();
-    expect(screen.queryByTestId('menu-item-Open in Editor')).toBeNull();
+    expect(await screen.findByTestId('menu-item-Open in Editor')).toBeInTheDocument();
+    expect(screen.queryByTestId('menu-item-Go to Editor')).toBeNull();
 
     fireEvent.contextMenu(screen.getByTestId(`panel-handle-${id}`));
-    fireEvent.click(await screen.findByTestId('menu-item-Go to Editor'));
+    fireEvent.click(await screen.findByTestId('menu-item-Open in Editor'));
 
     await waitFor(() => expect(mounted.openInto).toHaveBeenCalledWith(expect.objectContaining({ absPath: FILE })));
     await waitFor(() => {

@@ -24,8 +24,10 @@
  *
  * | Preview is | Button (token `editorPanel`)          | Click                                         |
  * |------------|---------------------------------------|-----------------------------------------------|
- * | standalone | *Open in Editor*, `aria-pressed=false` | an editor to the preview's left (FR-015c)     |
- * | parented   | *Go to Editor*, `aria-pressed=true`    | the parent, its tab and window focused (FR-015d) |
+ * | standalone | *Open in Editor*, `aria-pressed=false` | an editor of the file focused, else one to the preview's left (FR-015c) |
+ * | parented   | *Open in Editor*, `aria-pressed=true`  | the parent, its tab and window focused (FR-015d) |
+ *
+ * One label in both states (v1 review, #732), as the editor's Open Preview button keeps one label pressed or not.
  *
  * The group is measured whole and subtracted before the readouts are fitted, so width never hides either control.
  * A binary provider has no editor to route to and no text to count (FR-015e), and a bar holding nothing is not
@@ -53,7 +55,7 @@ export interface PreviewStatusBarProps {
   panelId: string;
   /** A binary provider's preview has no route to an editor, and so no bar (FR-015e). */
   providerKind: PreviewProviderKind;
-  /** Parented → *Go to Editor*, pressed; standalone → *Open in Editor*. */
+  /** Parented → the button draws pressed; its label is *Open in Editor* either way. */
   parented: boolean;
   /** The preview's editor route (`runPreviewEditorRoute`), shared with both menus (FR-015b). */
   onEditorRoute: () => void;
@@ -167,7 +169,6 @@ function PreviewStatusBarView({
     (r) => forms.has(r.id) && wanted(r.id),
   );
 
-  const title = parented ? 'Go to Editor' : 'Open in Editor';
   return (
     <div
       className={`editor-status-strip preview-status-bar${focusMode ? ` ${FOCUS_MODE_STRIP_CLASS}` : ''}`}
@@ -210,7 +211,7 @@ function PreviewStatusBarView({
           token="editorPanel"
           className="editor-status-strip__preview"
           testId={`preview-editor-${panelId}`}
-          title={title}
+          title="Open in Editor"
           ariaPressed={parented}
           disabled={editorRouteDisabled}
           onClick={onEditorRoute}

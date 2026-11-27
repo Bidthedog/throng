@@ -9,8 +9,8 @@
  * `parent: { panelId, title }`. The renderer's whole part is to DRAW that from `preview-store` — the
  * same panel, in the same slot of the same tab, with the same body still mounted (so the reader keeps
  * their place, FR-024) — while the chrome changes: the title takes the parent's name, the unsaved dot
- * follows `dirty`, and the route back to the source reads *Go to Editor* instead of *Open in Editor*.
- * `parent: null` (the editor closed) reverses every one of those.
+ * follows `dirty`, and the route back to the source goes to the parent. Its label stays *Open in Editor* in both
+ * states (v1 review, #732). `parent: null` (the editor closed) reverses every one of those.
  *
  * The whole window is mounted (real `PanelPlaceholder`, the shipped Markdown body) and main's updates
  * are pushed exactly as they arrive.
@@ -95,17 +95,17 @@ describe('becoming parented, in place (FR-013a)', () => {
     expect(screen.getByTestId(`preview-body-${panel().id}`)).toBe(bodyHost);
   });
 
-  it('offers Go to Editor instead of Open in Editor (FR-015c, FR-015d)', async () => {
+  it('keeps the one Open in Editor row when it becomes parented (FR-015c, FR-015d; #732)', async () => {
     await mountStandalone();
     const before = await headerMenuLabels();
-    expect(before).toContain('Open in Editor');
+    expect(before.filter((l) => l === 'Open in Editor')).toHaveLength(1);
     expect(before).not.toContain('Go to Editor');
 
     panel().push(previewUpdate({ panelId: panel().id, revision: 2, content: null, parent: parentOf }));
 
     const after = await headerMenuLabels();
-    expect(after).toContain('Go to Editor');
-    expect(after).not.toContain('Open in Editor');
+    expect(after.filter((l) => l === 'Open in Editor')).toHaveLength(1);
+    expect(after).not.toContain('Go to Editor');
   });
 });
 

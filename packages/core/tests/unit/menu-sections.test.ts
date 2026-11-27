@@ -27,10 +27,10 @@ describe('MENU_SECTION_ORDER (033 menu-sections.ts)', () => {
       'contextual',
       'content',
       'create',
-      'destroy',
       'navigate',
       'viewState',
       'application',
+      'destroy',
     ]);
   });
 
@@ -39,17 +39,18 @@ describe('MENU_SECTION_ORDER (033 menu-sections.ts)', () => {
     expect(new Set(MENU_SECTION_ORDER).size).toBe(7);
   });
 
-  it('leads with Contextual and ends with Application', () => {
+  it('leads with Contextual and ends with Destroy (v1 review T1: closing and destroying is the last thing on a menu)', () => {
     expect(MENU_SECTION_ORDER[0]).toBe('contextual');
-    expect(MENU_SECTION_ORDER[MENU_SECTION_ORDER.length - 1]).toBe('application');
+    expect(MENU_SECTION_ORDER[MENU_SECTION_ORDER.length - 1]).toBe('destroy');
   });
 
-  it('puts Destroy third, ahead of Navigate and View & state (FR-052 is an inventory, not an order)', () => {
+  it('keeps the other six in their order: Content, Create, Navigate, View & state, Application', () => {
     const at = (s: MenuSection): number => MENU_SECTION_ORDER.indexOf(s);
-    expect(at('destroy')).toBeLessThan(at('navigate'));
-    expect(at('navigate')).toBeLessThan(at('viewState'));
-    expect(at('create')).toBeLessThan(at('destroy'));
     expect(at('content')).toBeLessThan(at('create'));
+    expect(at('create')).toBeLessThan(at('navigate'));
+    expect(at('navigate')).toBeLessThan(at('viewState'));
+    expect(at('viewState')).toBeLessThan(at('application'));
+    expect(at('application')).toBeLessThan(at('destroy'));
   });
 
   /*
@@ -99,9 +100,9 @@ describe('groupBySection (033 menu-sections.ts)', () => {
     expect(labels(groupBySection(items, sectionOf))).toEqual([
       ['Open Link'],
       ['Rename'],
-      ['Delete'],
       ['Copy Path'],
       ['About'],
+      ['Delete'],
     ]);
   });
 
@@ -140,7 +141,7 @@ describe('groupBySection (033 menu-sections.ts)', () => {
     const groups = groupBySection(items, sectionOf);
     expect(groups).toHaveLength(2);
     expect(groups.every((g) => g.length > 0)).toBe(true);
-    expect(labels(groups)).toEqual([['Delete'], ['Settings']]);
+    expect(labels(groups)).toEqual([['Settings'], ['Delete']]);
   });
 
   it('returns ONE group for a single-section menu — the cog menu draws no divider (M4, FR-050)', () => {
@@ -190,12 +191,14 @@ describe('groupBySection (033 menu-sections.ts)', () => {
     const groups = groupBySection(explorer, sectionOf);
     expect(groups).toHaveLength(5);
     expect(groups.length - 1).toBe(4); // four boundaries === four dividers
-    expect(labels(groups)[3]).toEqual([
+    expect(labels(groups)[2]).toEqual([
       'Open In',
       'Copy Path',
       'Collapse All Children',
       'Expand All Children',
     ]);
+    // v1 review T1 — Destroy is the last group.
+    expect(labels(groups).at(-1)).toEqual(['Delete']);
   });
 
   /*

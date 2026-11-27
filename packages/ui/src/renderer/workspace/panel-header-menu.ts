@@ -6,21 +6,22 @@
  * JSX `onContextMenu` handler, which is why SC-010 could not be asserted below E2E; the extraction
  * moves code without altering a label, an icon, an action or a condition (N6).
  *
- * The biggest restructure in the feature, and all of it is FR-047's fixed order rather than a fresh
- * opinion (contracts/menu-sections.md §3.4):
+ * The groups, in the order the shared section order draws them (v1 review T1 regrouped 033's contracts/menu-sections.md
+ * §3.4 shape and put Destroy last in every menu):
  *
- * | Section      | Items                                                                              |
- * |--------------|------------------------------------------------------------------------------------|
- * | Create       | Split ▸ (Split Down, Up, Right, Left — 048)                                         |
- * | Content      | Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All               |
- * | Destroy      | the panel's destroy verb                                                            |
- * | Navigate     | Find in File Explorer, Open in OS Explorer, Send to Tab, Sync to                  |
- * | View & state | Zoom, Synchronise Scrolling, Flag, Try again, Copy details, Clear panel type,            |
- * |              | Refresh / redraw                                                                    |
+ * | Group                | Section, group      | Items                                                              |
+ * |----------------------|---------------------|--------------------------------------------------------------------|
+ * | The document         | Content             | Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All |
+ * | The document's file  | Navigate            | Find in File Explorer, Open in OS Explorer, Open in OS Default     |
+ * |                      |                     | Program, Open Preview / Open in Editor, Find…, Back, Forward, Print… |
+ * | This panel type only | View & state, `panelType` | Go to Heading / Page / Row…, the grid toggles                |
+ * | The panel itself     | View & state        | Split ▸, Send to Tab, Sync to, Refresh, Reload, Focus Mode, Zoom,  |
+ * |                      |                     | Refresh / redraw terminal, Synchronise Scrolling, Flag, the        |
+ * |                      |                     | failure banner's three                                             |
+ * | Closing it           | Destroy             | the panel's removal verb, last                                     |
  *
- * *Destroy Panel* moves from last to the middle — the same shape the File Explorer menu has always
- * had. The editor and terminal conditionals are unchanged: an absent item is simply absent
- * from its group, and an empty group draws no divider.
+ * The conditionals are unchanged: an absent item is simply absent from its group, and an empty group draws no
+ * divider.
  *
  * 048 REMOVED *Rename* and *Reset Name* (FR-030): a panel is named by what it holds, so no menu, chord
  * or gesture renames one. It ADDED *Split*, on every kind.
@@ -34,7 +35,7 @@
  *
  * 044 ADDS A KIND AND THREE ROWS (contracts/menus-and-controls.md §1–§2). An editor gains *Open
  * Preview*, *Back* and *Forward* in Navigate; a preview panel draws its own shape — no Content at all,
- * *Close Panel*, the reveal rows, *Open in Editor* / *Go to Editor*, *Back*, *Forward*, the send rows,
+ * *Close Panel*, the reveal rows, *Open in Editor*, *Back*, *Forward*, the send rows,
  * then *Refresh* and *Zoom* — and carries the failure banner's three commands while ITS banner is up.
  * The builder names no provider: a preview's rows read its provider KIND, and Open Preview reads
  * core's `previewAffordance`, both handed in (preview-provider-seam.md §3).
@@ -192,7 +193,7 @@ export interface PanelHeaderMenuActions {
 export interface PanelHeaderPreviewState {
   /** A binary provider has no editor to open or go to (044 FR-015e, FR-073). */
   providerKind: PreviewProviderKind;
-  /** Parented → *Go to Editor*; standalone → *Open in Editor* (FR-015c, FR-015d). */
+  /** Parented → *Open in Editor* goes to the parent; standalone → it opens or focuses one (FR-015c, FR-015d). */
   parented: boolean;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no Synchronise Scrolling. Absent reads `true`. */
   flowingDocument?: boolean;
@@ -413,14 +414,23 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   // Scrolling have nothing visible to act on.
   const documentCovered = isPanelSectionMaximised(panel.id) ? { disabled: true } : {};
 
+  /*
+   * v1 review T1 — the menu is drawn as four groups: what acts on the document or file shown (`items`: Content, then
+   * Navigate), what only this panel type has (`typeRows`), what acts on the panel itself (`layoutRows`, then
+   * `panelRows`), and the close row. The type and panel-level groups share View & state and are told apart by
+   * `group`, so `withDividers` draws one divider between them and none inside either.
+   */
   const items: MenuAction[] = [];
+  const typeRows: MenuAction[] = [];
+  const typeRow = (row: Omit<MenuAction, 'section'>): MenuAction => ({ ...row, section: 'viewState', group: 'panelType' });
+  const layoutRows: MenuAction[] = [];
+  const panelRows: MenuAction[] = [];
 
   /*
    * 044 FR-033 — a PREVIEW's own rows (contracts/menus-and-controls.md §1).
    *
-   * Emitted before the Zoom block for one reason: within View & state the contract draws *Refresh*
-   * ahead of *Zoom*, and a section keeps the order its rows were emitted in. Its Navigate rows go here
-   * too — Send to Tab and Sync to are emitted last, so they still close the section.
+   * Emitted before the Zoom block for one reason: among the panel-level rows the contract draws *Refresh*
+   * ahead of *Zoom*, and a group keeps the order its rows were emitted in.
    *
    * Content is EMPTY by construction: a preview is read-only (FR-020) and not renamable (FR-030), so
    * nothing that edits text or a name belongs to it — Rename, Save, Revert and Reload are all absent
@@ -440,11 +450,15 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       // 050 R26 — unavailable while the file is moved out (the layout's flag, which main's moved-out
       // report is mirrored into): the row stays, disabled, like every other state-dependent command.
       const disabled = (args.panel.config as { movedOut?: unknown } | undefined)?.movedOut === true;
-      items.push(
-        args.preview.parented
-          ? { label: 'Go to Editor', icon: 'editorPanel' as const, section: 'navigate', disabled, onClick: () => actions.goToEditor() }
-          : { label: 'Open in Editor', icon: 'editorPanel' as const, section: 'navigate', disabled, onClick: () => actions.openInEditor() },
-      );
+      // v1 review (#732): one label whether or not the preview is parented; a parented one's row goes to its editor.
+      const parented = args.preview.parented;
+      items.push({
+        label: 'Open in Editor',
+        icon: 'editorPanel' as const,
+        section: 'navigate',
+        disabled,
+        onClick: () => (parented ? actions.goToEditor() : actions.openInEditor()),
+      });
     }
     // 074 FR-086a — a picture has no text: no Find row at all.
     if (!isPanelFindAbsent(panel.id)) items.push({
@@ -455,15 +469,15 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       ...documentCovered,
       onClick: () => actions.find(),
     });
-    // 074 FR-062b — nothing to go to (a single picture): no row, as the body menu has none.
-    if (args.preview?.goTo !== null) items.push({
+    // 074 FR-062b — nothing to go to (a single picture): no row, as the body menu has none. v1 review T1: the row is
+    // named for the panel type (Heading, Page, Row), so it opens that type's own group.
+    if (args.preview?.goTo !== null) typeRows.push(typeRow({
       label: args.preview?.goTo === 'page' ? 'Go to Page…' : args.preview?.goTo === 'row' ? 'Go to Row…' : 'Go to Heading…',
       ...(args.preview?.goTo === 'row' ? { icon: 'goToRow' as const } : {}),
-      section: 'navigate',
       shortcut: firstBinding(keybindings, 'preview.goToHeading'),
       ...documentCovered,
       onClick: () => actions.goToHeading(),
-    });
+    }));
     items.push(...historyItems(args.history, keybindings, actions));
     // 075 FR-061 – FR-063 — Print…, on every preview; disabled, with the reason, when its provider cannot print.
     if (actions.print !== undefined) {
@@ -479,7 +493,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
         onClick: () => print(),
       });
     }
-    items.push({
+    panelRows.push({
       label: 'Refresh',
       icon: 'refresh' as const,
       section: 'viewState',
@@ -488,11 +502,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   }
 
   /*
-   * 048 FR-015 — Split, in Create, on every panel kind: a submenu of the four split commands, each
-   * showing its current chord. The same builder feeds the content menus and the **+** button.
-   * (Rename and Reset Name are gone — a panel is named by what it holds, FR-030.)
+   * 048 FR-015 — Split, on every panel kind: a submenu of the four split commands, each showing its current chord.
+   * The same builder feeds the content menus and the **+** button, where it stays in Create; here v1 review T1 puts
+   * it first among the panel-level rows. (Rename and Reset Name are gone — a panel is named by what it holds, FR-030.)
    */
-  items.push(splitSubmenu(panel.id, keybindings, (_id, direction) => actions.split(direction)));
+  layoutRows.push({
+    ...splitSubmenu(panel.id, keybindings, (_id, direction) => actions.split(direction)),
+    section: 'viewState',
+  });
 
   /*
    * 054 FR-071, FR-077 — Maximise Panel / Restore Panel, View & state, on every kind: the header control's
@@ -500,7 +517,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    */
   if (args.maximise) {
     const { maximised, toggle } = args.maximise;
-    items.push({
+    panelRows.push({
       // Named for the feature (FR-078, manual test change request 2026-10-12).
       label: maximised ? 'Exit Focus Mode' : 'Enter Focus Mode',
       icon: maximised ? 'panelRestore' : 'panelMaximise',
@@ -513,7 +530,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   // Per-panel zoom (012) — zoom THIS panel's text independently of others. Offered only on the kinds
   // that render it (FR-062a): see KINDS_THAT_ZOOM above for why this is a gate and not a comment.
   if (panel.kind !== undefined && KINDS_THAT_ZOOM.includes(panel.kind)) {
-    items.push({
+    panelRows.push({
       label: 'Zoom',
       icon: 'zoomIn' as const,
       section: 'viewState',
@@ -595,9 +612,9 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     /*
      * 044 FR-002 — Open Preview, after the reveal rows and before Send to Tab
      * (contracts/menus-and-controls.md §2). The affordance is core's decision: `absent` draws nothing
-     * (no provider, no file, outside the project — FR-001, FR-004), either `disabled` reason draws it
-     * greyed (the provider is off, FR-062, or the file already has its one preview, FR-012). It shows
-     * `preview.open`'s chord when one is bound; none ships (FR-005).
+     * (no provider, no file, outside the project — FR-001, FR-004); the provider being off draws it greyed
+     * (FR-062). v1 review (#732): the file already having its one preview (FR-012) leaves it ENABLED, and
+     * `preview.open` focuses that preview. It shows `preview.open`'s chord when one is bound; none ships (FR-005).
      */
     const openPreview = args.openPreview;
     if (openPreview !== undefined && openPreview.state !== 'absent') {
@@ -607,7 +624,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
         icon: previewIconOf(openPreview.provider),
         section: 'navigate',
         shortcut: firstBinding(keybindings, 'preview.open'),
-        disabled: openPreview.state === 'disabled',
+        disabled: openPreview.state === 'disabled' && openPreview.reason === 'provider-disabled',
         onClick: () => actions.openPreview(),
       });
     }
@@ -629,70 +646,66 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     // 044 FR-122a/b — Synchronise Scrolling, exactly where Open Preview is drawn, disabled or not.
     // 054 — none for a source whose preview is one picture (a Mermaid file).
     if (openPreview !== undefined && openPreview.state !== 'absent' && supportsScrollSync(openPreview.provider)) {
-      items.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
+      panelRows.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
     }
 
-    if (panelFailure) items.push(...failureItems(actions));
+    if (panelFailure) panelRows.push(...failureItems(actions));
   }
 
   // 044 FR-122a/b — a text preview's Synchronise Scrolling, after its Zoom; a binary provider has no editor to
   // keep in step with, so none.
   if (isPreview && args.preview?.providerKind === 'text' && (args.preview.scrollSync ?? args.preview.flowingDocument !== false)) {
-    items.push({ ...syncScrollItem(args.syncScroll ?? false, keybindings, actions), ...documentCovered });
+    panelRows.push({ ...syncScrollItem(args.syncScroll ?? false, keybindings, actions), ...documentCovered });
   }
 
   // 073 FR-036b — a grid provider's cell dialog, on or off for THIS panel: a checked toggle in View & state, the menu route
   // the status bar's toggle is an accelerator over.
   if (isPreview && args.preview?.cellDialog !== undefined) {
-    items.push({
+    typeRows.push(typeRow({
       label: 'Edit Long Cells in Dialog',
       checked: args.preview.cellDialog.on,
       testId: 'menu-item-Edit Long Cells in Dialog',
       icon: 'cellDialog' as const,
-      section: 'viewState',
       onClick: () => actions.toggleCellDialog(),
-    });
+    }));
   }
 
   // 073 FR-013 — a grid provider's Wrap, on or off for THIS panel: a checked toggle in View & state, the menu route the
   // status bar's toggle is an accelerator over.
   if (isPreview && args.preview?.wrap !== undefined) {
-    items.push({
+    typeRows.push(typeRow({
       label: 'Wrap',
       checked: args.preview.wrap.on,
       testId: 'menu-item-Wrap',
       icon: 'wrapCells' as const,
-      section: 'viewState',
       onClick: () => actions.toggleWrap(),
-    });
+    }));
   }
 
   // 073 FR-039a — a grid provider's two locks, each on or off for THIS panel: checked toggles in View & state, the menu
   // route the status bar's toggles are accelerators over.
   if (isPreview && args.preview?.lockFirstRow !== undefined) {
-    items.push({
+    typeRows.push(typeRow({
       label: 'Lock First Row',
       checked: args.preview.lockFirstRow.on,
       testId: 'menu-item-Lock First Row',
       icon: 'lockFirstRow' as const,
-      section: 'viewState',
       onClick: () => actions.toggleLockFirstRow(),
-    });
+    }));
   }
   if (isPreview && args.preview?.lockFirstColumn !== undefined) {
-    items.push({
+    typeRows.push(typeRow({
       label: 'Lock First Column',
       checked: args.preview.lockFirstColumn.on,
       testId: 'menu-item-Lock First Column',
       icon: 'lockFirstColumn' as const,
-      section: 'viewState',
       onClick: () => actions.toggleLockFirstColumn(),
-    });
+    }));
   }
 
   // 044 FR-033 — a preview's banner commands, after its Zoom (View & state: Refresh · Zoom · Synchronise
   // Scrolling · banner).
-  if (isPreview && panelFailure) items.push(...failureItems(actions));
+  if (isPreview && panelFailure) panelRows.push(...failureItems(actions));
 
   /*
    * 028 (issue 163) — Terminal Panels: the deliberate version of the divider nudge users
@@ -717,14 +730,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
      * 'editor'` it could never fire for a terminal at all.
      */
     if (panel.dormant === true) {
-      items.push({
+      panelRows.push({
         label: 'Reload',
         icon: 'retry' as const,
         section: 'viewState',
         onClick: () => actions.reloadTerminal(),
       });
     }
-    items.push({
+    panelRows.push({
       label: 'Refresh / redraw terminal',
       icon: 'retry' as const,
       section: 'viewState',
@@ -744,7 +757,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * no Flag — absent, not greyed (constitution VI), like the untyped placeholder's Zoom commands.
    */
   if (panel.kind !== undefined) {
-    items.push({
+    panelRows.push({
       label: 'Flag',
       section: 'viewState',
       onClick: () => actions.flag(),
@@ -796,10 +809,10 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     });
   }
 
-  items.push({
+  layoutRows.push({
     label: 'Send to Tab',
     icon: 'send' as const,
-    section: 'navigate',
+    section: 'viewState',
     ...lockedOut,
     submenu: [
       // New Tab == dragging the Panel onto the tab-strip `+` (005 FR-027).
@@ -820,10 +833,10 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   // existing one → choose a Tab within it ("New" makes a fresh Tab). Cloning
   // leaves the Panel in the main project.
   if (detach) {
-    items.push({
+    layoutRows.push({
       label: 'Sync to',
       icon: 'send' as const,
-      section: 'navigate',
+      section: 'viewState',
       ...lockedOut,
       submenu: [
         {
@@ -862,7 +875,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     });
   }
 
-  items.push({
+  const closeRow: MenuAction = {
     label: `${panelVerb} Panel`,
     icon: 'destroy' as const,
     section: 'destroy',
@@ -870,7 +883,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     shortcut: firstBinding(keybindings, 'panel.destroy'),
     ...lockedOut,
     onClick: () => actions.destroy(),
-  });
+  };
 
-  return items;
+  return [...items, ...typeRows, ...layoutRows, ...panelRows, closeRow];
 }
