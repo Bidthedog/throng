@@ -668,6 +668,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
   },
   {
+    // 081 FR-060 (#724) — the preview sibling of the editor follow, independent of it (FR-063).
+    key: 'explorer.autoRevealActivePreview',
+    label: 'Follow the active preview',
+    description:
+      "Select the active preview's source file in File Explorer, opening its folders to show it.",
+    group: 'File Explorer',
+    control: 'toggle',
+  },
+  {
     key: 'explorer.openUnsupportedInOs',
     label: 'Open unsupported files in the OS',
     description:
