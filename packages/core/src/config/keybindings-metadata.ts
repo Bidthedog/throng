@@ -309,6 +309,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord('grid.insertRowBelow', 'CSV grid', 'Insert Row Below', 'Insert an empty row below the active cell in the CSV Preview Editor.'),
   chord('grid.insertColumnLeft', 'CSV grid', 'Insert Column Left', 'Insert an empty column left of the active cell in the CSV Preview Editor.'),
   chord('grid.insertColumnRight', 'CSV grid', 'Insert Column Right', 'Insert an empty column right of the active cell in the CSV Preview Editor.'),
+  chord('grid.insertRowsAbove', 'CSV grid', 'Insert Rows Above…', 'Ask how many, then insert that many empty rows above the active cell in the CSV Preview Editor.'),
+  chord('grid.insertRowsBelow', 'CSV grid', 'Insert Rows Below…', 'Ask how many, then insert that many empty rows below the active cell in the CSV Preview Editor.'),
+  chord('grid.insertColumnsLeft', 'CSV grid', 'Insert Columns Left…', 'Ask how many, then insert that many empty columns left of the active cell in the CSV grid.'),
+  chord('grid.insertColumnsRight', 'CSV grid', 'Insert Columns Right…', 'Ask how many, then insert that many empty columns right of the active cell in the CSV grid.'),
+  chord('grid.deleteRows', 'CSV grid', 'Delete Rows', 'Delete every row the selection spans in the CSV Preview Editor.'),
+  chord('grid.deleteColumns', 'CSV grid', 'Delete Columns', 'Delete every column the selection spans, from every row, in the CSV Preview Editor.'),
   // 075 FR-064 — Print Preview for the active preview; Print Preview's own Print button sends the job.
   chord(
     'preview.print',

@@ -222,7 +222,7 @@ export const GUIDE_MAP: readonly GuideTask[] = [
   task('markdown', 'show-front-matter', 'Show front matter'),
   task('csv-and-spreadsheets', 'edit-a-csv-file-as-a-grid', 'Edit a CSV file as a grid', { previewTypes: ['csv'] }),
   task('csv-and-spreadsheets', 'move-around-and-edit-cells', 'Move around and edit cells'),
-  task('csv-and-spreadsheets', 'insert-rows-and-columns', 'Insert rows and columns', { commands: ['grid.insertRowAbove', 'grid.insertRowBelow', 'grid.insertColumnLeft', 'grid.insertColumnRight'] }),
+  task('csv-and-spreadsheets', 'insert-rows-and-columns', 'Insert rows and columns', { commands: ['grid.insertRowAbove', 'grid.insertRowBelow', 'grid.insertColumnLeft', 'grid.insertColumnRight', 'grid.insertRowsAbove', 'grid.insertRowsBelow', 'grid.insertColumnsLeft', 'grid.insertColumnsRight', 'grid.deleteRows', 'grid.deleteColumns'] }),
   task('csv-and-spreadsheets', 'copy-and-paste-cells', 'Copy and paste cells'),
   task('csv-and-spreadsheets', 'set-column-widths-and-edit-long-cells', 'Set column widths and edit long cells'),
   task('csv-and-spreadsheets', 'keep-headers-in-view-and-wrap-text', 'Keep headers in view and wrap text'),

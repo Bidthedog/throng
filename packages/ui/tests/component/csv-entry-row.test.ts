@@ -17,6 +17,7 @@ import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.
 import { __resetCopiedBlock } from '../../src/renderer/grid/copied-block.js';
 import { __resetColumnWidthCache } from '../../src/renderer/preview/providers/csv/column-widths.js';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
+import { openSubmenu } from './helpers/expand-submenus.js';
 
 const FILE = 'D:/proj/data.csv';
 
@@ -140,10 +141,20 @@ describe('the CSV entry row (081 US9)', () => {
     expect(doc.text()).toBe('a,b\n1,2\n');
   });
 
+  it('Tab from the last cell of the last record goes to the entry row\'s first cell, writing nothing (T6)', () => {
+    const doc = mountDocument('a,b\n1,2\n');
+    fireEvent.mouseDown(cellAt(1, 1)!, { button: 0 });
+    fireEvent.mouseUp(window);
+    expect(fireEvent.keyDown(grid(), { key: 'Tab' })).toBe(false);
+    expect(cellAt(2, 0)).toHaveClass('data-grid__cell--active');
+    expect(doc.gridEdit).not.toHaveBeenCalled();
+  });
+
   it('draws Cut and Insert Row Above disabled on the entry row\'s header, never hidden (FR-083)', async () => {
     mountDocument('a,b\n1,2\n');
     fireEvent.contextMenu(rowHead(2)!, { clientX: 5, clientY: 5 });
     const cut = await screen.findByTestId('menu-item-Cut');
+    openSubmenu('Insert');
     const above = screen.getByTestId('menu-item-Insert Row Above');
     expect(cut.getAttribute('aria-disabled')).toBe('true');
     expect(above.getAttribute('aria-disabled')).toBe('true');
@@ -154,6 +165,7 @@ describe('the CSV entry row (081 US9)', () => {
     mountDocument('a,b\n1,2\n');
     fireEvent.contextMenu(rowHead(1)!, { clientX: 5, clientY: 5 });
     expect((await screen.findByTestId('menu-item-Cut')).getAttribute('aria-disabled')).not.toBe('true');
+    openSubmenu('Insert');
     expect(screen.getByTestId('menu-item-Insert Row Above').getAttribute('aria-disabled')).not.toBe('true');
   });
 

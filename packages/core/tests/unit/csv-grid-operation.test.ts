@@ -12,6 +12,7 @@ describe('validateGridOperation', () => {
     expect(validateGridOperation({ kind: 'insertRows', at: 0, count: 2 })).not.toBeNull();
     expect(validateGridOperation({ kind: 'insertColumn', at: 3 })).not.toBeNull();
     expect(validateGridOperation({ kind: 'deleteRows', from: 1, count: 1 })).not.toBeNull();
+    expect(validateGridOperation({ kind: 'deleteColumns', from: 2, count: 3 })).toEqual({ kind: 'deleteColumns', from: 2, count: 3 });
   });
 
   // A cut of more than 10,000 whole rows is one contiguous change: refusing it left the rows copied and not removed.
@@ -30,6 +31,8 @@ describe('validateGridOperation', () => {
       { kind: 'insertRows', at: 0, count: 0 },
       { kind: 'insertRows', at: 0, count: 10_001 },
       { kind: 'deleteRows', from: 0, count: -2 },
+      { kind: 'deleteColumns', from: 0, count: 0 },
+      { kind: 'deleteColumns', from: -1, count: 1 },
       { kind: 'sort', column: 1 },
     ]) {
       expect(validateGridOperation(bad)).toBeNull();
@@ -83,6 +86,7 @@ describe('resolveGridOperation', () => {
     expect(apply({ kind: 'deleteRows', from: 0, count: 1 })).toBe('1,2\n');
     expect(apply({ kind: 'insertRows', at: 1, count: 1, values: [['x', 'y']] })).toBe('a,b\nx,y\n1,2\n');
     expect(apply({ kind: 'insertColumn', at: 1, count: 1, columns: [['p', 'q']] })).toBe('a,p,b\n1,q,2\n');
+    expect(apply({ kind: 'deleteColumns', from: 0, count: 1 })).toBe('b\n2\n');
   });
 
   it('refuses every operation on a document with an unterminated quote, naming its line', () => {

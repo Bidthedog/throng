@@ -182,6 +182,29 @@ describe('a grid edit with no editor open', () => {
     expect(coord.getContent(GRID_DOC)?.dirty).toBe(false);
   });
 
+  it('deletes a column as one undo step, dirty, and saves only the removed fields (T4)', async () => {
+    await writeFile(file, '"id","name",n\r\n"1","Ann",x\r\n');
+    expect(await service.edit({ panelId: PREVIEW, filePath: file, operation: { kind: 'deleteColumns', from: 1, count: 1 } })).toEqual({ ok: true, dirty: true });
+    expect(coord.getContent(GRID_DOC)?.text).toBe('"id",n\n"1",x\n');
+    expect(service.undo(PREVIEW)).toEqual({ ok: true });
+    expect(coord.getContent(GRID_DOC)).toMatchObject({ text: '"id","name",n\n"1","Ann",x\n', dirty: false });
+    service.redo(PREVIEW);
+    expect((await service.save(PREVIEW)).ok).toBe(true);
+    expect(await readFile(file, 'utf8')).toBe('"id",n\r\n"1",x\r\n');
+  });
+
+  it('inserts a row and a column into an empty file, dirty, and saves empty fields (T5)', async () => {
+    await writeFile(file, '');
+    expect(await service.edit({ panelId: PREVIEW, filePath: file, operation: { kind: 'insertRows', at: 0, count: 1 } })).toEqual({ ok: true, dirty: true });
+    await service.edit({ panelId: PREVIEW, filePath: file, operation: { kind: 'insertColumn', at: 1 } });
+    expect(coord.getContent(GRID_DOC)?.text).toBe(',\n');
+    expect(service.undo(PREVIEW)).toEqual({ ok: true });
+    expect(coord.getContent(GRID_DOC)?.text).toBe('\n');
+    service.redo(PREVIEW);
+    expect((await service.save(PREVIEW)).ok).toBe(true);
+    expect(await readFile(file, 'utf8')).toBe(',\n');
+  });
+
   it('refuses every operation on a document with an unterminated quote, naming the line', async () => {
     await writeFile(file, 'a,b\n1,"open\n');
     expect(await service.edit({ panelId: PREVIEW, filePath: file, operation: setB2('x') })).toEqual({

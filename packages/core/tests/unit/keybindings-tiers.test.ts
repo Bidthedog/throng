@@ -92,6 +92,12 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'grid.insertRowBelow': 'tier2',
   'grid.insertColumnLeft': 'tier2',
   'grid.insertColumnRight': 'tier2',
+  'grid.insertRowsAbove': 'tier2',
+  'grid.insertRowsBelow': 'tier2',
+  'grid.insertColumnsLeft': 'tier2',
+  'grid.insertColumnsRight': 'tier2',
+  'grid.deleteRows': 'tier2',
+  'grid.deleteColumns': 'tier2',
   'terminal.scrollLineUp': 'tier2',
   'terminal.scrollLineDown': 'tier2',
   'editor.saveAs': 'tier2', // recorded exception (the Save pair)
@@ -421,6 +427,12 @@ describe('the FR-101 tier guard', () => {
       'grid.insertRowBelow': [],
       'grid.insertColumnLeft': [],
       'grid.insertColumnRight': [],
+      'grid.insertRowsAbove': [],
+      'grid.insertRowsBelow': [],
+      'grid.insertColumnsLeft': [],
+      'grid.insertColumnsRight': [],
+      'grid.deleteRows': [],
+      'grid.deleteColumns': [],
       // 075 FR-064 — new command, scoped to {preview}.
       'preview.print': ['Ctrl+P'],
       // Print… for an editor's document — new command, scoped to {editor}.

@@ -13,6 +13,7 @@ import { EditorView } from '@codemirror/view';
 import userEvent from '@testing-library/user-event';
 import type { IconKey } from '@throng/core';
 import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
+import { menuWithSubmenu, openSubmenu } from './helpers/expand-submenus.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseCsv } from '@throng/core';
 import { CsvBody, CSV_WORKER_THRESHOLD } from '../../src/renderer/preview/providers/csv/csv-body.js';
@@ -368,16 +369,56 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     expect(cellAt(1, 1).textContent).toBe('2');
   });
 
-  it('names the editor route Go to Editor while the preview is linked to an editor, Open in Editor otherwise (T089)', () => {
-    const h = mount('a,b\n1,2\n', { onOpenInEditor: () => {}, editorRouteParented: true });
+  it('names the editor route Open in Editor, linked to an editor or not (T089, T17)', () => {
+    const onOpenInEditor = vi.fn();
+    mount('a,b\n1,2\n', { onOpenInEditor });
     fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
-    expect(screen.getByTestId('menu-item-Go to Editor')).toBeTruthy();
-    expect(screen.queryByTestId('menu-item-Open in Editor')).toBeNull();
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
-    h.unmount();
-    mount('a,b\n1,2\n', { onOpenInEditor: () => {}, editorRouteParented: false });
-    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
-    expect(screen.getByTestId('menu-item-Open in Editor')).toBeTruthy();
+    expect(screen.queryByTestId('menu-item-Go to Editor')).toBeNull();
+    fireEvent.click(screen.getByTestId('menu-item-Open in Editor'));
+    expect(onOpenInEditor).toHaveBeenCalledTimes(1);
+  });
+
+  const topLevel = (): string[] =>
+    [...document.querySelectorAll('[data-testid="context-menu"] > [role="menuitem"]')].map((el) =>
+      (el.getAttribute('data-testid') ?? '').replace(/^menu-item-/, ''),
+    );
+  const corner = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-corner]')!;
+
+  it('the corner menu offers only what acts on every cell and on the file (T13)', () => {
+    mount('a,b\n1,2\n', { onOpenInEditor: () => {}, providerSettings: { enabled: true, editLongCellsInDialog: true, longCellThreshold: 1 } });
+    fireEvent.contextMenu(corner(), { clientX: 5, clientY: 5 });
+    expect(topLevel()).toEqual(expect.arrayContaining(['Cut', 'Copy', 'Copy as', 'Clear Cells', 'Undo', 'Redo', 'Save', 'Save As…', 'Go to Row…', 'Open in Editor', 'Print…']));
+    for (const absent of ['Paste', 'Select All', 'Insert', 'Edit in Dialog…', 'Column Width…']) {
+      expect(screen.queryByTestId(`menu-item-${absent}`), absent).toBeNull();
+    }
+  });
+
+  it.each([
+    ['a cell', () => cellAt(0, 0)],
+    ['a row header', () => rowHead(0)],
+    ['a column header', () => colHead(0)],
+    ['the corner', () => corner()],
+  ])('Clear Cells on the menu of %s shows Del, the key that clears the selection (T12), and Undo / Redo theirs (#732)', (_name, target) => {
+    mount('a,b\n1,2\n');
+    fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
+    expect(screen.getByTestId('menu-shortcut-Clear Cells').textContent).toBe('(Del)');
+    // #732 — Undo and Redo show the grid's own keys, as the editor's menu does.
+    expect(screen.getByTestId('menu-shortcut-Undo').textContent).toBe('(Ctrl+Z)');
+    expect(screen.getByTestId('menu-shortcut-Redo').textContent).toBe('(Ctrl+Y)');
+  });
+
+  it.each([
+    ['a cell', () => cellAt(0, 0), 'Clear Cells'],
+    ['a row header', () => rowHead(0), 'Delete Row'],
+    ['a column header', () => colHead(0), 'Delete Column'],
+    ['the corner', () => corner(), 'Clear Cells'],
+  ])('on the menu of %s, Undo and Redo come straight after the clipboard group, ending in %s (T16)', (_name, target, last) => {
+    mount('a,b\n1,2\n');
+    fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
+    const items = topLevel();
+    const undo = items.indexOf('Undo');
+    expect(items[undo - 1]).toBe(last);
+    expect(items[undo + 1]).toBe('Redo');
   });
 
   it('Column Width… on a column header sizes the column right-clicked, not the active one (FR-006, T086)', () => {
@@ -442,6 +483,12 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
     __resetCopiedBlock();
   });
 
+  /** Right-click `target` and open Insert ▸ once the menu, which reads the clipboard first, is up. */
+  async function openInsert(target: HTMLElement): Promise<void> {
+    fireEvent.contextMenu(target, { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Insert'));
+  }
+
   /** Right-click `target` and choose Copy / Cut, waiting for the clipboard write to land. */
   async function chooseFrom(target: HTMLElement, label: string): Promise<void> {
     fireEvent.contextMenu(target, { clientX: 5, clientY: 5 });
@@ -452,7 +499,7 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
   it('offers Insert Copied Rows Above and Below on a row header while whole rows are on the clipboard, and inserts them', async () => {
     mount('a,b\n1,2\n3,4\n');
     await chooseFrom(rowHead(1), 'Copy');
-    fireEvent.contextMenu(rowHead(2), { clientX: 5, clientY: 5 });
+    await openInsert(rowHead(2));
     await screen.findByTestId('menu-item-Insert Copied Rows Above');
     expect(copiedItems()).toEqual(['Insert Copied Rows Above', 'Insert Copied Rows Below']);
     // The blank inserts stay beside them.
@@ -470,7 +517,7 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
     fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
     fireEvent.click(await screen.findByTestId('menu-item-Copy'));
     await waitFor(() => expect(clipText).not.toBe(''));
-    fireEvent.contextMenu(rowHead(2), { clientX: 5, clientY: 5 });
+    await openInsert(rowHead(2));
     fireEvent.click(await screen.findByTestId('menu-item-Insert Copied Rows Above'));
     await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalledTimes(1));
     expect(lastOp()).toEqual({ kind: 'insertRows', at: 2, count: 2, values: [['a', 'b'], ['1', '2']] });
@@ -479,7 +526,7 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
   it('offers Insert Copied Columns Left and Right on a column header while whole columns are on the clipboard', async () => {
     mount('a,b\n1,2\n3,4\n');
     await chooseFrom(colHead(0), 'Copy');
-    fireEvent.contextMenu(colHead(1), { clientX: 5, clientY: 5 });
+    await openInsert(colHead(1));
     await screen.findByTestId('menu-item-Insert Copied Columns Left');
     expect(copiedItems()).toEqual(['Insert Copied Columns Left', 'Insert Copied Columns Right']);
     expect(ids()).toEqual(expect.arrayContaining(['Insert Column Left', 'Insert Column Right']));
@@ -491,7 +538,7 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
   it('keeps rows and columns apart: copied columns offer no row items, and copied rows no column items', async () => {
     mount('a,b\n1,2\n');
     await chooseFrom(colHead(0), 'Copy');
-    fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
+    await openInsert(rowHead(1));
     await screen.findByTestId('menu-item-Insert Row Above');
     expect(copiedItems()).toEqual([]);
   });
@@ -504,7 +551,7 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
     fireEvent.mouseUp(window);
     fireEvent.copy(screen.getByTestId('csv-grid-p1'));
     await waitFor(() => expect(clipText).toBe('1'));
-    fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
+    await openInsert(rowHead(1));
     await screen.findByTestId('menu-item-Insert Row Above');
     expect(copiedItems()).toEqual([]);
   });
@@ -513,7 +560,7 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
     mount('a,b\n1,2\n');
     await chooseFrom(rowHead(0), 'Copy');
     clipText = 'copied somewhere else';
-    fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
+    await openInsert(rowHead(1));
     await screen.findByTestId('menu-item-Insert Row Above');
     expect(copiedItems()).toEqual([]);
   });
@@ -522,7 +569,7 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
     mount('a,b\n1,2\n3,4\n');
     await chooseFrom(rowHead(1), 'Cut');
     await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalledTimes(1));
-    fireEvent.contextMenu(rowHead(0), { clientX: 5, clientY: 5 });
+    await openInsert(rowHead(0));
     await screen.findByTestId('menu-item-Insert Copied Rows Above');
   });
 });
@@ -859,22 +906,26 @@ describe('CsvBody menu icons (FR-037g)', () => {
       Save: 'save',
       'Save As…': 'saveAs',
       'Edit in Dialog…': 'cellDialog',
+      'Go to Row…': 'goToRow',
+      // 073 T109 — a clearing action, drawn as the editor's Reset Language is.
+      'Clear Cells': 'destroy',
+      'Copy as': 'copy',
+    });
+    expect(iconOf('Column Width…')).toBeUndefined();
+    openSubmenu('Insert');
+    expectIcons({
       'Insert Row Above': 'insertRowAbove',
       'Insert Row Below': 'insertRowBelow',
       'Insert Column Left': 'insertColumnLeft',
       'Insert Column Right': 'insertColumnRight',
-      'Go to Row…': 'goToRow',
-      // 073 T109 — a clearing action, drawn as the editor's Reset Language is.
-      'Clear Cells': 'destroy',
     });
-    expect(iconOf('Column Width…')).toBeUndefined();
     // FR-037h — a header's own menu offers no Select Row / Select Column: clicking the header already selected it.
     expect(screen.queryByTestId('menu-item-Select Column')).toBeNull();
   });
 
   it('draws the copy picture on both Copy as items, and the editor picture on Open in Editor (T088)', () => {
     mount('a,b\n1,2\n', { onOpenInEditor: () => {} });
-    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
+    menuWithSubmenu(cellAt(0, 0), 'Copy as');
     expectIcons({ 'Copy as Rich Text': 'copy', 'Copy as Plain Text': 'copy', 'Open in Editor': 'editorPanel' });
   });
 
@@ -882,27 +933,27 @@ describe('CsvBody menu icons (FR-037g)', () => {
     mount('a,b\n1,2\n');
     fireEvent.contextMenu(head('rowheader', 1), { clientX: 5, clientY: 5 });
     expectIcons({
-      'Insert Row Above': 'insertRowAbove',
-      'Insert Row Below': 'insertRowBelow',
       Cut: 'cut',
       Copy: 'copy',
       Paste: 'paste',
       'Go to Row…': 'goToRow',
     });
+    openSubmenu('Insert');
+    expectIcons({ 'Insert Row Above': 'insertRowAbove', 'Insert Row Below': 'insertRowBelow' });
   });
 
   it('draws them on the column-header menu', () => {
     mount('a,b\n1,2\n');
     fireEvent.contextMenu(head('columnheader', 1), { clientX: 5, clientY: 5 });
     expectIcons({
-      'Insert Column Left': 'insertColumnLeft',
-      'Insert Column Right': 'insertColumnRight',
       Cut: 'cut',
       Copy: 'copy',
       Paste: 'paste',
       'Reset Column Width': 'resetColumnWidth',
     });
     expect(iconOf('Column Width…')).toBeUndefined();
+    openSubmenu('Insert');
+    expectIcons({ 'Insert Column Left': 'insertColumnLeft', 'Insert Column Right': 'insertColumnRight' });
   });
 });
 

@@ -250,6 +250,12 @@ export type ActionId =
   | 'grid.insertRowBelow'
   | 'grid.insertColumnLeft'
   | 'grid.insertColumnRight'
+  | 'grid.insertRowsAbove'
+  | 'grid.insertRowsBelow'
+  | 'grid.insertColumnsLeft'
+  | 'grid.insertColumnsRight'
+  | 'grid.deleteRows'
+  | 'grid.deleteColumns'
   /*
    * 070 FR-027, FR-024a — the application commands the macOS app menu carries, each also in the key bindings list
    * (Principle VI): Settings opens Preferences; Install and Uninstall put the `throng` command on the PATH and take it
@@ -527,6 +533,12 @@ export const COMMAND_SCOPES: CommandScopes = {
   'grid.insertRowBelow': GRID_SURFACES,
   'grid.insertColumnLeft': GRID_SURFACES,
   'grid.insertColumnRight': GRID_SURFACES,
+  'grid.insertRowsAbove': GRID_SURFACES,
+  'grid.insertRowsBelow': GRID_SURFACES,
+  'grid.insertColumnsLeft': GRID_SURFACES,
+  'grid.insertColumnsRight': GRID_SURFACES,
+  'grid.deleteRows': GRID_SURFACES,
+  'grid.deleteColumns': GRID_SURFACES,
   'preview.print': PRINT_SURFACES,
 };
 
@@ -725,6 +737,12 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'grid.insertRowBelow': [],
     'grid.insertColumnLeft': [],
     'grid.insertColumnRight': [],
+    'grid.insertRowsAbove': [],
+    'grid.insertRowsBelow': [],
+    'grid.insertColumnsLeft': [],
+    'grid.insertColumnsRight': [],
+    'grid.deleteRows': [],
+    'grid.deleteColumns': [],
     /*
      * 075 FR-064 — Print…, which opens Print Preview. `Ctrl+P` is readline's previous-history, so it is scoped to
      * {preview} alone and never live in a terminal; macOS derives `Cmd+P`.

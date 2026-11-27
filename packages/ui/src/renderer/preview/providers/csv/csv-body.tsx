@@ -23,7 +23,7 @@
  * Column letters and the first record as row 1, always (FR-042). A document with an unterminated quote is
  * not drawn as a grid — one inline notice names its first bad line, with Open in Editor (FR-046).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   cellDialogOn,
   wrapCellsOn,
@@ -34,8 +34,10 @@ import {
   flattenCellText,
   isJsonContainer,
   longCellThresholdOf,
-  firstBinding,
   logCaught,
+  checkTyped,
+  typedProblem,
+  type FieldDescriptor,
   logExpected,
   parseTsv,
   type PreviewCopyFormat,
@@ -55,18 +57,18 @@ import { previewPanelTypeLabel, SHIPPED_PREVIEW_PROVIDERS } from '@throng/core';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange, type GridSelection } from '../../../grid/grid-selection.js';
 import { useCsvScrollSync } from './use-csv-scroll-sync.js';
+import { csvGridMenu, type InsertManyKind } from './csv-menu.js';
 import { useSyncMarkFrom } from '../../sync-mark-store.js';
 import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { useFilePlaces } from '../../../grid/use-file-places.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
-import { gridPrintRow } from '../../../grid/grid-print-row.js';
 import { registerGridPrintSource, type GridPrintSource } from '../../../grid/grid-print.js';
 import { CellDialog } from '../../../grid/cell-dialog.js';
+import { GridNumberPrompt } from '../../../grid/grid-number-prompt.js';
 import { copiedBlockFor, hasCopiedBlock, recordCopy, type CopiedBlock } from '../../../grid/copied-block.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
 import { useAppSettings, useKeybindings } from '../../../config/config-store.js';
 import { useContextMenu } from '../../../context-menu-provider.js';
-import type { MenuAction } from '../../../workspace/context-menu.js';
 import { usePreviewState } from '../../preview-store.js';
 import { registerEditorActions, unregisterEditorActions } from '../../../editor/editor-actions.js';
 import { removeEditorState, setEditorState } from '../../../editor/editor-state.js';
@@ -124,13 +126,27 @@ function useCsvModel(text: string): Parsed | null {
   return parsed;
 }
 
+
+/**
+ * T8 — why `text` is no count of rows or columns to insert, as Preferences' number fields name it; `null` when it is
+ * one. The bound is the most one insert may name (GRID_MAX_ROW_COUNT), which main's validation enforces too.
+ */
+function insertCountField(noun: 'Rows' | 'Columns'): FieldDescriptor {
+  return { key: 'grid.insertCount', label: noun, description: `${noun} to insert`, group: 'CSV grid', control: 'number', min: 1, max: GRID_MAX_ROW_COUNT };
+}
+
+/** Typed text is read as a number by the one parser for what a user types (040 FR-028): core's `typedProblem`. */
+function insertCountProblem(text: string, noun: 'Rows' | 'Columns'): string | null {
+  return typedProblem(text, insertCountField(noun));
+}
+
 type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Window['throng']>['preview']>['gridEdit']>>>;
 
 /** 074 FR-104 — the CSV provider's panel type label, as the panel title shows it ("CSV Preview"). */
 const CSV_PREVIEW_LABEL = previewPanelTypeLabel(SHIPPED_PREVIEW_PROVIDERS.get('csv') ?? { displayName: 'CSV' });
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, editorRouteParented, onCopyCapped, onPrint, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, onCopyCapped, onPrint, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -142,6 +158,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
   const gridRef = useRef<DataGridHandle | null>(null);
   const [fault, setFault] = useState<number | null>(null);
   const [widthPrompt, setWidthPrompt] = useState<{ col: number; value: string } | null>(null);
+  const [insertPrompt, setInsertPrompt] = useState<{ kind: InsertManyKind; at: number; value: string } | null>(null);
   const { widths, setWidth, resetWidth } = useGridColumnWidths(projectRoot, filePath);
   // The project dot and the unload prompt count an unsaved document by its project (006 US8).
   const ownerProjectId = useProjectIdForRoot(projectRoot);
@@ -423,16 +440,63 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     [send],
   );
 
-  // FR-038 — the bindable commands act on the active cell of this panel.
+  // T8 — Insert Rows Above… and the rest ask how many, then insert that many as one operation (one undo step).
+  const askInsertMany = useCallback((kind: InsertManyKind, at: number) => setInsertPrompt({ kind, at, value: '1' }), []);
+  const insertMany = useCallback(
+    (kind: InsertManyKind, at: number, count: number) =>
+      void send(
+        kind === 'rowsAbove' || kind === 'rowsBelow'
+          ? { kind: 'insertRows', at: Math.min(at, rowCount), count }
+          : { kind: 'insertColumn', at, count },
+      ),
+    [send, rowCount],
+  );
+
+  // T4 — Delete Row / Delete Column remove whole records or whole fields; each is one operation, so one undo step.
+  const deleteRows = useCallback(
+    (range: GridRange) => {
+      const last = Math.min(range.bottom, rowCount - 1);
+      if (last >= range.top) void send({ kind: 'deleteRows', from: range.top, count: last - range.top + 1 });
+    },
+    [send, rowCount],
+  );
+  const deleteColumns = useCallback(
+    (range: GridRange) => {
+      const last = Math.min(range.right, colCount - 1);
+      // A CSV keeps at least one column: the menu draws this disabled, and the command does nothing.
+      if (range.left === 0 && last >= colCount - 1) return;
+      if (last >= range.left) void send({ kind: 'deleteColumns', from: range.left, count: last - range.left + 1 });
+    },
+    [send, colCount],
+  );
+
+  // FR-038 — the bindable commands act on the active cell of this panel; T4's deletes on the rows or columns the
+  // selection spans.
+  const selectedRange = useCallback((): GridRange | null => {
+    const sel = gridRef.current?.getSelection();
+    return sel === undefined ? null : rangeOf(sel, colCount);
+  }, [colCount]);
   useEffect(() => {
     registerCsvGridCommands(panelId, {
       insertRowAbove: () => insertRows(activeCell().row),
       insertRowBelow: () => insertRows(activeCell().row + 1),
       insertColumnLeft: () => insertColumn(activeCell().col),
       insertColumnRight: () => insertColumn(activeCell().col + 1),
+      insertRowsAbove: () => askInsertMany('rowsAbove', activeCell().row),
+      insertRowsBelow: () => askInsertMany('rowsBelow', activeCell().row + 1),
+      insertColumnsLeft: () => askInsertMany('columnsLeft', activeCell().col),
+      insertColumnsRight: () => askInsertMany('columnsRight', activeCell().col + 1),
+      deleteRows: () => {
+        const range = selectedRange();
+        if (range !== null) deleteRows(range);
+      },
+      deleteColumns: () => {
+        const range = selectedRange();
+        if (range !== null) deleteColumns(range);
+      },
     });
     return () => unregisterCsvGridCommands(panelId);
-  }, [panelId, insertRows, insertColumn, activeCell]);
+  }, [panelId, insertRows, insertColumn, activeCell, askInsertMany, deleteRows, deleteColumns, selectedRange]);
 
   /* ── The document's unsaved state, counted once (FR-033, 044 FR-044) ─────────────────────────── */
 
@@ -527,105 +591,40 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       if (grid === null) return;
       const sel = grid.getSelection();
       const range = rangeOf(sel, colCount);
-      const at = sel.active;
-      const chord = (id: Parameters<typeof firstBinding>[1]): string | undefined => firstBinding(keybindings, id) ?? undefined;
-      const items: MenuAction[] = [];
-      const insert: MenuAction[] = [
-        { label: 'Insert Row Above', icon: 'insertRowAbove', section: 'create', onClick: () => insertRows(at.row), shortcut: chord('grid.insertRowAbove') },
-        { label: 'Insert Row Below', icon: 'insertRowBelow', section: 'create', onClick: () => insertRows(at.row + 1), shortcut: chord('grid.insertRowBelow') },
-        { label: 'Insert Column Left', icon: 'insertColumnLeft', section: 'create', onClick: () => insertColumn(at.col), shortcut: chord('grid.insertColumnLeft') },
-        { label: 'Insert Column Right', icon: 'insertColumnRight', section: 'create', onClick: () => insertColumn(at.col + 1), shortcut: chord('grid.insertColumnRight') },
-      ];
-      const width: MenuAction = {
-        label: 'Column Width…',
-        section: 'viewState',
-        // FR-006 (T086) — the column right-clicked; a row header's menu never offers it, so a cell's own column otherwise.
-        onClick: () => {
-          const col = target.kind === 'row' ? at.col : target.col;
-          setWidthPrompt({ col, value: String(widths[col] ?? GRID_DEFAULT_COLUMN_WIDTH) });
+      const items = csvGridMenu({
+        target,
+        sel,
+        range,
+        rowCount,
+        colCount,
+        copied,
+        keybindings,
+        cellDialogAvailable,
+        actions: {
+          insertRows,
+          insertColumn,
+          askInsertMany,
+          clearRange: (r) => void clearRange(r),
+          cut,
+          copy,
+          paste: pasteFromMenu,
+          selectAll: () => grid.selectAll(),
+          history,
+          save: () => void save(),
+          saveAs: () => void saveAs(),
+          goToRow: goTo.open,
+          deleteRows,
+          deleteColumns,
+          columnWidth: (col) => setWidthPrompt({ col, value: String(widths[col] ?? GRID_DEFAULT_COLUMN_WIDTH) }),
+          resetWidth,
+          openCellDialog,
+          ...(onOpenInEditor !== undefined ? { openInEditor: onOpenInEditor } : {}),
+          ...(onPrint !== undefined ? { print: onPrint } : {}),
         },
-      };
-      // FR-037e — every menu offers the clipboard for the selection the right-click leaves.
-      const clipboard = (rows: boolean): MenuAction[] => [
-        { label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', onClick: () => cut(rows ? { ...sel, rows: true } : sel, range) },
-        { label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range) },
-        { label: 'Paste', icon: 'paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
-      ];
-      // FR-038a — beside the blank inserts, never instead of them.
-      const insertCopied: MenuAction[] = [];
-      if (copied !== null && copied.kind === 'rows' && copied.values.length <= GRID_MAX_ROW_COUNT) {
-        const rows = copied.values;
-        insertCopied.push(
-          { label: 'Insert Copied Rows Above', icon: 'insertRowAbove', section: 'create', onClick: () => insertRows(at.row, rows) },
-          { label: 'Insert Copied Rows Below', icon: 'insertRowBelow', section: 'create', onClick: () => insertRows(at.row + 1, rows) },
-        );
-      } else if (copied !== null && copied.kind === 'columns' && copied.values.length <= GRID_MAX_ROW_COUNT) {
-        const columns = copied.values;
-        insertCopied.push(
-          { label: 'Insert Copied Columns Left', icon: 'insertColumnLeft', section: 'create', onClick: () => insertColumn(at.col, columns) },
-          { label: 'Insert Copied Columns Right', icon: 'insertColumnRight', section: 'create', onClick: () => insertColumn(at.col + 1, columns) },
-        );
-      }
-      if (target.kind === 'row') {
-        // 081 FR-083 — the entry row is not a line of the file: the operations that need a real row draw disabled.
-        const onEntryRow = target.row >= rowCount;
-        const needsRealRow = onEntryRow ? { disabled: true, title: 'This row is not in the file yet. Type into it to add it.' } : {};
-        const rowClipboard = clipboard(true).map((item) => (item.label === 'Cut' ? { ...item, ...needsRealRow } : item));
-        items.push(
-          { ...insert[0]!, ...needsRealRow },
-          insert[1]!,
-          ...insertCopied,
-          ...rowClipboard,
-          { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open, shortcut: chord('preview.goToHeading') },
-        );
-      } else if (target.kind === 'column') {
-        items.push(
-          insert[2]!,
-          insert[3]!,
-          ...insertCopied,
-          ...clipboard(false),
-          width,
-          { label: 'Reset Column Width', icon: 'resetColumnWidth', section: 'viewState', onClick: () => resetWidth(target.col) },
-        );
-      } else {
-        items.push(
-          { label: 'Undo', icon: 'undo', section: 'content', group: 'history', onClick: () => history('undo') },
-          { label: 'Redo', icon: 'redo', section: 'content', group: 'history', onClick: () => history('redo') },
-          { label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', onClick: () => cut(sel, range) },
-          { label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range) },
-          { label: 'Copy as Rich Text', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range, 'rich') },
-          { label: 'Copy as Plain Text', icon: 'copy', section: 'content', group: 'clipboard', onClick: () => copy(range, 'plain') },
-          { label: 'Paste', icon: 'paste', section: 'content', group: 'clipboard', onClick: pasteFromMenu },
-          { label: 'Clear Cells', icon: 'destroy', section: 'content', group: 'clipboard', onClick: () => clearRange(range) },
-          ...(cellDialogAvailable
-            ? [
-                {
-                  label: 'Edit in Dialog…',
-                  icon: 'cellDialog' as const,
-                  section: 'content' as const,
-                  // FR-036d — the dialog edits one cell: a block, whole rows or whole columns disable it, and say why.
-                  ...(sel.rows === true || range.top !== range.bottom || range.left !== range.right
-                    ? { disabled: true, title: 'Select one cell to edit it in a dialog' }
-                    : {}),
-                  onClick: () => openCellDialog(target.row, target.col),
-                },
-              ]
-            : []),
-          { label: 'Select All', icon: 'selectAll', section: 'content', group: 'clipboard', onClick: () => grid.selectAll() },
-          { label: 'Save', icon: 'save', section: 'content', group: 'file', onClick: () => void save(), shortcut: chord('editor.save') },
-          { label: 'Save As…', icon: 'saveAs', section: 'content', group: 'file', onClick: () => void saveAs(), shortcut: chord('editor.saveAs') },
-          { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open, shortcut: chord('preview.goToHeading') },
-          ...insert,
-          width,
-        );
-      }
-      if (onOpenInEditor !== undefined) {
-        items.push({ label: editorRouteParented === true ? 'Go to Editor' : 'Open in Editor', icon: 'editorPanel', section: 'navigate', onClick: onOpenInEditor });
-      }
-      items.push(gridPrintRow(chord('preview.print'), onPrint));
+      });
       openMenu(point.x, point.y, items);
     },
-    [cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, editorRouteParented, history, insertColumn, insertRows, keybindings, onOpenInEditor, onPrint, openCellDialog, openMenu, pasteFromMenu, resetWidth, rowCount, save, saveAs, widths],
+    [askInsertMany, cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, deleteColumns, deleteRows, history, insertColumn, insertRows, keybindings, onOpenInEditor, onPrint, openCellDialog, openMenu, pasteFromMenu, resetWidth, rowCount, save, saveAs, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard
@@ -648,12 +647,26 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
     [buildMenu],
   );
 
-  const submitWidth = (e: FormEvent): void => {
-    e.preventDefault();
+  const submitWidth = (): void => {
     if (widthPrompt === null) return;
     const n = Number(widthPrompt.value);
     if (Number.isFinite(n)) setWidth(widthPrompt.col, Math.min(GRID_MAX_COLUMN_WIDTH, Math.max(GRID_MIN_COLUMN_WIDTH, Math.round(n))));
     setWidthPrompt(null);
+    gridRef.current?.focus();
+  };
+
+  const insertNoun = insertPrompt === null ? 'Rows' : insertPrompt.kind.startsWith('rows') ? 'Rows' : 'Columns';
+  const insertProblem = insertPrompt === null ? null : insertCountProblem(insertPrompt.value, insertNoun);
+  const submitInsert = (): void => {
+    const open = insertPrompt;
+    const check = open === null ? null : checkTyped(open.value, insertCountField(insertNoun));
+    const n = check?.ok ? check.value : null;
+    setInsertPrompt(null);
+    if (open !== null && n !== null) insertMany(open.kind, open.at, n);
+    gridRef.current?.focus();
+  };
+  const cancelInsert = (): void => {
+    setInsertPrompt(null);
     gridRef.current?.focus();
   };
 
@@ -728,26 +741,30 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         />
       ) : null}
       {widthPrompt !== null ? (
-        <form className="preview-grid-width" onSubmit={submitWidth} data-testid={`csv-width-${panelId}`}>
-          <label>
-            Column width (pixels)
-            <input
-              autoFocus
-              type="number"
-              min={GRID_MIN_COLUMN_WIDTH}
-              max={GRID_MAX_COLUMN_WIDTH}
-              value={widthPrompt.value}
-              onChange={(e) => setWidthPrompt({ col: widthPrompt.col, value: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setWidthPrompt(null);
-              }}
-            />
-          </label>
-          <button type="submit">Set Width</button>
-          <button type="button" onClick={() => setWidthPrompt(null)}>
-            Cancel
-          </button>
-        </form>
+        <GridNumberPrompt
+          testId={`csv-width-${panelId}`}
+          label="Column width (pixels)"
+          min={GRID_MIN_COLUMN_WIDTH}
+          max={GRID_MAX_COLUMN_WIDTH}
+          value={widthPrompt.value}
+          submitLabel="Set Width"
+          onChange={(value) => setWidthPrompt({ col: widthPrompt.col, value })}
+          onSubmit={submitWidth}
+          onCancel={() => setWidthPrompt(null)}
+        />
+      ) : null}
+      {insertPrompt !== null ? (
+        <GridNumberPrompt
+          testId={`csv-insert-${panelId}`}
+          type="text"
+          label={`${insertNoun} to insert`}
+          value={insertPrompt.value}
+          submitLabel="Insert"
+          problem={insertProblem}
+          onChange={(value) => setInsertPrompt({ ...insertPrompt, value })}
+          onSubmit={submitInsert}
+          onCancel={cancelInsert}
+        />
       ) : null}
     </div>
   );

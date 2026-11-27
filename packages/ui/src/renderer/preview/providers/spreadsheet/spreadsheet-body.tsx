@@ -10,22 +10,22 @@
  * Nothing here edits: the grid is `editable={false}`, so it opens no cell editor and offers no cut, paste,
  * clear or insert.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react';
-import { columnLabel, firstBinding, formatSetting, logCaught, logExpected, SETTINGS_METADATA, type FieldDescriptor, type PreviewCopyFormat } from '@throng/core';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { columnLabel, formatSetting, logCaught, logExpected, SETTINGS_METADATA, type FieldDescriptor, type PreviewCopyFormat } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { DataGrid, GRID_DEFAULT_COLUMN_WIDTH, GRID_MAX_COLUMN_WIDTH, GRID_MIN_COLUMN_WIDTH, type DataGridHandle, type GridMenuTarget } from '../../../grid/data-grid.js';
 import { rangeOf, type GridRange } from '../../../grid/grid-selection.js';
 import { useGridGoTo } from '../../../grid/use-grid-go-to.js';
 import { useFilePlaces } from '../../../grid/use-file-places.js';
 import { copyGridRange } from '../../../grid/grid-copy.js';
-import { gridPrintRow } from '../../../grid/grid-print-row.js';
+import { GridNumberPrompt } from '../../../grid/grid-number-prompt.js';
 import { registerGridPrintSource, type GridPrintSource } from '../../../grid/grid-print.js';
 import { createGridWorker } from '../../../grid/worker-factory.js';
 import { GRID_MAX_CELLS } from '@throng/core/csv';
 import { useAppSettings, useKeybindings } from '../../../config/config-store.js';
 import { useContextMenu } from '../../../context-menu-provider.js';
-import type { MenuAction } from '../../../workspace/context-menu.js';
-import { WORKBOOK_READ_ONLY_TITLE, requestReadOnlyFlash } from '../../read-only-marker.js';
+import { spreadsheetMenu } from './spreadsheet-menu.js';
+import { requestReadOnlyFlash } from '../../read-only-marker.js';
 import type { WorkbookRead, WorkbookRefusal, WorkbookSheet } from './workbook-read.js';
 import type { WorkbookParseReply } from './spreadsheet-handler.js';
 import { Spinner } from '../../../common/loading.js';
@@ -237,45 +237,18 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
       if (grid === null) return;
       const sel = grid.getSelection();
       const range = rangeOf(sel, colCount);
-      // FR-037e — every menu carries Copy, header menus included. FR-050c (2026-11-20, superseding FR-037e's "Copy
-      // only") — and the editing rows a CSV's menus carry, shown disabled with the reason: a workbook is read-only.
-      const readOnly = (label: string, icon: MenuAction['icon'], section: MenuAction['section']): MenuAction => ({
-        label,
-        ...(icon !== undefined ? { icon } : {}),
-        section,
-        disabled: true,
-        title: WORKBOOK_READ_ONLY_TITLE,
-        onClick: () => {},
+      const items = spreadsheetMenu({
+        target,
+        keybindings,
+        actions: {
+          copy: (format) => copy(range, format),
+          selectAll: () => grid.selectAll(),
+          goToRow: goTo.open,
+          columnWidth: (col) => setWidthPrompt({ col, value: String(sheetWidths[col] ?? GRID_DEFAULT_COLUMN_WIDTH) }),
+          resetWidth,
+          ...(onPrint !== undefined ? { print: onPrint } : {}),
+        },
       });
-      const copies: MenuAction[] = [
-        readOnly('Cut', 'cut', 'content'),
-        { label: 'Copy', icon: 'copy', section: 'content', onClick: () => copy(range) },
-        { label: 'Copy as Rich Text', icon: 'copy', section: 'content', onClick: () => copy(range, 'rich') },
-        { label: 'Copy as Plain Text', icon: 'copy', section: 'content', onClick: () => copy(range, 'plain') },
-        readOnly('Paste', 'paste', 'content'),
-        readOnly('Insert Row Above', 'insertRowAbove', 'create'),
-        readOnly('Insert Row Below', 'insertRowBelow', 'create'),
-        readOnly('Insert Column Left', 'insertColumnLeft', 'create'),
-        readOnly('Insert Column Right', 'insertColumnRight', 'create'),
-      ];
-      const items: MenuAction[] =
-        target.kind === 'column'
-          ? [
-              ...copies,
-              {
-                label: 'Column Width…',
-                section: 'viewState',
-                onClick: () => setWidthPrompt({ col: target.col, value: String(sheetWidths[target.col] ?? GRID_DEFAULT_COLUMN_WIDTH) }),
-              },
-              { label: 'Reset Column Width', icon: 'resetColumnWidth', section: 'viewState', onClick: () => resetWidth(target.col) },
-            ]
-          : [
-              ...copies,
-              { label: 'Select All', icon: 'selectAll', section: 'content', onClick: () => grid.selectAll() },
-              { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: goTo.open },
-            ];
-      // 075 FR-063 — the row shows Print…'s key binding, as the CSV grid's and every other preview's menu does.
-      items.push(gridPrintRow(firstBinding(keybindings, 'preview.print') ?? undefined, onPrint));
       openMenu(point.x, point.y, items);
     },
     [colCount, copy, goTo.open, keybindings, onPrint, openMenu, resetWidth, sheetWidths],
@@ -294,8 +267,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
   const [printRoot, printRootRef] = useState<HTMLDivElement | null>(null);
   useEffect(() => (printRoot === null ? undefined : registerGridPrintSource(printRoot, () => printRead.current())), [printRoot]);
 
-  const submitWidth = (e: FormEvent): void => {
-    e.preventDefault();
+  const submitWidth = (): void => {
     if (widthPrompt === null) return;
     const n = Number(widthPrompt.value);
     if (Number.isFinite(n)) setWidth(widthPrompt.col, Math.min(GRID_MAX_COLUMN_WIDTH, Math.max(GRID_MIN_COLUMN_WIDTH, Math.round(n))));
@@ -368,26 +340,20 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
         ))}
       </div>
       {widthPrompt !== null ? (
-        <form className="preview-grid-width" onSubmit={submitWidth}>
-          <label>
-            Column width (pixels)
-            <input
-              autoFocus
-              type="number"
-              min={GRID_MIN_COLUMN_WIDTH}
-              max={GRID_MAX_COLUMN_WIDTH}
-              value={widthPrompt.value}
-              onChange={(e) => setWidthPrompt({ col: widthPrompt.col, value: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setWidthPrompt(null);
-              }}
-            />
-          </label>
-          <button type="submit">Set Width</button>
-          <button type="button" onClick={() => setWidthPrompt(null)}>
-            Cancel
-          </button>
-        </form>
+        <GridNumberPrompt
+          testId={`spreadsheet-width-${panelId}`}
+          label="Column width (pixels)"
+          min={GRID_MIN_COLUMN_WIDTH}
+          max={GRID_MAX_COLUMN_WIDTH}
+          value={widthPrompt.value}
+          submitLabel="Set Width"
+          onChange={(value) => setWidthPrompt({ col: widthPrompt.col, value })}
+          onSubmit={submitWidth}
+          onCancel={() => {
+            setWidthPrompt(null);
+            gridRef.current?.focus();
+          }}
+        />
       ) : null}
     </div>
   );

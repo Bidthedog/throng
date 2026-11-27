@@ -12,6 +12,7 @@
  */
 import { parseCsv } from './csv-model.js';
 import {
+  csvDeleteColumns,
   csvDeleteRows,
   csvInsertColumn,
   csvInsertRows,
@@ -26,7 +27,9 @@ export type CsvGridOperation =
   | { kind: 'insertRows'; at: number; count: number; values?: string[][] }
   /** `count` empty columns (default 1); with `columns` (FR-038a) the copied ones: `columns[k][row]`, `count` of them. */
   | { kind: 'insertColumn'; at: number; count?: number; columns?: string[][] }
-  | { kind: 'deleteRows'; from: number; count: number };
+  | { kind: 'deleteRows'; from: number; count: number }
+  /** T4 — Delete Column: `count` fields from `from` in every record. */
+  | { kind: 'deleteColumns'; from: number; count: number };
 
 /** The most rows one insert may name. */
 export const GRID_MAX_ROW_COUNT = 10_000;
@@ -87,6 +90,10 @@ export function validateGridOperation(raw: unknown): CsvGridOperation | null {
       return index(raw.from) && index(raw.count) && raw.count >= 1 && raw.count <= GRID_MAX_CELLS
         ? { kind: 'deleteRows', from: raw.from, count: raw.count }
         : null;
+    case 'deleteColumns':
+      return index(raw.from) && index(raw.count) && raw.count >= 1 && raw.count <= GRID_MAX_CELLS
+        ? { kind: 'deleteColumns', from: raw.from, count: raw.count }
+        : null;
     default:
       return null;
   }
@@ -107,5 +114,7 @@ export function resolveGridOperation(text: string, op: CsvGridOperation): GridOp
       return { changes: csvInsertColumn(model, op.at, op.count ?? 1, op.columns) };
     case 'deleteRows':
       return { changes: csvDeleteRows(model, op.from, op.count) };
+    case 'deleteColumns':
+      return { changes: csvDeleteColumns(model, op.from, op.count) };
   }
 }

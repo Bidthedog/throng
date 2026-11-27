@@ -1104,6 +1104,66 @@ Insert an empty column right of the active cell in the CSV Preview Editor.
 
 **Default:** *(unbound)* · **Scope:** Preview
 
+### Insert Rows Above…
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.insertRowsAbove`
+
+Ask how many, then insert that many empty rows above the active cell in the CSV Preview Editor.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Insert Rows Below…
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.insertRowsBelow`
+
+Ask how many, then insert that many empty rows below the active cell in the CSV Preview Editor.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Insert Columns Left…
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.insertColumnsLeft`
+
+Ask how many, then insert that many empty columns left of the active cell in the CSV grid.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Insert Columns Right…
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.insertColumnsRight`
+
+Ask how many, then insert that many empty columns right of the active cell in the CSV grid.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Delete Rows
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.deleteRows`
+
+Delete every row the selection spans in the CSV Preview Editor.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Delete Columns
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.deleteColumns`
+
+Delete every column the selection spans, from every row, in the CSV Preview Editor.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
 Insert an empty column right of the active cell.
 
 ## Search

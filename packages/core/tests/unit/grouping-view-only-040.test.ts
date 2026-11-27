@@ -174,11 +174,17 @@ describe('the readouts are display-only and never parsed back (FR-028)', () => {
     // - form-controls.tsx — the numeric setting's own box (077 FR-008);
     // - map-control.tsx — a number cell of a table setting, such as the per-language indent widths, which 077
     //   FR-008, FR-009 and FR-012 hold to the same typed-value check, step and clamp as the box (077 T030).
+    // - csv-body.tsx — the CSV grid's "how many rows or columns" prompt, a number the user TYPED (2026-11-27 review
+    //   tweak T8), held to the same check so it reads "Rows must be a whole number" as Preferences would.
     const typedCallers = callersOf('checkTyped', sources).filter((f) => !f.endsWith('config/numeric-units.ts'));
     expect(
       typedCallers,
-      'checkTyped parses what a user typed into a preferences number input, and nothing else',
-    ).toEqual(['packages/ui/src/renderer/preferences/form-controls.tsx', 'packages/ui/src/renderer/preferences/map-control.tsx']);
+      'checkTyped parses what a user typed into a number input, and nothing else',
+    ).toEqual([
+      'packages/ui/src/renderer/preferences/form-controls.tsx',
+      'packages/ui/src/renderer/preferences/map-control.tsx',
+      'packages/ui/src/renderer/preview/providers/csv/csv-body.tsx',
+    ]);
   });
 
   it('no editor module parses a displayed figure back', () => {
