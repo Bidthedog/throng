@@ -129,6 +129,10 @@ trip to Settings is a default they cannot trust.
   which 006 FR-030 and 043's clarification on the *Open In → Search* row forbid.
 - Where no preference chooses between variants — a submenu of explicit targets with no
   default, such as **Copy Path ▸** or **Send to Tab ▸** — this rule adds nothing.
+- **A copy in named formats** (8.3.0) is offered as one **Copy as ▸** submenu, built by
+  `common/copy-as-menu.ts`, and the menu draws no plain **Copy** beside it: one row, not two, for one
+  command. The leaf in the format the preference picks shows the copy key, which copies in that format
+  (*A menu row shows its key*); the other leaf shows none.
 
 ## Name the OS generically
 

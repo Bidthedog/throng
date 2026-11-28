@@ -55,10 +55,10 @@ Principle XI — layout, sub-workspaces, focus, Panel state). The bullets below 
   gesture, and a panel's menu over a link offers Open Link / Copy Link to Clipboard. Tree rows, result
   rows, tabs, buttons and menu items are not links. Known gap: `about/about-app.tsx` follows its
   links on a plain click — do not copy it.
-- **A preference picks the default; the menu offers every variant** (constitution **5.5.0**). Where
-  a preference chooses an action's variant, the menu names each variant ("Copy as Plain Text"), and a
-  plain item beside them runs the preference's choice labelled for the action ("Copy"), never for a
-  variant — so it is not a second row naming one command.
+- **A preference picks the default; the menu offers every variant** (constitution **5.5.0**, **8.3.0**).
+  Where a preference chooses an action's variant, the menu names each variant, and a plain item, where
+  there is one, runs the preference's choice labelled for the action. A copy in named formats is one
+  **Copy as ▸** submenu with no plain Copy beside it; its preferred leaf shows the copy key.
 - **Displayed quantities are digit-grouped** (constitution 4.5.0, scope widened by **5.4.0**). Any
   **quantity** the UI renders — on any surface, not just a preference editor — goes through
   `formatGrouped` from `@throng/core`, and anything read back goes through `parseGrouped` — never

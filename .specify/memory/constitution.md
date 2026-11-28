@@ -1,37 +1,30 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 8.1.0 → 8.2.0
-Bump rationale: MINOR. The maintainer's v1 review of 2026-11-28 asked that rows about a panel or its file
-                leave the menu a right-click in the panel's body opens, and that rows about the content
-                leave the panel's title menu, and that this be a constitution rule. Principle VI gains one
-                rule, "A row goes on the menu of what it acts on". Argued against the project's own test:
-                - Not MAJOR: no guarantee is withdrawn. Every row that moved off a menu arrives on the
-                  other in the same change, so "Every panel action is reachable" holds for each, and no
-                  principle is redefined.
-                - MINOR, which decides it: a new obligation within an existing principle. Menus that put
-                  Split, Copy Path or Find on both menus complied with 8.1.0 and fail 8.2.0, which is the
-                  ordinary case for an additive rule.
+Version change: 8.2.0 → 8.3.0
+Bump rationale: MINOR. The maintainer's v1 review of 2026-11-28: "If there is a 'Copy As' menu option on any menu,
+                then it should replace the 'Copy' option instead of being in addition to it." Principle VI's
+                variant rule gains one obligation: a menu that offers a copy in named formats offers it as one
+                Copy as ▸ submenu, its only copy row, and the format the preference picks shows the copy key.
+                Argued against the project's own test:
+                - Not MAJOR: no guarantee is withdrawn. The rule already made the plain item conditional ("Where
+                  that menu also carries the plain item"), so a menu without one complied with 8.2.0 too; every
+                  variant is still named, and the preference still picks what the key does.
+                - MINOR, which decides it: a new obligation within an existing rule. The preview and grid menus,
+                  which drew Copy beside Copy as ▸, complied with 8.2.0 and fail 8.3.0.
                 - Not PATCH: it adds an obligation, not a clarification.
-Modified principles: VI (A row goes on the menu of what it acts on: added).
+Modified principles: VI (A preference picks the default; the menu offers every variant: amended).
 Modified sections: none outside VI. Added sections: none. Removed sections: none.
-Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › A row goes on the menu of
-                what it acts on (new section): the body and title lists, the test for an unlisted row,
-                how to apply it to a menu, and the gate.
-Audit before the rule: every panel body and title menu was listed from the key sweep's fixtures and sorted
-                by the rule; the maintainer approved the resulting moves row by row on 2026-11-28. The
-                editor, preview, CSV, spreadsheet, terminal and blank-panel menus are brought into line on
-                the same branch, so the shipped menus comply when the rule lands.
-Enforcement: packages/ui/tests/unit/menu-placement.test.ts builds the swept body and title menus and fails
-                a title row on a body menu or a body row on a title menu.
-Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
-           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no menu placement; no edit.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › A preference picks the default;
+                the menu offers every variant (one bullet added).
+Audit before the rule: three menus drew both rows (the preview body menu and the CSV and spreadsheet grid
+                menus); all three are changed on the same branch. Copy as ▸ is built in one place,
+                common/copy-as-menu.ts, so no other menu draws it.
+Enforcement: packages/ui/tests/unit/menu-shortcuts.test.ts sweeps every menu, so the preferred leaf's key is
+                checked there; the menus' own tests assert the plain Copy is absent.
+Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — no edit.
            ✅ .specify/extensions.yml — no constitution hooks.
-Artifacts: ✅ Specs that placed a moved row carry a dated amendment in their owning spec (043, 044, 048,
-                054, 067, 073, 074, 076 and the editor's status-strip menus, as each applied).
-           ✅ site/guide pages that say where a row lives are updated in the same branch.
-           ⚠ The menus outside the key sweep (the Key Bindings chord menu, the Sub-workspaces rows, the
-                Resource Monitor) are outside the placement gate too; none is a panel body or title menu.
+Artifacts: ✅ 044 and 073 copy FRs carry a dated amendment on the same branch.
 Deferred: none.
 -->
 
@@ -354,8 +347,9 @@ rules below is in the `throng-renderer-ui` skill (`references/constitution-ux.md
   that act on the panel, its file or its link to other panels; the lists, the test for an unlisted
   row and the gate are in the reference.
 - **A preference picks the default; the menu offers every variant.** Where a preference decides an
-  action's variant, the menu MUST list each variant by name, and a plain item MUST run the
-  preference's choice, labelled for the action.
+  action's variant, the menu MUST list each variant by name, and a plain item, where the menu has one,
+  MUST run the preference's choice, labelled for the action. A copy offered in named formats is one
+  Copy as submenu and no plain Copy beside it, its preferred format showing the copy key.
 - **Name the OS generically.** User-visible text SHOULD refer to the operating system as **the OS**,
   with the exceptions the reference names.
 - **Name a setting for its behaviour.** A setting MUST be named for the behaviour it turns on, so
@@ -654,4 +648,4 @@ Rationale: an installed build has no console, so the log is the only thing a use
   is kept in [`constitution-history.md`](constitution-history.md), newest first. This file carries
   only the latest amendment's report.
 
-**Version**: 8.2.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-28
+**Version**: 8.3.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-28

@@ -12,6 +12,43 @@ Each record is an HTML comment, so read this file as source rather than rendered
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 8.1.0 → 8.2.0
+Bump rationale: MINOR. The maintainer's v1 review of 2026-11-28 asked that rows about a panel or its file
+                leave the menu a right-click in the panel's body opens, and that rows about the content
+                leave the panel's title menu, and that this be a constitution rule. Principle VI gains one
+                rule, "A row goes on the menu of what it acts on". Argued against the project's own test:
+                - Not MAJOR: no guarantee is withdrawn. Every row that moved off a menu arrives on the
+                  other in the same change, so "Every panel action is reachable" holds for each, and no
+                  principle is redefined.
+                - MINOR, which decides it: a new obligation within an existing principle. Menus that put
+                  Split, Copy Path or Find on both menus complied with 8.1.0 and fail 8.2.0, which is the
+                  ordinary case for an additive rule.
+                - Not PATCH: it adds an obligation, not a clarification.
+Modified principles: VI (A row goes on the menu of what it acts on: added).
+Modified sections: none outside VI. Added sections: none. Removed sections: none.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › A row goes on the menu of
+                what it acts on (new section): the body and title lists, the test for an unlisted row,
+                how to apply it to a menu, and the gate.
+Audit before the rule: every panel body and title menu was listed from the key sweep's fixtures and sorted
+                by the rule; the maintainer approved the resulting moves row by row on 2026-11-28. The
+                editor, preview, CSV, spreadsheet, terminal and blank-panel menus are brought into line on
+                the same branch, so the shipped menus comply when the rule lands.
+Enforcement: packages/ui/tests/unit/menu-placement.test.ts builds the swept body and title menus and fails
+                a title row on a body menu or a body row on a title menu.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no menu placement; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Artifacts: ✅ Specs that placed a moved row carry a dated amendment in their owning spec (043, 044, 048,
+                054, 067, 073, 074, 076 and the editor's status-strip menus, as each applied).
+           ✅ site/guide pages that say where a row lives are updated in the same branch.
+           ⚠ The menus outside the key sweep (the Key Bindings chord menu, the Sub-workspaces rows, the
+                Resource Monitor) are outside the placement gate too; none is a panel body or title menu.
+Deferred: none.
+-->
+
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 8.0.0 → 8.1.0
 Bump rationale: MINOR. The maintainer's v1 review of 2026-11-27 asked that every context menu row whose
                 command has a key show that key, and that this be a constitution rule. Principle VI gains
