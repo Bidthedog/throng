@@ -602,6 +602,9 @@
     },
     "flag": {
       "throng": "A pennant on a pole: Flag marks a panel for attention, and Go to Next Marked Panel walks the marked ones"
+    },
+    "unflag": {
+      "throng": "The flag icon crossed out with one stroke: Unflag clears a panel’s mark"
     }
   }
 }

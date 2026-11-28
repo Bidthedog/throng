@@ -117,7 +117,7 @@ describe('the CSV Preview Editor’s title menu: Save and Save As… (073 FR-030
     const l = labels(csvTitle(true));
     expect(l).toContain('Open in Editor');
     expect(l).toContain('Print…');
-    for (const gone of ['Wrap', 'Lock First Row', 'Lock First Column', 'Go to Row…']) expect(l, gone).not.toContain(gone);
+    for (const gone of ['Wrap cell contents', 'Lock First Row', 'Lock First Column', 'Go to Row…']) expect(l, gone).not.toContain(gone);
   });
 
   it('a preview that does not edit its file draws neither', () => {
@@ -160,7 +160,7 @@ describe('every grid body menu carries Wrap, Lock First Row and Lock First Colum
     const items = build();
     const tail = items.slice(-3);
     expect(tail.map((r) => [r.label, r.checked, r.section, r.testId])).toEqual([
-      ['Wrap', true, 'viewState', 'menu-item-Wrap'],
+      ['Wrap cell contents', true, 'viewState', 'menu-item-Wrap'],
       ['Lock First Row', false, 'viewState', 'menu-item-Lock First Row'],
       ['Lock First Column', true, 'viewState', 'menu-item-Lock First Column'],
     ]);
@@ -170,12 +170,12 @@ describe('every grid body menu carries Wrap, Lock First Row and Lock First Colum
 
   it('each row runs its own flip', () => {
     const items = csv({ kind: 'cell', row: 0, col: 0 });
-    for (const label of ['Wrap', 'Lock First Row', 'Lock First Column']) items.find((i) => i.label === label)!.onClick!();
+    for (const label of ['Wrap cell contents', 'Lock First Row', 'Lock First Column']) items.find((i) => i.label === label)!.onClick!();
     expect([flips.wrap, flips.lockFirstRow, flips.lockFirstColumn].map((f) => f.mock.calls.length)).toEqual([1, 1, 1]);
   });
 
   it('draws none when the body is handed no toggles', () => {
-    expect(labels(csv({ kind: 'cell', row: 0, col: 0 }, false))).not.toContain('Wrap');
+    expect(labels(csv({ kind: 'cell', row: 0, col: 0 }, false))).not.toContain('Wrap cell contents');
   });
 });
 

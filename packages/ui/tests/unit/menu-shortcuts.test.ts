@@ -115,6 +115,7 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Panel header › Copy details': NONE,
   'Panel header › Clear panel type': NONE,
   'Panel header › Flag': NONE,
+  'Panel header › Unflag': NONE,
   'Panel header › Open in Editor': NONE,
   'Panel header › Refresh': NONE,
   'Panel header › Edit Long Cells in Dialog': NONE,
@@ -183,7 +184,7 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Link › Find in File Explorer': NONE,
   'Link › Copy Link to Clipboard': NONE,
   ...Object.fromEntries(
-    GRID_MENUS.flatMap((m) => ['Wrap', 'Lock First Row', 'Lock First Column'].map((t) => [`${m} › ${t}`, GRID_TOGGLE])),
+    GRID_MENUS.flatMap((m) => ['Wrap cell contents', 'Lock First Row', 'Lock First Column'].map((t) => [`${m} › ${t}`, GRID_TOGGLE])),
   ),
 };
 

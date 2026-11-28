@@ -76,7 +76,8 @@ A flag is a mark you set yourself, a reminder to come back to a panel. It raises
 1. Right-click the panel's header.
 2. Choose **Flag**.
 
-It stays marked, with no notification, until you have left it and come back to it.
+It stays marked, with no notification, until you have left it and come back to it. To clear a mark sooner, open
+the same menu and choose **Unflag**.
 
 ## Silence one terminal
 

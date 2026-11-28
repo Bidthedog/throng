@@ -182,6 +182,8 @@ export interface PanelHeaderMenuActions {
   toggleCellDialog: () => void;
   /** 057 FR-125 — raise a user-flagged Attention mark on this panel (`attention.flag`). */
   flag: () => void;
+  /** The v1 review's Unflag — clear the mark this panel holds. */
+  unflag: () => void;
 }
 
 /** What a PREVIEW panel's menu reads. `null` for a panel that is not a preview. */
@@ -218,6 +220,8 @@ export interface PanelHeaderHistoryState {
 
 export interface PanelHeaderMenuArgs {
   panel: Panel;
+  /** The panel holds an Attention mark now (any kind): its Flag row reads Unflag and clears it. */
+  flagged?: boolean;
   /** "Destroy", or "Close" for a project Panel viewed inside a sub-workspace window. */
   panelVerb: string;
   /** The live chords, so a rebind moves what the menu SHOWS as well as what the key does. */
@@ -740,10 +744,11 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    */
   if (panel.kind !== undefined) {
     panelRows.push({
-      label: 'Flag',
-      icon: 'flag' as const,
+      // v1 review (2026-11-28): a marked panel offers Unflag, with the crossed-out flag, which clears the mark.
+      ...(args.flagged === true
+        ? { label: 'Unflag', icon: 'unflag' as const, onClick: () => actions.unflag() }
+        : { label: 'Flag', icon: 'flag' as const, onClick: () => actions.flag() }),
       section: 'viewState',
-      onClick: () => actions.flag(),
     });
   }
 

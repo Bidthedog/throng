@@ -60,7 +60,7 @@ const BODY_ROWS = new Set([
   'Word Wrap',
   'View Whitespace',
   'Outlining',
-  'Wrap',
+  'Wrap cell contents',
   'Lock First Row',
   'Lock First Column',
   'Single Page',
@@ -110,6 +110,7 @@ const TITLE_ROWS = new Set([
   'Copy details',
   'Clear panel type',
   'Flag',
+  'Unflag',
   'Destroy Panel',
   'Close Panel',
 ]);

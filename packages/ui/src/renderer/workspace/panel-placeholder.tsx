@@ -744,6 +744,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             e.clientY,
             panelHeaderMenu({
               panel,
+              flagged: attentionMark !== null,
               panelVerb,
               keybindings,
               otherTabs: others,
@@ -895,6 +896,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 },
                 // 057 FR-125 — the mark's subject is the panel's place, the same three names a toast heads
                 // its card with. Main decides whether anything changes (a marked panel stays as it is).
+                unflag: () => window.throng?.attention?.unflag?.(panel.id),
                 flag: () => {
                   window.throng?.attention?.flag({
                     panelId: panel.id,

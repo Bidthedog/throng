@@ -642,7 +642,8 @@ Markdown and Mermaid pattern, each setting working as labelled.
   Both grids. *(Superseded by FR-012a.)*
 - **FR-012a** *(Q24, 2026-11-19)*: There MUST be no row resize in either grid: a row-number double-click
   MUST do nothing, and no menu offers expanding or resetting a row's height. *(Supersedes FR-012.)*
-- **FR-013** *(Q24, 2026-11-19)*: The CSV Preview Editor's status bar MUST show a **Wrap** toggle that, when
+- **FR-013** *(Q24, 2026-11-19; menu label amended 2026-11-28, v1 review, #732: on the grid's menus the row reads
+  **Wrap cell contents**, and the status bar's toggle keeps the short name)*: The CSV Preview Editor's status bar MUST show a **Wrap** toggle that, when
   on, wraps every cell within its column's width, line breaks honoured, each row as tall as its tallest cell
   so every value shows in full, with no line cap; off, cells truncate as FR-004 says. The toggle MUST show its
   state, be reachable by keyboard, and have a matching checked item on the panel menu. Whether Wrap is on is

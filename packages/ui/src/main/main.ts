@@ -2867,6 +2867,11 @@ if (isPrimaryInstance)
       projectName: text(p.projectName),
     });
   });
+  // The title menu's Unflag (v1 review): the panel's mark clears.
+  ipcMain.on('throng:attention:unflag', (_event, payload: unknown) => {
+    const panelId = (payload as { panelId?: unknown } | null)?.panelId;
+    if (typeof panelId === 'string') attentionService.unflag(panelId);
+  });
   // 057 FR-007 (#541): panels a Tab destroy or a sub-workspace ended — a mark never outlives its panel.
   ipcMain.on('throng:attention:panelsDestroyed', (_event, payload: unknown) => {
     const ids = (payload as { panelIds?: unknown } | null)?.panelIds;

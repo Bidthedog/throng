@@ -243,6 +243,8 @@ export const MENUS: readonly { name: string; build: () => MenuAction[] }[] = [
       }),
   },
   { name: 'Panel header', build: () => header({ panel: panel({ kind: 'findInFiles' }) }) },
+  // A marked panel: its Flag row reads Unflag.
+  { name: 'Panel header', build: () => header({ panel: panel({ kind: 'findInFiles' }), flagged: true }) },
   {
     name: 'Panel header',
     build: () => header({ panel: PREVIEW_PANEL, preview: { providerKind: 'text', parented: true, scrollSync: true, printable: true, hasFilePath: true }, syncScroll: true, copyPath: FORMS }),

@@ -31,6 +31,7 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Added
 
+- A marked panel's menu offers **Unflag**, which clears its mark at once. ([guide](https://throng-ide.com/guide/attention/#flag-a-panel-as-a-reminder))
 - **Ctrl+Shift+N** (Cmd+Shift+N on macOS) makes a new folder in the File Explorer, where the toolbar's New folder
   would. It is the **New folder** binding under Key Bindings › File Explorer, and the right-click menu shows it beside
   New Folder. ([guide](https://throng-ide.com/guide/files/#create-rename-and-delete-files-and-folders))

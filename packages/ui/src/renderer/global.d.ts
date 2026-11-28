@@ -490,6 +490,8 @@ declare global {
           tabTitle: string;
           projectName: string;
         }) => void;
+        /** The title menu's Unflag (v1 review): clear the panel's mark. Fire and forget. */
+        unflag?: (panelId: string) => void;
         /** 057 FR-007 (#541) — panels a route ended for good: their marks and stored flags go too. */
         panelsDestroyed?: (panelIds: string[]) => void;
         /** 076 FR-022 — this panel's own notifications turned off and that was saved. */

@@ -322,6 +322,25 @@ describe('AttentionModel — manual flags (057 round 12: FR-125, FR-127, FR-128)
     });
   });
 
+  it('unflag clears the panel\'s mark at once, whatever raised it, as a clear (v1 review, FR-125 as amended)', () => {
+    const h = harness();
+    h.model.flag(flag);
+    h.model.raise(signal({ panelId: 'p2', kind: 'failed', signal: 'processExited', detail: '1' }));
+    h.model.unflag('p1');
+    h.model.unflag('p2');
+    expect(h.model.marks()).toEqual([]);
+    expect(h.cleared).toEqual(['p1', 'p2']);
+  });
+
+  it('unflag on an unmarked panel changes nothing', () => {
+    const h = harness();
+    h.model.flag(flag);
+    const before = h.model.marks();
+    h.model.unflag('elsewhere');
+    expect(h.model.marks()).toBe(before);
+    expect(h.cleared).toEqual([]);
+  });
+
   it('flag on a panel already marked changes nothing (FR-125)', () => {
     const { model } = harness();
     model.raise(signal({ kind: 'failed', signal: 'processExited', detail: '1' }));

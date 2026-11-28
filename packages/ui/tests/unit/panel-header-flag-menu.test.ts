@@ -17,9 +17,10 @@ const actionsWith = (flag: () => void): PanelHeaderMenuActions =>
 
 const panel = (over: Partial<Panel>): Panel => ({ type: 'panel', id: 'p1', originProjectId: 'proj', title: 'Panel', ...over });
 
-function menu(p: Panel, flag: () => void = noop, over: { panelFailure?: boolean } = {}): MenuAction[] {
+function menu(p: Panel, flag: () => void = noop, over: { panelFailure?: boolean; flagged?: boolean; unflag?: () => void } = {}): MenuAction[] {
   return panelHeaderMenu({
     panel: p,
+    flagged: over.flagged ?? false,
     panelVerb: 'Destroy',
     keybindings: DEFAULT_KEYBINDINGS,
     otherTabs: [],
@@ -27,7 +28,9 @@ function menu(p: Panel, flag: () => void = noop, over: { panelFailure?: boolean 
     panelFailure: over.panelFailure ?? false,
     detach: null,
     preview: p.kind === PREVIEW_KIND ? { providerKind: 'text', parented: false } : null,
-    actions: actionsWith(flag),
+    actions: new Proxy({} as PanelHeaderMenuActions, {
+      get: (_t, key) => (key === 'flag' ? flag : key === 'unflag' ? (over.unflag ?? noop) : noop),
+    }),
   });
 }
 
@@ -52,6 +55,18 @@ describe.each([
     expect(flag[0]!.icon).toBe('flag');
     expect(flag[0]!.shortcut).toBeUndefined();
     expect(flag[0]!.disabled).not.toBe(true);
+  });
+
+  it('offers Unflag instead, with the crossed-out flag, once the panel is marked, and it clears the mark (v1 review)', () => {
+    const unflag = vi.fn();
+    const flag = vi.fn();
+    const items = menu(p, flag, { flagged: true, unflag });
+    expect(items.map((i) => i.label)).not.toContain('Flag');
+    const row = items.find((i) => i.label === 'Unflag');
+    expect(row).toMatchObject({ section: 'viewState', icon: 'unflag' });
+    row!.onClick();
+    expect(unflag).toHaveBeenCalledTimes(1);
+    expect(flag).not.toHaveBeenCalled();
   });
 
   it('calls flag once when chosen', () => {

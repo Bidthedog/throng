@@ -27,11 +27,12 @@ export function gridCopyAs(copy: (format: PreviewCopyFormat) => void): MenuActio
  */
 export function gridViewToggleRows(toggles: GridViewToggles | undefined): MenuAction[] {
   const rows: MenuAction[] = [];
-  const row = (label: string, icon: MenuAction['icon'], t: GridViewToggles['wrap']): void => {
+  const row = (label: string, icon: MenuAction['icon'], t: GridViewToggles['wrap'], id = label): void => {
     if (t === undefined) return;
-    rows.push({ label, checked: t.on, testId: `menu-item-${label}`, icon, section: 'viewState', group: 'gridView', onClick: () => t.onToggle() });
+    rows.push({ label, checked: t.on, testId: `menu-item-${id}`, icon, section: 'viewState', group: 'gridView', onClick: () => t.onToggle() });
   };
-  row('Wrap', 'wrapCells', toggles?.wrap);
+  // The menu says what it wraps (v1 review); the status bar's button keeps its short name. The test id is unchanged.
+  row('Wrap cell contents', 'wrapCells', toggles?.wrap, 'Wrap');
   row('Lock First Row', 'lockFirstRow', toggles?.lockFirstRow);
   row('Lock First Column', 'lockFirstColumn', toggles?.lockFirstColumn);
   return rows;
