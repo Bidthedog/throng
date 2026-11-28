@@ -20,15 +20,17 @@ Spec: `specs/081-v1-fixes-and-tweaks/spec.md`
 | MT-14 | Select All in a preview over an existing selection | untested | | | |
 | MT-15 | Every menu row shows its key | untested | | | |
 | MT-16 | Setting descriptions and their Help | untested | | | |
+| MT-17 | Flag icon on the Flag rows | untested | | | |
+| MT-18 | Body menus hold the content, title menus the panel | untested | | | |
 
 ## MT-01: Menu order and the panel title menu's groups
 
 Paths: `packages/core/src/workspace/menu-sections.ts`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`
 
 ### Steps
-1. Open an editor's title menu. Groups, divided: Save/Revert/Find rows; file rows (Open Preview, Back, Forward, Print); then Split, Send to Tab, Refresh, Focus Mode, Zoom, Flag; Close Panel and Destroy Panel last.
-2. Open a CSV preview's title menu. Its CSV-only rows (Go to Row, Edit Long Cells, Wrap, Lock First Row/Column) sit in their own group above the panel group.
-3. Open a Markdown preview's title menu. Go to Heading sits in the panel-type group; Synchronise Scrolling in the panel group.
+1. Open an editor's title menu. Groups, divided: Save/Revert rows; file rows (Open Preview, Copy Path, Back, Forward, Print); the editor's language, encoding and line endings; then Split, Send to Tab, Refresh, Focus Mode, Zoom, Flag; Close Panel and Destroy Panel last.
+2. Open a CSV preview's title menu. Its CSV-only row, Edit Long Cells in Dialog, sits in its own group above the panel group.
+3. Open a Markdown preview's title menu. Synchronise Scrolling sits in the panel group; Go to Heading is on the body menu instead.
 4. Right-click a file in the File Explorer. Delete is the last item. Right-click a tab: Close is last.
 
 ### Negative cases
@@ -145,7 +147,7 @@ Paths: `packages/ui/src/renderer/preview/providers/csv/csv-body.tsx`, `packages/
 1. Right-click a cell. The clipboard rows (Cut, Copy, Copy as ▸, Paste, Select All, Clear Cells) come first, then Undo and Redo in their own group. **Clear Cells** shows **Del**.
 2. Hover **Copy as**: it holds Rich Text and Plain Text. Hover **Insert**: it holds the eight inserts.
 3. Right-click a row number and a column letter. Each has Undo and Redo in the same place, and an **Insert** submenu with only its own direction's rows.
-4. Right-click the top-left corner. Every cell is selected; the menu offers Cut, Copy, Copy as, Clear Cells, Undo, Redo, Save, Save As…, Go to Row… and Print….
+4. Right-click the top-left corner. Every cell is selected; the menu offers Cut, Copy, Copy as, Clear Cells, Undo, Redo, Go to Row…, Wrap, Lock First Row and Lock First Column.
 
 ### Negative cases
 - The corner's menu has no Paste, Insert, Edit in Dialog…, Column Width… or Select All.
@@ -179,9 +181,9 @@ Paths: `packages/ui/src/renderer/preview/content-menu.ts`, `packages/ui/src/rend
 Paths: `packages/ui/src/renderer/editor/content-menu.ts`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/preview/content-menu.ts`, `packages/ui/src/renderer/editor/status-strip.tsx`, `packages/ui/src/renderer/preview/preview-status-bar.tsx`
 
 ### Steps
-1. Open a Markdown file in an editor. Its title menu and its right-click menu offer **Open Preview**, enabled; choose it. A preview opens.
+1. Open a Markdown file in an editor. Its title menu offers **Open Preview**, enabled; choose it. A preview opens.
 2. Back in the editor, choose **Open Preview** again. It is still enabled, and the existing preview takes focus; no second preview opens.
-3. In the preview, right-click and open its title menu. **Open in Editor** is enabled in both; it focuses the editor. Close the editor and choose it again: an editor opens.
+3. Open the preview's title menu. **Open in Editor** is enabled; it focuses the editor. Close the editor and choose it again: an editor opens.
 
 ### Negative cases
 - With the Markdown preview provider turned off in Settings, Open Preview is drawn disabled with the reason.
@@ -218,3 +220,30 @@ Paths: `packages/core/src/config/settings-metadata.ts`, `docs/preferences.md`
 1. Open **Cog › Settings › Terminal › Attention**. **Bell** says in one short line what ticking it does.
 2. Skim every settings group. Each row's line says what the setting does without needing anything else.
 3. Click a row's (?) for Bell and two others. Help opens on that setting, leading with the same line, then more detail on what it means in throng.
+
+## MT-17: Flag icon on the Flag rows
+
+Paths: `packages/core/src/icons/default-set/flag.svg`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/sidebar/project-menu.ts`
+
+### Steps
+1. Open a terminal panel's title menu. **Flag** shows a flag icon.
+2. Choose **Flag**, then right-click the project in the Projects panel. **Go to Next Marked Panel** shows the same flag icon.
+3. Switch to a light and a dark theme. The flag reads clearly in both.
+
+## MT-18: Body menus hold the content, title menus the panel
+
+Paths: `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/editor/content-menu.ts`, `packages/ui/src/renderer/preview/content-menu.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-menu.ts`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-menu.ts`, `packages/ui/src/renderer/terminal/terminal-content-menu.ts`
+
+### Steps
+1. Right-click in an editor's text. No Split, Open Preview, Print…, Synchronise Scrolling, language, encoding or line-ending rows; Find, Replace and Replace All are there.
+2. Open the same editor's title menu. Copy Path ▸, Set Language…, Encoding and Line Endings are there; Find, Replace and Replace All are not.
+3. Right-click in a Markdown preview's text, on an image and on a Mermaid diagram. No Split, Copy Path, Open in Editor, Print… or Synchronise Scrolling. The diagram still offers Copy Diagram as Image and its own Enter Focus Mode.
+4. Open the preview's title menu. Copy Path ▸ and Open in Editor are there; Find… and Go to Heading… are not.
+5. In a CSV preview, right-click a cell, a row number, a column letter, the corner, and the blank area below the grid. None offers Open in Editor, Print…, Save or Save As…; every grid menu offers Wrap, Lock First Row and Lock First Column.
+6. Open the CSV preview's title menu. Open in Editor, Save and Save As… are there; Go to Row…, Wrap and the two Lock rows are not.
+7. Right-click in a terminal. Find is there; Split, Refresh / redraw terminal and the Remember Command, Remember Directory and Notifications toggles are not. Open its title menu: the three toggles are there, with their keys, and Find is not.
+8. Right-click in a blank panel that has no type yet. No menu opens.
+
+### Negative cases
+- Every row that left one menu is on the other: nothing a menu used to offer is unreachable.
+
