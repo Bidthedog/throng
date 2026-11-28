@@ -1,11 +1,7 @@
 /**
- * 048 FR-015 — every panel content menu is handed `split`, at the call site.
- *
- * `menu-sections.test.ts` proves each BUILDER draws the Split row when it is given `split`, and
- * `component/panel-content-split.test.ts` drives the placeholder and the editor for real. The terminal,
- * the preview and the Find in Files panel build their menus inside components that need xterm, a preview
- * run and a scan to mount — so the one thing left to assert about them is that the call site passes the
- * argument, and that is a fact about the source text.
+ * 048 FR-015, amended by the v1 review (#732) — no panel body menu is handed `split` at its call site: Split is the
+ * panel title menu's alone. The terminal, the preview and the Find in Files panel build their menus inside components
+ * that need xterm, a preview run and a scan to mount, so what this file asserts is a fact about the source text.
  *
  * ANTI-VACUITY: each assertion first finds the call, so a rename of a builder fails loudly instead of
  * passing on an empty search.
@@ -33,15 +29,19 @@ function callOf(file: string, builder: string): string {
   throw new Error(`${file}: unbalanced call to ${builder}`);
 }
 
-describe('panel content menus are handed the Split argument (048 FR-015)', () => {
+describe('no panel body menu is handed the Split argument (048 FR-015, amended by the v1 review, #732)', () => {
+  // Split is the title menu's alone now: it acts on the panel, not on the content under the pointer.
   it.each([
     ['editor/use-editor.ts', 'editorContentMenu'],
     ['terminal/terminal-panel.tsx', 'terminalContentMenu'],
     ['preview/preview-panel.tsx', 'previewContentMenu'],
-  ] as const)('%s passes `split: { panelId… }` to %s', (file, builder) => {
-    const call = callOf(file, builder);
-    expect(call).toMatch(/\bsplit:\s*\{[^}]*panelId/);
-    expect(call).toMatch(/keybindings/);
+  ] as const)('%s hands %s no `split`', (file, builder) => {
+    expect(callOf(file, builder)).not.toMatch(/\bsplit:/);
+  });
+
+  // The rows that moved to the title menu read the body's state through this registration (v1 review, #732).
+  it.each(['editor/use-editor.ts', 'terminal/terminal-panel.tsx', 'preview/preview-panel.tsx'])('%s registers its title-menu extras', (file) => {
+    expect(readFileSync(resolve(RENDERER, file), 'utf8')).toMatch(/registerPanelTitleExtras\((panel\.id|panelId),/);
   });
 
   // 060 FR-042 supersedes 048 FR-015 for the Find in Files body menu: Split is the panel header's there.

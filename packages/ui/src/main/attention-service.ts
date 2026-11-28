@@ -168,6 +168,11 @@ export class AttentionService {
       .catch((err: unknown) => this.log('[attention] storing a flag failed:', err));
   }
 
+  /** The title menu's Unflag: the panel's mark clears now, its toast with it, and a stored flag is forgotten. */
+  unflag(panelId: string): void {
+    this.model.unflag(panelId);
+  }
+
   /** A window's renderer reported what it shows and where focus is. */
   onFocusReport(report: FocusReport): void {
     this.reports.set(report.windowId, report);

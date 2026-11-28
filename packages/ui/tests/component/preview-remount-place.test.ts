@@ -81,6 +81,9 @@ function withLayout(): void {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect(this: Element) {
     return modelRect(this);
   });
+  // The body draws only while it is mounted, so always on screen: 400 px wide, as the model's blocks are. jsdom's 0
+  // would read as a body with no box, whose tables wait for a width before they are laid out (081 FR-020).
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
 }
 
 // ── the window: a gate that unmounts and remounts the panel, and main's history ────────────────────────
@@ -105,8 +108,9 @@ let answerOver: Partial<PreviewUpdate> = {};
 const host = (): HTMLElement => screen.getByTestId(`preview-body-${m!.id}`);
 
 /**
- * `settle()` waits for the CONDITION the tests need — the deferred table pass has laid every table out — not for
- * a fixed 200 ms. `settle(0)` is just a frame.
+ * `settle()` waits for the CONDITION the tests need — the deferred table pass has laid every shown table out — not
+ * for a fixed 200 ms. `settle(0)` is just a frame. A table in a collapsed section waits for the section to open
+ * (081 FR-020), and is 0 px tall in the model either way.
  */
 async function settle(ms = TABLE_PASS_MS): Promise<void> {
   if (ms > 0) {
@@ -114,7 +118,9 @@ async function settle(ms = TABLE_PASS_MS): Promise<void> {
       () => {
         const tables = [...(bodyEl()?.querySelectorAll<HTMLElement>('table') ?? [])];
         expect(tables.length, 'the body has drawn its tables').toBeGreaterThan(0);
-        expect(tables.filter((t) => t.style.tableLayout !== 'fixed')).toEqual([]);
+        const shown = tables.filter((t) => t.closest('[hidden]') === null);
+        expect(shown.length, 'some table is on show').toBeGreaterThan(0);
+        expect(shown.filter((t) => t.style.tableLayout !== 'fixed')).toEqual([]);
       },
       { timeout: ms * 10, interval: 10 },
     );

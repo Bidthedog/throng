@@ -53,6 +53,7 @@ import {
 } from 'react';
 import {
   afterCommit,
+  type CommitMove,
   cell as mkCell,
   clampSelection,
   coversColumn,
@@ -94,6 +95,8 @@ const MAX_DISPLAY_CHARS = 1000;
 
 export type GridMenuTarget =
   | { kind: 'cell'; row: number; col: number }
+  /** The top-left corner: everything is selected, and its menu offers only what acts on all of it (T13). */
+  | { kind: 'corner' }
   | { kind: 'row'; row: number }
   | { kind: 'column'; col: number };
 
@@ -147,7 +150,7 @@ export interface DataGridProps {
   /** Multiplies row height, widths and font size. */
   zoom: number;
   /** Commit from the in-cell editor, only when the value changed. `move` is where the active cell goes next. */
-  onCommitEdit?(row: number, col: number, value: string, move: 'down' | 'right' | 'none'): void;
+  onCommitEdit?(row: number, col: number, value: string, move: CommitMove): void;
   /** Delete on a selection (editable only). */
   onClear?(range: GridRange): void;
   /** `copy` / `cut` / `paste` DOM events on the focused grid root. Cut and paste only when editable. */
@@ -190,6 +193,12 @@ export interface DataGridProps {
    * fading once it is not. Wherever the row sits in the viewport; the highlight touches no selection, focus or scroll.
    */
   syncMarkRow?: { row: number; on: boolean } | null;
+  /**
+   * 081 FR-080, FR-083 — draw one empty row after the last data row, at index `rowCount`, with no row number. It is
+   * a view-only place to type: the grid selects, moves through and edits it as any row, and the owner decides what
+   * writing into it means. Absent or false: no entry row.
+   */
+  entryRow?: boolean;
 }
 
 interface EditingState {
@@ -253,7 +262,7 @@ function CellEditor(props: {
   style: CSSProperties;
   minHeight: number;
   selectAll: boolean;
-  onDone(value: string | null, move: 'down' | 'right' | 'none', refocus: boolean): void;
+  onDone(value: string | null, move: CommitMove, refocus: boolean): void;
 }): ReactElement {
   const { initial, style, minHeight, selectAll, onDone } = props;
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -275,7 +284,7 @@ function CellEditor(props: {
     grow();
   }, [grow, selectAll]);
 
-  const finish = (value: string | null, move: 'down' | 'right' | 'none', refocus: boolean): void => {
+  const finish = (value: string | null, move: CommitMove, refocus: boolean): void => {
     if (finished.current) return;
     finished.current = true;
     onDone(value, move, refocus);
@@ -293,9 +302,10 @@ function CellEditor(props: {
       } else {
         finish(e.currentTarget.value, 'down', true);
       }
-    } else if (e.key === 'Tab' && !e.shiftKey) {
+    } else if (e.key === 'Tab') {
+      // T6 — Tab commits and moves on, Shift+Tab back, wrapping between rows; focus stays in the grid.
       e.preventDefault();
-      finish(e.currentTarget.value, 'right', true);
+      finish(e.currentTarget.value, e.shiftKey ? 'left' : 'right', true);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       finish(null, 'none', true);
@@ -484,9 +494,13 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     lockFirstRow = false,
     syncMarkRow = null,
     lockFirstColumn = false,
+    entryRow = false,
   } = props;
 
-  const rows = Math.max(1, rowCount);
+  // 081 FR-080 — with an entry row, one more row is drawn and reachable than the data holds. Select All and a column
+  // selection still cover the data rows only (`dataRows`); with no data at all they cover the entry row alone.
+  const dataRows = Math.max(1, rowCount);
+  const rows = entryRow ? rowCount + 1 : dataRows;
   const cols = Math.max(1, colCount);
   const rowH = GRID_ROW_HEIGHT * zoom;
   const headerH = HEADER_HEIGHT * zoom;
@@ -704,7 +718,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     [editable, ensureVisible, getCell, longCellThreshold, multiLineInDialog, onEditInDialog],
   );
 
-  const finishEdit = (value: string | null, move: 'down' | 'right' | 'none', refocus: boolean): void => {
+  const finishEdit = (value: string | null, move: CommitMove, refocus: boolean): void => {
     const ed = editing;
     setEditing(null);
     if (!ed) return;
@@ -720,7 +734,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     handleRef,
     () => ({
       focus: () => rootRef.current?.focus(),
-      selectAll: () => commitSel(selectAll(rows, cols), false),
+      selectAll: () => commitSel(selectAll(dataRows, cols), false),
       getSelection: () => selRef.current,
       setSelection: (s) => commitSel(clampSelection(s, rows, cols)),
       selectedRange: () => rangeOf(selRef.current, cols),
@@ -762,7 +776,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         if (el) el.scrollTop = Math.max(0, (rowV.measurementsCache[target]?.start ?? target * rowH) - locked);
       },
     }),
-    [beginEdit, cols, commitSel, ensureVisible, headerH, lockFirstRow, rowH, rowV, rows, viewport],
+    [beginEdit, cols, commitSel, dataRows, ensureVisible, headerH, lockFirstRow, rowH, rowV, rows, viewport],
   );
 
   // ── Pointer: cell / row / column selection, drag, resize ─────────────────────────────────────────────
@@ -797,7 +811,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     else if (dragging.mode === 'rows') {
       commitSel(selectRow(at.row, { anchor: dragging.anchor, active: dragging.anchor, rows: true }), false);
     } else {
-      commitSel(selectColumn(at.col, rows, { anchor: dragging.anchor, active: dragging.anchor }), false);
+      commitSel(selectColumn(at.col, dataRows, { anchor: dragging.anchor, active: dragging.anchor }), false);
     }
   });
   const onWindowUp = useEffectEvent((): void => {
@@ -883,7 +897,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
 
     // FR-008b — the corner selects everything, as Select All does, and never scrolls.
     if (target.closest('[data-grid-corner]')) {
-      commitSel(selectAll(rows, cols), false);
+      commitSel(selectAll(dataRows, cols), false);
       return;
     }
     const cur = selRef.current;
@@ -910,7 +924,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     if (colEl) {
       const col = numAttr(colEl, 'data-col');
       if (col === null) return;
-      const next = selectColumn(col, rows, e.shiftKey ? cur : undefined);
+      const next = selectColumn(col, dataRows, e.shiftKey ? cur : undefined);
       commitSel(next, false);
       setDragging({ mode: 'cols', anchor: next.anchor });
     }
@@ -977,8 +991,10 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       if (!inRange(rangeOf(cur, cols), target.row, target.col)) commitSel(single(target.row, target.col), false);
     } else if (target.kind === 'row') {
       if (!coversRow(cur, target.row)) commitSel(selectRow(target.row), false);
-    } else if (!coversColumn(cur, target.col, rows)) {
-      commitSel(selectColumn(target.col, rows), false);
+    } else if (target.kind === 'corner') {
+      commitSel(selectAll(dataRows, cols), false);
+    } else if (!coversColumn(cur, target.col, dataRows)) {
+      commitSel(selectColumn(target.col, dataRows), false);
     }
     onContextMenu?.(target, point);
   };
@@ -1008,11 +1024,10 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
     }
     const point = { x: e.clientX, y: e.clientY };
     if (target.closest('[data-grid-corner]')) {
-      // FR-008b — everything selected, then the selection's menu, opened over the active cell's menu target.
+      // FR-008b — everything selected, then the corner's own menu: what acts on every cell, and nothing that acts on
+      // the active cell, a row or a column (T13).
       handled();
-      commitSel(selectAll(rows, cols), false);
-      const { row: ar, col: ac } = selRef.current.active;
-      openMenu({ kind: 'cell', row: ar, col: ac }, point);
+      openMenu({ kind: 'corner' }, point);
       return;
     }
     const cellEl = target.closest('[data-grid-cell]');
@@ -1050,7 +1065,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       const k = e.key.toLowerCase();
       if (k === 'a') {
         consume();
-        commitSel(selectAll(rows, cols), false);
+        commitSel(selectAll(dataRows, cols), false);
         return;
       }
       // FR-050b — Undo and Redo on a read-only grid are edit attempts.
@@ -1109,8 +1124,8 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
         lockedRow: lockFirstRow,
         lockedCol: lockFirstColumn,
       });
-      // Tab at the edge of the grid leaves it, so the grid is never a keyboard trap.
-      if ((move === 'Tab' || move === 'ShiftTab') && sameCell(next.active, cur.active)) return;
+      // T11 — Tab at the grid's last cell stays there, as Shift+Tab at the first does: Tab never takes focus out of a
+      // panel (the maintainer's v1 review, 2026-11-27; full keyboard navigation between panels is its own issue).
       consume();
       commitSel(next);
       return;
@@ -1253,13 +1268,15 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
       <span className="data-grid__resize" data-grid-resize="" data-col={c.index} aria-hidden="true" />
     </div>
   );
-  // A row number. The locked first row's is held under the header strip (FR-039a), the others are placed.
+  // A row number. The locked first row's is held under the header strip (FR-039a), the others are placed. The entry
+  // row (081 FR-083) has none: it is not a line of the file yet.
   const rowHeadOf = (r: VirtualItem, locked: boolean): ReactElement => (
     <div
       key={r.key}
       role="rowheader"
       data-grid-rowheader=""
       data-row={r.index}
+      {...(entryRow && r.index === rowCount ? { 'data-entry-row': '', 'aria-label': 'New row' } : {})}
       className={
         'data-grid__rowhead' +
         (r.index === sel.active.row ? ' data-grid__rowhead--active' : '') +
@@ -1271,7 +1288,7 @@ export const DataGrid = forwardRef<DataGridHandle, DataGridProps>(function DataG
           : { top: r.start, height: r.size }
       }
     >
-      {formatGrouped(r.index + 1)}
+      {entryRow && r.index === rowCount ? null : formatGrouped(r.index + 1)}
     </div>
   );
   // The cell editor. One that edits a locked cell lives inside the strip it stays with, so it is held there too.

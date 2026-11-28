@@ -88,6 +88,8 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Toggle Focus Mode',
     'Focus Mode: let the focused panel fill its tab\'s middle section, or step back out of it.',
   ),
+  // 057 FR-125, v1 review — beside Focus Mode: the title menu's Flag / Unflag row, from the keyboard.
+  chord('panel.toggleFlag', 'Focus & Zoom', 'Flag or unflag', 'Mark the focused panel for attention, or clear its mark.'),
   chord(
     'focus.left',
     'Focus & Zoom',
@@ -309,6 +311,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord('grid.insertRowBelow', 'CSV grid', 'Insert Row Below', 'Insert an empty row below the active cell in the CSV Preview Editor.'),
   chord('grid.insertColumnLeft', 'CSV grid', 'Insert Column Left', 'Insert an empty column left of the active cell in the CSV Preview Editor.'),
   chord('grid.insertColumnRight', 'CSV grid', 'Insert Column Right', 'Insert an empty column right of the active cell in the CSV Preview Editor.'),
+  chord('grid.insertRowsAbove', 'CSV grid', 'Insert Rows Above…', 'Ask how many, then insert that many empty rows above the active cell in the CSV Preview Editor.'),
+  chord('grid.insertRowsBelow', 'CSV grid', 'Insert Rows Below…', 'Ask how many, then insert that many empty rows below the active cell in the CSV Preview Editor.'),
+  chord('grid.insertColumnsLeft', 'CSV grid', 'Insert Columns Left…', 'Ask how many, then insert that many empty columns left of the active cell in the CSV grid.'),
+  chord('grid.insertColumnsRight', 'CSV grid', 'Insert Columns Right…', 'Ask how many, then insert that many empty columns right of the active cell in the CSV grid.'),
+  chord('grid.deleteRows', 'CSV grid', 'Delete Rows', 'Delete every row the selection spans in the CSV Preview Editor.'),
+  chord('grid.deleteColumns', 'CSV grid', 'Delete Columns', 'Delete every column the selection spans, from every row, in the CSV Preview Editor.'),
   // 075 FR-064 — Print Preview for the active preview; Print Preview's own Print button sends the job.
   chord(
     'preview.print',
@@ -319,6 +327,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),
+  chord('file.newFolder', 'File Explorer', 'New folder', 'Create a folder in the selected folder, or beside the selected file.'),
   chord(
     'file.undo',
     'File Explorer',

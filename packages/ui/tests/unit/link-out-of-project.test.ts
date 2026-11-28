@@ -344,7 +344,7 @@ describe('SC-013 — no gesture hands any file to the OS default program', () =>
         const resolved = linkFor(name, inProject);
         const items = linkMenuActions(
           {
-            cls: 'onDevice',
+            cls: 'unc',
             applicable: {
               inProjectByName: true,
               previewByExtension: 'none',
@@ -367,6 +367,8 @@ describe('SC-013 — no gesture hands any file to the OS default program', () =>
   });
 });
 
+// The menus below draw 045's rows, which a UNC link keeps (081 FR-054). A local link's out-of-project
+// Open In ▸ holds the two OS rows only, pinned in `link-menu-open-in.test.ts`.
 describe('SC-007 — and no MENU ITEM does either', () => {
   it('the menu offers neither Open In ▸ nor Open Preview for an out-of-project link', () => {
     const offered: string[] = [];
@@ -375,7 +377,7 @@ describe('SC-007 — and no MENU ITEM does either', () => {
         const link = outsideLink(toPath(name));
         const items = linkMenuActions(
           {
-            cls: 'onDevice',
+            cls: 'unc',
             applicable: {
               inProjectByName: false,
               previewByExtension: link.preview,
@@ -408,7 +410,7 @@ describe('SC-007 — and no MENU ITEM does either', () => {
         const request = requestFor(name);
         const items = linkMenuActions(
           {
-            cls: 'onDevice',
+            cls: 'unc',
             applicable: {
               inProjectByName: false,
               previewByExtension: link.preview,

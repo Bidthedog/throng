@@ -14,6 +14,12 @@ Placed in: the panel header menu (`workspace/panel-header-menu.ts`); the content
 (`preview/content-menu.ts`), Find in Files (`find-in-files/content-menu.ts`); and the untyped placeholder's
 new content menu (`workspace/panel-body.tsx`), where it is the only item (so no divider).
 
+*Superseded in part 2026-11-27 (the maintainer's v1 review): on the panel header menu the Split row is
+**viewState**, first of the panel-level rows (`panel-header-menu.ts` overrides the builder's section).
+Every content menu keeps it in **create**.*
+
+*(Amended 2026-11-28, v1 review, #732: Split is on the panel header menu only. The editor, terminal and preview content menus no longer carry it, and the untyped placeholder (and a dormant terminal) opens no body menu at all. `withSplit` and `placeholderContentMenu` are gone; the **+** button still lists the four split items.)*
+
 ## Removed rows
 
 | Menu | Row | Was section |

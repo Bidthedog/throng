@@ -10,11 +10,13 @@ import { act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { collectPanels, type Panel } from '@throng/core';
+import { DEFAULT_KEYBINDINGS, collectPanels, type Panel } from '@throng/core';
 import { mountEditor, type EditorHarness } from './helpers/mount-editor.js';
 import { TerminalPanel } from '../../src/renderer/terminal/terminal-panel.js';
 import { useWorkspace } from '../../src/renderer/state/workspace-store.js';
 import { runTerminalToggle } from '../../src/renderer/terminal/terminal-toggle-registry.js';
+import { panelHeaderMenu, type PanelHeaderMenuActions } from '../../src/renderer/workspace/panel-header-menu.js';
+import { readPanelTitleExtras } from '../../src/renderer/workspace/panel-title-extras.js';
 
 vi.mock('../../src/renderer/terminal/use-terminal.js', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -140,18 +142,34 @@ describe('flipping a terminal toggle (076)', () => {
     await waitFor(() => expect(h.savedPanelConfig()?.rememberDirectory).toBe(false));
   });
 
-  it('keeps the toggles in the menu with the status bar hidden, checked as stored, and flips from there (FR-005, SC-005)', async () => {
+  // v1 review (#732): the toggles are settings of the panel, so its TITLE menu holds them; the body menu does not.
+  it('keeps the toggles in the title menu with the status bar hidden, checked as stored, and flips from there (FR-005, SC-005)', async () => {
     const user = userEvent.setup({ delay: null });
     const { h } = await mount({ notifications: true }, { terminals: { showStatusBar: false } }, false);
     expect(document.querySelector(`[data-testid="terminal-status-bar-${PANEL}"]`)).toBeNull();
     const surface = document.querySelector(`[data-testid="terminal-${PANEL}"]`)!;
     await user.pointer({ keys: '[MouseRight]', target: surface });
-    const item = (label: string): HTMLElement | null => document.querySelector(`[data-testid="menu-item-${label}"]`);
-    await waitFor(() => expect(item('Terminal notifications')).not.toBeNull());
-    expect(item('Remember the last running command')).not.toBeNull();
-    expect(item('Reopen in the last directory')).not.toBeNull();
-    expect(item('Terminal notifications')!.getAttribute('aria-checked')).toBe('true');
-    await user.click(item('Terminal notifications')!);
+    await waitFor(() => expect(document.querySelector('[data-testid="menu-item-Paste"]')).not.toBeNull());
+    expect(document.querySelector('[data-testid="menu-item-Terminal notifications"]'), 'the body menu still has it').toBeNull();
+
+    // The title menu, as `panel-placeholder.tsx` builds it from what the mounted terminal registered.
+    const title = (): ReturnType<typeof panelHeaderMenu> =>
+      panelHeaderMenu({
+        panel: { type: 'panel', id: PANEL, originProjectId: 'proj-editor', title: 'Terminal', kind: 'terminal' } as Panel,
+        panelVerb: 'Destroy',
+        keybindings: DEFAULT_KEYBINDINGS,
+        otherTabs: [],
+        editor: null,
+        panelFailure: false,
+        detach: null,
+        terminalToggles: readPanelTitleExtras(PANEL).terminal?.toggles ?? null,
+        actions: {} as PanelHeaderMenuActions,
+      });
+    const row = (label: string) => title().find((i) => i.testId === `menu-item-${label}`);
+    expect(row('Remember the last running command')).toBeDefined();
+    expect(row('Reopen in the last directory')).toBeDefined();
+    expect(row('Terminal notifications')).toMatchObject({ checked: true, settingToggle: true });
+    act(() => row('Terminal notifications')!.onClick!());
     await waitFor(() => expect(h.savedPanelConfig()?.notifications).toBe(false));
   });
 });

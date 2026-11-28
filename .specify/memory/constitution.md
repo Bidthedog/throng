@@ -1,25 +1,30 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 7.5.0 → 7.6.0
-Bump rationale: MINOR. Spec 080 (#477, maintainer-agreed): Help opens the online guide with **F1**, the
-                standard Help key. The maintainer chose it in 080's clarification of 2026-11-25 ("A": F1,
-                live everywhere except a terminal, so F1 still reaches a program running there). Principle
-                IV's chord tiers judge no function key, but their recorded-exception list is exhaustive and
-                says an addition MUST be justified in the spec that ships it and recorded here; F1 is added
-                beside F2, F3, F11 and Shift+F10. Not MAJOR: no previously-compliant work becomes
-                non-compliant. Not PATCH: the exhaustive list changes. A bounded exception that adds no
-                obligation sits with MINOR, as 5.10.0's `panel.toggleMaximise` did.
-Modified principles: IV (Modifier tiers › Recorded exceptions: `help.open` `F1`).
-Added sections: none. Removed sections: none.
-Terminal tiers: unaffected. `help.open` is scoped to every surface but a terminal (080 FR-010), so F1 is
-                never taken from a shell and needs no terminal-tier entry.
-Enforcement: `packages/core/tests/unit/keybindings-tiers.test.ts` (TIER_EXCEPTIONS gains `help.open|F1`);
-                `packages/core/tests/unit/keybindings-080.test.ts` asserts the scope excludes `terminal` and F1
-                resolves to nothing there.
-Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — name no chord;
-                no edit.
+Version change: 8.2.0 → 8.3.0
+Bump rationale: MINOR. The maintainer's v1 review of 2026-11-28: "If there is a 'Copy As' menu option on any menu,
+                then it should replace the 'Copy' option instead of being in addition to it." Principle VI's
+                variant rule gains one obligation: a menu that offers a copy in named formats offers it as one
+                Copy as ▸ submenu, its only copy row, and the format the preference picks shows the copy key.
+                Argued against the project's own test:
+                - Not MAJOR: no guarantee is withdrawn. The rule already made the plain item conditional ("Where
+                  that menu also carries the plain item"), so a menu without one complied with 8.2.0 too; every
+                  variant is still named, and the preference still picks what the key does.
+                - MINOR, which decides it: a new obligation within an existing rule. The preview and grid menus,
+                  which drew Copy beside Copy as ▸, complied with 8.2.0 and fail 8.3.0.
+                - Not PATCH: it adds an obligation, not a clarification.
+Modified principles: VI (A preference picks the default; the menu offers every variant: amended).
+Modified sections: none outside VI. Added sections: none. Removed sections: none.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › A preference picks the default;
+                the menu offers every variant (one bullet added).
+Audit before the rule: three menus drew both rows (the preview body menu and the CSV and spreadsheet grid
+                menus); all three are changed on the same branch. Copy as ▸ is built in one place,
+                common/copy-as-menu.ts, so no other menu draws it.
+Enforcement: packages/ui/tests/unit/menu-shortcuts.test.ts sweeps every menu, so the preferred leaf's key is
+                checked there; the menus' own tests assert the plain Copy is absent.
+Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — no edit.
            ✅ .specify/extensions.yml — no constitution hooks.
+Artifacts: ✅ 044 and 073 copy FRs carry a dated amendment on the same branch.
 Deferred: none.
 -->
 
@@ -322,8 +327,8 @@ rules below is in the `throng-renderer-ui` skill (`references/constitution-ux.md
   or its content MUST be reachable by a mouse-click or a keyboard command, never only by a route the
   user can hide; the routes, menu-item and Key Bindings editor rules are in the reference.
 - **One section vocabulary for every menu.** Every context menu MUST place its items in these
-  sections, in this order — Contextual, Content, Create, Destroy, Navigate, View & state,
-  Application — with a divider only at a real section boundary, and every menu item MUST declare its
+  sections, in this order — Contextual, Content, Create, Navigate, View & state, Application,
+  Destroy — with a divider only at a real section boundary, and every menu item MUST declare its
   section; the section definitions and divider rules are in the reference.
 - **Disabled when unavailable, absent when meaningless.** A control whose action is temporarily
   unavailable MUST be drawn and disabled; one structurally meaningless for the thing under the
@@ -333,9 +338,18 @@ rules below is in the `throng-renderer-ui` skill (`references/constitution-ux.md
   **Ctrl+click** (**Cmd+click** on macOS), and a plain click MUST NOT navigate, with the keyboard,
   hover and menu rules in the reference. An end-state requirement; known gaps are tracked in the
   reference.
+- **A menu row shows its key.** Every menu row whose command a key performs where the menu
+  was opened MUST show that key: the user's current binding for a rebindable command, the fixed key
+  for one the surface handles itself, and nothing for a command with no key; the rules and the gate
+  are in the reference.
+- **A row goes on the menu of what it acts on.** A panel's body menu MUST hold only rows that act on
+  the content under the pointer or on how the body shows it, and its title menu MUST hold the rows
+  that act on the panel, its file or its link to other panels; the lists, the test for an unlisted
+  row and the gate are in the reference.
 - **A preference picks the default; the menu offers every variant.** Where a preference decides an
-  action's variant, the menu MUST list each variant by name, and a plain item MUST run the
-  preference's choice, labelled for the action.
+  action's variant, the menu MUST list each variant by name, and a plain item, where the menu has one,
+  MUST run the preference's choice, labelled for the action. A copy offered in named formats is one
+  Copy as submenu and no plain Copy beside it, its preferred format showing the copy key.
 - **Name the OS generically.** User-visible text SHOULD refer to the operating system as **the OS**,
   with the exceptions the reference names.
 - **Name a setting for its behaviour.** A setting MUST be named for the behaviour it turns on, so
@@ -634,4 +648,4 @@ Rationale: an installed build has no console, so the log is the only thing a use
   is kept in [`constitution-history.md`](constitution-history.md), newest first. This file carries
   only the latest amendment's report.
 
-**Version**: 7.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-25
+**Version**: 8.3.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-28

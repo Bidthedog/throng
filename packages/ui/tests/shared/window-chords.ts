@@ -250,6 +250,8 @@ export const COVERED_IN_COMPONENT: ReadonlyMap<string, { test: string; key: stri
    */
   ['help.open', { test: 'window-help-key.test.ts', key: 'F1', mods: [] }],
   ['focus.nextMarkedPanel', { test: 'attention-next-command.test.ts', key: 'G', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  // v1 review — `panel.toggleFlag` (`Ctrl+Alt+G`), the letter shape, pressed through the real dispatcher in a real panel box.
+  ['panel.toggleFlag', { test: 'panel-flag-chord.test.ts', key: 'G', mods: ['ctrlKey', 'altKey'] }],
   /*
    * 046 iterate round 1 (T106/T111) — `project.next` / `project.previous` moved to the tier-1
    * `Ctrl+Shift+Alt+PageDown` / `Ctrl+Shift+Alt+PageUp` at the same checkpoint (T099), and newly

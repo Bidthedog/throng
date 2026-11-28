@@ -21,6 +21,8 @@ from the editor, from the File Explorer, or by dropping a file on a preview you 
 2. Or right-click the file in the File Explorer and choose **Open Preview**.
 3. Or drag a file onto a preview panel.
 
+If the file already has a preview, **Open Preview** takes you to it rather than opening a second.
+
 ![The SVG preview of a project's logo](images/previews/open-a-preview.png)
 
 ## Choose what opens when you open a file
@@ -43,7 +45,7 @@ stays in view in both.
 
 1. Open the file in an editor, and its preview in a panel beside it.
 2. Type: the preview follows, and scrolls with you.
-3. Click **Go to Editor** in the preview to jump back to the source.
+3. Click **Open in Editor** in the preview to jump back to the source.
 
 ## Move around a preview
 
@@ -64,8 +66,10 @@ You can paste rendered content into another program, keeping its formatting, or 
 and diagrams copy as images.
 
 1. Select what you want, then right-click.
-2. Choose **Copy** as rich or plain text, or **Copy Path**.
+2. Choose **Copy as** › **Rich Text** or **Plain Text**. The one marked **Ctrl+C** is the format the copy format
+   setting picks, and the one **Ctrl+C** copies in.
 3. For pictures and diagrams, choose **Copy Image**.
+4. To copy the file's path, open the panel header's menu and choose **Copy Path**.
 
 ## Print a preview or save it as a PDF
 

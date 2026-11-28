@@ -57,7 +57,7 @@
  * fail**. Every test goes through `mount()`, and no absence assertion below can be satisfied by an
  * empty document.
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -503,6 +503,24 @@ describe('Delete asks first, and only a confirmed Delete reaches the filesystem 
 
     await waitFor(() => expect(files.delete).toHaveBeenCalledTimes(1));
     expect(files.delete.mock.calls[0]![0]).toEqual(['a.txt']);
+  });
+});
+
+describe('Ctrl+Shift+N in the tree makes a folder where the toolbar’s New folder does (v1 review, 004 FR-021)', () => {
+  it('makes it inside the selected folder, and the menu row shows the key', async () => {
+    const { user, tree, files } = await mount();
+
+    await user.click(within(tree).getByText('sub'));
+    await waitFor(() =>
+      expect(tree.querySelector('.tree-row--selected .tree-label')).toHaveTextContent('sub'),
+    );
+    fireEvent.keyDown(document.activeElement ?? tree, { key: 'N', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(files.newFolder).toHaveBeenCalledWith('sub'));
+    expect(files.newFolder).toHaveBeenCalledTimes(1);
+
+    await user.pointer({ keys: '[MouseRight]', target: within(tree).getByText('sub') });
+    expect(await screen.findByTestId('menu-item-New Folder')).toHaveTextContent('Ctrl+Shift+N');
+    expect(screen.getByRole('button', { name: 'New folder' })).toHaveAttribute('title', 'New folder (Ctrl+Shift+N)');
   });
 });
 

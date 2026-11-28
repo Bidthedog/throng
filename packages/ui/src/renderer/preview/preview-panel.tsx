@@ -163,7 +163,8 @@ import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { isPanelSectionMaximised } from '../workspace/maximise-store.js';
 import { findHeading, linkOf, type EditorPreviewLink } from './link-dom.js';
 import { holdHeading, type HeadingHold } from './heading-hold.js';
-import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
+import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSection } from './content-menu.js';
+import { registerPanelTitleExtras } from '../workspace/panel-title-extras.js';
 import { docDirectory, openPreviewLinkMenu } from './preview-link-menu.js';
 import { focusLocalPanel, requestPreviewOpen } from './open-preview.js';
 import { FindBar } from '../search/find-bar.js';
@@ -246,6 +247,7 @@ import {
   editorTopLineOf,
   editorCentreLineOf,
   requestEditorTopLine,
+  subscribeEditorScrolled,
   useEditorDocLines,
   useEditorTopLine,
   type EditorTopLine,
@@ -256,7 +258,7 @@ import { clearPreviewReservation, previewReservationFor } from './preview-reserv
 import { useMiddleDragScroll } from './middle-drag-scroll.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import type { PageLayout, PageLayoutControl, PreviewBody, PreviewBodyProps } from './provider-view.js';
-import { PRINT_UNAVAILABLE, printPreviewPanel } from './print/print-command.js';
+import { printPreviewPanel } from './print/print-command.js';
 import { usePrintFailureNotice } from '../print/print-failure.js';
 import {
   TASK_NOTICE_ACTION,
@@ -267,7 +269,7 @@ import {
 import { revealNodeAt } from './node-reveal.js';
 import './preview.css';
 import './match-frames.css';
-import { formatGrouped, logCaught, logExpected, pathForms, relPathUnderRoot } from '@throng/core';
+import { formatGrouped, logCaught, logExpected, nonBlankSyncLine, pathForms, relPathUnderRoot } from '@throng/core';
 
 /** The refusals that mean the preview must not be restored here (FR-067). Everything else is kept. */
 const CLEARING_REFUSALS: ReadonlySet<string> = new Set(['no-provider', 'disabled', 'outside-project']);
@@ -296,6 +298,15 @@ const TOP_OF_DOCUMENT = { line: 0, offsetRatio: 0 } as const;
 interface DrawnLines {
   filePath: string;
   lines: number | null;
+}
+
+/**
+ * 081 FR-032 — the line a preview-led sync mark names: `line`, or for a blank line the next non-blank line of the text the
+ * preview holds (the previous one at its end). Split only when a mark is drawn, once a scroll has stopped.
+ */
+function drawnSyncLine(content: PreviewContent | null | undefined, line: number): number {
+  if (content?.kind !== 'text') return line;
+  return nonBlankSyncLine(content.text.split(/\r\n|\r|\n/), line) ?? line;
 }
 
 /** Lines in `text`, counted as CodeMirror and the Markdown pipeline count them: each line-ending style is one break. */
@@ -424,8 +435,8 @@ export interface PreviewPanelProps {
    */
   onClose: () => void;
   /**
-   * 044 FR-015 — the route back to the source: Open in Editor while standalone, Go to Editor while parented
-   * (`runPreviewEditorRoute`). The status bar's button and the body menu's row both call it, as the header
+   * 044 FR-015 — the route back to the source, Open in Editor: the parent focused while parented, else an editor of the
+   * file focused or placed (`runPreviewEditorRoute`). The status bar's button and the body menu's row both call it, as the header
    * menu's row calls the same function. Omitted where no workspace can place an editor: neither is drawn.
    */
   onEditorRoute?: () => void;
@@ -712,8 +723,6 @@ export function PreviewPanel({
   const panelRootRef = useRef<HTMLDivElement | null>(null);
   /** Whether the body is covered by a file notice right now — read by the focus callback below. */
   const bodyCoveredRef = useRef(false);
-  /** 050 R26 — the moved notice is up: every route to the linked editor is unavailable. */
-  const movedOutRef = useRef(false);
   useEffect(() => {
     registerPanelFocus(panelId, () => {
       // US2 fix round 1 — while a file notice covers the body, the body is inert and cannot take the
@@ -1391,18 +1400,6 @@ export function PreviewPanel({
    * the status-bar toggle, both built from the SAME `foldState`/`onFoldChange`/`headingsRef` this
    * panel already holds (never a second original, Principle XI).
    */
-  const foldMenuChords = useMemo(
-    () => ({
-      collapseSection: firstBinding(keybindings, 'markdown.collapseSection'),
-      expandSection: firstBinding(keybindings, 'markdown.expandSection'),
-      collapseAllInside: firstBinding(keybindings, 'markdown.collapseAllInside'),
-      expandAllInside: firstBinding(keybindings, 'markdown.expandAllInside'),
-      collapseAll: firstBinding(keybindings, 'markdown.collapseAll'),
-      expandAll: firstBinding(keybindings, 'markdown.expandAll'),
-    }),
-    [keybindings],
-  );
-
   /**
    * `target` is the DOM node the body menu opened AT (the real contextmenu event's own `e.target`);
    * `null` when the caller has none (the Link-menu path, whose event carries a synthetic point with
@@ -1442,10 +1439,11 @@ export function PreviewPanel({
         },
         collapseAll: () => onFoldChange(foldCollapseAll(foldState)),
         expandAll: () => onFoldChange(foldExpandAll(foldState)),
-        chords: foldMenuChords,
+        // No chords on these rows (v1 review, 2026-11-28): the outlining keys do not reach a preview, so its menu
+        // shows none (constitution VI, "A menu row shows its key"). The commands stay, on the menu and below.
       };
     },
-    [isFoldableProvider, foldState, onFoldChange, foldMenuChords],
+    [isFoldableProvider, foldState, onFoldChange],
   );
 
   /**
@@ -2086,6 +2084,14 @@ export function PreviewPanel({
     // where the editor is THEN. 073 FR-033e — its centre line, not its top (sync itself keys on the top).
     settleSyncMark(parentId, () => editorCentreLineOf(parentId) ?? editorTopLineOf(parentId)?.line ?? null, highlightMsRef.current);
   }, [parentTop, parentId, syncing]);
+  // 081 FR-032 (R7) — a scroll that moved the editor's centre but not its top line (inside a wrapped line) marks too.
+  useEffect(() => {
+    if (!syncing || parentId === null) return;
+    return subscribeEditorScrolled(parentId, () => {
+      if (lastEditorLine.current === null) return;
+      settleSyncMark(parentId, () => editorCentreLineOf(parentId) ?? editorTopLineOf(parentId)?.line ?? null, highlightMsRef.current);
+    });
+  }, [parentId, syncing]);
   useEffect(() => {
     if (!syncing || parentId === null) return;
     return () => clearSyncMark(parentId);
@@ -2197,7 +2203,8 @@ export function PreviewPanel({
     // 073 FR-033d — this view led: the pair is in step at its top line.
     // 073 FR-033e — the mark names the line at the CENTRE of this view; sync itself keyed on the top.
     // 073 FR-033g — drawn once scrolling has stopped for 300 ms, at the latest place this view reported.
-    settleSyncMark(editor, () => centreLine ?? line, highlightMsRef.current);
+    // 081 FR-032 — a blank line there names the next non-blank line of the text drawn, or the previous one at its end.
+    settleSyncMark(editor, () => drawnSyncLine(stateRef.current?.content, centreLine ?? line), highlightMsRef.current);
     return true;
   }, []);
 
@@ -2349,6 +2356,21 @@ export function PreviewPanel({
     [registry, settings.editor.previews, settings.editor.openTarget],
   );
 
+  /*
+   * v1 review (#732) — Copy Path moved from this panel's body menu to its title menu (074 FR-028, FR-068a, amended),
+   * which reads it here when it opens: the File Explorer's four forms, for a file inside the project.
+   */
+  useEffect(
+    () =>
+      registerPanelTitleExtras(panelId, () => {
+        const root = projectRootRef.current;
+        const file = stateRef.current?.filePath;
+        const rel = root !== null && file !== undefined ? relPathUnderRoot(root, file) : null;
+        return { copyPath: root !== null && rel !== null ? pathForms(root, rel) : null };
+      }),
+    [panelId],
+  );
+
   /**
    * The ORDINARY body menu, for a right-click over plain text, over a link WITH a selection (024
    * FR-019d), or over an inert link. The selection is captured NOW: a menu row that copies copies what
@@ -2371,30 +2393,9 @@ export function PreviewPanel({
             pageSelectAll: bodySelectionHost.current !== null,
           }
         : null;
-      const editorRoute: PreviewEditorRouteItem | null =
-        providerKind === 'text' && onEditorRoute !== undefined
-          ? { parented, run: onEditorRoute, disabled: movedOutRef.current }
-          : null;
       const items = previewContentMenu({
         selectionEmpty,
         content,
-        editorRoute,
-        // 074 FR-028, FR-068a — Copy Path, in the File Explorer's four forms, for a file inside the project.
-        copyPath: (() => {
-          const root = projectRootRef.current;
-          const file = stateRef.current?.filePath;
-          const rel = root !== null && file !== undefined ? relPathUnderRoot(root, file) : null;
-          return root !== null && rel !== null ? pathForms(root, rel) : null;
-        })(),
-        // FR-122a/b — every text-provider preview, whatever is under the pointer; never a binary one.
-        syncScroll:
-          flowingRef.current
-            ? {
-                on: syncScrollRef.current,
-                toggle: onToggleSyncScroll,
-                chord: firstBinding(keybindings, 'preview.toggleSyncScroll'),
-              }
-            : null,
         // 047 US1 (FR-007) — always offered, whatever is under the pointer.
         find: {
           run: () => openFind(panelId, 'preview'),
@@ -2407,16 +2408,8 @@ export function PreviewPanel({
           chord: firstBinding(keybindings, 'preview.goToHeading'),
           kind: goToKindRef.current,
         },
-        // 075 FR-062, FR-063 — always drawn; disabled, with the reason, for a provider that cannot print.
-        print: {
-          run: () => void printPanel(),
-          chord: firstBinding(keybindings, 'preview.print'),
-          ...(canPrint(stateRef.current ? registry.get(stateRef.current.providerId) : undefined) ? {} : { unavailable: PRINT_UNAVAILABLE }),
-        },
         // 047 US3 (T048, FR-036) — the fold rows, resolved at the point the menu opened.
         fold: buildFoldMenuArgs(target),
-        // 048 — the Split submenu, splitting this panel.
-        split: { panelId, keybindings },
         // 054 FR-074 — this panel's inline diagram is maximised over the document.
         focusLocked: isPanelSectionMaximised(panelId),
         flowingDocument: flowingRef.current,
@@ -2444,19 +2437,13 @@ export function PreviewPanel({
       textSelection,
       copySelection,
       selectAll,
-      providerKind,
-      onEditorRoute,
-      parented,
       keybindings,
       openMenu,
-      onToggleSyncScroll,
       panelId,
       openHeadingOutlineHandler,
       buildFoldMenuArgs,
       findable,
       selectionHost,
-      printPanel,
-      registry,
     ],
   );
 
@@ -2618,7 +2605,6 @@ export function PreviewPanel({
         : null;
   const bodyCovered = fileNotice !== null || movedOutTo !== null;
   bodyCoveredRef.current = bodyCovered;
-  movedOutRef.current = movedOutTo !== null;
 
   /*
    * US2 scenario 6 — while the file cannot be shown, the notice and nothing else. The body is COVERED
@@ -2811,10 +2797,18 @@ export function PreviewPanel({
             onToggleTask={onToggleTask}
             // 073 — the grid lays out in JS, so it takes the factor itself; its notice and menu offer the editor route.
             zoom={zoomFactor(panelZoomLevel(panel))}
-            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute, editorRouteParented: parented } : {})}
+            {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute } : {})}
             onCopyCapped={onCopyCapped}
-            // 075 FR-075b — a grid's own menus carry Print…, the same command as the header's.
-            {...(state && canPrint(registry.get(state.providerId)) ? { onPrint: () => void printPanel() } : {})}
+            // v1 review (#732) — a grid's body menus carry its view toggles, the same pairs its status bar holds.
+            gridToggles={{
+              ...(hasWrapToggle ? { wrap: { on: wrapEffective, onToggle: onToggleWrap } } : {}),
+              ...(hasLockToggles
+                ? {
+                    lockFirstRow: { on: lockRowEffective, onToggle: onToggleLockRow },
+                    lockFirstColumn: { on: lockColumnEffective, onToggle: onToggleLockColumn },
+                  }
+                : {}),
+            }}
           />
         ) : null}
         {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a

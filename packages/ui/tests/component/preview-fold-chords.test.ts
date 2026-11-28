@@ -34,7 +34,7 @@ function chord(host: HTMLElement, first: string, second: string): void {
 }
 
 describe('Ctrl+M,A / Ctrl+M,L act on the WHOLE document (contracts "Commands")', () => {
-  it('Ctrl+M,A collapses every section; Ctrl+M,X is unbound; Ctrl+M,L expands them again', async () => {
+  it('Ctrl+M,A collapses every section; Ctrl+M,X expands them; Ctrl+M,L toggles them', async () => {
     m = await mountMarkdownPreview(DOC);
     const bodyOne = await screen.findByText('body one', {}, COLD);
     const bodyTwo = screen.getByText('body two');
@@ -44,10 +44,13 @@ describe('Ctrl+M,A / Ctrl+M,L act on the WHOLE document (contracts "Commands")',
     await waitFor(() => expect(bodyOne).not.toBeVisible());
     expect(bodyTwo).not.toBeVisible();
 
-    // Unbound by review (2026-09-28): Expand All stays on the menus, and the chord does nothing.
+    // Bound again by the v1 review (#732, 2026-11-28), after the 2026-09-28 review had left it unbound.
     chord(host, 'm', 'x');
-    expect(bodyOne).not.toBeVisible();
+    await waitFor(() => expect(bodyOne).toBeVisible());
+    expect(bodyTwo).toBeVisible();
 
+    chord(host, 'm', 'l');
+    await waitFor(() => expect(bodyOne).not.toBeVisible());
     chord(host, 'm', 'l');
     await waitFor(() => expect(bodyOne).toBeVisible());
     expect(bodyTwo).toBeVisible();
@@ -61,7 +64,7 @@ describe('Ctrl+M,A / Ctrl+M,L act on the WHOLE document (contracts "Commands")',
  * resolves to "two", the same way a real scroll to the very top of a short document would.
  */
 describe('Ctrl+M,S / Ctrl+M,M act on the section at the TOP OF THE VIEW (FR-037)', () => {
-  it('Ctrl+M,S collapses it, Ctrl+M,E is unbound, Ctrl+M,M expands it — the OTHER section is untouched throughout', async () => {
+  it('Ctrl+M,S collapses it, Ctrl+M,E expands it, Ctrl+M,M toggles it — the OTHER section is untouched throughout', async () => {
     m = await mountMarkdownPreview(DOC);
     const bodyOne = await screen.findByText('body one', {}, COLD);
     const bodyTwo = screen.getByText('body two');
@@ -71,10 +74,13 @@ describe('Ctrl+M,S / Ctrl+M,M act on the section at the TOP OF THE VIEW (FR-037)
     await waitFor(() => expect(bodyTwo).not.toBeVisible());
     expect(bodyOne).toBeVisible();
 
-    // Unbound by review (2026-09-28): Expand This Section stays on the menus.
+    // Bound again by the v1 review (#732, 2026-11-28).
     chord(host, 'm', 'e');
-    expect(bodyTwo).not.toBeVisible();
+    await waitFor(() => expect(bodyTwo).toBeVisible());
+    expect(bodyOne).toBeVisible();
 
+    chord(host, 'm', 'm');
+    await waitFor(() => expect(bodyTwo).not.toBeVisible());
     chord(host, 'm', 'm');
     await waitFor(() => expect(bodyTwo).toBeVisible());
     expect(bodyOne).toBeVisible();

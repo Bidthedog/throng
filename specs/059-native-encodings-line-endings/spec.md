@@ -584,7 +584,7 @@ CRLF lines and its LF line.
 - **FR-058**: The content menu MUST carry a **Line Endings** item holding the same list as the indicator,
   and an **Encoding** item holding the encoding indicator's list. Each of Change Encoding, Reopen with
   Encoding, Convert to LF, Convert to CR, Convert to CRLF and Toggle View Whitespace MUST be a command
-  under FR-041 and FR-042; Change Encoding opens the encoding list as a picker.
+  under FR-041 and FR-042; Change Encoding opens the encoding list as a picker. *(Amended 2026-11-28, v1 review, #732: the **Encoding** and **Line Endings** items are on the panel **title** menu, View & state, after Set Language… and Reset Language, not the content menu: they describe the file. Same lists, same chords.)*
 - **FR-059**: **View Whitespace** MUST be a per-panel toggle, from a status-bar button beside the word-wrap
   toggle and from the content menu, persisted with the panel. On, it MUST show a visible symbol for each
   space, tab and line break — the line-break symbol distinct for LF, CR and CRLF — and a visible mark

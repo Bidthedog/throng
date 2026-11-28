@@ -21,6 +21,8 @@ the preview header menu and body menu (in the group with Copy / Select All's nei
 last before Close). Disabled with hover "This preview type cannot be printed." when the provider has no
 `print`. Running it: `window.throng.print.open({ title, output })`.
 
+*(Amended 2026-11-28, v1 review, #732: the menu item is on the preview header menu only; the body menus, the grids' included, no longer carry it. The editor's `editor.print` row is likewise on its header menu only.)*
+
 ## IPC (preload `throng.print`)
 
 | Call | From | Answer |

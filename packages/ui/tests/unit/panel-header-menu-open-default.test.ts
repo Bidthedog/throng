@@ -93,8 +93,28 @@ describe('Open in OS Default Program on the panel title menu (067 US2)', () => {
     expect(open).toHaveBeenCalledTimes(1);
   });
 
-  it('is absent on an editor with no file on disk', () => {
-    expect(row(menu({ kind: 'editor', hasFilePath: false }))).toBeUndefined();
+  // 081 FR-041 supersedes "absent": the row is drawn disabled with the reason, as its title-bar button is.
+  it('is drawn disabled, with the reason, on an editor with no file on disk', () => {
+    const open = vi.fn();
+    const item = row(menu({ kind: 'editor', hasFilePath: false, open }));
+    expect(item?.disabled).toBe(true);
+    expect(item?.title).toMatch(/^Open in OS Default Program is unavailable: .*Save it first\.$/);
+  });
+
+  it('is drawn disabled on a preview that has no file yet (081 FR-041)', () => {
+    const item = panelHeaderMenu({
+      panel: panel(PREVIEW_KIND),
+      panelVerb: 'Close',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: null,
+      panelFailure: false,
+      detach: null,
+      preview: { providerKind: 'text', parented: false, hasFilePath: false },
+      actions: actions(),
+    }).find((i) => i.label === LABEL);
+    expect(item?.disabled).toBe(true);
+    expect(item?.title).toMatch(/unavailable: this preview has no file yet/);
   });
 
   it.each(['text', 'binary'] as const)('is in Navigate on a %s preview with no provider-specific code', (providerKind) => {

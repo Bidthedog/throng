@@ -121,6 +121,9 @@ Focus Mode gives one panel the whole tab, with the side panes folded away, until
 2. The tab's other panels hide and both side panes fold away.
 3. Do the same again, or press **Esc**, to put everything back.
 
+While a panel is in Focus Mode its status bar is highlighted and names the mode, with the key that leaves it. Terminals
+do this too when their status bar is shown.
+
 ## Zoom text in panels or the whole window
 
 **Anywhere**
@@ -156,6 +159,9 @@ Every move between panels, panes and menus has a chord, so you can leave the mou
 3. Press **Ctrl+Shift+Alt+B**, **N** or **M** to jump to Projects, the workspace or the File Explorer.
 4. Press **Shift+F10** to open the menu for whatever has focus.
 
+**Tab** and **Shift+Tab** move between the controls of the panel you are in and stop at its edges; they never
+take you to another panel.
+
 See [Focus & Zoom](../../docs/key-bindings.md#focus--zoom) for the rest.
 
 ## Close a panel
@@ -180,6 +186,11 @@ A panel's header names what it is and shows whether it needs you.
 
 1. Read the type icon and the title.
 2. Look for the file it shows, an unsaved dot, an attention mark and, for an elevated terminal, **ADMIN**.
+3. On an editor or a preview, the first two buttons open the file in your system's default program and find it in
+   the File Explorer. They are greyed out, with the reason on hover, while the document has no file.
+4. Right-click the header for the panel's menu: its file, its layout and its links to other panels, such as Split,
+   Copy Path, Encoding and Print. Right-click inside the panel for what acts on the content you point at, such as
+   Copy, Find and Wrap.
 
 On a narrow panel the less important controls give way first; every one stays on the panel's menu.
 

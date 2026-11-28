@@ -92,11 +92,11 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
 
     // A leaf has nothing below it: its Kill All Below would be Kill Process again, so it is not offered.
     rightClick('x:300:1');
-    expect(menuLabels()).toEqual(['menu-item-Kill Process', 'menu-item-Go to panel']);
+    expect(menuLabels()).toEqual(['menu-item-Go to panel', 'menu-item-Kill Process']);
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
 
     rightClick('x:200:1');
-    expect(menuLabels()).toEqual(['menu-item-Kill Process', 'menu-item-Kill All Below', 'menu-item-Go to panel']);
+    expect(menuLabels()).toEqual(['menu-item-Go to panel', 'menu-item-Kill Process', 'menu-item-Kill All Below']);
     expect(drawnIcon(screen.getByTestId('menu-item-Kill Process'))).toBe(iconMarkup('resourceKill'));
     expect(drawnIcon(screen.getByTestId('menu-item-Kill All Below'))).toBe(iconMarkup('resourceKillBelow'));
   });
@@ -107,11 +107,11 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
     act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
 
     rightClick('n:n1');
-    expect(menuLabels()).toEqual(['menu-item-Destroy Panel', 'menu-item-Kill All Below', 'menu-item-Go to panel']);
+    expect(menuLabels()).toEqual(['menu-item-Go to panel', 'menu-item-Destroy Panel', 'menu-item-Kill All Below']);
 
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     rightClick('n:n2');
-    expect(menuLabels()).toEqual(['menu-item-Destroy Panel', 'menu-item-Go to panel']);
+    expect(menuLabels()).toEqual(['menu-item-Go to panel', 'menu-item-Destroy Panel']);
   });
 
   it('a project: both Unload rows, and Kill All Below when it holds a live process', async () => {
@@ -121,8 +121,8 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
 
     rightClick('p:p1');
 
-    // Sections draw in the shared order (destroy, navigate, viewState), as every other menu does.
-    expect(menuLabels()).toEqual(['menu-item-Kill All Below', 'menu-item-Go to project', 'menu-item-Unload Project', 'menu-item-Unload Project and End Terminals']);
+    // Sections draw in the shared order (navigate, viewState, destroy), as every other menu does.
+    expect(menuLabels()).toEqual(['menu-item-Go to project', 'menu-item-Unload Project', 'menu-item-Unload Project and End Terminals', 'menu-item-Kill All Below']);
   });
 
   it('an unloaded project offers nothing to unload, only going to it', async () => {

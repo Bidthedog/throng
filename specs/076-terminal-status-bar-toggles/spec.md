@@ -262,6 +262,7 @@ name and theme-derived icon colours; tabbing reaches each one; Space and Enter f
   *(2026-11-22, the maintainer: "these menu options need icons. Use the same icons as are used in the terminal status
   bar, including those that are crossed out if they are disabled.")* Each item MUST draw its toggle's status-bar icon,
   struck through while the setting is off, exactly as the toggle draws it (FR-002).
+  *(Amended 2026-11-28, v1 review, #732: the checkable items are on the terminal panel's **title** menu, View & state (the panel-type group), each showing its bound chord, not the content menu: each is a setting of the panel. Same presence, icons and flip.)*
 - **FR-006**: Each toggle MUST be a command listed in the Key Bindings editor with a label and description, **with no
   default chord**. A user who binds one MUST NOT be offered a reserved terminal key (constitution IV).
 - **FR-007**: Width pressure MUST NOT hide or overlap any toggle; the link readout truncates first, then the flavour

@@ -19,6 +19,9 @@ import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
  * `terminalContentMenu` no longer draws any link row at all (FR-169): a right-click over a link opens
  * the Link menu INSTEAD of the panel's menu, never one leading the other — the second `describe`
  * below is what is left of the old file-link/web-link coverage, now a negative assertion.
+ *
+ * 081 FR-053 moved a LOCAL link's rows 2 – 6 into the File Explorer's Open In ▸ (`link-menu-open-in.test.ts`);
+ * FR-054 keeps them for a UNC link, so the row fixtures below run on `unc`.
  */
 
 const noop = (): void => {};
@@ -56,7 +59,7 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
   it('an in-project file with an enabled provider — labels, order and Open In ▸ grouped', () => {
     const items = linkMenuActions(
       {
-        cls: 'onDevice',
+        cls: 'unc',
         applicable: applicable({ previewByExtension: 'enabled' }),
         openEditors: [{ id: 'e1', name: 'notes.md' }],
         openLink: noop,
@@ -82,7 +85,7 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
   it('an executable offers Open Program, not Open in OS Default Program (S8)', () => {
     const items = linkMenuActions(
       {
-        cls: 'onDevice',
+        cls: 'unc',
         applicable: applicable({ executableByExtension: true }),
         openLink: noop,
         copyLink: noop,
@@ -102,7 +105,7 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
 
   it('an in-project folder offers Open Link, Find in File Explorer, Open in OS Explorer and Copy Link to Clipboard only', () => {
     const items = linkMenuActions(
-      { cls: 'onDevice', applicable: applicable(), openLink: noop, copyLink: noop },
+      { cls: 'unc', applicable: applicable(), openLink: noop, copyLink: noop },
       { kind: 'folder', inProject: true, executable: false, preview: 'none' },
     );
     expect(labels(items)).toEqual(['Open Link', 'Find in File Explorer', 'Open in OS Explorer', 'Copy Link to Clipboard']);
@@ -111,7 +114,7 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
   it('an UNRESOLVED link draws its applicable rows DISABLED, never absent (FR-170a)', () => {
     const items = linkMenuActions(
       {
-        cls: 'onDevice',
+        cls: 'unc',
         applicable: applicable({ previewByExtension: 'enabled', executableByExtension: true }),
         openLink: noop,
         copyLink: noop,
@@ -138,7 +141,7 @@ describe('linkMenuActions — SC-025: identical rows for every fixture (FR-170)'
   it("'pending' draws only the renderer-known rows — rows 5/6 not drawn at all (FR-170c)", () => {
     const items = linkMenuActions(
       {
-        cls: 'onDevice',
+        cls: 'unc',
         applicable: applicable({ previewByExtension: 'enabled', executableByExtension: true }),
         openLink: noop,
         copyLink: noop,
@@ -171,7 +174,7 @@ describe('linkMenuActions — each row performs its OWN target (FR-054)', () => 
   it('Open Link runs the surface Ctrl+click route, and only that', () => {
     const openLink = vi.fn();
     const items = linkMenuActions(
-      { cls: 'onDevice', applicable: applicable(), openLink, copyLink: noop },
+      { cls: 'unc', applicable: applicable(), openLink, copyLink: noop },
       { kind: 'file', inProject: true, executable: false, preview: 'none' },
     );
     item(items, 'Open Link').onClick?.();
@@ -181,7 +184,7 @@ describe('linkMenuActions — each row performs its OWN target (FR-054)', () => 
   it('Copy Link to Clipboard runs the caller’s copy action', () => {
     const copyLink = vi.fn();
     const items = linkMenuActions(
-      { cls: 'onDevice', applicable: applicable(), openLink: noop, copyLink },
+      { cls: 'unc', applicable: applicable(), openLink: noop, copyLink },
       null,
     );
     item(items, 'Copy Link to Clipboard').onClick?.();
@@ -192,7 +195,7 @@ describe('linkMenuActions — each row performs its OWN target (FR-054)', () => 
     const perf = performers();
     const items = linkMenuActions(
       {
-        cls: 'onDevice',
+        cls: 'unc',
         applicable: applicable(),
         openEditors: [{ id: 'e1', name: 'notes.md' }],
         openLink: noop,
@@ -214,7 +217,7 @@ describe('linkMenuActions — each row performs its OWN target (FR-054)', () => 
     const perf = performers();
     const items = linkMenuActions(
       {
-        cls: 'onDevice',
+        cls: 'unc',
         applicable: applicable({ previewByExtension: 'enabled', executableByExtension: true }),
         openLink: noop,
         copyLink: noop,
@@ -232,7 +235,7 @@ describe('linkMenuActions — each row performs its OWN target (FR-054)', () => 
   it('a DISABLED row carries no handler at all', () => {
     const perf = performers();
     const items = linkMenuActions(
-      { cls: 'onDevice', applicable: applicable(), openLink: noop, copyLink: noop, performers: perf },
+      { cls: 'unc', applicable: applicable(), openLink: noop, copyLink: noop, performers: perf },
       null,
     );
     expect(item(items, 'Open in OS Default Program').onClick).toBeUndefined();
@@ -334,22 +337,13 @@ describe('terminalContentMenu — carries no link row at all any more (FR-169)',
   const menu = (selection = ''): MenuAction[] =>
     terminalContentMenu({
       selection,
-      redrawChord: 'Ctrl+Shift+R',
-      startFailure: false,
-      actions: {
-        copySelection: noop,
-        paste: noop,
-        redraw: noop,
-        tryAgain: noop,
-        copyDetails: noop,
-        clearPanelType: noop,
-      },
+      actions: { copySelection: noop, paste: noop, find: noop },
     });
 
-  it('is exactly Copy, Paste, Refresh / redraw terminal — the ordinary menu, unchanged, with or without a selection', () => {
+  it('is exactly Copy, Paste, Find — the ordinary menu (v1 review, #732), with or without a selection', () => {
     // An exact list, so neither Open Link nor Copy Link to Clipboard can be drawn.
     for (const selection of ['', 'some output']) {
-      expect(labels(menu(selection)), `selection "${selection}"`).toEqual(['Copy', 'Paste', 'Refresh / redraw terminal']);
+      expect(labels(menu(selection)), `selection "${selection}"`).toEqual(['Copy', 'Paste', 'Find']);
     }
   });
 });

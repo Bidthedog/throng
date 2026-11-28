@@ -44,8 +44,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
   // 073 — both sit INSIDE the grid's own scroller or body, positioned against it, never over the page.
   '.data-grid__editor':
     'grid/data-grid.tsx — laid over its cell inside the grid canvas; it scrolls with the cell and cannot leave the panel',
-  '.preview-grid-width':
-    'grid/grid.css — anchored to the top-right corner of the grid body inside the panel; nothing to flip or clamp',
+  '.preview-grid-prompt':
+    'grid/grid-number-prompt.tsx (T10) — the grid\'s number prompt, a scrim inset over its own grid body with the form centred in it; clamped to the panel by construction, anchored to nothing, so nothing to flip away from',
   '.context-menu':
     'workspace/context-menu.tsx — measures and flips X/Y against the viewport; submenus flip too',
   '.ctl__font-list':

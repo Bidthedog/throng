@@ -372,6 +372,9 @@ observable on its own).
   or drag — neither is a literal menu entry.)
 - **FR-021**: All keyboard shortcuts for tree operations MUST be defined as named actions in
   **`keybindings.json`** (re-mappable, hot-reloaded), consistent with the 003 keybindings model.
+  *(Amended 2026-11-28, v1 review: New Folder has its own action, `file.newFolder`, bound by default to
+  Ctrl+Shift+N (Cmd+Shift+N on macOS) while the tree has focus. It makes the folder where the toolbar's New
+  folder does (FR-031); the context menu's New Folder row and the toolbar's hover title show its key.)*
 - **FR-022**: File operations MUST be **confined to the active project's root**; a source or target
   outside the root, or a move/paste into a node's own descendant, MUST be rejected with a clear
   message. Confinement MUST be evaluated against **resolved real paths**, so an operation whose source

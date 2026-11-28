@@ -1,6 +1,9 @@
 /**
- * 059 T028, T063 — the editor content menu's Encoding and Line Endings items (FR-033, FR-041, FR-055 … FR-058,
+ * 059 T028, T063 — the editor's Encoding and Line Endings items (FR-033, FR-041, FR-055 … FR-058,
  * FR-061, SC-006).
+ *
+ * v1 review (#732): the items describe the file, so the panel's TITLE menu holds them (right-click the header);
+ * the body menu no longer does. The editor mounts through `PanelPlaceholder` so its header is there to open.
  *
  * Two items in the `viewState` section beside Set Language, each naming the current state and holding the
  * indicator's own list: **Encoding** — every encoding, the current one marked, then Reopen with Encoding…;
@@ -29,6 +32,7 @@ afterEach(() => {
 async function mount(opts: { settings?: Record<string, unknown>; keybindings?: Record<string, string[]> } = {}) {
   const h = mountEditor({
     panelId: PANEL,
+    withHeader: true,
     doc: { text: 'hello\n', version: 1, absPath: PATH, encoding: 'windows1252', lineEnding: 'crlf' },
     ...opts,
   });
@@ -59,8 +63,13 @@ const submenuRows = (parent: HTMLElement): string[] =>
     .map((r) => r.getAttribute('data-testid'))
     .filter((id): id is string => id !== null);
 
-async function openSubmenu(h: Awaited<ReturnType<typeof mount>>, testId: string): Promise<HTMLElement> {
-  fireEvent.contextMenu(h.content());
+/** The panel's title menu: right-click its header. */
+const openTitleMenu = (): void => {
+  fireEvent.contextMenu(screen.getByTestId(`panel-handle-${PANEL}`));
+};
+
+async function openSubmenu(_h: Awaited<ReturnType<typeof mount>>, testId: string): Promise<HTMLElement> {
+  openTitleMenu();
   const parent = await screen.findByTestId(testId);
   fireEvent.click(parent);
   await waitFor(() => expect(parent.querySelector('ul')).not.toBeNull());
@@ -71,9 +80,18 @@ async function openSubmenu(h: Awaited<ReturnType<typeof mount>>, testId: string)
 // `unit/content-menu-encoding-builders.test.ts`.
 
 describe('the Encoding and Line Endings items (059 FR-058)', () => {
-  it('sit beside Set Language, each naming the current state', async () => {
+  it('the body menu no longer carries them (v1 review, #732)', async () => {
     const h = await mount();
     fireEvent.contextMenu(h.content());
+    await screen.findByTestId('context-menu');
+    expect(screen.queryByTestId('menu-item-Encoding')).toBeNull();
+    expect(screen.queryByTestId('menu-item-Line Endings')).toBeNull();
+    expect(screen.queryByTestId('menu-item-Set Language…')).toBeNull();
+  });
+
+  it('sit beside Set Language on the title menu, each naming the current state', async () => {
+    await mount();
+    openTitleMenu();
     expect(await screen.findByTestId('menu-item-Encoding')).toHaveTextContent('Encoding (Windows-1252)');
     expect(screen.getByTestId('menu-item-Line Endings')).toHaveTextContent('Line Endings (CRLF)');
     const rows = [...document.querySelectorAll('[data-testid="context-menu"] > [data-testid^="menu-item-"]')].map((r) =>

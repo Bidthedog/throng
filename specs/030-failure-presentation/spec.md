@@ -731,7 +731,7 @@ earlier one.
   panel's own menu, for every panel type that shows the banner. A discrete command acting on a Panel
   that exists only as a banner button is unreachable from the place users look for panel commands; 029
   FR-004d set this precedent for the terminal's Clear panel type, and each of the three is new work in
-  at least one panel type, which binds it immediately.
+  at least one panel type, which binds it immediately. *(Amended 2026-11-28, v1 review, #732: "the panel's own menu" is the panel title menu for every panel type, the terminal included; the terminal content menu no longer carries the three.)*
 - **FR-042d**: The labels MUST be the ones 029 already ships — **Try again** and **Clear panel type**
   — in every panel type, plus **Copy details**. This is what makes FR-042's "same titles and
   accessible names everywhere" true without regressing 029 FR-004a/FR-004d or churning the five test

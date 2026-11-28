@@ -38,13 +38,25 @@ function canonical(value: unknown): string {
  * Commands added after 070, each on a chord no earlier command held in its scope. They are new, not changed, so the
  * pinned figure leaves them out rather than being re-pinned to include them.
  */
-const ADDED_AFTER_070 = new Set(['preview.print', 'editor.print', 'help.open']);
+const ADDED_AFTER_070 = new Set(['preview.print', 'editor.print', 'help.open', 'file.newFolder', 'panel.toggleFlag']);
+
+/**
+ * Commands that shipped unbound at 070 and took a chord later, on a chord no other command held in their scope. Their
+ * pinned value is the empty array the filter below already leaves out, so the figure stays master's.
+ */
+const BOUND_AFTER_070 = new Set([
+  // v1 review (#732): the four outlining commands, on Ctrl+M chords beside the ones 047 shipped.
+  'markdown.expandSection',
+  'markdown.expandAll',
+  'markdown.collapseAllInside',
+  'markdown.expandAllInside',
+]);
 
 /** Every chord shipped before 070. Commands 070 adds unbound on these platforms (`app.settings` and the like) are left out. */
 function boundDigest(os: OsName): string {
   const shipped = shippedBindingsFor(os);
   const bound = Object.fromEntries(
-    Object.entries(shipped.bindings).filter(([action, chords]) => chords.length > 0 && !ADDED_AFTER_070.has(action)),
+    Object.entries(shipped.bindings).filter(([action, chords]) => chords.length > 0 && !ADDED_AFTER_070.has(action) && !BOUND_AFTER_070.has(action)),
   );
   return createHash('sha256').update(canonical({ ...shipped, bindings: bound })).digest('hex');
 }

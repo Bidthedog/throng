@@ -1011,7 +1011,8 @@ and layouts.
 
 - **FR-001**: Every user-visible string that names the right-hand file tree MUST call it **File
   Explorer**. That covers the pane header, the pane rail label and its show/hide tooltip, the panel
-  header menu item (**Reveal File in File Explorer**), the empty-editor placeholder, the descriptions
+  header menu item (**Reveal File in File Explorer**, renamed **Find in File Explorer** by 081 FR-044), the
+  empty-editor placeholder, the descriptions
   of `view.toggleExplorer`, `panes.fileExplorer.maxWidth`, `explorer.autoRevealActiveFile` (corrected
   at implementation: the setting is `explorer.autoRevealActiveFile`, not `explorer.followActiveEditor`,
   which does not exist) and every other setting or keybinding description that names the pane, the

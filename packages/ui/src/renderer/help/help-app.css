@@ -29,6 +29,11 @@
   object-position: top left;
 }
 
+/* No still came in time: the guide's place is covered plainly, in the window's own background */
+.help-cover--plain {
+  background: var(--bg);
+}
+
 .help-toolbar {
   display: flex;
   flex: 0 0 auto;

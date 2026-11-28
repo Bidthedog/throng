@@ -26,6 +26,7 @@
  * body compares against its blocks without translation.
  */
 import { useSyncExternalStore } from 'react';
+import { nonBlankSyncLine } from '@throng/core';
 
 /**
  * An editor panel's top visible source line (0-based), and whether it is where the editor went to FOLLOW
@@ -172,7 +173,7 @@ export interface TopLineView {
   scrollDOM: { getBoundingClientRect(): { top: number; left: number } };
   contentDOM: { getBoundingClientRect(): { top: number; left: number } };
   posAtCoords(coords: { x: number; y: number }, precise: false): number | null;
-  state: { doc: { lineAt(pos: number): { number: number } } };
+  state: { doc: { readonly lines: number; lineAt(pos: number): { number: number }; line(n: number): { from: number; text: string } } };
 }
 
 /**
@@ -197,6 +198,9 @@ export function editorTopLine(view: TopLineView): number {
 /**
  * 073 FR-033e — the 0-based source line at the vertical centre of `view`'s viewport: the same lookup as
  * {@link editorTopLine}, a half-viewport lower. A view that cannot say how tall it is answers its top line.
+ *
+ * 081 FR-032 — a blank line there names the next non-blank line instead, or the previous one at the end of the document,
+ * so a stop between two paragraphs still highlights a line. A document of blank lines answers the line as it stands.
  */
 export function editorCentreLine(view: TopLineView): number {
   const rect = view.scrollDOM.getBoundingClientRect() as { top: number; height?: number };
@@ -204,7 +208,37 @@ export function editorCentreLine(view: TopLineView): number {
   if (!(height > 0)) return editorTopLine(view);
   const left = view.contentDOM.getBoundingClientRect().left;
   const pos = view.posAtCoords({ x: left + 1, y: rect.top + height / 2 }, false);
-  return pos === null ? editorTopLine(view) : view.state.doc.lineAt(pos).number - 1;
+  if (pos === null) return editorTopLine(view);
+  const { doc } = view.state;
+  const line = doc.lineAt(pos).number - 1;
+  return nonBlankSyncLine({ count: doc.lines, text: (n: number) => doc.line(n + 1).text }, line) ?? line;
+}
+
+/*
+ * 081 FR-032 (R7) — an editor scroll that moved the view without moving its top line: inside a long wrapped line, the
+ * centre moves on while the top stays put. The top-line store dedupes that frame away, so the scroll relay reports it
+ * here, and only for a scroll the reader made (never the echo of a preview's request), so the preview can still mark
+ * the place the scroll stops at. No React state: a listener per panel, called at most once per scroll event.
+ */
+const scrolled = new Map<string, Set<() => void>>();
+
+/** The editor panel's view scrolled at the reader's hand — `editor-scroll-relay.ts` calls it from its scroll listener. */
+export function noteEditorScrolled(panelId: string): void {
+  for (const l of scrolled.get(panelId) ?? []) l();
+}
+
+/** Be told each time {@link noteEditorScrolled} fires for one editor panel. */
+export function subscribeEditorScrolled(panelId: string, listener: () => void): () => void {
+  let set = scrolled.get(panelId);
+  if (set === undefined) {
+    set = new Set();
+    scrolled.set(panelId, set);
+  }
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0 && scrolled.get(panelId) === set) scrolled.delete(panelId);
+  };
 }
 
 /** Test-only: clear all state. */
@@ -212,6 +246,7 @@ export function __resetEditorScrollStore(): void {
   lines.clear();
   centres.clear();
   scrollers.clear();
+  scrolled.clear();
   docLines.clear();
   emit();
 }

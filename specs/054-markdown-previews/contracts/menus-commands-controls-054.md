@@ -19,8 +19,8 @@ Rows show their bindings (`firstBinding`). No fold row at the menu's top level.
 
 | Id | Label (key-bindings editor) | Default |
 |---|---|---|
-| `markdown.collapseAllInside` | Collapse All Inside This Section | unbound |
-| `markdown.expandAllInside` | Expand All Inside This Section | unbound |
+| `markdown.collapseAllInside` | Collapse All Inside This Section | Ctrl+M,Shift+S *(v1 review, #732)* |
+| `markdown.expandAllInside` | Expand All Inside This Section | Ctrl+M,Shift+E *(v1 review, #732)* |
 | `panel.toggleMaximise` | Maximise / Restore Panel | `Alt+Shift+Enter` |
 
 ## Panel header and title menu (FR-071)

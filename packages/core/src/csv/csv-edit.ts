@@ -75,7 +75,8 @@ export function csvSetCells(model: CsvModel, text: string, edits: readonly CsvCe
   const newRows: { row: number; cols: Map<number, string> }[] = [];
   for (const [row, cols] of byRow) {
     if (row >= model.records) {
-      newRows.push({ row, cols });
+      // An empty value in a record that does not exist yet writes nothing (081 FR-082).
+      if ([...cols.values()].some((v) => v !== '')) newRows.push({ row, cols });
       continue;
     }
     const count = recordFieldCount(model, row);
@@ -109,7 +110,8 @@ export function csvSetCells(model: CsvModel, text: string, edits: readonly CsvCe
         lines.push('');
         continue;
       }
-      const maxCol = Math.max(...[...cols].filter(([, v]) => v !== '').map(([c]) => c), 0);
+      // A new record has the file's width (081 FR-081), or more where a value lies past it.
+      const maxCol = Math.max(...[...cols].filter(([, v]) => v !== '').map(([c]) => c), model.width - 1, 0);
       const fields: string[] = [];
       for (let col = 0; col <= maxCol; col++) fields.push(encodeCsvField(cols.get(col) ?? '', d));
       lines.push(fields.join(d));
@@ -148,6 +150,8 @@ export function csvInsertRows(
     while (fields.length < model.width) fields.push('');
     return fields.join(d);
   });
+  // T5 — a blank file: each record ends with a line ending, so an empty one-field record exists at all.
+  if (model.records === 0) return [{ from: 0, to: 0, insert: lines.map((l) => l + eol(model)).join('') }];
   if (at < model.records) {
     const from = model.recordStart[Math.max(0, at)] ?? 0;
     return [{ from, to: from, insert: lines.map((l) => l + eol(model)).join('') }];
@@ -170,6 +174,7 @@ export function csvInsertColumn(
   columns?: readonly (readonly string[])[],
 ): CsvTextChange[] {
   const d = model.delimiter;
+  if (model.records === 0) return insertColumnIntoBlank(model, at, count, columns);
   const changes: CsvTextChange[] = [];
   for (let row = 0; row < model.records; row++) {
     // FR-038a — `columns[k][row]` is the value copied column k puts in this record; none means empty.
@@ -183,6 +188,52 @@ export function csvInsertColumn(
       // A record shorter than the point is padded up to it only when there is a value to place.
       const end = model.recordEnd[row] ?? 0;
       changes.push({ from: end, to: end, insert: d.repeat(at - reach) + encoded.map((f) => d + f).join('') });
+    }
+  }
+  return changes;
+}
+
+/**
+ * T5 — a column inserted into a blank file. The blank file reads as one empty column, so the new column sits beside
+ * it: one record `1 + count` fields wide (`,` for one column), or one per copied row. Each record ends with a line
+ * ending, as an inserted row in a blank file does.
+ */
+function insertColumnIntoBlank(
+  model: CsvModel,
+  at: number,
+  count: number,
+  columns?: readonly (readonly string[])[],
+): CsvTextChange[] {
+  const d = model.delimiter;
+  const place = Math.min(Math.max(0, at), 1);
+  const records = Math.max(1, ...Array.from({ length: count }, (_, k) => columns?.[k]?.length ?? 0));
+  let insert = '';
+  for (let row = 0; row < records; row++) {
+    const added = Array.from({ length: count }, (_, k) => encodeCsvField(columns?.[k]?.[row] ?? '', d));
+    const fields = place === 0 ? [...added, ''] : ['', ...added];
+    insert += fields.join(d) + eol(model);
+  }
+  return [{ from: 0, to: 0, insert }];
+}
+
+/**
+ * Remove `count` columns from `from` in every record (T4, Delete Column): the header too, since it is a record. Each
+ * record loses those fields and one delimiter apiece — the one after them, or the one before when they run to the
+ * record's end — so no record gains or keeps a trailing delimiter. A record that ends before `from` is left alone.
+ */
+export function csvDeleteColumns(model: CsvModel, from: number, count: number): CsvTextChange[] {
+  if (count <= 0 || from < 0) return [];
+  const changes: CsvTextChange[] = [];
+  for (let row = 0; row < model.records; row++) {
+    const reach = recordFieldCount(model, row);
+    if (from >= reach) continue;
+    const base = model.recordFieldStart[row] ?? 0;
+    const end = from + count;
+    if (end < reach) {
+      changes.push({ from: model.fieldStart[base + from] ?? 0, to: model.fieldStart[base + end] ?? 0, insert: '' });
+    } else {
+      const start = from === 0 ? (model.fieldStart[base] ?? 0) : (model.fieldEnd[base + from - 1] ?? 0);
+      changes.push({ from: start, to: model.recordEnd[row] ?? 0, insert: '' });
     }
   }
   return changes;

@@ -89,7 +89,7 @@ A terminal whose shell has exited shows its form again, so you can fix the start
 
 ## Reopen in the folder you were last in
 
-**The terminal's status bar › Reopen in the last directory, or the panel menu**
+**The terminal's status bar › Reopen in the last directory, or the panel header's menu**
 
 A terminal can reopen in the folder you were last in, in place of the project root.
 

@@ -7,8 +7,8 @@
  * Core's `previewAffordance` decides; the strip draws. Absent when showing a preview is meaningless
  * (no provider, no file on disk, outside the project); drawn DISABLED while the provider is switched
  * off, because one setting would make it work and the tooltip names that setting (Principle VI's
- * disabled-versus-absent rule, FR-062); ENABLED as *Open Preview*; and PRESSED as *Go to Preview*
- * while `preview-open-store` holds the file — in ANY window, and whatever spelling the path arrives
+ * disabled-versus-absent rule, FR-062); ENABLED as *Open Preview*; and PRESSED, still named *Open Preview* (v1
+ * review, #732), while `preview-open-store` holds the file — in ANY window, and whatever spelling the path arrives
  * in (FR-014). A pressed button still acts: it asks for the preview again, main answers `focused`, and
  * nothing is ever closed from here.
  *
@@ -180,7 +180,7 @@ describe('enabled: Open Preview (FR-001, SC-001)', () => {
   });
 });
 
-describe('pressed: Go to Preview while the file has a preview in any window (FR-014)', () => {
+describe('pressed, and still Open Preview, while the file has a preview in any window (FR-014, #732)', () => {
   it('draws pressed as soon as main announces the preview, in compare form', async () => {
     await strip({ filePath: FILE });
     expect(button()).toHaveAttribute('aria-pressed', 'false');
@@ -188,8 +188,8 @@ describe('pressed: Go to Preview while the file has a preview in any window (FR-
     act(() => applyPreviewOpenChanged({ path: normaliseForCompare(FILE), open: true }));
 
     expect(button()).toHaveAttribute('aria-pressed', 'true');
-    expect(button()).toHaveAttribute('title', 'Go to Preview');
-    expect(button()).toHaveAccessibleName('Go to Preview');
+    expect(button()).toHaveAttribute('title', 'Open Preview');
+    expect(button()).toHaveAccessibleName('Open Preview');
     // Pressed is a state of an ENABLED control: choosing it still does something.
     expect(button()).toBeEnabled();
   });

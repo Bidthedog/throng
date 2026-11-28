@@ -141,8 +141,13 @@
   opacity: 0.55;
 }
 
-/* 054 FR-078 — the maximised panel's strip, painted in the panel's border colour, names Focus Mode centred. */
-.editor-status-strip.editor-status-strip--focus-mode {
+/* 054 FR-078 — the maximised panel's strip, painted in the panel's border colour, names Focus Mode centred.
+   081 FR-090 — the ONE styling of the state for every panel's status strip (editor, previews, maximise layer,
+   terminal): keyed on the modifier class alone, so a strip joins by carrying the class and nothing else. The class
+   is written twice for specificity only, (0,2,0) as the old `.editor-status-strip.…` compound had: enough to beat a
+   strip's own one-class background (`.editor-status-strip`, `.terminal-status-bar`) whichever stylesheet loads
+   last, while `.panel-box--active-dimmed .editor-status-strip`, later in this file, still dims it as before. */
+.editor-status-strip--focus-mode.editor-status-strip--focus-mode {
   opacity: 1;
   background: var(--panel-border-colour, var(--throng-colour-activePanelBorder));
   color: var(--throng-colour-accentText);
@@ -151,13 +156,23 @@
 
 .editor-status-strip--focus-mode button,
 .editor-status-strip--focus-mode .editor-status-strip__preview .icon,
-.editor-status-strip--focus-mode .editor-status-strip__language-reset .icon {
+.editor-status-strip--focus-mode .editor-status-strip__language-reset .icon,
+.editor-status-strip--focus-mode .setting-toggle[aria-pressed] .icon {
   color: var(--throng-colour-accentText);
 }
 
 .editor-status-strip--focus-mode .editor-status-strip__preview:hover:not(:disabled),
-.editor-status-strip--focus-mode .editor-status-strip__preview[aria-pressed='true'] {
+.editor-status-strip--focus-mode .editor-status-strip__preview[aria-pressed='true'],
+.editor-status-strip--focus-mode .setting-toggle:hover,
+.editor-status-strip--focus-mode .setting-toggle[aria-pressed='true'] {
   background: color-mix(in srgb, var(--throng-colour-accentText) 22%, transparent);
+}
+
+/* 081 FR-091 — an off toggle's struck line, in the strip's text colour and cut out of the highlight it sits on
+   (setting-toggle.css draws it muted, outlined in the normal strip background). */
+.editor-status-strip--focus-mode .setting-toggle[aria-pressed='false']::after {
+  background: var(--throng-colour-accentText);
+  box-shadow: 0 0 0 1px var(--panel-border-colour, var(--throng-colour-activePanelBorder));
 }
 
 .editor-status-strip__focus-mode {

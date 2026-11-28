@@ -602,6 +602,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'How thick a scrollbar is, as a real measurement.',
   },
+  'sizes.ignoredEntryOpacity': {
+    label: 'Ignored Entry Opacity',
+    description:
+      'How strongly the File Explorer draws what git ignores; 1 draws it like any other entry.',
+  },
   'colours.errorSurface': {
     label: 'Error Notice Surface',
     description:

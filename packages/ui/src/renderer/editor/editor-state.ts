@@ -38,6 +38,18 @@ export interface EditorUiState {
    */
   unloadableDetail?: string;
   /**
+   * The 018 refusal reason the read returned (`missing`, `folder`, `too-large`, `out-of-tree`, `binary`, `utf32`,
+   * `not-decodable`) — 081 FR-010. Set with `unloadableDetail`; kept when an authority `unloadable` verdict carries no
+   * reason; cleared with `unloadable`. The tab-open scan words its notice from it, and only a missing reason carries
+   * the `path-missing` cause (FR-011). Absent where no view of this panel read the path.
+   */
+  unloadableReason?: string;
+  /**
+   * The panel shows a Back/Forward stand-in for a gone path (044 FR-106d): its banner is that condition's one
+   * surface, so the tab-open scan skips it (081 FR-012). `fileMissing` stays false for it, as main keeps it.
+   */
+  historyStandIn?: boolean;
+  /**
    * The panel's INITIAL OPEN has not decided anything yet (#369).
    *
    * The third state, and the reason it has to exist. `fileMissing` and `unloadable` are both false

@@ -191,7 +191,7 @@ Every item declares a `section` from the closed vocabulary; `section` is a **req
 
 | Item | Menu | Section |
 |---|---|---|
-| Find / Replace / Replace All | owning panel's menu (FR-015) | `content` |
+| Find / Replace / Replace All | owning panel's body menu (FR-015, amended 2026-11-28, v1 review, #732: no longer the title menu) | `content` |
 | Find in Files | folder context menu (FR-029b) | `navigate` |
 | *(none for `search.replaceInFiles`)* | — | FR-029d: no second toolbar control and no second context-menu item. It is a chord only; the panel-level action with a menu item is the replace **toggle** below |
 | Run / Cancel | Find in Files panel menu (FR-025a) | `viewState` |

@@ -12,6 +12,153 @@ Each record is an HTML comment, so read this file as source rather than rendered
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 8.1.0 → 8.2.0
+Bump rationale: MINOR. The maintainer's v1 review of 2026-11-28 asked that rows about a panel or its file
+                leave the menu a right-click in the panel's body opens, and that rows about the content
+                leave the panel's title menu, and that this be a constitution rule. Principle VI gains one
+                rule, "A row goes on the menu of what it acts on". Argued against the project's own test:
+                - Not MAJOR: no guarantee is withdrawn. Every row that moved off a menu arrives on the
+                  other in the same change, so "Every panel action is reachable" holds for each, and no
+                  principle is redefined.
+                - MINOR, which decides it: a new obligation within an existing principle. Menus that put
+                  Split, Copy Path or Find on both menus complied with 8.1.0 and fail 8.2.0, which is the
+                  ordinary case for an additive rule.
+                - Not PATCH: it adds an obligation, not a clarification.
+Modified principles: VI (A row goes on the menu of what it acts on: added).
+Modified sections: none outside VI. Added sections: none. Removed sections: none.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › A row goes on the menu of
+                what it acts on (new section): the body and title lists, the test for an unlisted row,
+                how to apply it to a menu, and the gate.
+Audit before the rule: every panel body and title menu was listed from the key sweep's fixtures and sorted
+                by the rule; the maintainer approved the resulting moves row by row on 2026-11-28. The
+                editor, preview, CSV, spreadsheet, terminal and blank-panel menus are brought into line on
+                the same branch, so the shipped menus comply when the rule lands.
+Enforcement: packages/ui/tests/unit/menu-placement.test.ts builds the swept body and title menus and fails
+                a title row on a body menu or a body row on a title menu.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no menu placement; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Artifacts: ✅ Specs that placed a moved row carry a dated amendment in their owning spec (043, 044, 048,
+                054, 067, 073, 074, 076 and the editor's status-strip menus, as each applied).
+           ✅ site/guide pages that say where a row lives are updated in the same branch.
+           ⚠ The menus outside the key sweep (the Key Bindings chord menu, the Sub-workspaces rows, the
+                Resource Monitor) are outside the placement gate too; none is a panel body or title menu.
+Deferred: none.
+-->
+
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: 8.0.0 → 8.1.0
+Bump rationale: MINOR. The maintainer's v1 review of 2026-11-27 asked that every context menu row whose
+                command has a key show that key, and that this be a constitution rule. Principle VI gains
+                one rule, "A menu row shows its key". Argued against the project's own test:
+                - Not MAJOR: no guarantee is withdrawn or reversed, and no principle is redefined; every
+                  other rule of VI reads as it did.
+                - MINOR, which decides it: a new obligation within an existing principle. Menus that left
+                  a bound command's key off their rows complied with 8.0.0 and fail 8.1.0, which is the
+                  ordinary case for an additive rule.
+                - Not PATCH: it adds an obligation, not a clarification.
+Modified principles: VI (A menu row shows its key: added).
+Modified sections: none outside VI. Added sections: none. Removed sections: none.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › A menu row shows its key
+                (new section): what counts, rebindable versus fixed keys, the context rule, the one home
+                of the fixed keys and the gate.
+Audit before the rule: every context-menu builder was swept on this branch (commits "Show every bound
+                command's key on its menu row" and "Fail a menu row that shows no key and says no reason").
+                The rows that lacked a key were the CSV and spreadsheet grids' Undo, Redo, Cut, Copy, Paste
+                and Select All, the spreadsheet's Go to Row…, the cog menu's Settings, Resource Monitor and
+                Help, and the notification entry's Dismiss. The editor, preview and terminal menus showed
+                Ctrl on macOS, where those surfaces answer to Cmd. All are fixed in the same branch, so the
+                shipped menus comply when the rule lands.
+Enforcement: packages/ui/tests/unit/menu-shortcuts.test.ts builds every swept builder's menus with every
+                command bound and fails a leaf row that shows no key and has no reason in its NO_KEY list,
+                a reason that no longer applies, or a shown key that is neither a live binding nor a fixed
+                key from packages/ui/src/renderer/common/fixed-shortcut.ts.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no menu shortcut; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Artifacts: ✅ docs/key-bindings.md — no statement contradicts the rule.
+           ⚠ Known gaps, recorded in the reference: the Key Bindings tab's chord menu, the Sub-workspaces
+                panel's Minimise/Restore row and the Resource Monitor's node-action menus are not yet in the
+                gate's sweep.
+Deferred: none beyond the gaps above.
+-->
+
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: 7.6.0 → 8.0.0 (an earlier 8.0.0 draft, superseded by 7.4.0 before release, sits in
+                constitution-history.md marked as never released; this is the first published 8.0.0)
+Bump rationale: MAJOR. The maintainer's v1 review of 2026-11-27 asked for "Close Panel, Destroy Panel etc"
+                to be the last thing on the menu, and chose every menu over the panel title menu alone.
+                Principle VI's section order moves Destroy from third (after Create) to last (after
+                Application): Contextual, Content, Create, Navigate, View & state, Application, Destroy.
+                Argued against the project's own test:
+                - For MINOR: no section is added or removed, every definition stands, and the shipped
+                  menus already draw the new order (commit 8aa13467, `MENU_SECTION_ORDER` in
+                  packages/core/src/workspace/menu-sections.ts).
+                - For MAJOR, which decides it: the order is part of the rule, and a menu that drew Delete
+                  between Create and Navigate complied with 7.6.0 and fails 8.0.0. The test asks about
+                  previously-compliant work, not about whether the code has caught up, so a redefinition
+                  that makes the 7.6.0 shape non-compliant is MAJOR even when the code moved first. This
+                  is not an additive rule that existing code fails (the MINOR case); it reverses a stated
+                  position.
+Modified principles: VI (One section vocabulary for every menu: the order).
+Modified sections: none outside VI. Added sections: none. Removed sections: none.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › One section vocabulary
+                for every menu: Destroy moved to row 6 and gained Close Panel as an example, the rows
+                between it and Create renumbered, and a bullet recording when Destroy moved.
+Enforcement: packages/core/tests/unit/menu-sections.test.ts pins `MENU_SECTION_ORDER`;
+                packages/ui/tests/unit/menu-sections.test.ts pins each menu's shape;
+                packages/ui/tests/component/explorer-properties-last.test.ts pins the explorer rows ending
+                on Delete. All edited in 8aa13467.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no menu section; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Artifacts: ✅ specs/033-open-and-navigate/spec.md — FR-047's table reordered, superseded-in-part notes on
+                FR-047, FR-052 and the 2026-08-15 Q&A.
+           ✅ specs/033-open-and-navigate/contracts/menu-sections.md — order and per-menu shapes updated.
+           ✅ specs/067-workspace-and-os-integration/spec.md — FR-128 superseded in part: Delete follows
+                Properties on a file or folder row; the root still ends on Properties.
+           ✅ specs/044-file-previews/contracts/menus-and-controls.md,
+              specs/047-markdown-preview-enhancements/contracts/menus-commands-controls.md,
+              specs/048-panel-splitting/contracts/menus-commands-controls.md — dated notes: Close Panel
+                last, Send to Tab / Sync to / Split in the header's panel-level View & state group, Go to
+                Heading in the `panelType` group. Content menus keep Split in Create.
+           ✅ docs/, .claude/skills/ — no other statement of the order found.
+           ⚠ specs/033-open-and-navigate/plan.md › Complexity Tracking ("FR-047 fixes it third") left as
+                the record of the 2026-08-15 decision; the spec's supersession note is the current word.
+Deferred: none.
+-->
+
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: 7.5.0 → 7.6.0
+Bump rationale: MINOR. Spec 080 (#477, maintainer-agreed): Help opens the online guide with **F1**, the
+                standard Help key. The maintainer chose it in 080's clarification of 2026-11-25 ("A": F1,
+                live everywhere except a terminal, so F1 still reaches a program running there). Principle
+                IV's chord tiers judge no function key, but their recorded-exception list is exhaustive and
+                says an addition MUST be justified in the spec that ships it and recorded here; F1 is added
+                beside F2, F3, F11 and Shift+F10. Not MAJOR: no previously-compliant work becomes
+                non-compliant. Not PATCH: the exhaustive list changes. A bounded exception that adds no
+                obligation sits with MINOR, as 5.10.0's `panel.toggleMaximise` did.
+Modified principles: IV (Modifier tiers › Recorded exceptions: `help.open` `F1`).
+Added sections: none. Removed sections: none.
+Terminal tiers: unaffected. `help.open` is scoped to every surface but a terminal (080 FR-010), so F1 is
+                never taken from a shell and needs no terminal-tier entry.
+Enforcement: `packages/core/tests/unit/keybindings-tiers.test.ts` (TIER_EXCEPTIONS gains `help.open|F1`);
+                `packages/core/tests/unit/keybindings-080.test.ts` asserts the scope excludes `terminal` and F1
+                resolves to nothing there.
+Templates: ✅ plan-template.md, spec-template.md, tasks-template.md, checklist-template.md — name no chord;
+                no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 7.4.1 → 7.5.0
 Bump rationale: MINOR. Issue #717 (Tweak, maintainer-agreed): the Preferences fold headings' "Fold section" /
                 "Unfold section" hover popup repeated what the heading already shows and got in the way of the

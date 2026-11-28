@@ -34,7 +34,7 @@
  * The fourth (044 T237) is two-way scroll sync (FR-121) and its toggle (FR-122), in a real layout. Its
  * own comment says why it is here.
  */
-import { cpSync, mkdtempSync, renameSync } from 'node:fs';
+import { cpSync, mkdtempSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -829,5 +829,85 @@ test('scrolling either side of a parented preview moves the other, a caret move 
   } finally {
     await restoreWidth();
     cleanupTemp(root);
+  }
+});
+
+/** Every cell of every row of the preview's first table, as `[left, top, width, height]` from the table's own corner. */
+function tableCellRects(win: Page, previewId: string): Promise<number[][][]> {
+  return win.evaluate((id) => {
+    const table = document.querySelector<HTMLElement>(`[data-testid="preview-markdown-${id}"] table`)!;
+    const origin = table.getBoundingClientRect();
+    return [...table.querySelectorAll('tr')].map((tr) =>
+      [...(tr as HTMLTableRowElement).cells].map((cell) => {
+        const r = cell.getBoundingClientRect();
+        return [r.left - origin.left, r.top - origin.top, r.width, r.height];
+      }),
+    );
+  }, previewId);
+}
+
+/*
+ * 081 FR-030 (#733 item 1) — a highlighted table row lays out exactly as it does unhighlighted: only its background
+ * changes. Seen in the app as a row that drew differently until the highlight faded, on the issue's own table (an empty
+ * header row). jsdom has no layout, so `preview-css-tokens.test.ts` (component) holds the CSS rule and this measures
+ * the geometry: every cell's rect with the row marked equals its rect unmarked.
+ *
+ * Its own app: the preview gutter (where the bar is drawn) is seeded on, and the highlight is held for 20 s so the
+ * marked rects are read while the mark is bright, not racing its fade.
+ */
+test('a highlighted table row keeps every cell rect it has unhighlighted, with the bar drawn on its first cell (081 FR-030)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'throng-preview-sync-table-'));
+  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-preview-sync-table-cfg-'));
+  writeSettingsAtomic(cfgRoot, { editor: { previews: { syncHighlightMs: 20_000, providers: { markdown: { gutter: true } } } } });
+  const paragraphs = (from: number): string[] => Array.from({ length: 30 }, (_, i) => `Paragraph ${from + i} of the document.\n`);
+  writeFileSync(
+    join(root, 'sync-table.md'),
+    ['# Sync table', '', ...paragraphs(1), '| | |', '|---|---|', '| Alpha | one |', '| Beta | two |', '| Gamma | three |', '', ...paragraphs(31)].join('\n'),
+  );
+  try {
+    await runApp(async (_app, win) => {
+      await markdownOpensInEditor(win);
+      await createProject(win, 'PreviewSyncTable', root);
+      const editorId = await editorPanel(win);
+      await win.getByTestId('file-explorer-tree').getByText('sync-table.md', { exact: true }).click();
+      await expect(win.getByTestId(`editor-${editorId}`).locator('.cm-content')).toContainText('Sync table', { timeout: 8000 });
+
+      const before = await previewIds(win);
+      await win.getByTestId(`editor-preview-${editorId}`).click();
+      const previewId = await newPreviewId(win, before);
+      const preview = win.getByTestId(`preview-markdown-${previewId}`);
+      await expect(preview.locator('table > colgroup')).toBeAttached({ timeout: 8000 });
+      await expect(preview).toHaveClass(/preview-markdown--gutter/);
+
+      const unmarked = await tableCellRects(win, previewId);
+      expect(unmarked, 'the header row and three body rows').toHaveLength(4);
+
+      // The reader scrolls the preview to stop with Beta's row under its vertical centre.
+      await win.evaluate((id) => {
+        const host = document.querySelector<HTMLElement>(`[data-testid="preview-body-${id}"]`)!;
+        const row = [...host.querySelectorAll('tr')].find((tr) => tr.textContent?.includes('Beta'))!;
+        const r = row.getBoundingClientRect();
+        const h = host.getBoundingClientRect();
+        host.scrollTop += r.top + r.height / 2 - (h.top + h.height / 2);
+      }, previewId);
+      const marked = preview.locator('tr.preview-sync-mark--on');
+      await expect(marked, 'the stop marks the row under the centre').toHaveCount(1, { timeout: 5000 });
+      await expect(marked).toContainText('Beta');
+
+      const highlighted = await tableCellRects(win, previewId);
+      highlighted.forEach((row, r) =>
+        row.forEach((rect, c) =>
+          rect.forEach((v, k) =>
+            expect(Math.abs(v - unmarked[r]![c]![k]!), `row ${r} cell ${c} [left, top, width, height][${k}]: ${v} marked, ${unmarked[r]![c]![k]} unmarked`).toBeLessThanOrEqual(0.5),
+          ),
+        ),
+      );
+      // The bar is drawn, on the first cell: the mark is visible, and only its background and that bar changed.
+      const bar = await marked.locator('td').first().evaluate((cell) => getComputedStyle(cell, '::before').content);
+      expect(bar).not.toBe('none');
+    }, { env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  } finally {
+    cleanupTemp(root);
+    cleanupTemp(cfgRoot);
   }
 });

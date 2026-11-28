@@ -1,5 +1,7 @@
 import type {
+  FlavourOption,
   LinkMenuApplicable,
+  LinkMenuItem,
   LinkPosition,
   LinkResolutionRequest,
   PreviewProviderRegistry,
@@ -12,11 +14,19 @@ import { positionRevealTarget } from '../editor/reveal-range.js';
 import { clickTargetByName, folderByGrammarByName, previewStateByExtension } from './click-by-name.js';
 import { copyLinkAddress, performLinkTarget, resolveLinkForMenu, type LinkActionDeps } from './link-actions.js';
 import { linkMenuActions, type LinkMenuPerformers } from './link-menu.js';
-import { currentLinkOpenInEditors, performLinkOpenIn } from './link-open-in-perform.js';
+import { currentLinkOpenInEditors, performLinkEditorTarget, performLinkOpenIn } from './link-open-in-perform.js';
 import { openLinkMenu, type LinkMenuOpener } from './open-link-or-panel-menu.js';
-import { binaryProviderClaims, logCaught, previewIconOf, relPathUnderRoot } from '@throng/core';
+import { binaryProviderClaims, logCaught, previewIconOf, relPathUnderRoot, resourceClass } from '@throng/core';
 import { editorRefusesAsBinary } from '../editor/open-into-panel.js';
+import { readOpenInFacts } from '../editor/open-in-perform.js';
+import { describeOpenInTargets, openInMenuActions } from '../editor/open-in-targets.js';
+import { openInRows, type OpenInOps } from '../explorer/open-in-rows.js';
+import { requestFindInFiles } from '../find-in-files/open-find-in-files.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
+import { readPreviewOpenIn } from '../preview/preview-open-in.js';
 import { linkFirstReadingByName } from './path-by-name.js';
+import { openTerminalAt } from './open-terminal-at.js';
+import { readFlavours } from '../panel-type/use-flavours.js';
 import { revealInFileExplorer } from '../explorer/reveal-in-tree.js';
 
 /**
@@ -28,6 +38,29 @@ import { revealInFileExplorer } from '../explorer/reveal-in-tree.js';
  */
 
 type Ws = Parameters<typeof performLinkOpenIn>[0];
+
+const NO_SCHEMES: ReadonlySet<string> = new Set();
+
+/**
+ * The terminal flavour catalogue, read once per menu: the list `useFlavours()` holds for the File Explorer
+ * (033 FR-030), read here without a hook because a link menu opens from a callback. Empty on failure, which
+ * draws Terminal disabled (FR-035).
+ */
+async function linkFlavours(): Promise<readonly FlavourOption[]> {
+  try {
+    return await readFlavours();
+  } catch (error) {
+    logCaught('file-link-menu: list the terminal flavours for Open In ▸ Terminal', error);
+    return [];
+  }
+}
+
+/** The folder a terminal opened on `absPath` starts in: the folder itself, or a file's folder. */
+function folderOf(absPath: string, kind: 'file' | 'folder'): string {
+  if (kind === 'folder') return absPath;
+  const cut = Math.max(absPath.lastIndexOf('/'), absPath.lastIndexOf('\\'));
+  return cut > 0 ? absPath.slice(0, cut) : absPath;
+}
 
 /** The rows a web, loopback or protocol link has: Open Link and Copy Link to Clipboard, from its class alone. */
 const NO_FILE_TARGETS: LinkMenuApplicable = {
@@ -117,6 +150,11 @@ export function openFileLinkMenu(args: {
   // 060 FR-045 — whether the resolved file is open in an editor anywhere (main's one-buffer answer),
   // folded into the same resolution so the Open In rows are right when the menu settles.
   let fileOpen = false;
+  // 081 FR-054 — a UNC link keeps 045's menu; every other local link draws the File Explorer's Open In ▸.
+  const unc = resourceClass(request.text, NO_SCHEMES, NO_SCHEMES) === 'unc';
+  // 044 FR-012 — whether the resolved file already has its one preview, asked with the rest of the answer.
+  let previewOpen = false;
+  let flavours: readonly FlavourOption[] = [];
   const stub = (path: string): ResolvedLink => ({
     path,
     kind: 'file',
@@ -147,7 +185,7 @@ export function openFileLinkMenu(args: {
       if (!resolvedLink) return;
       void performLinkTarget({ target: 'preview', link: resolvedLink, request, deps });
     },
-    // #714 — the panel header's Reveal File in File Explorer, on the resolved target (or a folder by
+    // #714 — the panel header's Find in File Explorer, on the resolved target (or a folder by
     // grammar's own path). Drawn enabled only for a target inside the project (`buildLinkMenu`).
     findInExplorer: () => {
       const path = resolvedLink?.path ?? folderPath;
@@ -168,10 +206,75 @@ export function openFileLinkMenu(args: {
     },
   };
 
+  /*
+   * 081 FR-050 – FR-053 — the File Explorer's Open In ▸, built by its own `openInRows` from core's target
+   * state, with the same editor targets (`describeOpenInTargets`) and preview targets (`readPreviewOpenIn`)
+   * the explorer reads, sampled at each build. The performers act on the link's absolute path: the
+   * resolved one once main answers, the first reading by name before (only OS File Explorer runs then,
+   * and it acts on the REQUEST).
+   */
+  const openIn = (state: NonNullable<LinkMenuItem['openIn']>): MenuAction[] => {
+    const absPath =
+      resolvedLink?.path ??
+      folderPath ??
+      linkFirstReadingByName({ text: request.text, baseDirectory: request.baseDirectory, projectRoot });
+    const projectId = request.originProjectId;
+    const editorRows = openInMenuActions(describeOpenInTargets(readOpenInFacts(ws, absPath, fileOpen)), (target) => {
+      if (!resolvedLink) return;
+      // Through `performLinkTarget`, so FR-055's refusal of an out-of-project target stays below every caller.
+      void performLinkTarget({
+        target: 'editor',
+        link: resolvedLink,
+        request,
+        ...at,
+        deps: {
+          ...deps,
+          openInEditor: (link, pos) =>
+            performLinkEditorTarget(ws, target, link.path, pos ? positionRevealTarget(pos.line, pos.column) : undefined),
+        },
+      });
+    });
+    const ops: OpenInOps = {
+      osExplorer: () => void performers.osExplorer(),
+      osDefaultProgram: () => void performers.osDefaultProgram(),
+      editorRows,
+      ...(projectRoot !== null && projectId !== undefined
+        ? {
+            preview: {
+              ...readPreviewOpenIn({
+                layout: ws.layout,
+                registry: args.previewRegistry,
+                settings: args.previewSettings,
+                absPath,
+                projectRoot,
+                previewOpen,
+              }),
+              openLastActive: () => void requestPreviewOpen({ absPath, projectId, target: { mode: 'lastActive' }, flash: true }),
+              openNew: () => void requestPreviewOpen({ absPath, projectId, target: { mode: 'new' }, flash: true }),
+            },
+          }
+        : {}),
+      flavours,
+      openInTerminal: (path, flavour) => openTerminalAt(ws, folderOf(path, state.kind), flavour),
+      ...(projectRoot !== null
+        ? {
+            findInFiles: (path: string, replace: boolean) =>
+              void requestFindInFiles({
+                route: 'contextMenu',
+                replace,
+                scopeSubPath: relPathUnderRoot(projectRoot, path) ?? '',
+              }),
+          }
+        : {}),
+    };
+    return openInRows({ absPath, ...state }, ops);
+  };
+
   const buildItems = (resolution: ResolvedTarget | null | 'pending'): MenuAction[] =>
     linkMenuActions(
       {
-        cls: 'onDevice',
+        cls: unc ? 'unc' : 'onDevice',
+        openIn,
         applicable,
         // FR-170 row 2 — one Open In row per open editor, read at each build so main's answer removes
         // the editor that turns out to hold the target.
@@ -194,11 +297,15 @@ export function openFileLinkMenu(args: {
     );
 
   if (folderByGrammar) {
-    args.opener.openMenu(
-      args.x,
-      args.y,
-      buildItems({ kind: 'folder', inProject: folderInProject, executable: false, preview: 'none' }),
-    );
+    const folder: ResolvedTarget = { kind: 'folder', inProject: folderInProject, executable: false, preview: 'none' };
+    const opId = args.opener.openMenu(args.x, args.y, buildItems(folder));
+    // Open In ▸ Terminal waits on the flavour catalogue, as the File Explorer's does: disabled until it arrives.
+    if (!unc && folderInProject) {
+      void linkFlavours().then((list) => {
+        flavours = list;
+        args.opener.updateMenu(opId, buildItems(folder));
+      });
+    }
     return;
   }
 
@@ -209,7 +316,11 @@ export function openFileLinkMenu(args: {
     buildItems,
     // SC-021 — ONE `throng:links:resolve` per opening.
     resolve: async () => {
-      const answer = await resolveLinkForMenu(request);
+      const [answer, catalogue] = await Promise.all([
+        resolveLinkForMenu(request),
+        unc ? Promise.resolve<readonly FlavourOption[]>([]) : linkFlavours(),
+      ]);
+      flavours = catalogue;
       if (answer.ok) {
         resolvedLink = answer.link;
         // 045 FR-170e (#719) — a file the editor refuses as binary gets no Open In ▸ row; asked only where one
@@ -217,7 +328,7 @@ export function openFileLinkMenu(args: {
         let binary = false;
         if (answer.link.kind === 'file') {
           const path = answer.link.path;
-          [fileOpen, binary] = await Promise.all([
+          [fileOpen, binary, previewOpen] = await Promise.all([
             (async () => {
               try {
                 return (await window.throng?.editor?.isOpen?.(path)) ?? false;
@@ -228,6 +339,17 @@ export function openFileLinkMenu(args: {
             })(),
             answer.link.inProject
               ? editorRefusesAsBinary(ws, path, args.previewRegistry, request.originProjectId)
+              : Promise.resolve(false),
+            // 044 FR-012 — the preview rows give way to Current Preview when the file has its one preview.
+            answer.link.inProject && !unc
+              ? (async () => {
+                  try {
+                    return (await window.throng?.preview?.isOpen?.(path)) ?? false;
+                  } catch (error) {
+                    logCaught('file-link-menu: ask whether the linked file has its preview', error);
+                    return false;
+                  }
+                })()
               : Promise.resolve(false),
           ]);
         }

@@ -233,7 +233,8 @@ describe('054 — one Outlining submenu (FR-010 – FR-014)', () => {
 /* ── A moved-out preview disables its Open in Editor rows (050 FR-035; from component/preview-moved-out) ── */
 
 describe('a moved-out preview (050 FR-035)', () => {
-  it('disables the header menu and content menu rows', () => {
+  // v1 review (#732) — Open in Editor is the title menu's alone now; the body menu has none to disable.
+  it('disables the header menu row, and the body menu draws none', () => {
     const keybindings = { bindings: {} };
     const header = panelHeaderMenu({
       panel: {
@@ -256,11 +257,10 @@ describe('a moved-out preview (050 FR-035)', () => {
 
     const content = previewContentMenu({
       selectionEmpty: true,
-      editorRoute: { parented: false, run: () => {}, disabled: true },
       find: { run: () => {} },
       goToHeading: { run: () => {} },
-    } as never) as unknown as { label?: string; disabled?: boolean }[];
-    expect(content.find((i) => i.label === 'Open in Editor')?.disabled).toBe(true);
+    });
+    expect(content.find((i) => i.label === 'Open in Editor')).toBeUndefined();
   });
 });
 
@@ -269,12 +269,10 @@ describe('a moved-out preview (050 FR-035)', () => {
 const EXTERNAL: PreviewLink = { kind: 'external', url: 'https://example.com/' };
 
 describe('previewContentMenu carries no Contextual section any more (FR-169)', () => {
-  it('draws only Navigate (Find…, Go to Heading…), Content, Navigate and View & state — never Open Link or Copy Link to Clipboard', () => {
+  it('draws only Navigate (Find…, Go to Heading…) and Content — never Open Link or Copy Link to Clipboard', () => {
     const items = previewContentMenu({
       selectionEmpty: false,
       content: { copyFormat: 'rich', copy: vi.fn(), selectAll: vi.fn() },
-      editorRoute: { parented: false, run: vi.fn() },
-      syncScroll: { on: true, toggle: vi.fn() },
       find: { run: vi.fn() },
       goToHeading: { run: vi.fn() },
     });
@@ -283,12 +281,9 @@ describe('previewContentMenu carries no Contextual section any more (FR-169)', (
     expect(items.map((i) => i.section)).toEqual([
       'navigate',
       'navigate',
+      // Copy as ▸, Select All (#732: the two formats live in the submenu; v1 review: it replaces the plain Copy).
       'content',
       'content',
-      'content',
-      'content',
-      'navigate',
-      'viewState',
     ]);
     expect(items.some((i) => i.label === 'Open Link')).toBe(false);
     expect(items.some((i) => i.label.startsWith('Copy Link'))).toBe(false);
@@ -383,34 +378,21 @@ describe('the address a link copies (FR-116)', () => {
 });
 
 /*
- * 044 T234 — Synchronise Scrolling on the preview body menu (FR-122a, FR-122b; contracts/menus-and-controls.md
- * §4, §10): a View & state section, last, on every text-provider preview, whatever is under the pointer.
+ * 044 FR-122b, amended by the v1 review (#732) — Synchronise Scrolling is the title menu's alone: it links this panel
+ * to its editor. The body menu draws none, whatever the provider.
  */
-describe('Synchronise Scrolling on the body menu (FR-122b)', () => {
-  const SYNC = 'menu-item-Synchronise Scrolling';
-
+describe('Synchronise Scrolling is not on the body menu (FR-122b, v1 review #732)', () => {
   it.each<[string, boolean]>([
     ['nothing selected', true],
     ['text selected', false],
-  ])('is the last item with %s', (_name, selectionEmpty) => {
+  ])('draws none with %s', (_name, selectionEmpty) => {
     const items = previewContentMenu({
       selectionEmpty,
       content: { copyFormat: 'rich', copy: vi.fn(), selectAll: vi.fn() },
-      editorRoute: { parented: false, run: vi.fn() },
-      syncScroll: { on: true, toggle: vi.fn() },
       find: { run: vi.fn() },
       goToHeading: { run: vi.fn() },
     });
-    expect(items.at(-1)).toMatchObject({ testId: SYNC, section: 'viewState', label: 'Synchronise Scrolling', checked: true });
-  });
-
-  it('is absent when the panel hands the builder none (a binary provider)', () => {
-    const items = previewContentMenu({
-      selectionEmpty: true,
-      syncScroll: null,
-      find: { run: () => {} },
-      goToHeading: { run: () => {} },
-    });
-    expect(items.find((i) => i.testId === SYNC)).toBeUndefined();
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.find((i) => i.testId === 'menu-item-Synchronise Scrolling')).toBeUndefined();
   });
 });

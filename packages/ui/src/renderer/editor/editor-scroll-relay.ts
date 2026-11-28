@@ -52,6 +52,7 @@ import {
   editorCentreLine,
   editorTopLine,
   forgetEditorTopLine,
+  noteEditorScrolled,
   publishEditorDocLines,
   registerEditorCentreReader,
   publishEditorTopLine,
@@ -129,7 +130,9 @@ export function attachEditorScrollRelay(view: RelayView, panelId: string, frames
   };
 
   const onScroll = (): void => {
+    // 081 R7: a scroll that moves the centre line but not the top still has to settle the sync mark.
     if (armed) scrolledSinceDispatch = true;
+    else noteEditorScrolled(panelId);
     schedulePublish();
   };
 

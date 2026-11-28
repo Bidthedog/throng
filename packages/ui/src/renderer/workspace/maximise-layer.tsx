@@ -16,6 +16,7 @@
  */
 import { useEffect, type CSSProperties, type ReactElement } from 'react';
 import { transientOverlayOpen } from '../common/transient-overlay.js';
+import { keepTabInPanel } from '../common/panel-tab-stop.js';
 import { isTabGroupDragLive } from './drag-live.js';
 import { restore, useTabMaximise } from './maximise-store.js';
 import { FOCUS_MODE_STRIP_CLASS, FocusModeBadge } from './focus-mode-badge.js';
@@ -71,6 +72,8 @@ export function MaximiseLayer({ tabId }: { tabId: string }): ReactElement | null
       data-testid="maximise-layer"
       data-panel-id={topSection.panelId}
       data-section-id={topSection.sectionId}
+      // T11 — the layer stands in for its panel, so Tab stays inside it too.
+      onKeyDown={keepTabInPanel}
       // The section held here is outside its panel, so the panel's colour is handed to all of it — the diagram's
       // focus ring as well as the strip (MT-04 retest, 2026-10-13: the ring took the theme's default).
       style={colour ? ({ '--panel-border-colour': colour } as CSSProperties) : undefined}

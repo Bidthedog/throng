@@ -3,6 +3,7 @@ import {
   COMMAND_SCOPES,
   DEFAULT_KEYBINDINGS,
   eventToToken,
+  isTwoStrokeToken,
   normalizeToken,
   parseKeybindings,
   resetBindingValue,
@@ -154,8 +155,9 @@ describe('Keybindings resolver (FR-033)', () => {
       for (const token of tokens) {
         // A two-stroke token (FR-091/FR-092) is not a single `eventToToken` event by construction —
         // it round-trips through `parseTwoStroke`/`isValidTwoStrokeToken` instead
-        // (keybindings-two-stroke.test.ts), never through this single-event helper.
-        if (token.includes(' ')) continue;
+        // (keybindings-two-stroke.test.ts), never through this single-event helper. The comma form
+        // (`Ctrl+M,Shift+S`, FR-124) is one too: split on `+` it reads as nonsense.
+        if (isTwoStrokeToken(token)) continue;
         const parsed = parseToken(token);
         const rebuilt = eventToToken(parsed!.ev);
         expect(

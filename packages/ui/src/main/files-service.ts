@@ -7,7 +7,7 @@
  * the filesystem only through this service. All failures are returned as
  * `{ error }` (non-fatal, FR-025), never thrown across the bridge.
  */
-import { logCaught, logExpected, nameProblem, pathCompareKey, trashTerm } from '@throng/core';
+import { NoIgnoreOracle, logCaught, logExpected, nameProblem, pathCompareKey, trashTerm, type IgnoreOracle } from '@throng/core';
 import { basename, dirname, join } from 'node:path';
 import {
   dedupeName,
@@ -55,6 +55,12 @@ export type NewFolderResult = { relPath: string } | FailureEnvelope;
 export type DeleteMode = 'recycle' | 'permanent';
 
 const NO_ROOT = 'No active project.';
+
+/** A root-relative path that cannot leave the root: not empty, not absolute, no `..` segment under either separator. */
+function staysInRoot(relPath: string): boolean {
+  if (relPath === '' || relPath.startsWith('/') || relPath.startsWith('\\') || /^[A-Za-z]:/.test(relPath)) return false;
+  return !relPath.split(/[\\/]/).includes('..');
+}
 const OUTSIDE = 'Target is outside the project root.';
 const UNKNOWN_PROJECT = 'Unknown project.';
 
@@ -89,6 +95,8 @@ export class FilesService {
   constructor(
     private readonly fs: IFileSystem,
     private readonly shell: IShellIntegration,
+    /** 081 US8 — which listed entries git ignores. Absent, nothing is (FR-073). */
+    private readonly ignoreOracle: IgnoreOracle = NoIgnoreOracle,
   ) {}
 
   /**
@@ -250,6 +258,19 @@ export class FilesService {
       logExpected('files-service: list', 'failed() logs the raw error and the explorer reports the cause', e);
       return this.failed(e);
     }
+  }
+
+  /**
+   * 081 US8 (FR-070, FR-072a) — which of a listing's entries git ignores, for the explorer to fade. Folders carry a
+   * trailing `/`. Asked of the active root only, and only for paths that stay inside it; with no root, or no
+   * repository, the answer is empty. The listing never waits on this: the renderer asks after it has drawn.
+   */
+  async ignored(relPaths: readonly string[]): Promise<{ ignored: string[] }> {
+    const root = this.root;
+    if (!root) return { ignored: [] };
+    const asked = relPaths.filter(staysInRoot);
+    if (asked.length === 0) return { ignored: [] };
+    return { ignored: [...(await this.ignoreOracle.ignored(root, asked))] };
   }
 
   async rename(relPath: string, newName: string, reportingWindowId?: number): Promise<OkOrError> {

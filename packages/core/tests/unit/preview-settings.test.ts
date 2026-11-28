@@ -283,7 +283,7 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
       allowedValues: ['lastActive', 'new'],
     });
     // 054 FR-052 — the sentence names the provider ("…most recently used Markdown preview…").
-    expect(openTarget.description).toContain('Where a Markdown preview opens');
+    expect(openTarget.description).toContain('Where Markdown previews open');
     expect(openTarget.description).toContain('reuse the last one used in this tab, or a new panel');
     // 054 FR-052 — disabled while the provider is off, like every other provider leaf.
     expect(openTarget.enabledWhen).toEqual({ key: 'editor.previews.providers.markdown.enabled', is: true });

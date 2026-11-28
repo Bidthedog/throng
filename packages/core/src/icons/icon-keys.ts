@@ -205,6 +205,13 @@ export const ICON_KEYS = [
   'pageNext',
   // 078 FR-009, FR-013 — the Themes picker's mark for a theme that meets WCAG AA.
   'wcagConformant',
+  // 081 FR-040, FR-042 — a panel's own file, handed to the OS or found in File Explorer.
+  'openInDefaultProgram',
+  'findInFileExplorer',
+  // #732 — Flag and Go to Next Marked Panel, which round 13 had left without a glyph.
+  'flag',
+  // The v1 review's Unflag: the flag, crossed out.
+  'unflag',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -596,6 +603,12 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
   pageNext: 'The icon on the Print Preview button that shows the page after the one on screen.',
   wcagConformant:
     'The mark beside the theme picker in Preferences, Themes, shown when the selected theme meets WCAG AA contrast on every colour pair throng measures.',
+  openInDefaultProgram:
+    'The icon on the Open in OS Default Program button in an editor’s or preview’s title bar, and on the Open in OS Default Program menu rows, which open the file in the program your operating system uses for it.',
+  findInFileExplorer:
+    'The icon on the Find in File Explorer button in an editor’s or preview’s title bar, and on the Find in File Explorer menu rows, which select the file in the File Explorer tree and open its folders to show it.',
+  flag: 'The icon on Flag in a panel’s title menu, which marks the panel for attention, and on Go to Next Marked Panel.',
+  unflag: 'The icon on Unflag in a marked panel’s title menu, which clears its mark: the flag, crossed out.',
 };
 
 /** Is `value` one of the icon keys? */

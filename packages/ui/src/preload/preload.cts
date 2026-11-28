@@ -722,6 +722,7 @@ contextBridge.exposeInMainWorld('throng', {
     startOsDrag: (relPaths: readonly string[]) => ipcRenderer.send('throng:files:startOsDrag', relPaths),
     setRoot: (root: string | null) => ipcRenderer.send('throng:files:setRoot', root),
     list: (relDir: string) => ipcRenderer.invoke('throng:files:list', relDir),
+    ignored: (relPaths: readonly string[]) => ipcRenderer.invoke('throng:files:ignored', relPaths),
     rename: (relPath: string, newName: string) =>
       ipcRenderer.invoke('throng:files:rename', relPath, newName),
     move: (srcRelPaths: string[], destRelDir: string) =>
@@ -1322,6 +1323,8 @@ contextBridge.exposeInMainWorld('throng', {
     /** 057 round 12 (FR-125): the panel menu's Flag — main raises a user mark and stores it. */
     flag: (panel: { panelId: string; projectId: string; panelTitle: string; tabTitle: string; projectName: string }) =>
       ipcRenderer.send('throng:attention:flag', panel),
+    /** The title menu's Unflag: clear the panel's mark. Fire and forget. */
+    unflag: (panelId: string) => ipcRenderer.send('throng:attention:unflag', { panelId }),
     /**
      * 057 FR-007 (#541): panels a route ended for good — a Tab destroy, Destroy other tabs, or a
      * sub-workspace's own panel — whose marks and stored flags go with them. The project window's

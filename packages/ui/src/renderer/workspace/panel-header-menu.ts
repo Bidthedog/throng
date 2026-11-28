@@ -6,21 +6,29 @@
  * JSX `onContextMenu` handler, which is why SC-010 could not be asserted below E2E; the extraction
  * moves code without altering a label, an icon, an action or a condition (N6).
  *
- * The biggest restructure in the feature, and all of it is FR-047's fixed order rather than a fresh
- * opinion (contracts/menu-sections.md §3.4):
+ * The groups, in the order the shared section order draws them (v1 review T1 regrouped 033's contracts/menu-sections.md
+ * §3.4 shape and put Destroy last in every menu):
  *
- * | Section      | Items                                                                              |
- * |--------------|------------------------------------------------------------------------------------|
- * | Create       | Split ▸ (Split Down, Up, Right, Left — 048)                                         |
- * | Content      | Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All               |
- * | Destroy      | the panel's destroy verb                                                            |
- * | Navigate     | Reveal File in File Explorer, Open in OS Explorer, Send to Tab, Sync to           |
- * | View & state | Zoom, Synchronise Scrolling, Flag, Try again, Copy details, Clear panel type,            |
- * |              | Refresh / redraw                                                                    |
+ * | Group                | Section, group      | Items                                                              |
+ * |----------------------|---------------------|--------------------------------------------------------------------|
+ * | The document         | Content             | Save, Save As…, Revert, Reload from disk                           |
+ * | The document's file  | Navigate            | Find in File Explorer, Open in OS Explorer, Open in OS Default     |
+ * |                      |                     | Program, Copy Path ▸, Open Preview / Open in Editor, Back, Forward, |
+ * |                      |                     | Print…                                                             |
+ * | This panel type only | View & state, `panelType` | Set Language…, Reset Language, Encoding ▸, Line Endings ▸;   |
+ * |                      |                     | Edit Long Cells in Dialog; a terminal's Remember / Notifications   |
+ * | The panel itself     | View & state        | Split ▸, Send to Tab, Sync to, Refresh, Reload, Focus Mode, Zoom,  |
+ * |                      |                     | Refresh / redraw terminal, Synchronise Scrolling, Flag, the        |
+ * |                      |                     | failure banner's three                                             |
+ * | Closing it           | Destroy             | the panel's removal verb, last                                     |
  *
- * *Destroy Panel* moves from last to the middle — the same shape the File Explorer menu has always
- * had. The editor and terminal conditionals are unchanged: an absent item is simply absent
- * from its group, and an empty group draws no divider.
+ * v1 review (#732), the maintainer's rule for every panel menu: this menu holds the panel, its file and its link to
+ * other panels; the body menu holds what acts on the content under the pointer and how the body shows it. So Find,
+ * Replace, Replace All, Go to Heading / Page / Row… and a grid's Wrap and locks moved to the body menus, and the
+ * format rows, Copy Path, a CSV file's Save and Save As…, and a terminal's toggles and start-failure rows moved here.
+ *
+ * The conditionals are unchanged: an absent item is simply absent from its group, and an empty group draws no
+ * divider.
  *
  * 048 REMOVED *Rename* and *Reset Name* (FR-030): a panel is named by what it holds, so no menu, chord
  * or gesture renames one. It ADDED *Split*, on every kind.
@@ -34,7 +42,7 @@
  *
  * 044 ADDS A KIND AND THREE ROWS (contracts/menus-and-controls.md §1–§2). An editor gains *Open
  * Preview*, *Back* and *Forward* in Navigate; a preview panel draws its own shape — no Content at all,
- * *Close Panel*, the reveal rows, *Open in Editor* / *Go to Editor*, *Back*, *Forward*, the send rows,
+ * *Close Panel*, the reveal rows, *Open in Editor*, *Back*, *Forward*, the send rows,
  * then *Refresh* and *Zoom* — and carries the failure banner's three commands while ITS banner is up.
  * The builder names no provider: a preview's rows read its provider KIND, and Open Preview reads
  * core's `previewAffordance`, both handed in (preview-provider-seam.md §3).
@@ -50,11 +58,11 @@
 import {
   firstBinding,
   PREVIEW_KIND,
+  type IconKey,
   type Keybindings,
   type Panel,
   type PanelKind,
   type PreviewAffordance,
-  type PreviewGoToKind,
   type PreviewProviderKind,
   type SplitDirection,
   supportsScrollSync,
@@ -64,7 +72,9 @@ import type { MenuAction } from './context-menu.js';
 import { PRINT_UNAVAILABLE } from '../preview/print/print-command.js';
 import { splitSubmenu } from './split-menu.js';
 import { isPanelSectionMaximised, isPanelTabMaximised } from './maximise-store.js';
-import { isPanelFindAbsent } from '../preview/unsearchable-panels.js';
+import { copyPathSubmenu, type PathForms } from '../common/copy-path-menu.js';
+import { editorFormatItems, type EditorFormatMenuArgs } from '../editor/content-menu.js';
+import type { TerminalMenuToggle } from '../terminal/terminal-content-menu.js';
 
 /**
  * The panel kinds that actually RENDER their zoom level (043 FR-062a, plan D2).
@@ -105,7 +115,7 @@ export function removalVerbFor(panel: Panel, ownershipVerb: string): string {
 export interface PanelHeaderEditorState {
   /** Unsaved changes — Revert is disabled without them, and Reload asks before discarding them. */
   dirty: boolean;
-  /** Backed by a path on disk — the two reveal items exist only then, and Reload needs one. */
+  /** Backed by a path on disk — the own-file rows are disabled without one (081 FR-041), and Reload needs one. */
   hasFilePath: boolean;
   /** 050 FR-036 — the file moved to another project: Save is disabled, Save As stays. */
   movedOut?: boolean;
@@ -148,14 +158,6 @@ export interface PanelHeaderMenuActions {
   redraw: () => void;
   sendToNewTab: () => void;
   sendToTab: (tabId: string) => void;
-  /** 043 FR-015 — open this panel's find bar. Editors, terminals and (047) previews all search. */
-  find: () => void;
-  /** 047 US4 — open this preview's Go to Heading pop-down (`preview.goToHeading`). */
-  goToHeading: () => void;
-  /** 043 FR-015 — open it with the replace row revealed. Editor only (FR-013). */
-  replace: () => void;
-  /** 043 FR-015 — replace every match in this panel's document. Editor only (FR-013). */
-  replaceAll: () => void;
   destroy: () => void;
   /** 044 FR-002 — an editor's Open Preview (`preview.open`). */
   openPreview: () => void;
@@ -178,20 +180,17 @@ export interface PanelHeaderMenuActions {
   toggleSyncScroll: () => void;
   /** 073 FR-036b — flip this panel's own choice to offer the cell dialog (persisted with the panel). */
   toggleCellDialog: () => void;
-  /** 073 FR-013 — flip this panel's own choice to wrap its cells (persisted with the panel). */
-  toggleWrap: () => void;
-  /** 073 FR-039a — flip this panel's own choice to lock its first row / first column (persisted with the panel). */
-  toggleLockFirstRow: () => void;
-  toggleLockFirstColumn: () => void;
   /** 057 FR-125 — raise a user-flagged Attention mark on this panel (`attention.flag`). */
   flag: () => void;
+  /** The v1 review's Unflag — clear the mark this panel holds. */
+  unflag: () => void;
 }
 
 /** What a PREVIEW panel's menu reads. `null` for a panel that is not a preview. */
 export interface PanelHeaderPreviewState {
   /** A binary provider has no editor to open or go to (044 FR-015e, FR-073). */
   providerKind: PreviewProviderKind;
-  /** Parented → *Go to Editor*; standalone → *Open in Editor* (FR-015c, FR-015d). */
+  /** Parented → *Open in Editor* goes to the parent; standalone → it opens or focuses one (FR-015c, FR-015d). */
   parented: boolean;
   /** 054 — `false` for a provider that draws one picture (Mermaid): no Synchronise Scrolling. Absent reads `true`. */
   flowingDocument?: boolean;
@@ -199,18 +198,15 @@ export interface PanelHeaderPreviewState {
   scrollSync?: boolean;
   /** 073 FR-036b — the provider has a cell dialog; `on` is whether it is on for this panel (its own choice, else the setting). */
   cellDialog?: { on: boolean };
-  /** 073 FR-013 — the provider wraps cells; `on` is whether it does for this panel (its own choice, else the setting). */
-  wrap?: { on: boolean };
-  /** 073 FR-039a — the provider locks its first row / column; `on` is whether it does for this panel (its own choice, else the setting). */
-  lockFirstRow?: { on: boolean };
-  lockFirstColumn?: { on: boolean };
   /**
-   * 074 FR-062b — where the Go to row goes (`previewGoToKind`): `'page'` labels it Go to Page…, `'row'` Go to Row…
-   * (073 FR-043a). Absent: Go to Heading….
+   * 073 FR-030 — the preview EDITS its document (the CSV Preview Editor): Save and Save As… are drawn, running the
+   * document's own save (v1 review, #732, moved from its grid menus). Absent reads `false`.
    */
-  goTo?: PreviewGoToKind;
+  editable?: boolean;
   /** 075 FR-062 — whether its provider prints. Absent reads `false`: Print… is drawn disabled with the reason. */
   printable?: boolean;
+  /** 081 FR-041 — the preview knows its file. Absent reads `true`; `false` draws the own-file rows disabled. */
+  hasFilePath?: boolean;
 }
 
 /**
@@ -224,6 +220,8 @@ export interface PanelHeaderHistoryState {
 
 export interface PanelHeaderMenuArgs {
   panel: Panel;
+  /** The panel holds an Attention mark now (any kind): its Flag row reads Unflag and clears it. */
+  flagged?: boolean;
   /** "Destroy", or "Close" for a project Panel viewed inside a sub-workspace window. */
   panelVerb: string;
   /** The live chords, so a rebind moves what the menu SHOWS as well as what the key does. */
@@ -261,7 +259,65 @@ export interface PanelHeaderMenuArgs {
    * builder called without it (the menu tables drive the builder directly) draws no row.
    */
   maximise?: { maximised: boolean; toggle: () => void } | null;
+  /**
+   * 074 FR-028, FR-068a (amended by the v1 review, #732) — the panel's file in the File Explorer's four forms, for an
+   * editor or a preview whose file is inside the project: Copy Path ▸ is drawn. Omitted or `null`: none.
+   */
+  copyPath?: PathForms | null;
+  /** v1 review (#732) — an editor's format rows, moved from its body menu. Omitted or `null`: none. */
+  editorFormat?: EditorFormatMenuArgs | null;
+  /**
+   * 076 FR-005 (amended by the v1 review, #732) — a terminal's per-panel toggles, in status-bar order, moved from its
+   * body menu. Omitted or `null`: none.
+   */
+  terminalToggles?: readonly TerminalMenuToggle[] | null;
   actions: PanelHeaderMenuActions;
+}
+
+export const FIND_IN_FILE_EXPLORER_LABEL = 'Find in File Explorer';
+export const OPEN_IN_OS_EXPLORER_LABEL = 'Open in OS Explorer';
+export const OPEN_IN_DEFAULT_PROGRAM_LABEL = 'Open in OS Default Program';
+
+/** Whether the panel's own-file rows and title-bar buttons can act, and the hover text each carries. */
+export interface PanelFileActionState {
+  disabled: boolean;
+  /** The row's or button's hover title: the label, or why it is unavailable. */
+  titleFor: (label: string) => string;
+}
+
+/**
+ * 081 FR-041 — one answer for the menu rows and the title-bar buttons (`panel-header-file-icons.tsx`), so the two
+ * are disabled together and give the same reason. A panel with no file draws them disabled rather than absent
+ * (Principle VI).
+ */
+export function panelFileActionState(hasFilePath: boolean, isPreview: boolean): PanelFileActionState {
+  if (hasFilePath) return { disabled: false, titleFor: (label) => label };
+  const why = isPreview ? 'this preview has no file yet.' : 'this document has no file yet. Save it first.';
+  return { disabled: true, titleFor: (label) => `${label} is unavailable: ${why}` };
+}
+
+/**
+ * The panel's own-file rows in Navigate: Find in File Explorer (081 FR-044, renamed from 046's Reveal File in File
+ * Explorer), Open in OS Explorer, and Open in OS Default Program unless `explorer.showOpenInOsDefaultProgram` is off
+ * (067 FR-021). Each row is drawn disabled with its reason while there is no file (081 FR-041).
+ */
+function fileItems(args: PanelHeaderMenuArgs, state: PanelFileActionState): MenuAction[] {
+  const { actions } = args;
+  const row = (label: string, onClick: () => void, icon?: IconKey): MenuAction => ({
+    label,
+    ...(icon ? { icon } : {}),
+    section: 'navigate',
+    ...(state.disabled ? { disabled: true, title: state.titleFor(label) } : {}),
+    onClick,
+  });
+  const items = [
+    row(FIND_IN_FILE_EXPLORER_LABEL, () => actions.revealInTree(), 'findInFileExplorer'),
+    row(OPEN_IN_OS_EXPLORER_LABEL, () => actions.openInOsExplorer()),
+  ];
+  if (args.showOpenInDefaultProgram ?? true) {
+    items.push(row(OPEN_IN_DEFAULT_PROGRAM_LABEL, () => actions.openInDefaultProgram(), 'openInDefaultProgram'));
+  }
+  return items;
 }
 
 /**
@@ -360,46 +416,47 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   // and Destroy are drawn disabled (Principle VI), as Split is by its own builder.
   const modal = isPanelTabMaximised(panel.id);
   const lockedOut = modal ? { disabled: true } : {};
-  // An inline diagram of this preview is maximised over its document: Find, Go to Heading and Synchronise
-  // Scrolling have nothing visible to act on.
+  // An inline diagram of this preview is maximised over its document: Print… and Synchronise Scrolling have nothing
+  // visible to act on.
   const documentCovered = isPanelSectionMaximised(panel.id) ? { disabled: true } : {};
 
+  /*
+   * v1 review T1 — the menu is drawn as four groups: what acts on the document or file shown (`items`: Content, then
+   * Navigate), what only this panel type has (`typeRows`), what acts on the panel itself (`layoutRows`, then
+   * `panelRows`), and the close row. The type and panel-level groups share View & state and are told apart by
+   * `group`, so `withDividers` draws one divider between them and none inside either.
+   */
   const items: MenuAction[] = [];
+  const typeRows: MenuAction[] = [];
+  const typeRow = (row: Omit<MenuAction, 'section'>): MenuAction => ({ ...row, section: 'viewState', group: 'panelType' });
+  const layoutRows: MenuAction[] = [];
+  const panelRows: MenuAction[] = [];
 
   /*
    * 044 FR-033 — a PREVIEW's own rows (contracts/menus-and-controls.md §1).
    *
-   * Emitted before the Zoom block for one reason: within View & state the contract draws *Refresh*
-   * ahead of *Zoom*, and a section keeps the order its rows were emitted in. Its Navigate rows go here
-   * too — Send to Tab and Sync to are emitted last, so they still close the section.
+   * Emitted before the Zoom block for one reason: among the panel-level rows the contract draws *Refresh*
+   * ahead of *Zoom*, and a group keeps the order its rows were emitted in.
    *
    * Content is EMPTY by construction: a preview is read-only (FR-020) and not renamable (FR-030), so
    * nothing that edits text or a name belongs to it — Rename, Save, Revert and Reload are all absent
-   * rather than disabled. A preview always shows a file, so the two reveal rows are unconditional.
+   * rather than disabled. A preview shows a file, so its own-file rows are live once it knows the path.
    *
-   * 047 US1 (FR-007) — Find… IS offered, in `navigate` rather than `content`: a preview's find bar
-   * moves through rendered text, not a document to edit, so it sits with the other ways to get
-   * somewhere in the panel (contracts/menus-commands-controls.md "Preview header menu") rather than
-   * beside a Save/Revert group this panel does not have.
+   * v1 review (#732) — Find… and Go to Heading / Page / Row… act on the content, so they are the body menu's alone
+   * (047 FR-007 and 074 FR-062b, amended). The CSV Preview Editor's Save and Save As… are the exception to an empty
+   * Content: that preview edits its document (073 FR-030).
    */
   if (isPreview) {
-    items.push({
-      label: 'Reveal File in File Explorer',
-      section: 'navigate',
-      onClick: () => actions.revealInTree(),
-    });
-    items.push({
-      label: 'Open in OS Explorer',
-      section: 'navigate',
-      onClick: () => actions.openInOsExplorer(),
-    });
     // 067 FR-016, FR-017 — in the shared preview title menu, so a provider needs no code of its own.
-    if (args.showOpenInDefaultProgram ?? true) {
-      items.push({
-        label: 'Open in OS Default Program',
-        section: 'navigate',
-        onClick: () => actions.openInDefaultProgram(),
-      });
+    items.push(...fileItems(args, panelFileActionState(args.preview?.hasFilePath ?? true, true)));
+    // 074 FR-028, FR-068a — Copy Path, for a file inside the project (v1 review, #732: from the body menu).
+    if (args.copyPath) items.push(copyPathSubmenu(args.copyPath, 'navigate'));
+    // 073 FR-030 — the CSV Preview Editor's own document: Save and Save As… (v1 review, #732: from its grid menus).
+    if (args.preview?.editable === true) {
+      items.push(
+        { label: 'Save', icon: 'save' as const, section: 'content', shortcut: firstBinding(keybindings, 'editor.save'), onClick: () => actions.save() },
+        { label: 'Save As…', icon: 'saveAs' as const, section: 'content', shortcut: firstBinding(keybindings, 'editor.saveAs'), onClick: () => actions.saveAs() },
+      );
     }
     // FR-015b/c/d — the mirror image of an editor's Open Preview. A binary provider has no editor at
     // all (FR-015e), so neither form is offered for one.
@@ -407,30 +464,16 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       // 050 R26 — unavailable while the file is moved out (the layout's flag, which main's moved-out
       // report is mirrored into): the row stays, disabled, like every other state-dependent command.
       const disabled = (args.panel.config as { movedOut?: unknown } | undefined)?.movedOut === true;
-      items.push(
-        args.preview.parented
-          ? { label: 'Go to Editor', icon: 'editorPanel' as const, section: 'navigate', disabled, onClick: () => actions.goToEditor() }
-          : { label: 'Open in Editor', icon: 'editorPanel' as const, section: 'navigate', disabled, onClick: () => actions.openInEditor() },
-      );
+      // v1 review (#732): one label whether or not the preview is parented; a parented one's row goes to its editor.
+      const parented = args.preview.parented;
+      items.push({
+        label: 'Open in Editor',
+        icon: 'editorPanel' as const,
+        section: 'navigate',
+        disabled,
+        onClick: () => (parented ? actions.goToEditor() : actions.openInEditor()),
+      });
     }
-    // 074 FR-086a — a picture has no text: no Find row at all.
-    if (!isPanelFindAbsent(panel.id)) items.push({
-      label: 'Find…',
-      icon: 'search' as const,
-      section: 'navigate',
-      shortcut: firstBinding(keybindings, 'search.find'),
-      ...documentCovered,
-      onClick: () => actions.find(),
-    });
-    // 074 FR-062b — nothing to go to (a single picture): no row, as the body menu has none.
-    if (args.preview?.goTo !== null) items.push({
-      label: args.preview?.goTo === 'page' ? 'Go to Page…' : args.preview?.goTo === 'row' ? 'Go to Row…' : 'Go to Heading…',
-      ...(args.preview?.goTo === 'row' ? { icon: 'goToRow' as const } : {}),
-      section: 'navigate',
-      shortcut: firstBinding(keybindings, 'preview.goToHeading'),
-      ...documentCovered,
-      onClick: () => actions.goToHeading(),
-    });
     items.push(...historyItems(args.history, keybindings, actions));
     // 075 FR-061 – FR-063 — Print…, on every preview; disabled, with the reason, when its provider cannot print.
     if (actions.print !== undefined) {
@@ -446,7 +489,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
         onClick: () => print(),
       });
     }
-    items.push({
+    panelRows.push({
       label: 'Refresh',
       icon: 'refresh' as const,
       section: 'viewState',
@@ -455,11 +498,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   }
 
   /*
-   * 048 FR-015 — Split, in Create, on every panel kind: a submenu of the four split commands, each
-   * showing its current chord. The same builder feeds the content menus and the **+** button.
-   * (Rename and Reset Name are gone — a panel is named by what it holds, FR-030.)
+   * 048 FR-015 — Split, on every panel kind: a submenu of the four split commands, each showing its current chord.
+   * The same builder feeds the content menus and the **+** button, where it stays in Create; here v1 review T1 puts
+   * it first among the panel-level rows. (Rename and Reset Name are gone — a panel is named by what it holds, FR-030.)
    */
-  items.push(splitSubmenu(panel.id, keybindings, (_id, direction) => actions.split(direction)));
+  layoutRows.push({
+    ...splitSubmenu(panel.id, keybindings, (_id, direction) => actions.split(direction)),
+    section: 'viewState',
+  });
 
   /*
    * 054 FR-071, FR-077 — Maximise Panel / Restore Panel, View & state, on every kind: the header control's
@@ -467,7 +513,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    */
   if (args.maximise) {
     const { maximised, toggle } = args.maximise;
-    items.push({
+    panelRows.push({
       // Named for the feature (FR-078, manual test change request 2026-10-12).
       label: maximised ? 'Exit Focus Mode' : 'Enter Focus Mode',
       icon: maximised ? 'panelRestore' : 'panelMaximise',
@@ -480,7 +526,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   // Per-panel zoom (012) — zoom THIS panel's text independently of others. Offered only on the kinds
   // that render it (FR-062a): see KINDS_THAT_ZOOM above for why this is a gate and not a comment.
   if (panel.kind !== undefined && KINDS_THAT_ZOOM.includes(panel.kind)) {
-    items.push({
+    panelRows.push({
       label: 'Zoom',
       icon: 'zoomIn' as const,
       section: 'viewState',
@@ -554,35 +600,22 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       onClick: () => actions.reloadFromDisk(),
     });
 
-    // US6 (#137) — for a panel backed by an on-disk file: reveal it in throng's own
-    // File Explorer tree, and open its folder in the OS file manager (via the seam).
-    if (editor?.hasFilePath) {
-      items.push({
-        label: 'Reveal File in File Explorer',
-        section: 'navigate',
-        onClick: () => actions.revealInTree(),
-      });
-      items.push({
-        label: 'Open in OS Explorer',
-        section: 'navigate',
-        onClick: () => actions.openInOsExplorer(),
-      });
-      // 067 FR-016, FR-021.
-      if (args.showOpenInDefaultProgram ?? true) {
-        items.push({
-          label: 'Open in OS Default Program',
-          section: 'navigate',
-          onClick: () => actions.openInDefaultProgram(),
-        });
-      }
-    }
+    // US6 (#137) — the panel's file in throng's own File Explorer tree, its folder in the OS file manager (via the
+    // seam), and the file in its OS default program (067 FR-016, FR-021). 081 FR-041: drawn disabled, with the
+    // reason, for a document with no file, where they used to be absent.
+    items.push(...fileItems(args, panelFileActionState(editor?.hasFilePath === true, false)));
+    // 074 FR-028 — Copy Path, for a file inside the project, as a preview's title menu offers it (v1 review, #732).
+    if (args.copyPath) items.push(copyPathSubmenu(args.copyPath, 'navigate'));
+    // v1 review (#732) — Set Language…, Reset Language, Encoding ▸ and Line Endings ▸, moved from the body menu: they
+    // describe the file, not the text under the pointer. Only an editor has them, so they open its type group.
+    if (args.editorFormat) typeRows.push(...editorFormatItems(args.editorFormat, 'panelType'));
 
     /*
      * 044 FR-002 — Open Preview, after the reveal rows and before Send to Tab
      * (contracts/menus-and-controls.md §2). The affordance is core's decision: `absent` draws nothing
-     * (no provider, no file, outside the project — FR-001, FR-004), either `disabled` reason draws it
-     * greyed (the provider is off, FR-062, or the file already has its one preview, FR-012). It shows
-     * `preview.open`'s chord when one is bound; none ships (FR-005).
+     * (no provider, no file, outside the project — FR-001, FR-004); the provider being off draws it greyed
+     * (FR-062). v1 review (#732): the file already having its one preview (FR-012) leaves it ENABLED, and
+     * `preview.open` focuses that preview. It shows `preview.open`'s chord when one is bound; none ships (FR-005).
      */
     const openPreview = args.openPreview;
     if (openPreview !== undefined && openPreview.state !== 'absent') {
@@ -592,7 +625,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
         icon: previewIconOf(openPreview.provider),
         section: 'navigate',
         shortcut: firstBinding(keybindings, 'preview.open'),
-        disabled: openPreview.state === 'disabled',
+        disabled: openPreview.state === 'disabled' && openPreview.reason === 'provider-disabled',
         onClick: () => actions.openPreview(),
       });
     }
@@ -614,70 +647,33 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     // 044 FR-122a/b — Synchronise Scrolling, exactly where Open Preview is drawn, disabled or not.
     // 054 — none for a source whose preview is one picture (a Mermaid file).
     if (openPreview !== undefined && openPreview.state !== 'absent' && supportsScrollSync(openPreview.provider)) {
-      items.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
+      panelRows.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
     }
 
-    if (panelFailure) items.push(...failureItems(actions));
+    if (panelFailure) panelRows.push(...failureItems(actions));
   }
 
   // 044 FR-122a/b — a text preview's Synchronise Scrolling, after its Zoom; a binary provider has no editor to
   // keep in step with, so none.
   if (isPreview && args.preview?.providerKind === 'text' && (args.preview.scrollSync ?? args.preview.flowingDocument !== false)) {
-    items.push({ ...syncScrollItem(args.syncScroll ?? false, keybindings, actions), ...documentCovered });
+    panelRows.push({ ...syncScrollItem(args.syncScroll ?? false, keybindings, actions), ...documentCovered });
   }
 
   // 073 FR-036b — a grid provider's cell dialog, on or off for THIS panel: a checked toggle in View & state, the menu route
   // the status bar's toggle is an accelerator over.
   if (isPreview && args.preview?.cellDialog !== undefined) {
-    items.push({
+    typeRows.push(typeRow({
       label: 'Edit Long Cells in Dialog',
       checked: args.preview.cellDialog.on,
       testId: 'menu-item-Edit Long Cells in Dialog',
       icon: 'cellDialog' as const,
-      section: 'viewState',
       onClick: () => actions.toggleCellDialog(),
-    });
-  }
-
-  // 073 FR-013 — a grid provider's Wrap, on or off for THIS panel: a checked toggle in View & state, the menu route the
-  // status bar's toggle is an accelerator over.
-  if (isPreview && args.preview?.wrap !== undefined) {
-    items.push({
-      label: 'Wrap',
-      checked: args.preview.wrap.on,
-      testId: 'menu-item-Wrap',
-      icon: 'wrapCells' as const,
-      section: 'viewState',
-      onClick: () => actions.toggleWrap(),
-    });
-  }
-
-  // 073 FR-039a — a grid provider's two locks, each on or off for THIS panel: checked toggles in View & state, the menu
-  // route the status bar's toggles are accelerators over.
-  if (isPreview && args.preview?.lockFirstRow !== undefined) {
-    items.push({
-      label: 'Lock First Row',
-      checked: args.preview.lockFirstRow.on,
-      testId: 'menu-item-Lock First Row',
-      icon: 'lockFirstRow' as const,
-      section: 'viewState',
-      onClick: () => actions.toggleLockFirstRow(),
-    });
-  }
-  if (isPreview && args.preview?.lockFirstColumn !== undefined) {
-    items.push({
-      label: 'Lock First Column',
-      checked: args.preview.lockFirstColumn.on,
-      testId: 'menu-item-Lock First Column',
-      icon: 'lockFirstColumn' as const,
-      section: 'viewState',
-      onClick: () => actions.toggleLockFirstColumn(),
-    });
+    }));
   }
 
   // 044 FR-033 — a preview's banner commands, after its Zoom (View & state: Refresh · Zoom · Synchronise
   // Scrolling · banner).
-  if (isPreview && panelFailure) items.push(...failureItems(actions));
+  if (isPreview && panelFailure) panelRows.push(...failureItems(actions));
 
   /*
    * 028 (issue 163) — Terminal Panels: the deliberate version of the divider nudge users
@@ -702,89 +698,66 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
      * 'editor'` it could never fire for a terminal at all.
      */
     if (panel.dormant === true) {
-      items.push({
+      panelRows.push({
         label: 'Reload',
         icon: 'retry' as const,
         section: 'viewState',
         onClick: () => actions.reloadTerminal(),
       });
     }
-    items.push({
+    panelRows.push({
       label: 'Refresh / redraw terminal',
       icon: 'retry' as const,
       section: 'viewState',
       shortcut: firstBinding(keybindings, 'terminal.redraw'),
       onClick: () => actions.redraw(),
     });
+    /*
+     * 076 FR-005 (amended by the v1 review, #732) — Remember Command, Remember Directory and Notifications, moved from
+     * the body menu: each is a setting of this panel. Checked toggles in the editor's Word Wrap idiom, each showing the
+     * chord bound to it now, and present whether or not `terminals.showStatusBar` hides the bar.
+     */
+    for (const t of args.terminalToggles ?? []) {
+      typeRows.push(typeRow({
+        label: t.label,
+        icon: t.icon,
+        checked: t.on,
+        settingToggle: true,
+        testId: `menu-item-${t.label}`,
+        shortcut: t.chord,
+        onClick: () => t.toggle(),
+      }));
+    }
+    // 029 FR-004d, 030 FR-042c — the start failure's three commands, while it is live (v1 review, #732: from the body).
+    if (panelFailure) panelRows.push(...failureItems(actions));
   }
 
   /*
    * 057 FR-125 — Flag: raise an Attention mark on this panel from the user, whatever kind it is. A plain
    * item with no command id and no chord (the failure banner's items above are the precedent), in View &
    * state because it sets the panel's state. On a panel already marked main changes nothing, so it is
-   * never disabled: the user is not told "no", the mark is simply already there. No glyph: the flag icon
-   * was retired by round 13 (FR-139).
+   * never disabled: the user is not told "no", the mark is simply already there. Round 13 (FR-139) retired
+   * the mark's own icons; the row wears the `flag` icon (057 FR-139, amended by the v1 review).
    *
    * Amended 2026-11-07: a blank panel (no type chosen yet) has nothing to draw attention to, so it offers
    * no Flag — absent, not greyed (constitution VI), like the untyped placeholder's Zoom commands.
    */
   if (panel.kind !== undefined) {
-    items.push({
-      label: 'Flag',
+    panelRows.push({
+      // v1 review (2026-11-28): a marked panel offers Unflag, with the crossed-out flag, which clears the mark.
+      ...(args.flagged === true
+        ? { label: 'Unflag', icon: 'unflag' as const, onClick: () => actions.unflag() }
+        : { label: 'Flag', icon: 'flag' as const, onClick: () => actions.flag() }),
+      // v1 review — both rows run `panel.toggleFlag`, so both show its chord.
+      shortcut: firstBinding(keybindings, 'panel.toggleFlag'),
       section: 'viewState',
-      onClick: () => actions.flag(),
     });
   }
 
-  /*
-   * 043 FR-015 — the panel's SEARCH commands, in the panel's own menu.
-   *
-   * The constitution names `search.find`, `search.replace` and `search.replaceAll` as pre-existing
-   * gaps in "every panel action has a menu item", to be closed by tracked work; this is that work.
-   * Until now each was reachable only by a chord, so a user who had not read the key bindings could
-   * not discover that a panel searched at all — and this menu, which is the panel's canonical index
-   * of what it can do, did not list them.
-   *
-   * `content`, not `viewState`: all three act on the panel's TEXT. Find moves the caret through it
-   * and Replace rewrites it, which is the same test that puts Save and Revert in the same group.
-   *
-   * Only a panel with a kind gets them — there is nothing to search in an untyped placeholder — and
-   * a terminal gets Find alone, because its find is read-only (FR-013) and `search.replace`'s chord
-   * is already inert there. Offering Replace on a terminal would index a command it does not have.
-   *
-   * Stepping through matches and closing the bar are deliberately absent: FR-015 keeps them exempt
-   * as navigational input, the same exemption scroll and column-select hold.
-   */
-  if (panel.kind === 'editor' || panel.kind === 'terminal') {
-    items.push({
-      label: 'Find',
-      icon: 'search' as const,
-      section: 'content',
-      shortcut: firstBinding(keybindings, 'search.find'),
-      onClick: () => actions.find(),
-    });
-  }
-  if (panel.kind === 'editor') {
-    items.push({
-      label: 'Replace',
-      icon: 'replace' as const,
-      section: 'content',
-      shortcut: firstBinding(keybindings, 'search.replace'),
-      onClick: () => actions.replace(),
-    });
-    items.push({
-      label: 'Replace All',
-      icon: 'replaceAll' as const,
-      section: 'content',
-      shortcut: firstBinding(keybindings, 'search.replaceAll'),
-      onClick: () => actions.replaceAll(),
-    });
-  }
-
-  items.push({
+  layoutRows.push({
     label: 'Send to Tab',
     icon: 'send' as const,
-    section: 'navigate',
+    section: 'viewState',
     ...lockedOut,
     submenu: [
       // New Tab == dragging the Panel onto the tab-strip `+` (005 FR-027).
@@ -805,10 +778,10 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   // existing one → choose a Tab within it ("New" makes a fresh Tab). Cloning
   // leaves the Panel in the main project.
   if (detach) {
-    items.push({
+    layoutRows.push({
       label: 'Sync to',
       icon: 'send' as const,
-      section: 'navigate',
+      section: 'viewState',
       ...lockedOut,
       submenu: [
         {
@@ -847,7 +820,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     });
   }
 
-  items.push({
+  const closeRow: MenuAction = {
     label: `${panelVerb} Panel`,
     icon: 'destroy' as const,
     section: 'destroy',
@@ -855,7 +828,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     shortcut: firstBinding(keybindings, 'panel.destroy'),
     ...lockedOut,
     onClick: () => actions.destroy(),
-  });
+  };
 
-  return items;
+  return [...items, ...typeRows, ...layoutRows, ...panelRows, closeRow];
 }

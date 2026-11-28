@@ -231,8 +231,9 @@ describe('FR-133 — a keyboard move ends the leaving panel\'s transient control
     const select = screen.getByTestId(`panel-type-select-${FORM}`);
     act(() => select.focus());
 
-    // The untyped panel's content menu (048 FR-015), opened over the form.
-    fireEvent.contextMenu(select, { clientX: 10, clientY: 10 });
+    // The untyped panel's title menu. Its body opens no menu any more (v1 review, #732): Split, its only row, is the
+    // title menu's.
+    fireEvent.contextMenu(screen.getByTestId(`panel-handle-${FORM}`), { clientX: 10, clientY: 10 });
     await screen.findByTestId('context-menu');
 
     press(document.activeElement ?? document.body, 'ArrowRight');

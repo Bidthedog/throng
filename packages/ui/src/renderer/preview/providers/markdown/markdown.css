@@ -160,11 +160,15 @@
  * -0.25em): drawn from the `border` token, the one colour a preview rule may use besides its text, so it stays on the pairing
  * every preview colour sits on (SC-005; the accent is the focus ring's alone). It fades when `--on` goes, and exists only with the gutter.
  */
-.preview-markdown--gutter .preview-sync-mark {
+/* 081 FR-030 — never on a table part: a `::before` on a `table`, `thead`, `tbody` or `tr` joins the table's own layout,
+   and the marked row drew differently until the mark faded (#733). A row's bar is drawn on its first cell instead. */
+.preview-markdown--gutter .preview-sync-mark:not(table, thead, tbody, tr),
+.preview-markdown--gutter tr.preview-sync-mark > :first-child {
   position: relative;
 }
 
-.preview-markdown--gutter .preview-sync-mark::before {
+.preview-markdown--gutter .preview-sync-mark:not(table, thead, tbody, tr)::before,
+.preview-markdown--gutter tr.preview-sync-mark > :first-child::before {
   content: '';
   position: absolute;
   left: -2em;
@@ -178,7 +182,8 @@
   transition: opacity 600ms ease-out;
 }
 
-.preview-markdown--gutter .preview-sync-mark--on::before {
+.preview-markdown--gutter .preview-sync-mark--on:not(table, thead, tbody, tr)::before,
+.preview-markdown--gutter tr.preview-sync-mark--on > :first-child::before {
   opacity: 1;
   transition-duration: 120ms;
 }

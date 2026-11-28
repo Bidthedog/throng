@@ -23,6 +23,19 @@ interface HelpState {
 }
 
 /** The window's identity: the page's own title, after "Help". */
+/** The cover with no still of the guide behind it (080 FR-070): main sent an empty image. */
+export const PLAIN_COVER = 'plain';
+
+/**
+ * 080 FR-070 — the cover after main's message: a still's object URL, {@link PLAIN_COVER} for an empty image (the guide
+ * is hidden, and no still of it has come yet), or null once the guide is back. The previous still's URL is released.
+ */
+export function nextCover(previous: string | null, png: Uint8Array | null): string | null {
+  if (previous && previous !== PLAIN_COVER) URL.revokeObjectURL(previous);
+  if (png && png.length === 0) return PLAIN_COVER;
+  return png ? URL.createObjectURL(new Blob([png as BlobPart], { type: 'image/png' })) : null;
+}
+
 export function helpWindowIdentity(title: string): string {
   return title.trim() === '' ? 'Help — throng' : `Help — ${title.trim()}`;
 }
@@ -40,10 +53,7 @@ function HelpShell(): ReactElement {
   useEffect(
     () =>
       window.throng?.help?.onCover?.((png) =>
-        setCover((previous) => {
-          if (previous) URL.revokeObjectURL(previous);
-          return png ? URL.createObjectURL(new Blob([png as BlobPart], { type: 'image/png' })) : null;
-        }),
+        setCover((previous) => nextCover(previous, png)),
       ),
     [],
   );
@@ -105,7 +115,11 @@ function HelpShell(): ReactElement {
           <span className="help-toolbar__spacer" />
           <IconButton token="openInBrowser" title="Open in browser" testId="help-open-in-browser" onClick={() => window.throng?.help?.openInBrowser()} />
         </div>
-        {cover ? <img className="help-cover" src={cover} alt="" data-testid="help-cover" /> : null}
+        {cover === PLAIN_COVER ? (
+          <div className="help-cover help-cover--plain" data-testid="help-cover" />
+        ) : cover ? (
+          <img className="help-cover" src={cover} alt="" data-testid="help-cover" />
+        ) : null}
       </div>
     </ThemeProvider>
   );

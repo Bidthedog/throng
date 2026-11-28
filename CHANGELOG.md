@@ -29,6 +29,71 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+
+- A marked panel's menu offers **Unflag**, which clears its mark at once. ([guide](https://throng-ide.com/guide/attention/#flag-a-panel-as-a-reminder))
+- **Ctrl+Alt+G** flags the focused panel, or unflags it when it is marked. It is **Flag or unflag** under Key
+  Bindings › Focus & Zoom, and the panel menu's Flag and Unflag rows show it. ([guide](https://throng-ide.com/guide/attention/#flag-a-panel-as-a-reminder), [#732](https://github.com/Bidthedog/throng/issues/732))
+- **Ctrl+Shift+N** (Cmd+Shift+N on macOS) makes a new folder in the File Explorer, where the toolbar's New folder
+  would. It is the **New folder** binding under Key Bindings › File Explorer, and the right-click menu shows it beside
+  New Folder. ([guide](https://throng-ide.com/guide/files/#create-rename-and-delete-files-and-folders))
+- Editor and preview title bars have **Open in OS Default Program** and **Find in File Explorer** buttons; the panel
+  menu's Reveal File in File Explorer is now called Find in File Explorer. ([guide](https://throng-ide.com/guide/layout/#read-a-panels-header), [#725](https://github.com/Bidthedog/throng/issues/725))
+- **Follow the active preview** (Preferences › Settings › File Explorer, on by default) reveals a preview's file in
+  the File Explorer when the preview becomes active. ([guide](https://throng-ide.com/guide/files/#browse-your-projects-files), [#724](https://github.com/Bidthedog/throng/issues/724))
+- The File Explorer fades files and folders a `.gitignore` matches, in a git repository or not. ([guide](https://throng-ide.com/guide/files/#recognise-files-at-a-glance), [#729](https://github.com/Bidthedog/throng/issues/729))
+- The CSV Preview Editor shows an empty row after the last row, ready to type into. ([guide](https://throng-ide.com/guide/csv-and-spreadsheets/#insert-rows-and-columns), [#732](https://github.com/Bidthedog/throng/issues/732))
+- The CSV Preview Editor deletes whole rows or columns you select, from the row and column header menus, which also
+  offer **Clear Cells**. **Insert Rows Above…** and the other counted inserts ask how many to add, and a new, empty
+  CSV takes inserted rows and columns before it holds any data. **Tab** and **Shift+Tab** wrap from row to row. ([guide](https://throng-ide.com/guide/csv-and-spreadsheets/#insert-rows-and-columns))
+
+### Changed
+
+- On preview and grid menus, **Copy as** replaces the separate **Copy** row. The format the copy format setting picks shows **Ctrl+C**. ([guide](https://throng-ide.com/guide/previews/#copy-from-a-preview))
+- The File Explorer menu puts **Rename** above **New File**. ([guide](https://throng-ide.com/guide/files/#create-rename-and-delete-files-and-folders))
+- A preview's **Outlining** rows no longer show keys, because the outlining keys work in the editor only. ([guide](https://throng-ide.com/guide/editing/#fold-markdown-sections))
+- Every row of a Markdown editor's **Outlining** menu has a key: **Ctrl+M,E** expands the section, **Ctrl+M,X**
+  expands all, and **Ctrl+M,Shift+S** / **Ctrl+M,Shift+E** collapse or expand everything inside the section. An install
+  that left them unbound takes the new keys. ([guide](https://throng-ide.com/guide/editing/#fold-markdown-sections), [#732](https://github.com/Bidthedog/throng/issues/732))
+- Right-clicking a link to a local file or folder offers the File Explorer's **Open In** submenu, with the same
+  rows in the same order. ([guide](https://throng-ide.com/guide/editing/#follow-links-in-your-files), [#731](https://github.com/Bidthedog/throng/issues/731))
+- A terminal in Focus Mode shows the Focus Mode status-bar highlight that editors and previews already show. ([guide](https://throng-ide.com/guide/layout/#concentrate-on-one-panel), [#727](https://github.com/Bidthedog/throng/issues/727))
+- Every menu ends with its closing and deleting items. A panel's title menu groups its rows: the document, its file,
+  that panel type, then the panel itself (split, refresh, Focus Mode, zoom, flag), with Close and Destroy Panel last. ([guide](https://throng-ide.com/guide/layout/#read-a-panels-header))
+- The CSV grid's menus gather the inserts in an **Insert** submenu and the copy formats in **Copy as**, put Undo and
+  Redo below the clipboard rows, show **Del** beside Clear Cells, and give the select-all corner a menu for the whole
+  table. Column Width… and the counted inserts ask in a box over the grid, with the number selected, that you answer
+  or close with Esc before working in that panel again. ([guide](https://throng-ide.com/guide/csv-and-spreadsheets/#insert-rows-and-columns))
+- Every setting's description in Preferences says in one short line what it does, and its Help section explains
+  the rest. ([guide](https://throng-ide.com/guide/preferences/#change-a-setting))
+- Every menu row whose command has a key shows it, including Undo and Redo in the CSV grid, and on macOS the
+  clipboard and undo keys read Cmd rather than Ctrl. ([guide](https://throng-ide.com/guide/layout/#move-around-with-the-keyboard))
+- **Tab** and **Shift+Tab** no longer move focus out of a panel; at a CSV grid's last cell, Tab stays put. ([guide](https://throng-ide.com/guide/layout/#move-around-with-the-keyboard))
+- Every menu that copies in a chosen format groups the formats under **Copy as**, and Undo and Redo sit in their own
+  group directly below Cut, Copy and Paste in the editor, File Explorer and grid menus. ([guide](https://throng-ide.com/guide/previews/#copy-from-a-preview))
+- **Open Preview** stays available while the file's preview is open, and goes to it. A preview's way back is always
+  called **Open in Editor**, and goes to the editor that is already open. ([guide](https://throng-ide.com/guide/previews/#open-a-preview-of-a-file))
+- A panel's title menu holds what acts on the panel and its file: Split, Copy Path, Print…, Synchronise Scrolling,
+  an editor's language, encoding and line endings, a CSV file's Save, and a terminal's Remember and Notifications
+  toggles. Right-clicking inside the panel offers what acts on the content there: Find and Replace, Go to Row…, and a
+  grid's Wrap and Lock rows. ([guide](https://throng-ide.com/guide/layout/#read-a-panels-header), [#732](https://github.com/Bidthedog/throng/issues/732))
+- A spreadsheet preview draws its values in a muted colour and its menus offer only what a read-only workbook can
+  do: copy, select and go to a row. ([guide](https://throng-ide.com/guide/csv-and-spreadsheets/#read-a-spreadsheet))
+
+### Fixed
+
+- Clicking the **…** on a folded Markdown section unfolds it the way its gutter arrow does: the arrow updates and the
+  linked preview unfolds it too. ([#732](https://github.com/Bidthedog/throng/issues/732))
+- **Select All** in a preview, from the menu or **Ctrl+A**, selects the whole document on the first try when
+  something is already selected.
+- "Couldn't open" notices no longer name panels you cannot see, no longer call an existing folder missing, and no
+  longer appear when another program deletes and rewrites a file within half a second. ([#728](https://github.com/Bidthedog/throng/issues/728))
+- Markdown tables in a preview that was out of view while its file changed now lay out correctly when shown, and
+  their column handles work. ([#730](https://github.com/Bidthedog/throng/issues/730))
+- The Synchronise Scrolling highlight no longer shifts a table row's layout, marks the right row from the editor
+  side, and marks the next line when a scroll stops on a blank line. ([#733](https://github.com/Bidthedog/throng/issues/733))
+- Dragging a Markdown table's column border keeps it under the pointer instead of jumping on the first move.
+
 ## 1.0.0-beta3 — 2026-11-27
 
 ### Added

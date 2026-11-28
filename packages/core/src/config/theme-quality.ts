@@ -12,7 +12,7 @@
  *   AA thresholds (4.5:1 body, 3:1 large/UI). Hard failure for the in-scope
  *   themes only; out-of-scope shortfalls are reported, not thrown.
  */
-import { THRONG_THEME, type Theme } from './theme.js';
+import { THRONG_THEME, ignoredEntryOpacityOf, type Theme } from './theme.js';
 import { channelToLinear, contrastRatio, hexToRgb, readableTextOn, relativeLuminance, type Rgb } from './colour-math.js';
 import { FILE_ICON_CATEGORY_TOKENS, FILE_ICON_MIN_CONTRAST } from './file-icon-colours.js';
 
@@ -481,7 +481,52 @@ export interface ContrastPairing {
   min: number;
   /** human label for diagnostics. */
   label: string;
+  /**
+   * 081 FR-071 — the foreground is drawn faded: `ignoredEntry` blends it over the background at the theme's
+   * `sizes.ignoredEntryOpacity` before it is measured.
+   */
+  fade?: 'ignoredEntry';
+  /** A wash drawn over `bg` first: `token` at `percent`, as the stylesheet's `color-mix` paints it. */
+  wash?: { token: string; percent: number };
 }
+
+/** `fg` drawn at `alpha` (0–1) over the opaque `bg`, composited per sRGB channel as the browser does. */
+export function blendOver(fg: string, bg: string, alpha: number): string {
+  const a = hexToRgb(fg);
+  const b = hexToRgb(bg);
+  const mix = (x: number, y: number): string =>
+    Math.round(x * alpha + y * (1 - alpha))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${mix(a.r, b.r)}${mix(a.g, b.g)}${mix(a.b, b.b)}`;
+}
+
+/**
+ * 081 FR-071 — tree text on an entry git ignores, faded, on each background a tree row is drawn on: the pane, a
+ * hovered row, a selected row, the active file's wash and a drop target's (explorer.css). At 3:1: the fade marks the
+ * entry as secondary, and secondary text is held to the muted-text floor.
+ */
+const FADED_TREE_TEXT: readonly ContrastPairing[] = [
+  { fg: 'text', bg: 'sidebarBg', min: WCAG_AA_LARGE_UI, fade: 'ignoredEntry', label: 'faded ignored text on the tree' },
+  { fg: 'text', bg: 'hoverSurface', min: WCAG_AA_LARGE_UI, fade: 'ignoredEntry', label: 'faded ignored text on a hovered row' },
+  { fg: 'text', bg: 'surfaceActive', min: WCAG_AA_LARGE_UI, fade: 'ignoredEntry', label: 'faded ignored text on a selected row' },
+  {
+    fg: 'text',
+    bg: 'sidebarBg',
+    min: WCAG_AA_LARGE_UI,
+    fade: 'ignoredEntry',
+    wash: { token: 'accent', percent: 10 },
+    label: 'faded ignored text on the active file',
+  },
+  {
+    fg: 'text',
+    bg: 'sidebarBg',
+    min: WCAG_AA_LARGE_UI,
+    fade: 'ignoredEntry',
+    wash: { token: 'accent', percent: 22 },
+    label: 'faded ignored text on a drop target',
+  },
+];
 
 /** Every `syntax*` token a theme paints code with, sorted for a stable pairing order. */
 function syntaxTokensOf(theme: Theme): string[] {
@@ -607,6 +652,7 @@ export const CONTRAST_PAIRINGS: readonly ContrastPairing[] = [
   ...SYNTAX_ON_MATCH,
   ...SYNTAX_ON_BODY,
   ...SYNTAX_ON_SELECTION,
+  ...FADED_TREE_TEXT,
 ];
 
 /**
@@ -657,11 +703,22 @@ export interface ContrastResult {
   pass: boolean;
 }
 
+/** The two colours a pairing is drawn in, after any wash and fade (081 FR-071); undefined where a token is unset. */
+function drawnColours(theme: Theme, p: ContrastPairing): [string | undefined, string | undefined] {
+  let bg: string | undefined = theme.colours[p.bg];
+  let fg: string | undefined = theme.colours[p.fg];
+  if (bg && p.wash) {
+    const wash = theme.colours[p.wash.token];
+    bg = wash ? blendOver(wash, bg, p.wash.percent / 100) : undefined;
+  }
+  if (fg && bg && p.fade === 'ignoredEntry') fg = blendOver(fg, bg, ignoredEntryOpacityOf(theme.sizes));
+  return [fg, bg];
+}
+
 /** Measure every enumerated pairing for a theme (colours resolve within the theme). */
 export function measureContrast(theme: Theme): ContrastResult[] {
   return contrastPairingsFor(theme).map((p) => {
-    const fg = theme.colours[p.fg];
-    const bg = theme.colours[p.bg];
+    const [fg, bg] = drawnColours(theme, p);
     const ratio = fg && bg ? contrastRatio(fg, bg) : 0;
     return { label: p.label, fg: p.fg, bg: p.bg, ratio, min: p.min, pass: ratio >= p.min };
   });

@@ -32,7 +32,7 @@ import {
   roleSizeMax,
   themeEditableTokens,
 } from '../../src/config/theme-metadata.js';
-import { THRONG_THEME } from '../../src/config/theme.js';
+import { THRONG_THEME, toCssVariables } from '../../src/config/theme.js';
 
 describe('the base font size cannot destroy the application (018)', () => {
   it('caps the base size at a value a window can still be used at', () => {
@@ -142,5 +142,22 @@ describe('the terminal role offers only what xterm can honour (021)', () => {
     );
     expect(paneTitle).toContain('typography.paneTitle.italic');
     expect(paneTitle.length).toBeGreaterThan(terminalTokens().length);
+  });
+});
+
+describe('the ignored-entry opacity (081 FR-071)', () => {
+  it('is a File Explorer slider from 0.2 to 1 in steps of 0.05, defaulting to 0.6', () => {
+    const d = descriptorForThemeToken('sizes.ignoredEntryOpacity');
+    expect(d).toMatchObject({ control: 'slider', group: 'File Explorer', min: 0.2, max: 1, step: 0.05 });
+    expect(THRONG_THEME.sizes.ignoredEntryOpacity).toBe(0.6);
+  });
+
+  it('reaches the stylesheet as --throng-explorer-ignored-opacity, held to the same bounds', () => {
+    const at = (ignoredEntryOpacity: number): string | undefined =>
+      toCssVariables({ ...THRONG_THEME, sizes: { ...THRONG_THEME.sizes, ignoredEntryOpacity } })['--throng-explorer-ignored-opacity'];
+    expect(toCssVariables(THRONG_THEME)['--throng-explorer-ignored-opacity']).toBe('0.6');
+    expect(at(0.35)).toBe('0.35');
+    expect(at(0)).toBe('0.2');
+    expect(at(4)).toBe('1');
   });
 });

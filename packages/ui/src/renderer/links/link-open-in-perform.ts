@@ -1,5 +1,6 @@
 import { collectPanels } from '@throng/core';
 import { openFileInPanel, openFileInTab } from '../editor/editor-open.js';
+import type { OpenInTarget as ExplorerOpenInTarget } from '../editor/open-in-targets.js';
 import type { RevealTarget } from '../editor/reveal-range.js';
 import { getEditorState } from '../editor/editor-state.js';
 import { isPanelHidden } from '../workspace/maximise-store.js';
@@ -55,4 +56,25 @@ export async function performLinkOpenIn(
   // `current` rides the same one-buffer check as `active`: the editor holding an open file is focused
   // and the range revealed there (060 FR-045), never a second buffer.
   await openFileInTab(ws, tabId, absPath, target.kind === 'new' ? 'new' : 'lastActive', range);
+}
+
+/**
+ * 081 FR-050 — perform one of the File Explorer's editor targets (`describeOpenInTargets`) from a local
+ * link's Open In ▸: the routes `performOpenIn` takes, with the link's position revealed where the file
+ * lands and the editor flashed as the File Explorer flashes it (047 FR-083). `performOpenIn` takes only a
+ * fixed range; a link's position is a resolver read once the document is in the editor.
+ */
+export async function performLinkEditorTarget(
+  ws: Ws,
+  target: ExplorerOpenInTarget,
+  absPath: string,
+  range?: RevealTarget,
+): Promise<void> {
+  if (target.kind === 'tab') {
+    if (target.tabId) await openFileInTab(ws, target.tabId, absPath, 'lastActive', range, { flash: true });
+    return;
+  }
+  const tabId = ws.layout?.activeTabId;
+  if (!tabId) return;
+  await openFileInTab(ws, tabId, absPath, target.kind === 'new' ? 'new' : 'lastActive', range, { flash: true });
 }

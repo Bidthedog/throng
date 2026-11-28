@@ -26,6 +26,12 @@ heading line, that heading's section. Before the first heading the section items
 Find… (navigate) and Go to Heading… (navigate) beside Back/Forward. Principle VI: every command
 reachable by chord is on a menu.
 
+*Superseded in part 2026-11-27 (the maintainer's v1 review): Go to Heading… moved to View & state,
+group `panelType`, the rows only that panel type has, after the file's Navigate rows. Find… stays in
+Navigate.*
+
+*(Amended 2026-11-28, v1 review, #732: neither row is on the preview header menu any more. Find… and Go to Heading… are the body menu's alone (FR-007, FR-042a, amended), with their chords.)*
+
 ## Editor body menu (`editor/content-menu.ts`), Markdown documents only
 
 The same four fold rows as the preview body menu, in viewState, computed at the clicked position;
@@ -75,9 +81,9 @@ in the gutter, and hiding the gutter hides them; folding stays available by chor
 | `markdown.toggleSection` | Ctrl+M,M | editor(Markdown), preview | — (gutter click, chord) |
 | `markdown.toggleAll` | Ctrl+M,L | editor(Markdown), preview | status-bar toggle |
 | `markdown.collapseSection` | Ctrl+M,S | editor(Markdown), preview | Collapse This H*n* |
-| `markdown.expandSection` | *(unbound)* | editor(Markdown), preview | Expand This H*n* |
+| `markdown.expandSection` | Ctrl+M,E *(v1 review, #732)* | editor(Markdown), preview | Expand This H*n* |
 | `markdown.collapseAll` | Ctrl+M,A | editor(Markdown), preview | Collapse All |
-| `markdown.expandAll` | *(unbound)* | editor(Markdown), preview | Expand All |
+| `markdown.expandAll` | Ctrl+M,X *(v1 review, #732)* | editor(Markdown), preview | Expand All |
 | `preview.goToHeading` | Ctrl+G | preview | Go to Heading… |
 
 Toggle This Section and Toggle All are reachable from a menu through their Collapse/Expand

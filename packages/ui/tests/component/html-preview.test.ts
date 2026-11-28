@@ -490,22 +490,28 @@ async function rightClickSelected(m: MountedPreviewWindow, html: string, selecto
 }
 
 describe('a right-click in the page opens the panel’s body menu (FR-085a)', () => {
-  it('offers Find…, Copy, Copy as Rich Text, Copy as Plain Text, Select All and Split, enabled over a selection', async () => {
+  it('offers Find…, Copy as ▸ and Select All, enabled over a selection, and no plain Copy or Split (v1 review, #732)', async () => {
     const m = await mount(PLAIN);
     await rightClickSelected(m, '<p id="t">Some <b>bold</b> words</p>', '#t');
     await waitFor(() => expect(menuLabels().length).toBeGreaterThan(0));
     const labels = menuLabels();
-    for (const row of ['Find…', 'Copy', 'Copy as Rich Text', 'Copy as Plain Text', 'Select All', 'Split']) {
+    for (const row of ['Find…', 'Copy as', 'Select All']) {
       expect(labels.some((l) => l.startsWith(row)), `${row} in ${labels.join(' | ')}`).toBe(true);
     }
+    // Copy as ▸ replaces the plain Copy on a preview's body menu.
+    expect(screen.queryByTestId('menu-item-Copy')).toBeNull();
     expect(labels.some((l) => l.startsWith('Go to Heading'))).toBe(false);
+    // Split acts on the panel: the title menu holds it.
+    expect(labels.some((l) => l.startsWith('Split'))).toBe(false);
   });
 
   it('Copy as Rich Text puts the selection on the clipboard as HTML with its plain text', async () => {
     const m = await mount(PLAIN);
     await rightClickSelected(m, '<p id="t">Some <b>bold</b> <a href="https://example.test/x">link</a><img src="x.png" alt="pic"></p>', '#t');
-    await waitFor(() => expect(screen.getByText('Copy as Rich Text')).toBeTruthy());
-    fireEvent.click(screen.getByText('Copy as Rich Text'));
+    // #732 — the format lives in the Copy as ▸ submenu, which a click on its parent opens.
+    await waitFor(() => expect(screen.getByTestId('menu-item-Copy as')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('menu-item-Copy as'));
+    fireEvent.click(screen.getByTestId('menu-item-Copy as Rich Text'));
     await waitFor(() => expect(m.writeRich).toHaveBeenCalled());
     const [{ text, html }] = m.writeRich.mock.calls[0]! as [{ text: string; html: string }];
     expect(text).toContain('Some bold link');
@@ -518,8 +524,10 @@ describe('a right-click in the page opens the panel’s body menu (FR-085a)', ()
   it('Copy as Plain Text puts the text alone; Select All selects the page and nothing outside it', async () => {
     const m = await mount(PLAIN);
     await rightClickSelected(m, '<p id="t">Plain words</p><p id="u">More</p>', '#t');
-    await waitFor(() => expect(screen.getByText('Copy as Plain Text')).toBeTruthy());
-    fireEvent.click(screen.getByText('Copy as Plain Text'));
+    // #732 — the format lives in the Copy as ▸ submenu, which a click on its parent opens.
+    await waitFor(() => expect(screen.getByTestId('menu-item-Copy as')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('menu-item-Copy as'));
+    fireEvent.click(screen.getByTestId('menu-item-Copy as Plain Text'));
     await waitFor(() => expect(m.clipboardWrite).toHaveBeenCalledWith(expect.objectContaining({ text: 'Plain words' })));
     const doc = frameDoc()!;
     const W = doc.defaultView as Window & typeof globalThis;

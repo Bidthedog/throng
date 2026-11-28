@@ -96,4 +96,31 @@ describe('AppSettings explorer section (004 T004/T005)', () => {
       true,
     );
   });
+
+  it('follows the active preview by default, honours false, coerces a non-boolean (081 FR-060, #724)', () => {
+    expect(DEFAULT_APP_SETTINGS.explorer.autoRevealActivePreview).toBe(true);
+    expect(
+      parseAppSettings({ explorer: { autoRevealActivePreview: false } }).explorer.autoRevealActivePreview,
+    ).toBe(false);
+    expect(
+      parseAppSettings({ explorer: { autoRevealActivePreview: 'false' } }).explorer.autoRevealActivePreview,
+    ).toBe(true);
+  });
+
+  it('keeps the two follow settings independent (081 FR-063)', () => {
+    const s = parseAppSettings({ explorer: { autoRevealActiveFile: false } });
+    expect(s.explorer.autoRevealActivePreview).toBe(true);
+    const t = parseAppSettings({ explorer: { autoRevealActivePreview: false } });
+    expect(t.explorer.autoRevealActiveFile).toBe(true);
+  });
+
+  it('describes Follow the active preview directly after Follow the active editor (081 FR-060)', () => {
+    const keys = SETTINGS_METADATA.map((d) => d.key);
+    expect(keys.indexOf('explorer.autoRevealActivePreview')).toBe(keys.indexOf('explorer.autoRevealActiveFile') + 1);
+    const d = SETTINGS_METADATA.find((m) => m.key === 'explorer.autoRevealActivePreview');
+    expect(d?.label).toBe('Follow the active preview');
+    expect(d?.group).toBe('File Explorer');
+    expect(d?.control).toBe('toggle');
+    expect(d?.description).toBeTruthy();
+  });
 });

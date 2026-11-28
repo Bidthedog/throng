@@ -265,7 +265,7 @@ describe('FR-111 — the explicit menu item still runs it', () => {
         void performLinkTarget({ target: 'osDefaultProgram', link: resolved, request, deps: { ...s.deps, ...osLinkActions() } });
       const actions = linkMenuActions(
         {
-          cls: 'onDevice',
+          cls: 'unc',
           applicable: {
             inProjectByName: true,
             previewByExtension: 'none',

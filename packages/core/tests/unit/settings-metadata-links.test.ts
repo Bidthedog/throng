@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SETTINGS_METADATA } from '../../src/config/settings-metadata.js';
+import { settingHelp } from './preferences-help.js';
 
 /**
  * 045 FR-061, FR-080c, and the 2026-09-18 amendment FR-112, FR-120 — the descriptors' CONTENT.
@@ -85,14 +86,15 @@ describe('editor.links.existenceCheckTimeoutMs — renamed, key kept (round five
     expect(d().label.toLowerCase()).not.toMatch(/existence/);
   });
 
+  // #732 — the description says what it times; the network and restart detail is in its Help section.
   it('says it applies with no restart', () => {
-    const text = d().description.toLowerCase();
+    const text = settingHelp('editor.links.existenceCheckTimeoutMs').toLowerCase();
     expect(text).toMatch(/restart/);
     expect(text).toMatch(/\bno restart\b|without (a )?restart|next check/);
   });
 
   it('says what it is for — a slow network location', () => {
-    expect(d().description.toLowerCase()).toMatch(/network/);
+    expect(settingHelp('editor.links.existenceCheckTimeoutMs').toLowerCase()).toMatch(/network/);
   });
 
   it('names following a link and opening the Link menu — a resolution bound, not an existence check', () => {
@@ -182,15 +184,16 @@ describe('the allowlist and the known-extensions list (round five, FR-159, #408)
     expect(text.length).toBeLessThan(300);
   });
 
-  it('the known-extensions description says an entry is taken with or without its dot, and without case', () => {
-    const text = descriptor('editor.links.knownFileExtensions').description.toLowerCase();
+  it('the known-extensions Help says an entry is taken with or without its dot, and without case (#732)', () => {
+    const text = settingHelp('editor.links.knownFileExtensions').toLowerCase();
     expect(text).toMatch(/dot/);
     expect(text).toMatch(/case/);
   });
 });
 
-describe('terminals.advertiseHyperlinks’ description carries FR-080a and FR-080c', () => {
-  const text = () => descriptor('terminals.advertiseHyperlinks').description.toLowerCase();
+// #732 — the description says what the switch does; FR-080a and FR-080c's detail is in its Help section.
+describe('terminals.advertiseHyperlinks’ description and Help carry FR-080a and FR-080c', () => {
+  const text = () => settingHelp('terminals.advertiseHyperlinks').toLowerCase();
 
   it('FR-080c: it says the setting applies to terminals started afterwards', () => {
     expect(text()).toMatch(/new terminal|terminals started|next terminal|already running/);
@@ -201,7 +204,7 @@ describe('terminals.advertiseHyperlinks’ description carries FR-080a and FR-08
   });
 
   it('FR-080a: it says a FORCE_HYPERLINK the user set is never overridden', () => {
-    expect(descriptor('terminals.advertiseHyperlinks').description).toContain('FORCE_HYPERLINK');
+    expect(settingHelp('terminals.advertiseHyperlinks')).toContain('FORCE_HYPERLINK');
     expect(text()).toMatch(/never|not/);
   });
 });

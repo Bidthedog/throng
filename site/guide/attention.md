@@ -69,14 +69,16 @@ You can also right-click a marked project and choose **Go to Next Marked Panel**
 
 ## Flag a panel as a reminder
 
-**Right-click a panel › Flag**
+**Right-click a panel › Flag, or Ctrl+Alt+G**
 
 A flag is a mark you set yourself, a reminder to come back to a panel. It raises no notification.
 
 1. Right-click the panel's header.
-2. Choose **Flag**.
+2. Choose **Flag**. Or click into the panel and press **Ctrl+Alt+G**.
 
-It stays marked, with no notification, until you have left it and come back to it.
+It stays marked, with no notification, until you have left it and come back to it. To clear a mark sooner, open
+the same menu and choose **Unflag**, or press **Ctrl+Alt+G** in the panel again. The key is
+**Flag or unflag**, under [Focus & Zoom](../../docs/key-bindings.md#focus--zoom).
 
 ## Silence one terminal
 
@@ -84,7 +86,7 @@ It stays marked, with no notification, until you have left it and come back to i
 
 A chatty terminal can stop raising marks and notices on its own, while every other terminal carries on.
 
-1. Click **Terminal notifications** on the terminal's status bar (or turn it off in the panel's menu).
+1. Click **Terminal notifications** on the terminal's status bar (or turn it off in the panel header's menu).
 2. It greys out with a line through it. That terminal no longer raises marks or notices.
 
 ## Read and act on notifications

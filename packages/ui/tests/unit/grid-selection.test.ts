@@ -91,6 +91,17 @@ describe('moveSelection', () => {
     expect(out.anchor).toEqual(out.active);
   });
 
+  // T6 — Tab reads the grid row by row, as a spreadsheet does.
+  it('Tab wraps from the last column to the first of the next row, and Shift+Tab back', () => {
+    expect(move(single(2, 9), 'Tab').active).toEqual({ row: 3, col: 0 });
+    expect(move(single(3, 0), 'ShiftTab').active).toEqual({ row: 2, col: 9 });
+  });
+
+  it('Tab stays at the last cell and Shift+Tab at the first, so the caller can tell the edge', () => {
+    expect(move(single(99, 9), 'Tab').active).toEqual({ row: 99, col: 9 });
+    expect(move(single(0, 0), 'ShiftTab').active).toEqual({ row: 0, col: 0 });
+  });
+
   it('copes with a one-cell grid', () => {
     const one = { rowCount: 1, colCount: 1 };
     expect(move(single(0, 0), 'ArrowDown', one).active).toEqual({ row: 0, col: 0 });
@@ -155,6 +166,13 @@ describe('afterCommit', () => {
     expect(afterCommit({ row: 4, col: 4 }, 'down', 5, 5)).toEqual({ row: 4, col: 4 });
     expect(afterCommit({ row: 4, col: 4 }, 'right', 5, 5)).toEqual({ row: 4, col: 4 });
     expect(afterCommit({ row: 1, col: 1 }, 'none', 5, 5)).toEqual({ row: 1, col: 1 });
+  });
+
+  it('wraps a commit by Tab or Shift+Tab to the next or previous row (T6)', () => {
+    expect(afterCommit({ row: 1, col: 4 }, 'right', 5, 5)).toEqual({ row: 2, col: 0 });
+    expect(afterCommit({ row: 2, col: 0 }, 'left', 5, 5)).toEqual({ row: 1, col: 4 });
+    expect(afterCommit({ row: 2, col: 2 }, 'left', 5, 5)).toEqual({ row: 2, col: 1 });
+    expect(afterCommit({ row: 0, col: 0 }, 'left', 5, 5)).toEqual({ row: 0, col: 0 });
   });
 });
 

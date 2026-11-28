@@ -3,7 +3,8 @@
  *
  * The title keeps a minimum share of the header, ellipsised, down to the narrowest a panel can be (FR-069b; its floor
  * is `.panel-box__title`'s `min-width` in `theme.css`). The controls give way instead, a whole control at a time:
- * Save As, then Save with its separator (FR-069a), then Back / Forward, then Split, then Focus Mode, then Destroy.
+ * Open in OS Default Program and Find in File Explorer with their separator (081 FR-043), then Save As, then Save with
+ * its separator (FR-069a), then Back / Forward, then Split, then Focus Mode, then Destroy.
  * Each is an accelerator over the header's menu, which offers every one of them at any width, so nothing a hidden
  * control did becomes unreachable (Principle VI) — the editor status strip's way of giving way to width (040 FR-021).
  *
@@ -13,6 +14,11 @@
  */
 import { useEffect, useState, type RefObject } from 'react';
 
+/**
+ * Below this header width Open in OS Default Program, Find in File Explorer and their separator are hidden, before
+ * Save As (081 FR-043): two buttons and a separator above Save As's step.
+ */
+export const FILE_ICONS_MIN_HEADER_WIDTH = 440;
 /** Below this header width Save As is hidden (FR-069a). */
 export const SAVE_AS_MIN_HEADER_WIDTH = 360;
 /** Below this header width Save and the separator are hidden too (FR-069a). */
@@ -27,6 +33,8 @@ export const FOCUS_MIN_HEADER_WIDTH = 140;
 export const DESTROY_MIN_HEADER_WIDTH = 110;
 
 export interface HeaderControlsFit {
+  /** Open in OS Default Program, Find in File Explorer and the separator after them (081 FR-043). */
+  fileIcons: boolean;
   save: boolean;
   saveAs: boolean;
   separator: boolean;
@@ -41,6 +49,7 @@ export function headerControlsFit(width: number): HeaderControlsFit {
   const fits = (min: number): boolean => width <= 0 || width >= min;
   const save = fits(SAVE_MIN_HEADER_WIDTH);
   return {
+    fileIcons: fits(FILE_ICONS_MIN_HEADER_WIDTH),
     save,
     saveAs: fits(SAVE_AS_MIN_HEADER_WIDTH),
     separator: save,

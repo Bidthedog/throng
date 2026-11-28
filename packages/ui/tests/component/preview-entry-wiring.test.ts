@@ -100,11 +100,12 @@ describe('each entry point reaches preview.open (FR-001, FR-002, FR-005)', () =>
     await waitFor(() => expect(bridge.open).toHaveBeenCalledWith(EXPECTED));
   });
 
-  it('the body menu’s Open Preview', async () => {
-    const { h, bridge } = await mount();
+  // v1 review (#732): Open Preview is about the panel's file, so the body menu no longer offers it.
+  it('the body menu carries no Open Preview', async () => {
+    const { h } = await mount();
     fireEvent.contextMenu(h.content(), { clientX: 10, clientY: 10 });
-    fireEvent.click(await screen.findByTestId('menu-item-Open Preview'));
-    await waitFor(() => expect(bridge.open).toHaveBeenCalledWith(EXPECTED));
+    await screen.findByTestId('menu-item-Word Wrap');
+    expect(screen.queryByTestId('menu-item-Open Preview')).toBeNull();
   });
 
   it('the chord, over the focused editor', async () => {

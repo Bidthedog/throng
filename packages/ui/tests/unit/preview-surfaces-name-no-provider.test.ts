@@ -402,6 +402,7 @@ const ALLOWED: readonly Allowed[] = [
   ...allow(`${CORE_SRC}/config/settings-metadata.ts`, 'identifier', ['markdown'], '054 FR-051 — files the Markdown-editor setting above in the Markdown preview subsection of Preferences; layout only, it selects no provider behaviour and a new provider needs no edit'),
   ...allow(`${CORE_SRC}/config/keybindings.ts`, 'identifier', ['MARKDOWN_SURFACES'], `${SECTION_FOLDING} — the surfaces the \`markdown.*\` fold chords are live on`),
   ...allow(`${CORE_SRC}/config/keybindings.ts`, 'literal', FOLD_COMMANDS, `${SECTION_FOLDING} — the fold command ids and their default chords`),
+  ...allow(`${CORE_SRC}/config/shipped-defaults.ts`, 'literal', ['markdown.expandSection', 'markdown.expandAll', 'markdown.collapseAllInside', 'markdown.expandAllInside'], `${SECTION_FOLDING} — V41_KEYBINDINGS, the saved unbound rows the v42 upgrade binds (v1 review, #732)`),
   ...allow(`${CORE_SRC}/config/keybindings-metadata.ts`, 'literal', [...FOLD_COMMANDS, 'Markdown'], `${SECTION_FOLDING} — the fold commands' descriptors and their group name`),
   ...allow(`${CORE_SRC}/icons/icon-keys.ts`, 'literal', [
     'The disclosure triangle beside a collapsed heading in a Markdown preview’s fold gutter. Clicking it expands the section.',

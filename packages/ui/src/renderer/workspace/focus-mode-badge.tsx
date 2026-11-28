@@ -1,6 +1,6 @@
 /**
  * Focus Mode in a panel's own status strip (054 FR-078, manual test change request 2026-10-12): while the
- * panel is the maximised one, its editor or preview status strip is painted in the panel's border colour and
+ * panel is the maximised one, its editor, preview or terminal (081 FR-090) status strip is painted in the panel's border colour and
  * names the mode — centred — and the way out. Replaces the window status bar's pill, which was not clear
  * enough at the edge of the window.
  */
@@ -8,6 +8,9 @@ import { useSyncExternalStore, type ReactElement } from 'react';
 import { firstBinding } from '@throng/core';
 import { useKeybindings } from '../config/config-store.js';
 import { maximisedPanelOf, subscribeMaximise, tabOfMaximisePanel } from './maximise-store.js';
+// 081 FR-090 — the class's one styling lives in editor.css; imported here so every strip that carries the class
+// (a terminal's included, in a window with no editor open) has it loaded.
+import '../editor/editor.css';
 
 /** The class a status strip carries while its panel is in Focus Mode (`editor.css`). */
 export const FOCUS_MODE_STRIP_CLASS = 'editor-status-strip--focus-mode';

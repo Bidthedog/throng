@@ -294,4 +294,8 @@ print.svg - The icon on Print… in a preview’s menus, and on the Print button
 pagePrevious.svg - The icon on the Print Preview button that shows the page before the one on screen.
 pageNext.svg - The icon on the Print Preview button that shows the page after the one on screen.
 wcagConformant.svg - The mark beside the theme picker in Preferences, Themes, shown when the selected theme meets WCAG AA contrast on every colour pair throng measures.
+openInDefaultProgram.svg - The icon on the Open in OS Default Program button in an editor’s or preview’s title bar, and on the Open in OS Default Program menu rows, which open the file in the program your operating system uses for it.
+findInFileExplorer.svg - The icon on the Find in File Explorer button in an editor’s or preview’s title bar, and on the Find in File Explorer menu rows, which select the file in the File Explorer tree and open its folders to show it.
+flag.svg - The icon on Flag in a panel’s title menu, which marks the panel for attention, and on Go to Next Marked Panel.
+unflag.svg - The icon on Unflag in a marked panel’s title menu, which clears its mark: the flag, crossed out.
 ---- icon keys: end ----

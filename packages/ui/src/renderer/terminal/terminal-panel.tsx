@@ -46,7 +46,6 @@ import {
 } from './command-store.js';
 import { peekTerminalCwd, useTerminalCwd } from './cwd-store.js';
 import { ensureAppTerminatingBridge, isAppTerminating, onAppCloseCancelled } from './app-terminating.js';
-import { requestRedraw } from './redraw.js';
 import { setTerminalDebugLogging, terminalDebug } from './debug-log.js';
 import { useActiveTheme, useKeybindings, useAppSettings } from '../config/config-store.js';
 import { TerminalStatusBar } from './terminal-status-bar.js';
@@ -61,7 +60,7 @@ import { useContextMenu } from '../context-menu-provider.js';
 import { terminalContentMenu, type TerminalMenuToggle } from './terminal-content-menu.js';
 import { registerTerminalToggles } from './terminal-toggle-registry.js';
 import { Icon } from '../common/icon.js';
-import { PanelFailureBanner, retryPanelFailure } from '../common/panel-failure-banner.js';
+import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
 import { currentPanelTitle } from '../workspace/use-panel-display-names.js';
 import {
@@ -94,7 +93,8 @@ import { useTerminalReconnect } from './use-terminal-reconnect.js';
 import { FindBar } from '../search/find-bar.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
 import { terminalReservesKeydown } from '../search/search-actions.js';
-import { isFindShowingOn, updateCount } from '../search/search-store.js';
+import { isFindShowingOn, openFind, updateCount } from '../search/search-store.js';
+import { registerPanelTitleExtras } from '../workspace/panel-title-extras.js';
 import type { SearchCount } from '../search/search-model.js';
 import './terminal.css';
 
@@ -189,21 +189,21 @@ export function TerminalPanel({
   const reportPanelFailure = useReportPanelFailure();
   const reportPanelFailureRef = useRef(reportPanelFailure);
   reportPanelFailureRef.current = reportPanelFailure;
-  // Read by the context-menu callback, which is memoised and would otherwise close over a stale
+  // Read by the title menu's reader (`registerPanelTitleExtras` below), which would otherwise close over a stale
   // value — the menu must offer Retry/Clear based on the state at the moment it OPENS (FR-004d).
   const startFailureRef = useRef(startFailure);
   startFailureRef.current = startFailure;
-  // Same reason, and additionally because `clearWithMemory` is declared BELOW the menu callback:
+  // Same reason, and additionally because `clearWithMemory` is declared BELOW the reader:
   // a ref is read when the menu opens, not when the callback was built.
   const clearWithMemoryRef = useRef<() => void>(() => {});
   /*
-   * There is deliberately NO ref for the retry. The menu item calls `retryPanelFailure(panel.id)`,
+   * There is deliberately NO ref for the retry. The title menu's row calls `retryPanelFailure(panel.id)`,
    * which runs the MOUNTED BANNER's retry — the one place the retry's in-flight guard and its
    * failure sentence live. A ref straight to `retryStart` is what made the menu bypass both.
    */
   /** …and for *Copy details*, which is assembled below this callback for the same reason (FR-042c). */
   const copyFailureRef = useRef<() => void>(() => {});
-  /** 076 FR-005 — the toggles as menu items, read when the menu OPENS (they are built further down). */
+  /** 076 FR-005 — the toggles as title-menu items, read when the menu OPENS (they are built further down). */
   const menuTogglesRef = useRef<readonly TerminalMenuToggle[]>([]);
   /**
    * The pending *Try again* (030 FR-045), resolved by whichever of the three attach outcomes lands.
@@ -388,10 +388,7 @@ export function TerminalPanel({
         y,
         terminalContentMenu({
           selection,
-          redrawChord: firstBinding(keybindings, 'terminal.redraw'),
-          split: { panelId: panel.id, keybindings },
-          startFailure: startFailureRef.current !== null,
-          toggles: menuTogglesRef.current,
+          findChord: firstBinding(keybindings, 'search.find'),
           actions: {
             copySelection: () => {
               // #290 — the copy symptom: Copy enabled, clipboard unchanged. Record what was sent and
@@ -406,12 +403,8 @@ export function TerminalPanel({
                 );
             },
             paste: () => apiRef.current?.paste(),
-            redraw: () => requestRedraw(panel.id, 'manual'),
-            tryAgain: () => {
-              retryPanelFailure(panel.id);
-            },
-            copyDetails: () => copyFailureRef.current(),
-            clearPanelType: () => clearWithMemoryRef.current(),
+            // v1 review (#732) — the same store action `search.find` runs.
+            find: () => openFind(panel.id, 'terminal'),
           },
         }),
       );
@@ -587,6 +580,22 @@ export function TerminalPanel({
     onToggle: () => flipToggle(t.id),
   }));
   menuTogglesRef.current = statusToggles.map((t) => ({ label: t.label, icon: t.icon, on: t.on, chord: t.chord, toggle: t.onToggle }));
+  /*
+   * v1 review (#732) — the panel's TITLE menu holds the toggles and the start failure's commands; it reads them through
+   * this registration when it opens, so the rows state the panel as it is then.
+   */
+  useEffect(
+    () =>
+      registerPanelTitleExtras(panel.id, () => ({
+        terminal: {
+          toggles: menuTogglesRef.current,
+          startFailure: startFailureRef.current !== null,
+          copyDetails: () => copyFailureRef.current(),
+          clearPanelType: () => clearWithMemoryRef.current(),
+        },
+      })),
+    [panel.id],
+  );
 
   // 025 FR-019 — resolve a STRANDED observation during render, before the launch reads it.
   //

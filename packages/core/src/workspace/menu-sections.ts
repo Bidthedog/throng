@@ -43,18 +43,17 @@ export type MenuSection =
 
 /**
  * The fixed order every menu draws its sections in. Stated once, here.
- * Destroy is third — ahead of Navigate and View & state — as the constitution
- * and FR-047 both have it, and as the File Explorer menu the vocabulary was
- * derived from has always shipped.
+ * Destroy is LAST: closing or destroying is the final row of every menu (v1 review T1, the maintainer's choice of
+ * "every menu" over the panel title menu alone). It was third, after Create, under 033 FR-047.
  */
 const ORDER = [
   'contextual',
   'content',
   'create',
-  'destroy',
   'navigate',
   'viewState',
   'application',
+  'destroy',
 ] as const;
 
 /**

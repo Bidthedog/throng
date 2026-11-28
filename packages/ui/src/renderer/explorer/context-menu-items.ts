@@ -6,7 +6,7 @@
  */
 import type { MenuAction } from '../workspace/context-menu.js';
 import { copyPathSubmenu } from '../common/copy-path-menu.js';
-import { previewOpenInRows } from '../preview/preview-open-in.js';
+import { openInRows, openInSubmenu } from './open-in-rows.js';
 import type { FileClipboard } from '@throng/core';
 import {
   firstBinding,
@@ -178,13 +178,13 @@ export function buildContextMenuItems(args: {
    */
   const items: MenuAction[] = [];
   if (!isRoot) {
-    items.push({ label: 'Rename', icon: 'rename', section: 'content', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
     // 023 (#127): the clipboard actions now have their own theme tokens (cut/copy/paste), so the
     // reserved icon column finally renders a glyph rather than sitting blank.
-    items.push({ label: 'Cut', icon: 'cut', section: 'content', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
-    items.push({ label: 'Copy', icon: 'copy', section: 'content', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
+    items.push({ label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
+    items.push({ label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
-  items.push({ label: pasteText, icon: 'paste', section: 'content', disabled: clipboard === null && !osFiles, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+  items.push({ label: pasteText, icon: 'paste', section: 'content', group: 'clipboard', disabled: clipboard === null && !osFiles, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+  // v1 review (#732): Undo / Redo are their own group, straight below the clipboard group, as in every content menu.
   // 024 US3 (#85): undo/redo the last file OPERATION. Disabled — not hidden — when the stack is
   // empty: an action that exists and is unavailable teaches what the menu can do; one that vanishes
   // teaches nothing (and leaves the user wondering whether undo exists at all).
@@ -192,6 +192,7 @@ export function buildContextMenuItems(args: {
     label: 'Undo',
     icon: 'undo',
     section: 'content',
+    group: 'history',
     disabled: !(undoState?.canUndo ?? false),
     shortcut: sc('file.undo'),
     onClick: () => ops.undoFileOp(),
@@ -200,14 +201,19 @@ export function buildContextMenuItems(args: {
     label: 'Redo',
     icon: 'redo',
     section: 'content',
+    group: 'history',
     disabled: !(undoState?.canRedo ?? false),
     shortcut: sc('file.redo'),
     onClick: () => ops.redoFileOp(),
   });
 
-  // Create section.
+  // Create section. Rename heads it, below Redo and above New File: it names the item as New File and New Folder
+  // name the one they make (v1 review, 2026-11-28). The root has no Rename (004 FR-023).
+  if (!isRoot) {
+    items.push({ label: 'Rename', icon: 'rename', section: 'create', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
+  }
   items.push({ label: 'New File', icon: 'add', section: 'create', onClick: () => ops.newFile(node) });
-  items.push({ label: 'New Folder', icon: 'newFolder', section: 'create', onClick: () => ops.newFolder(node) });
+  items.push({ label: 'New Folder', icon: 'newFolder', section: 'create', shortcut: sc('file.newFolder'), onClick: () => ops.newFolder(node) });
 
   // Destructive section. The root has none, and an EMPTY group draws no divider — which is why the
   // tree's empty space still opens with two boundaries rather than four (M5).
@@ -216,101 +222,34 @@ export function buildContextMenuItems(args: {
     items.push({ label: 'Delete', icon: 'deleteFile', section: 'destroy', shortcut: sc('file.delete'), onClick: () => ops.remove(targets) });
   }
 
-  // Location section (US5/#158, FR-018a): a single "Open In" submenu, "OS File Explorer" FIRST,
-  // with the editor "Open In" targets (for files) beneath. Folders get just the OS reveal. The child
-  // reads "OS File Explorer" — the parent already says "Open In", so "Open in OS File Explorer" doubled it.
-  const openInItems: MenuAction[] = [
-    { label: 'OS File Explorer', icon: 'folderOpen', section: 'navigate', group: 'os', onClick: () => ops.reveal(node.relPath) },
-    // #483 — five groups, divided: the OS reveal alone, the editor targets with Other Tab, the previews,
-    // Terminal, Search.
-    // 067 FR-015, FR-019, FR-021 — on exactly one selected file, in the OS section (033 FR-048).
-    ...(showOpenInDefaultProgram && node.kind === 'file' && !isRoot && targets.length === 1 && ops.openInDefaultProgram
-      ? [
-          {
-            label: 'Open in OS Default Program',
-            section: 'navigate' as const,
-            group: 'os',
-            onClick: () => ops.openInDefaultProgram?.(node.relPath),
-          },
-        ]
-      : []),
-    ...(openIn ?? []).map((item) => ({ ...item, group: 'editor' })),
-  ];
   /*
-   * 044 FR-003 — Preview, after the editor targets and before Terminal. Drawn DISABLED — never hidden —
-   * while the provider is turned off (FR-062) or the file already has its one preview (FR-012): one
-   * setting, or closing that preview, makes it work. Absent where it could never mean anything (a
-   * folder, a type no provider claims, outside the project — FR-003, FR-004).
+   * Location section (US5/#158, FR-018a): one Open In submenu, built by `openInRows` — the SAME builder the
+   * Link menu calls over a local file or folder (081 FR-050), so the two cannot drift. The explorer's node is
+   * always in the project and resolved; its root-relative performers are bound to the right-clicked node here,
+   * whatever absolute path the builder hands back.
+   *
+   * 067 FR-015, FR-019, FR-021 — Open in OS Default Program on exactly one selected file, when the setting
+   * offers it. 044 FR-003 — the preview rows for a file. 033 FR-029 — Terminal for files and folders alike;
+   * the children ARE the flavour catalogue. 043 FR-090 — Search, for a file, a folder or the root.
    */
-  // 047 US2 (FR-014, R8) — the two explicit reuse targets, described once for every surface (060 FR-048).
-  if (preview !== undefined && node.kind === 'file') {
-    openInItems.push(...previewOpenInRows(preview, { lastActive: preview.openLastActive, new: preview.openNew }));
-  }
-  /*
-   * 033 US3 (FR-029/FR-030/FR-035) — Terminal, a THIRD level nested inside Open In, for folders and
-   * files alike. A file gets one because "open a shell here" means the folder the file lives in,
-   * which is what the user is pointing at; there is no state in which the item would be meaningless,
-   * so Principle VI says disable it, never hide it.
-   *
-   * The children ARE the catalogue — mapped, not filtered and not re-ordered. A user-defined flavour
-   * therefore appears with no wiring at all, and a disabled built-in is already absent by the time
-   * the list arrives (FR-030, FR-037).
-   */
-  const terminalFlavours = flavours ?? [];
-  const canOpenTerminal = terminalFlavours.length > 0 && ops.openInTerminal !== undefined;
-  openInItems.push({
-    label: 'Terminal',
-    icon: 'terminal',
-    section: 'navigate',
-    group: 'terminal',
-    disabled: !canOpenTerminal,
-    submenu: canOpenTerminal
-      ? terminalFlavours.map((flavour) => ({
-          label: flavour.label,
-          icon: 'terminal',
-          section: 'navigate' as const,
-          onClick: () => ops.openInTerminal?.(node, flavour),
-        }))
-      : undefined,
-  });
-  /*
-   * 043 FR-090 — Search, a third level inside Open In, for files, folders and the root alike.
-   *
-   * LAST in the flyout, after Terminal. `explorer.e2e.ts` clicks the flyout's first row expecting the
-   * OS reveal, and appending keeps that true without it having to know this submenu exists.
-   *
-   * Offered on a FILE because FR-092 made a single file a legitimate scope. It was never offered on
-   * one before only because a scope had to be a directory.
-   *
-   * No shortcut on either leaf: they act on the RIGHT-CLICKED node, and the two chords do not — they
-   * keep their term and search where the panel already looks. Advertising them here would name a
-   * keystroke that does something else, which is the reason the old folder row carried none.
-   *
-   * The labels are the request's own, verbatim. FR-090a records that FR-015 already says "Find" for
-   * the find bar's item, and why that does not collide here: the tree has no find bar, and the
-   * *Search* parent says which search is meant.
-   */
-  openInItems.push({
-    label: 'Search',
-    icon: 'search',
-    section: 'navigate',
-    group: 'search',
-    submenu: [
-      {
-        label: 'Find',
-        icon: 'findInFiles',
-        section: 'navigate',
-        onClick: () => ops.findInFiles(node.relPath, false),
-      },
-      {
-        label: 'Find & Replace',
-        icon: 'replace',
-        section: 'navigate',
-        onClick: () => ops.findInFiles(node.relPath, true),
-      },
-    ],
-  });
-  items.push({ label: 'Open In', icon: 'send', section: 'navigate', submenu: openInItems });
+  const absPath = projectRoot === undefined ? node.relPath : isRoot ? projectRoot : `${projectRoot}/${node.relPath}`;
+  const openInDefaultProgram = ops.openInDefaultProgram;
+  const openInTerminal = ops.openInTerminal;
+  const openInItems = openInRows(
+    { absPath, kind: node.kind === 'folder' ? 'folder' : 'file', inProject: true, binary: false, pending: false },
+    {
+      osExplorer: () => ops.reveal(node.relPath),
+      ...(showOpenInDefaultProgram && !isRoot && targets.length === 1 && openInDefaultProgram !== undefined
+        ? { osDefaultProgram: () => openInDefaultProgram(node.relPath) }
+        : {}),
+      ...(openIn !== undefined ? { editorRows: openIn } : {}),
+      ...(preview !== undefined ? { preview } : {}),
+      ...(flavours !== undefined ? { flavours } : {}),
+      ...(openInTerminal !== undefined ? { openInTerminal: (_abs: string, flavour: FlavourOption) => openInTerminal(node, flavour) } : {}),
+      findInFiles: (_abs, replace) => ops.findInFiles(node.relPath, replace),
+    },
+  );
+  items.push(openInSubmenu(openInItems, 'navigate'));
 
   // US9 (#156): "Copy Path" submenu, directly below "Open In" in the location group (FR-018a).
   // Four forms — absolute/relative × Windows(\)/Linux(/); relative is against the project root.

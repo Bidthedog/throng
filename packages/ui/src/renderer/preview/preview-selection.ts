@@ -134,6 +134,19 @@ export function createPreviewSelection(deps: PreviewSelectionDeps): PreviewSelec
     selection.addRange(range);
   };
 
+  /**
+   * Whether the body holds a selection other than the retained one: something selected after the focus restore. A
+   * collapsed or absent selection is not one — moving focus into a container can collapse it after the event, which
+   * is what the frame's second restore exists for.
+   */
+  const selectedSinceRestore = (host: HTMLElement): boolean => {
+    const range = liveRange(host, false);
+    if (!range || !retained) return false;
+    const cache = models.get();
+    const sel = cache ? readSelection(range, cache) : null;
+    return sel === null || sel.from !== retained.from || sel.to !== retained.to;
+  };
+
   const paintInactive = (host: HTMLElement): void => {
     const cache = models.get();
     const range = retained && cache ? rangeOver(host, cache.model, retained.from, retained.to) : null;
@@ -156,7 +169,9 @@ export function createPreviewSelection(deps: PreviewSelectionDeps): PreviewSelec
     if (isFocused(host)) {
       // A redraw with nothing retained has nothing to put back: the selection is the user's newest, so read it
       // (#637 — otherwise the first selection made after a draw went unreported until the next selectionchange).
-      if (restoreDom && retained) restore(host);
+      // Nor does one made since focus came back: Select All focuses the body and then selects everything, and putting
+      // the retained selection back over it left Select All doing nothing (maintainer's v1 review, 2026-11-27).
+      if (restoreDom && retained && !selectedSinceRestore(host)) restore(host);
       else track(host, true);
       restoreDom = false;
       clearPaint();

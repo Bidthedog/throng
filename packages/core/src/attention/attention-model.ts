@@ -198,6 +198,14 @@ export class AttentionModel {
     this.removeWhere((m) => m.panelId === panelId && m.producer === 'terminal');
   }
 
+  /**
+   * The title menu's Unflag (v1 review, 057 FR-125 as amended): the user clears the panel's mark, whatever raised it,
+   * as a clear after attending would. A cleared user flag leaves the daemon's store (FR-128).
+   */
+  unflag(panelId: string): void {
+    this.removeWhere((m) => m.panelId === panelId);
+  }
+
   /** FR-007: the panel is gone. */
   panelDestroyed(panelId: string): void {
     this.removeWhere((m) => m.panelId === panelId);

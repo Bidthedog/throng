@@ -1,6 +1,7 @@
 /**
  * 067 T133 (FR-128, refining FR-045) — Properties is the LAST item of the File Explorer context
- * menu, for a file and for a folder alike. "Last" is the drawn order, so the items are put through
+ * menu, for a file and for a folder alike, apart from Delete: v1 review T1 put the Destroy section last in every
+ * menu, so where a row offers Delete it follows Properties. "Last" is the drawn order, so the items are put through
  * the same `groupBySection` the menu renderer uses.
  */
 import { describe, expect, it, vi } from 'vitest';
@@ -44,20 +45,20 @@ function drawn(node: TargetNode): string[] {
     .map((i) => i.label ?? '');
 }
 
-describe('Properties is the last item of the explorer context menu (067 FR-128)', () => {
+describe('Properties is the last item of the explorer context menu before Delete (067 FR-128, v1 review T1)', () => {
   it('for a file', () => {
     const labels = drawn({ relPath: 'src/a.ts', kind: 'file' });
     expect(labels).toContain('Hide in this project');
-    expect(labels.at(-1)).toBe('Properties');
+    expect(labels.slice(-2)).toEqual(['Properties', 'Delete']);
   });
 
   it('for a folder', () => {
     const labels = drawn({ relPath: 'src', kind: 'folder' });
     expect(labels).toContain('Expand All Children');
-    expect(labels.at(-1)).toBe('Properties');
+    expect(labels.slice(-2)).toEqual(['Properties', 'Delete']);
   });
 
-  it('for the project root, which has no Hide row', () => {
+  it('for the project root, which has no Hide row and no Delete', () => {
     const labels = drawn({ relPath: '', kind: 'folder' });
     expect(labels.at(-1)).toBe('Properties');
   });

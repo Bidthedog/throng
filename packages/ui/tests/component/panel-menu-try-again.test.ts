@@ -1,19 +1,22 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FailureCause, Panel } from '@throng/core';
+import { DEFAULT_KEYBINDINGS, type FailureCause, type Panel } from '@throng/core';
 import { mountEditor, type EditorHarness } from './helpers/mount-editor.js';
 import { TerminalPanel } from '../../src/renderer/terminal/terminal-panel.js';
 import { removeEditorState } from '../../src/renderer/editor/editor-state.js';
 import { BANNER_RETRY_FAILED } from '../../src/renderer/common/notice-text.js';
+import { retryPanelFailure } from '../../src/renderer/common/panel-failure-banner.js';
+import { panelHeaderMenu, type PanelHeaderMenuActions } from '../../src/renderer/workspace/panel-header-menu.js';
+import { readPanelTitleExtras } from '../../src/renderer/workspace/panel-title-extras.js';
 
 /**
  * MIGRATED FROM `packages/ui/tests/e2e/panel-failure-banner.e2e.ts` — `Try again from the panel MENU reports a
  * failed retry, in both panel types` (030 FR-042c, FR-045).
  *
  * Layer: component — what is under test is which function the menu item runs. The panel's menu builds
- * `tryAgain` in `panel-placeholder.tsx` (the editor's header menu) and `terminal-panel.tsx` (the terminal's
- * content menu); both must run the MOUNTED BANNER's retry (`retryPanelFailure`) rather than the operation
+ * `tryAgain` in `panel-placeholder.tsx`, the title menu, for both panel types (the terminal's rows moved there from
+ * its body menu in the v1 review, #732); both must run the MOUNTED BANNER's retry (`retryPanelFailure`) rather than the operation
  * directly, or the banner never learns the retry failed and stays silent. A stubbed failing retry action (the
  * editor's `reload`, the terminal's attach failing again) shows it in jsdom, with no window and no real
  * unreadable folder. The banner's own control is `panel-failure-banner.test.ts`; the wiring to a real
@@ -118,8 +121,28 @@ describe('Try again from the terminal’s panel menu (FR-042c, FR-045)', () => {
     expect(bannerOf(TERMINAL_ID)).not.toHaveTextContent(BANNER_RETRY_FAILED);
     const attemptBefore = captured.opts!.attempt ?? 0;
 
+    // v1 review (#732) — the terminal's start-failure rows are on its TITLE menu, which reads the failure from what
+    // the mounted terminal registered, and whose Try again runs `retryPanelFailure` as `panel-placeholder.tsx` wires it.
+    expect(screen.queryByTestId('context-menu')).toBeNull();
     fireEvent.contextMenu(screen.getByTestId(`terminal-${TERMINAL_ID}`), { clientX: 20, clientY: 120 });
-    fireEvent.click(await screen.findByTestId('menu-item-Try again'));
+    expect(screen.queryByTestId('menu-item-Try again'), 'the body menu still offers Try again').toBeNull();
+    const extras = readPanelTitleExtras(TERMINAL_ID);
+    expect(extras.terminal?.startFailure, 'the terminal reports its failure to the title menu').toBe(true);
+    const items = panelHeaderMenu({
+      panel,
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: null,
+      panelFailure: extras.terminal?.startFailure === true,
+      detach: null,
+      terminalToggles: extras.terminal?.toggles ?? null,
+      // Only Try again is chosen here; the builder reads no other action until its row is clicked.
+      actions: { tryAgain: () => retryPanelFailure(TERMINAL_ID) } as unknown as PanelHeaderMenuActions,
+    });
+    const tryAgain = items.find((i) => i.label === 'Try again');
+    expect(tryAgain, 'the title menu offers Try again while the start has failed').toBeDefined();
+    act(() => tryAgain!.onClick!());
 
     await waitFor(() => expect(captured.opts!.attempt, 'the menu re-ran the attach').toBe(attemptBefore + 1));
     // The re-attach fails again, as the real one does while the folder is still gone.

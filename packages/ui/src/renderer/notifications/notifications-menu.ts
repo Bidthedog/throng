@@ -16,6 +16,9 @@ export const ORDER_LABELS: Readonly<Record<NotificationOrder, string>> = {
 
 const ORDERS = Object.keys(ORDER_LABELS) as NotificationOrder[];
 
+/** What an entry's Dismiss row shows: the Delete key, as the CSV grid's Clear Cells names it. */
+export const DISMISS_SHORTCUT = 'Del';
+
 /** The four orders as menu rows; the current one is checked, and keeps the same test id. */
 export function orderMenuItems(order: NotificationOrder, onSetOrder: (order: NotificationOrder) => void): MenuAction[] {
   return ORDERS.map((o) => ({
@@ -76,7 +79,8 @@ export function buildEntryMenu(input: EntryMenuInput): MenuAction[] {
       section: 'navigate' as const,
       onClick: () => input.onRun(action),
     })),
-    { label: 'Dismiss', icon: 'dismiss', section: 'destroy', onClick: input.onDismiss },
+    // #732 — Delete on the focused entry dismisses it (`notifications-panel.tsx`); a fixed key, not in Key Bindings.
+    { label: 'Dismiss', icon: 'dismiss', section: 'destroy', shortcut: DISMISS_SHORTCUT, onClick: input.onDismiss },
   ];
 }
 

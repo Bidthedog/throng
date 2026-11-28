@@ -30,6 +30,8 @@
   - `testId`: `menu-item-<label>`.
   - Each runs the same flip as the toggle.
 
+*(Amended 2026-11-28, v1 review, #732: the three items moved to the panel title menu (`workspace/panel-header-menu.ts`), View & state group `panelType`, read through `panel-title-extras.ts` when the menu opens. The content menu holds Copy, Paste and Find.)*
+
 ## Commands
 
 `terminal.toggleRememberCommand`, `terminal.toggleRememberDirectory` and `terminal.toggleNotifications` run the

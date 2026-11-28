@@ -2,8 +2,8 @@
  * Which files have an open preview, in ANY window (044, FR-012, FR-014, data-model §12).
  *
  * Fed only by main's broadcast `throng:preview:openChanged`, which carries a canonical path and nothing
- * else. It is what lets an editor's status-bar button draw PRESSED, and its Open Preview item draw
- * DISABLED, for a preview opened in another window (contracts/menus-and-controls.md §7).
+ * else. It is what lets an editor's status-bar button draw PRESSED for a preview opened in another window
+ * (contracts/menus-and-controls.md §7).
  *
  * ══ ONE SPELLING ══
  *

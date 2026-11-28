@@ -18,6 +18,10 @@ import {
  *
  * Row numbers follow FR-170's table: 1 Open Link, 2 Open In ▸, 3 Open Preview, 4 Open in OS Explorer,
  * 5 Open in OS Default Program, 6 Open Program, 7 Copy Link to Clipboard.
+ *
+ * 081 FR-053 moved rows 2 – 6 of a LOCAL file or folder (`onDevice`) into the File Explorer's Open In ▸, which
+ * the renderer builds from the one `openIn` item's target state; the last describe block covers that. FR-054
+ * keeps a UNC link's menu as 045 drew it, so the FR-170 fixtures below run on `unc`.
  */
 
 const noop = (): void => undefined;
@@ -39,7 +43,7 @@ const file = (over: Partial<ResolvedTarget> = {}): ResolvedTarget => ({
 });
 
 const ctx = (over: Partial<LinkMenuContext> = {}): LinkMenuContext => ({
-  cls: 'onDevice',
+  cls: 'unc',
   resolution: file(),
   applicable: applicable(),
   openEditors: [],
@@ -155,8 +159,8 @@ describe('buildLinkMenu — FR-170: the rows, in order, for every SC-025 fixture
     ).toEqual(['Open Link', 'Find in File Explorer', 'Open in OS Explorer', 'Copy Link to Clipboard']);
   });
 
-  it('a UNC file is treated like an on-device one', () => {
-    expect(menu({ cls: 'unc' })).toEqual(menu({ cls: 'onDevice' }));
+  it('a UNC file keeps these rows; an on-device one draws Open In ▸ from its target state instead (081 FR-053, FR-054)', () => {
+    expect(menu({ cls: 'onDevice' })).not.toEqual(menu({ cls: 'unc' }));
   });
 
   for (const cls of ['web', 'loopback', 'protocol', 'anchor'] as const) {
@@ -461,6 +465,86 @@ describe('buildLinkMenu — sections (FR-169, Principle VI)', () => {
   it('every row declares the contextual section, in every state', () => {
     for (const resolution of [file({ preview: 'enabled' }), null, 'pending' as const]) {
       for (const item of buildLinkMenu(ctx({ resolution }))) expect(item.section).toBe('contextual');
+    }
+  });
+});
+
+describe('buildLinkMenu — a local file or folder: one Open In ▸ item carrying its target state (081 FR-050 – FR-053)', () => {
+  const local = (over: Partial<LinkMenuContext> = {}): LinkMenuContext => ctx({ cls: 'onDevice', ...over });
+  /** The Open In item reads as its state; every other row as `shape` draws it. */
+  const rows = (over: Partial<LinkMenuContext> = {}): string[] =>
+    buildLinkMenu(local(over)).map((i) =>
+      i.id === 'openIn' && i.openIn !== undefined
+        ? `Open In ▸ ${i.openIn.kind}, ${i.openIn.inProject ? 'in project' : 'outside the project'}${i.openIn.binary ? ', binary' : ''}${i.openIn.pending ? ', pending' : ''}`
+        : shape([i])[0]!,
+    );
+
+  it('an in-project file: Open Link, Open In ▸, Find in File Explorer, Copy Link to Clipboard', () => {
+    expect(rows({ resolution: file({ preview: 'enabled' }), applicable: applicable({ previewByExtension: 'enabled' }) })).toEqual([
+      'Open Link',
+      'Open In ▸ file, in project',
+      'Find in File Explorer',
+      'Copy Link to Clipboard',
+    ]);
+  });
+
+  it('no Open Preview, Open in OS Explorer, Open in OS Default Program or Open Program row at the top level', () => {
+    for (const resolution of [file({ executable: true, preview: 'enabled' }), null, 'pending' as const]) {
+      const ids = buildLinkMenu(local({ resolution, applicable: applicable({ executableByExtension: true }) })).map((i) => i.id);
+      for (const gone of ['openPreview', 'osExplorer', 'osDefaultProgram', 'openProgram', 'openInNew', 'openInActive', 'openInEditor'])
+        expect(ids).not.toContain(gone);
+    }
+  });
+
+  it('a file that resolves outside the project: no Find in File Explorer, and the state says outside', () => {
+    expect(rows({ resolution: file({ inProject: false }) })).toEqual([
+      'Open Link',
+      'Open In ▸ file, outside the project',
+      'Copy Link to Clipboard',
+    ]);
+  });
+
+  it('a folder, resolved or by grammar', () => {
+    const folder: ResolvedTarget = { kind: 'folder', inProject: true, executable: false, preview: 'none' };
+    for (const app of [applicable(), applicable({ folderByGrammar: true })]) {
+      expect(rows({ resolution: folder, applicable: app })).toEqual([
+        'Open Link',
+        'Open In ▸ folder, in project',
+        'Find in File Explorer',
+        'Copy Link to Clipboard',
+      ]);
+    }
+  });
+
+  it("'pending' and unresolved read from the name: pending, in the project by name, Find in File Explorer disabled", () => {
+    for (const resolution of ['pending', null] as const) {
+      expect(rows({ resolution })).toEqual([
+        'Open Link',
+        'Open In ▸ file, in project, pending',
+        'Find in File Explorer (disabled)',
+        'Copy Link to Clipboard',
+      ]);
+      expect(rows({ resolution, applicable: applicable({ inProjectByName: false }) })).toEqual([
+        'Open Link',
+        'Open In ▸ file, outside the project, pending',
+        'Copy Link to Clipboard',
+      ]);
+    }
+  });
+
+  it('a binary file, by extension before main answers or by the answer after (FR-170e)', () => {
+    expect(rows({ resolution: 'pending', applicable: applicable({ binaryByExtension: true }) })[1]).toBe(
+      'Open In ▸ file, in project, binary, pending',
+    );
+    expect(rows({ resolution: file({ binary: true }) })[1]).toBe('Open In ▸ file, in project, binary');
+    expect(rows({ resolution: file(), applicable: applicable({ binaryByExtension: true }) })[1]).toBe(
+      'Open In ▸ file, in project, binary',
+    );
+  });
+
+  it('the Open In item is enabled in every state: OS File Explorer inside it needs no answer', () => {
+    for (const resolution of [file(), null, 'pending' as const]) {
+      expect(buildLinkMenu(local({ resolution })).find((i) => i.id === 'openIn')?.disabled).toBe(false);
     }
   });
 });

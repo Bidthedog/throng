@@ -37,6 +37,11 @@ export type ActionId =
    * exception. Window-handled, so it never reaches the program.
    */
   | 'panel.toggleMaximise'
+  /*
+   * 057 FR-125, amended by the v1 review (2026-11-28) — flag the focused panel for attention, or clear its mark: the
+   * title menu's Flag / Unflag row from the keyboard. Window-handled and live in every panel, like Focus Mode.
+   */
+  | 'panel.toggleFlag'
   // Keyboard move-focus (012, FR-015). Directional moves + a stable-layout-order
   // cycle over the active tab's panels; tokens use the produced key names.
   | 'focus.left'
@@ -89,6 +94,8 @@ export type ActionId =
   | 'file.copy'
   | 'file.paste'
   | 'file.delete'
+  // v1 review (2026-11-28): New Folder, where the toolbar's New folder makes one (004 FR-031).
+  | 'file.newFolder'
   // 024 US3 (#85): undo/redo the last file OPERATION — a move, a rename, a delete. Explorer-scoped,
   // so Ctrl+Z means "put that file back" in the tree and "undo my typing" in an editor, which is
   // exactly what a user means by it in each place.
@@ -250,6 +257,12 @@ export type ActionId =
   | 'grid.insertRowBelow'
   | 'grid.insertColumnLeft'
   | 'grid.insertColumnRight'
+  | 'grid.insertRowsAbove'
+  | 'grid.insertRowsBelow'
+  | 'grid.insertColumnsLeft'
+  | 'grid.insertColumnsRight'
+  | 'grid.deleteRows'
+  | 'grid.deleteColumns'
   /*
    * 070 FR-027, FR-024a — the application commands the macOS app menu carries, each also in the key bindings list
    * (Principle VI): Settings opens Preferences; Install and Uninstall put the `throng` command on the PATH and take it
@@ -383,6 +396,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   // 054 FR-071 — EVERYWHERE for `panel.destroy`'s reason: the dispatcher, not the scope, decides that
   // focus in a side pane maximises nothing and leaves the key unconsumed.
   'panel.toggleMaximise': EVERYWHERE,
+  // v1 review — EVERYWHERE for `panel.destroy`'s reason: the dispatcher, not the scope, decides that focus in a side
+  // pane flags nothing and leaves the key unconsumed.
+  'panel.toggleFlag': EVERYWHERE,
   'focus.left': EVERYWHERE,
   'focus.right': EVERYWHERE,
   'focus.up': EVERYWHERE,
@@ -449,6 +465,7 @@ export const COMMAND_SCOPES: CommandScopes = {
   'file.copy': EXPLORER_ONLY,
   'file.paste': EXPLORER_ONLY,
   'file.delete': EXPLORER_ONLY,
+  'file.newFolder': EXPLORER_ONLY,
   'file.undo': EXPLORER_ONLY,
   'file.redo': EXPLORER_ONLY,
   // Save acts on the active panel's document; it is inert, not wrong, in a terminal.
@@ -527,6 +544,12 @@ export const COMMAND_SCOPES: CommandScopes = {
   'grid.insertRowBelow': GRID_SURFACES,
   'grid.insertColumnLeft': GRID_SURFACES,
   'grid.insertColumnRight': GRID_SURFACES,
+  'grid.insertRowsAbove': GRID_SURFACES,
+  'grid.insertRowsBelow': GRID_SURFACES,
+  'grid.insertColumnsLeft': GRID_SURFACES,
+  'grid.insertColumnsRight': GRID_SURFACES,
+  'grid.deleteRows': GRID_SURFACES,
+  'grid.deleteColumns': GRID_SURFACES,
   'preview.print': PRINT_SURFACES,
 };
 
@@ -586,6 +609,11 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     // 054 FR-071a — Visual Studio's full-screen toggle, by the maintainer's choice; a Principle IV
     // recorded exception (v5.10.0). A brand-new command on a chord no shipped row held: no bump.
     'panel.toggleMaximise': ['Shift+Alt+Enter'],
+    // v1 review (2026-11-28) — tier 2, acting on the panel that holds focus; G is Go to Next Marked Panel's letter one
+    // modifier down. AltGr+G types no character on UK, German, French, Spanish, Italian, Nordic or Polish; Czech and
+    // Hungarian type `]` there and lose it. In a terminal it displaces only readline's Meta+Ctrl+G, an alias of
+    // Ctrl+G's abort. A brand-new command on a chord no shipped row held: the per-read fill supplies it, no bump.
+    'panel.toggleFlag': ['Ctrl+Alt+G'],
     // Keyboard move-focus (012) — TIER 1 (046, FR-102): Ctrl+Shift+Alt+Arrow*, freeing the plain
     // Ctrl+Alt+Arrow family back to the editor/shell. Arrow tokens use the produced key names
     // (`Arrow*`). The cycle chords are a RECORDED EXCEPTION (FR-103) and keep their pre-round
@@ -705,14 +733,14 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'markdown.toggleSection': ['Ctrl+M,M'],
     'markdown.toggleAll': ['Ctrl+M,L'],
     'markdown.collapseSection': ['Ctrl+M,S'],
-    // Unbound by the maintainer's review (2026-09-28): the context menus carry both, and a chord for
-    // them adds nothing Ctrl+M,M and Ctrl+M,L do not already toggle.
-    'markdown.expandSection': [],
+    // v1 review (2026-11-28, #732): every Outlining row gets a chord. Expand takes back the ReSharper E and X
+    // the 2026-09-28 review dropped; All Inside is its section chord with Shift added to the second stroke.
+    // `V41_KEYBINDINGS` moves an install that still saves these four unbound.
+    'markdown.expandSection': ['Ctrl+M,E'],
     'markdown.collapseAll': ['Ctrl+M,A'],
-    'markdown.expandAll': [],
-    // 054 FR-013 — unbound; the Outlining submenu carries both.
-    'markdown.collapseAllInside': [],
-    'markdown.expandAllInside': [],
+    'markdown.expandAll': ['Ctrl+M,X'],
+    'markdown.collapseAllInside': ['Ctrl+M,Shift+S'],
+    'markdown.expandAllInside': ['Ctrl+M,Shift+E'],
     /*
      * 047 (research R7) — Go to Heading. `Ctrl+G` is readline's `abort`, same as `navigate.gotoLine`
      * above; the two share the literal chord on DISJOINT scopes ({editor} vs {preview}), which
@@ -725,6 +753,12 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'grid.insertRowBelow': [],
     'grid.insertColumnLeft': [],
     'grid.insertColumnRight': [],
+    'grid.insertRowsAbove': [],
+    'grid.insertRowsBelow': [],
+    'grid.insertColumnsLeft': [],
+    'grid.insertColumnsRight': [],
+    'grid.deleteRows': [],
+    'grid.deleteColumns': [],
     /*
      * 075 FR-064 — Print…, which opens Print Preview. `Ctrl+P` is readline's previous-history, so it is scoped to
      * {preview} alone and never live in a terminal; macOS derives `Cmd+P`.
@@ -741,6 +775,9 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'file.copy': ['Ctrl+C'],
     'file.paste': ['Ctrl+V'],
     'file.delete': ['Delete'],
+    // Tier 2, Ctrl+Shift+<key>: it acts on the focused pane. A saved file that lacks the action is filled from here on
+    // read, so an existing install gets it with no upgrade step. macOS derives Cmd+Shift+N.
+    'file.newFolder': ['Ctrl+Shift+N'],
     'file.undo': ['Ctrl+Z'],
     'file.redo': ['Ctrl+Y'],
     'editor.save': ['Ctrl+S'],
@@ -964,6 +1001,10 @@ export const MACOS_BINDING_OVERRIDES: Readonly<Record<string, readonly string[]>
   'markdown.toggleAll': ['Ctrl+M,L'],
   'markdown.collapseSection': ['Ctrl+M,S'],
   'markdown.collapseAll': ['Ctrl+M,A'],
+  'markdown.expandSection': ['Ctrl+M,E'],
+  'markdown.expandAll': ['Ctrl+M,X'],
+  'markdown.collapseAllInside': ['Ctrl+M,Shift+S'],
+  'markdown.expandAllInside': ['Ctrl+M,Shift+E'],
   'terminal.redraw': ['Shift+Meta+F5'],
   'navigate.back': ['Meta+['],
   'navigate.forward': ['Meta+]'],
@@ -1449,6 +1490,7 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'panel.destroy',
   'tabs.rename',
   'panel.toggleMaximise',
+  'panel.toggleFlag',
   'app.settings',
   'app.installCommandLine',
   'app.uninstallCommandLine',

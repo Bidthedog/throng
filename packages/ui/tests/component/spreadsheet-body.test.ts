@@ -8,6 +8,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { IconKey } from '@throng/core';
 import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
+import { menuWithSubmenu } from './helpers/expand-submenus.js';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as XLSX from 'xlsx';
@@ -18,9 +19,8 @@ import { setGridWorkerFactory, type GridWorker } from '../../src/renderer/grid/w
 import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { PREVIEW_LOADING_CLASS } from '../../src/renderer/preview/loading-placeholder.js';
-import { PRINT_UNAVAILABLE } from '../../src/renderer/preview/print/print-command.js';
 import { gridPrintable } from '../../src/renderer/grid/grid-print.js';
-import { WORKBOOK_READ_ONLY_TITLE, subscribeReadOnlyFlash } from '../../src/renderer/preview/read-only-marker.js';
+import { subscribeReadOnlyFlash } from '../../src/renderer/preview/read-only-marker.js';
 
 function book(sheets: Record<string, string[][]>, hidden: string[] = []): ArrayBuffer {
   const wb = XLSX.utils.book_new();
@@ -215,35 +215,45 @@ describe('SpreadsheetBody', () => {
   describe('header menus (FR-037e, FR-006a)', () => {
     const colHead = (c: number): HTMLElement => document.querySelector<HTMLElement>(`[role="columnheader"][data-col="${c}"]`)!;
     const rowHead = (r: number): HTMLElement => document.querySelector<HTMLElement>(`[role="rowheader"][data-row="${r}"]`)!;
+    const topLevel = (): string[] =>
+      [...document.querySelectorAll('[data-testid="context-menu"] > [role="menuitem"]')].map((el) =>
+        (el.getAttribute('data-testid') ?? '').replace(/^menu-item-/, ''),
+      );
 
-    it('every grid menu offers Print…, which runs the chrome\'s Print… (075 FR-063, FR-075b)', async () => {
-      const onPrint = vi.fn();
-      mount('throng-preview://source/s1?rev=1', { onPrint });
+    // v1 review (#732) — Wrap and the two locks moved here from the panel's title menu, on every grid menu.
+    it('every grid menu offers Wrap and both locks as checked toggles, each running its flip', async () => {
+      const wrap = vi.fn();
+      const row = vi.fn();
+      mount('throng-preview://source/s1?rev=1', {
+        gridToggles: {
+          wrap: { on: true, onToggle: wrap },
+          lockFirstRow: { on: false, onToggle: row },
+          lockFirstColumn: { on: false, onToggle: () => {} },
+        },
+      });
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
       const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;
-      for (const target of [cellEl, () => rowHead(0), () => colHead(0)]) {
+      const corner = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-corner]')!;
+      for (const target of [cellEl, () => rowHead(0), () => colHead(0), corner]) {
         fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
-        fireEvent.click(screen.getByTestId('menu-item-Print…'));
+        expect(screen.getByTestId('menu-item-Wrap')).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByTestId('menu-item-Lock First Column')).toHaveAttribute('aria-checked', 'false');
+        fireEvent.click(screen.getByTestId('menu-item-Lock First Row'));
       }
-      expect(onPrint).toHaveBeenCalledTimes(3);
+      expect(row).toHaveBeenCalledTimes(4);
+      expect(wrap).not.toHaveBeenCalled();
     });
 
     // FR-037g (convergence T104) — both grids: each Copy variant carries the copy icon, as the CSV grid's do.
-    it('draws the copy icon on Copy, Copy as Rich Text and Copy as Plain Text', async () => {
+    it('draws the copy icon on Copy as, Copy as Rich Text and Copy as Plain Text', async () => {
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
-      fireEvent.contextMenu(document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
-      for (const label of ['Copy', 'Copy as Rich Text', 'Copy as Plain Text']) {
+      menuWithSubmenu(document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!, 'Copy as');
+      for (const label of ['Copy as', 'Copy as Rich Text', 'Copy as Plain Text']) {
         expect(drawnIcon(screen.getByTestId(`menu-item-${label}`)), label).toBe(iconMarkup('copy' as IconKey));
       }
     });
 
-    it('the grid menu\'s Print… shows its key binding, as every other preview\'s does (075 FR-063, FR-075b)', async () => {
-      mount('throng-preview://source/s1?rev=1', { onPrint: vi.fn() });
-      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
-      fireEvent.contextMenu(document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
-      expect(screen.getByTestId('menu-item-Print…').textContent).toContain('Ctrl+P');
-    });
 
     it('prints the sheet on screen as a table, every row (075 FR-075b)', async () => {
       const { container } = mount('throng-preview://source/s1?rev=1');
@@ -254,35 +264,65 @@ describe('SpreadsheetBody', () => {
       expect(doc.querySelector('tbody tr td')?.textContent).toBe('h1');
     });
 
-    it('without the chrome\'s Print… route, every grid menu draws Print… disabled with the reason (075 FR-062)', async () => {
+
+    // T18 (2026-11-27), superseding 073 FR-050c: a workbook stays read-only, so the menus draw no editing row at all.
+    it('every grid menu offers Copy as (no plain Copy, v1 review), and draws no Cut, Paste, Clear Cells, delete or insert (T18)', async () => {
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
       const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;
-      for (const target of [cellEl, () => rowHead(0), () => colHead(0)]) {
+      const corner = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-corner]')!;
+      const editing = [
+        'Cut',
+        'Paste',
+        'Clear Cells',
+        'Delete Row',
+        'Delete Rows',
+        'Delete Column',
+        'Delete Columns',
+        'Insert',
+        'Insert Row Above',
+        'Insert Rows Above…',
+        'Insert Column Left',
+        'Insert Columns Left…',
+        'Undo',
+        'Redo',
+      ];
+      const menus: [string, () => HTMLElement, string[]][] = [
+        // v1 review (#732): Print… is the panel's title menu's, so no grid menu draws it.
+        ['cell', cellEl, ['Copy as', 'Select All', 'Go to Row…']],
+        ['row header', () => rowHead(0), ['Copy as', 'Select All', 'Go to Row…']],
+        ['column header', () => colHead(0), ['Copy as', 'Column Width…', 'Reset Column Width']],
+        ['corner', corner, ['Copy as', 'Go to Row…']],
+      ];
+      for (const [name, target, expected] of menus) {
         fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
-        const print = screen.getByTestId('menu-item-Print…');
-        expect(print.getAttribute('aria-disabled')).toBe('true');
-        expect(print.getAttribute('title')).toBe(PRINT_UNAVAILABLE);
+        expect([...topLevel()].sort(), name).toEqual([...expected].sort());
+        for (const label of editing) expect(screen.queryByTestId(`menu-item-${label}`), `${name}: ${label}`).toBeNull();
+        expect(screen.getByTestId('menu-item-Copy as').getAttribute('aria-disabled'), name).not.toBe('true');
         fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       }
     });
 
-    // 073 FR-050c (2026-11-20), superseding FR-037e's "offers Copy only": the editing rows are there, disabled, saying why.
-    it('every grid menu offers Copy, and shows Cut, Paste and the Insert rows disabled with the read-only reason', async () => {
+    it('marks the grid read-only, which the faded cell text is keyed on', async () => {
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
-      const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;
-      const editing = ['Cut', 'Paste', 'Insert Row Above', 'Insert Row Below', 'Insert Column Left', 'Insert Column Right'];
-      for (const target of [cellEl, () => rowHead(0), () => colHead(0)]) {
-        fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
-        expect(screen.getByTestId('menu-item-Copy').getAttribute('aria-disabled')).not.toBe('true');
-        for (const label of editing) {
-          const row = screen.getByTestId(`menu-item-${label}`);
-          expect(row.getAttribute('aria-disabled'), label).toBe('true');
-          expect(row.getAttribute('title'), label).toBe(WORKBOOK_READ_ONLY_TITLE);
-        }
-        fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
-      }
+      expect(screen.getByTestId('spreadsheet-body-s1').querySelector('[role="grid"]')?.getAttribute('aria-readonly')).toBe('true');
+    });
+
+    it('Column Width… asks in the grid\'s modal number prompt and sizes the column right-clicked (T10)', async () => {
+      mount('throng-preview://source/s1?rev=1');
+      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
+      fireEvent.contextMenu(colHead(1), { clientX: 5, clientY: 5 });
+      fireEvent.click(screen.getByTestId('menu-item-Column Width…'));
+      const form = screen.getByTestId('spreadsheet-width-s1');
+      expect(form.getAttribute('role')).toBe('dialog');
+      expect(screen.getByTestId('spreadsheet-width-s1-scrim').contains(form)).toBe(true);
+      const input = form.querySelector('input')!;
+      expect(document.activeElement).toBe(input);
+      fireEvent.change(input, { target: { value: '250' } });
+      fireEvent.submit(form);
+      expect(screen.queryByTestId('spreadsheet-width-s1')).toBeNull();
+      expect(Number.parseFloat(colHead(1).style.width)).toBe(250);
     });
 
     it('draws a themeable icon on every item with a picture, and none on Column Width… (FR-037g)', async () => {
@@ -297,15 +337,15 @@ describe('SpreadsheetBody', () => {
         }
       };
       fireEvent.contextMenu(colHead(0), { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Reset Column Width': 'resetColumnWidth' });
+      expectIcons({ 'Copy as': 'copy', 'Reset Column Width': 'resetColumnWidth' });
       expect(screen.queryByTestId('menu-item-Select Column')).toBeNull();
       expect(iconOf('Column Width…')).toBeUndefined();
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       fireEvent.contextMenu(rowHead(0), { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
+      expectIcons({ 'Copy as': 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       fireEvent.contextMenu(document.querySelector('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
+      expectIcons({ 'Copy as': 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
     });
 
     it('Go to Row… opens the shared dialog for the sheet rows, and the chord claim opens the same one (FR-043a)', async () => {

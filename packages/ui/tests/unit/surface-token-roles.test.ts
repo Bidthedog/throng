@@ -160,8 +160,9 @@ describe('the surface token split (FR-001 / SC-001)', () => {
     // `.picker` (031 US3) is the general list-and-choose card: a modal surface on `.modal-overlay`,
     // audited here as a dialog card for the same reason `.modal` and `.colour-picker` are.
     // `.resource-monitor` (055 FR-050) is the Resource Monitor's dialog card, on the same `.modal-overlay`.
+    // `.preview-grid-width` (T10) is the grid's number prompt, a dialog card over its panel's own scrim.
     const DIALOG_CARDS =
-      /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root|resource-monitor)$|^\.app-close-table th$/;
+      /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root|resource-monitor|preview-grid-width)$|^\.app-close-table th$/;
     // 055 R15 (FR-092, FR-094) — the Resource Monitor window's body IS a pane (`.resource-monitor`), and
     // these read its token only to sit ON it: the sticky column header must hide the rows scrolling under
     // it, and the heat scale's bars and key blend their colour into the pane behind them.

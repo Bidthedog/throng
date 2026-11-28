@@ -47,6 +47,7 @@ import { performOpenIn, readOpenInFacts } from '../editor/open-in-perform.js';
 import { editorRefusesAsBinary } from '../editor/open-into-panel.js';
 import { useDirtyPathKey } from '../editor/editor-state.js';
 import { useActiveEditorFilePath } from '../editor/active-editor-file.js';
+import { useActivePreviewFilePath } from '../preview/active-preview-file.js';
 import { PanelSkeleton } from '../common/loading.js';
 import {
   buildTreeDragPayload,
@@ -82,6 +83,69 @@ function rootName(rootFolder: string): string {
   const trimmed = rootFolder.replace(/[\\/]+$/, '');
   const i = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
   return i >= 0 ? trimmed.slice(i + 1) : trimmed;
+}
+
+export interface FollowActiveFileOptions {
+  ready: boolean;
+  rootFolder: string;
+  /** `explorer.autoRevealActiveFile`: follow the active editor (#188). */
+  followEditor: boolean;
+  /** `explorer.autoRevealActivePreview`: follow the active preview's source (081 FR-060). */
+  followPreview: boolean;
+  reveal: (relPath: string, opts: { focus: boolean }) => Promise<void>;
+}
+
+/*
+ * #188 — follow the active editor: whichever file the user is working in is the one selected here,
+ * so acting on it (rename, copy path, reveal, delete) never starts with a hunt. 081 FR-061 adds the
+ * active preview's source file under its own setting; the two settings stay independent (FR-063).
+ * Only one panel is active, so at most one of the two paths is non-null at a time.
+ *
+ * Three things keep it from getting in the way:
+ *
+ *   - `{ focus: false }`. The reveal fires on every panel and tab switch, and react-arborist's
+ *     `select()` otherwise focuses the row, which would pull the caret out of the editor the user
+ *     just switched INTO (the #144 class of bug). The manual action's call cannot be reused for that.
+ *   - It keys on the PATH, not on the reveal callback's identity (which changes as folders load).
+ *     A selection the user makes by hand stands until the active file changes, instead of being
+ *     snapped back on the next unrelated re-render.
+ *   - A null path (a terminal, a placeholder, an unsaved document, a preview with no source yet) and
+ *     a file outside this project's root both mean "nothing to do", never "clear the selection".
+ *
+ * `ready` participates because the reveal cannot find a node before the root's children exist;
+ * re-running once the tree loads selects a restored editor's file on arrival.
+ *
+ * Returns the active EDITOR's file as a path of this tree, whatever the settings say, for the row
+ * mark (#188); a preview's source is revealed but not marked.
+ */
+export function useFollowActiveFile({
+  ready,
+  rootFolder,
+  followEditor,
+  followPreview,
+  reveal,
+}: FollowActiveFileOptions): string | null {
+  const activeEditorPath = useActiveEditorFilePath();
+  const activePreviewPath = useActivePreviewFilePath();
+  /** A path of THIS tree, or null when the file belongs somewhere else (or there is none). */
+  const activeEditorRel = useMemo(
+    () => (activeEditorPath ? relPathUnderRoot(rootFolder, activeEditorPath) : null),
+    [activeEditorPath, rootFolder],
+  );
+  const activePreviewRel = useMemo(
+    () => (activePreviewPath ? relPathUnderRoot(rootFolder, activePreviewPath) : null),
+    [activePreviewPath, rootFolder],
+  );
+  const activeFileRel = (followEditor ? activeEditorRel : null) ?? (followPreview ? activePreviewRel : null);
+  const revealRef = useRef(reveal);
+  useEffect(() => {
+    revealRef.current = reveal;
+  }, [reveal]);
+  useEffect(() => {
+    if (!ready || !activeFileRel) return;
+    void revealRef.current(activeFileRel, { focus: false });
+  }, [ready, activeFileRel]);
+  return activeEditorRel;
 }
 
 /** Measure a container so the virtualised tree gets a concrete width + height. */
@@ -264,39 +328,13 @@ export function FileTree({
   const previewSettingsRef = useRef(appSettings.editor.previews);
   previewSettingsRef.current = appSettings.editor.previews;
 
-  /*
-   * #188 — follow the active editor: whichever file the user is working in is the one selected here,
-   * so acting on it (rename, copy path, reveal, delete) never starts with a hunt.
-   *
-   * Three things make this safe rather than intrusive:
-   *
-   *   - `{ focus: false }`. The reveal fires on every panel and tab switch, and react-arborist's
-   *     `select()` otherwise focuses the row — which would pull the caret out of the editor the user
-   *     just switched INTO. That is precisely the #144 class of bug, and the reason the setting
-   *     cannot simply reuse the manual action's call.
-   *   - It keys on the PATH, not on the reveal callback's identity (which changes as folders load).
-   *     So a selection the user makes by hand stands until the active editor genuinely changes,
-   *     instead of being snapped back on the next unrelated re-render.
-   *   - A null path — a terminal, a placeholder, an unsaved document — and a file outside this
-   *     project's root both mean "nothing to do", never "clear the selection".
-   *
-   * `ready` participates because the reveal cannot find a node before the root's children exist;
-   * re-running once the tree loads is what makes a restored editor's file selected on arrival.
-   */
-  const activeEditorPath = useActiveEditorFilePath();
-  /** That file as a path of THIS tree, or null when it belongs somewhere else (or there is none). */
-  const activeFileRel = useMemo(
-    () => (activeEditorPath ? relPathUnderRoot(rootFolder, activeEditorPath) : null),
-    [activeEditorPath, rootFolder],
-  );
-  const revealRef = useRef(revealInTree);
-  useEffect(() => {
-    revealRef.current = revealInTree;
-  }, [revealInTree]);
-  useEffect(() => {
-    if (!ready || !explorerSettings.autoRevealActiveFile || !activeFileRel) return;
-    void revealRef.current(activeFileRel, { focus: false });
-  }, [ready, explorerSettings.autoRevealActiveFile, activeFileRel]);
+  const activeFileRel = useFollowActiveFile({
+    ready,
+    rootFolder,
+    followEditor: explorerSettings.autoRevealActiveFile,
+    followPreview: explorerSettings.autoRevealActivePreview,
+    reveal: revealInTree,
+  });
 
   // 067 FR-004 — the folder an OS file drag over the tree would drop into, for the highlight.
   const [inboundDropFolder, setInboundDropFolder] = useState<string | null>(null);
@@ -471,6 +509,7 @@ export function FileTree({
     clearClipboard,
     paste,
     remove,
+    newFolder: createFolder,
     undoFileOp,
     redoFileOp,
     // 044 FR-005 — `preview.open` for the selected FILE; a folder has no preview. Main decides the rest.

@@ -12,7 +12,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { codeFolding, foldedRanges } from '@codemirror/language';
-import { headingSlug, initialFold, type FoldState, type HeadingRecord } from '@throng/core';
+import { DEFAULT_KEYBINDINGS, headingSlug, initialFold, isCollapsed, type FoldState, type HeadingRecord } from '@throng/core';
 import {
   foldRangeFor,
   liveSections,
@@ -462,6 +462,115 @@ describe('Collapse All on a document with one H1 (047 FR-037a)', () => {
     });
     await waitFor(() => expect(markers().map(markerSlug)).toEqual(['intro', 'a', 'b']));
     expect(markers().map((m) => m.title)).toEqual(['Collapse section', 'Expand section', 'Expand section']);
+    h.unmount();
+  });
+});
+
+/*
+ * Reported in v1 review (#732, 2026-11-28): "When I click on the ellipses on a collapsed section in a markdown editor
+ * with the preview open, the editor collapses (but the icon in the gutter does not change), but the preview does not.
+ * The ellipses should do exactly the same as the gutter button." CodeMirror's own placeholder unfolded the range
+ * and never told the document's fold state, so the marker and the linked preview kept reading collapsed.
+ */
+describe('clicking the "…" placeholder on a collapsed section does what its gutter marker does (047 FR-031)', () => {
+  it('expands the section in the document fold state, so the marker and every linked view follow', async () => {
+    const h = await mountMarkdown({ foldAuthority: { base: 'expanded', flipped: ['b'] } });
+    await waitFor(() => expect(markers()[2]?.title).toBe('Expand section'));
+    expect(documentFoldState('file:C:/proj/note.md', initialFold('expanded')).flipped).toContain('b');
+    const placeholder = await waitFor(() => {
+      const el = h.content().querySelector<HTMLElement>('.cm-foldPlaceholder');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    act(() => {
+      fireEvent.click(placeholder);
+    });
+
+    // The store is what main relays to the preview (setDocumentFoldState → setFoldState).
+    await waitFor(() =>
+      expect(documentFoldState('file:C:/proj/note.md', initialFold('expanded')).flipped).not.toContain('b'),
+    );
+    await waitFor(() => expect(markers()[2]!.title).toBe('Collapse section'));
+    expect(h.content().querySelector('.cm-foldPlaceholder')).toBeNull();
+    h.unmount();
+  });
+});
+
+/*
+ * Reported in v1 review (#732, 2026-11-28): "All the expand / collapse outline actions need working keyboard shortcuts
+ * in the editor." Every row of the editor's Outlining submenu runs a command; each must ship a chord, and pressing
+ * that chord in a Markdown editor must do what the row does.
+ */
+describe('every Outlining action has a shipped chord that works in a Markdown editor (047 FR-037b, 054 FR-013)', () => {
+  /** One stroke of a binding token as a US keyboard reports it; the first stroke's modifiers stay held (046 FR-124). */
+  function strokeEvent(stroke: string, held: readonly string[]): KeyboardEventInit & { keyCode: number } {
+    const parts = stroke.split('+');
+    const key = parts.pop()!;
+    const mods = new Set([...held, ...parts]);
+    const upper = key.toUpperCase();
+    const named: Record<string, { key: string; code: string; keyCode: number }> = {
+      '[': { key: '[', code: 'BracketLeft', keyCode: 219 },
+      ']': { key: ']', code: 'BracketRight', keyCode: 221 },
+    };
+    const base =
+      named[key] ??
+      (/^[0-9]$/.test(key)
+        ? { key, code: `Digit${key}`, keyCode: 48 + Number(key) }
+        : // A browser reports Shift+S as `S`.
+          { key: mods.has('Shift') ? upper : key.toLowerCase(), code: `Key${upper}`, keyCode: upper.charCodeAt(0) });
+    return {
+      ...base,
+      ctrlKey: mods.has('Ctrl'),
+      shiftKey: mods.has('Shift'),
+      altKey: mods.has('Alt'),
+      metaKey: mods.has('Meta'),
+    };
+  }
+
+  function pressChord(el: HTMLElement, token: string): void {
+    const strokes = token.split(',');
+    const held = strokes[0]!.split('+').slice(0, -1);
+    strokes.forEach((stroke, index) => {
+      act(() => {
+        fireEvent.keyDown(el, { bubbles: true, cancelable: true, ...strokeEvent(stroke, index === 0 ? [] : held) });
+      });
+    });
+  }
+
+  const KEY = 'file:C:/proj/note.md';
+  const state = (): FoldState => documentFoldState(KEY, initialFold('expanded'));
+  /** The caret on 1-based `line`: line 3 is `# Intro`'s content (A and B nest under it), line 6 is `## A`'s. */
+  const caretAt = (h: EditorHarness, line: number): void => {
+    act(() => {
+      h.view().focus();
+      h.view().dispatch({ selection: { anchor: h.view().state.doc.line(line).from } });
+    });
+  };
+  /** Which of the three sections read collapsed. */
+  const collapsed = (s: FoldState): string[] => ['intro', 'a', 'b'].filter((slug) => isCollapsed(s, slug));
+
+  const CASES: Array<{ action: string; line: number; start?: FoldState; after: string[] }> = [
+    { action: 'markdown.collapseSection', line: 6, after: ['a'] },
+    { action: 'markdown.expandSection', line: 6, start: { base: 'expanded', flipped: ['a', 'b'] }, after: ['b'] },
+    { action: 'markdown.collapseAll', line: 6, after: ['intro', 'a', 'b'] },
+    { action: 'markdown.expandAll', line: 6, start: { base: 'collapsed', flipped: [] }, after: [] },
+    // Inside Intro: everything nested under it folds, Intro itself stays as it was (054 FR-013).
+    { action: 'markdown.collapseAllInside', line: 3, after: ['a', 'b'] },
+    { action: 'markdown.expandAllInside', line: 3, start: { base: 'collapsed', flipped: [] }, after: [] },
+  ];
+
+  it.each(CASES)('$action', async ({ action, line, start, after }) => {
+    const chord = DEFAULT_KEYBINDINGS.bindings[action as keyof typeof DEFAULT_KEYBINDINGS.bindings]?.[0];
+    expect(chord, `${action} ships no chord`).toBeDefined();
+    const h = await mountMarkdown(start ? { foldAuthority: start } : {});
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    if (start) await waitFor(() => expect(state()).toEqual(start));
+    caretAt(h, line);
+
+    pressChord(h.content(), chord!);
+
+    await waitFor(() => expect(collapsed(state())).toEqual(after));
     h.unmount();
   });
 });

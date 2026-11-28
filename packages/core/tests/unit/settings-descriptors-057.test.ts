@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SETTINGS_METADATA } from '../../src/config/settings-metadata.js';
+import { settingHelp } from './preferences-help.js';
 
 /**
  * 057 T049 — every setting this spec adds has a descriptor (Principle X, FR-061).
@@ -66,7 +67,9 @@ describe('057 describes every setting it adds (T049)', () => {
   });
 
   it('Command finished states how late it can be: two observations of nothing (FR-061, FR-065 amended 2026-11-18)', () => {
-    const d = SETTINGS_METADATA.find((s) => s.key === 'terminals.attention.signals.commandFinished');
-    expect(d?.description).toContain('up to two Command tracking intervals late');
+    // #732 — the description says what ticking it does; how late the mark can be is in its Help section.
+    const help = settingHelp('terminals.attention.signals.commandFinished');
+    expect(help).toContain('Command tracking interval');
+    expect(help).toContain('up to two intervals after the command ends');
   });
 });

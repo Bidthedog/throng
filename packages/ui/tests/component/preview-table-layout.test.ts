@@ -319,6 +319,55 @@ describe('applyTableLayout — resize handles (FR-063/064)', () => {
   });
 });
 
+/**
+ * T2 (v1 review) — "when I resize table cells, the handle jumps; it should stay under the cursor". A table that fits
+ * leaves a surplus (`fairColumnWidths` never widens a column past its max-content), and a `width: 100%`,
+ * `table-layout: fixed` table hands that surplus back to every column in proportion to its `<col>` width. jsdom has no
+ * layout, so the browser is played by a stub that does exactly that: each cell draws at its column's share of the
+ * table, and the table widens only when the columns add up to more than its host.
+ */
+describe('a drag keeps the border under the pointer (T2, FR-063)', () => {
+  function drawLikeABrowser(t: HTMLTableElement, hostWidth: number): () => number[] {
+    const drawn = (): number[] => {
+      const cols = [...t.querySelectorAll<HTMLElement>(':scope > colgroup > col')].map((c) => parseFloat(c.style.width) || 0);
+      const sum = cols.reduce((a, b) => a + b, 0);
+      const tableWidth = t.style.width === '100%' ? Math.max(hostWidth, sum) : parseFloat(t.style.width) || sum;
+      return cols.map((w) => (sum > 0 ? (w * tableWidth) / sum : 0));
+    };
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect(this: Element) {
+      const widths = drawn();
+      const index = this.tagName === 'COL' ? [...this.parentElement!.children].indexOf(this) : (this as HTMLTableCellElement).cellIndex;
+      if ((this.tagName === 'COL' || this.tagName === 'TD' || this.tagName === 'TH') && t.contains(this)) {
+        const left = widths.slice(0, index).reduce((a, b) => a + b, 0);
+        return new DOMRect(left, 0, widths[index] ?? 0, 20);
+      }
+      return new DOMRect(0, 0, 0, 0);
+    });
+    /** Each column border's x, left to right. */
+    return () => drawn().map((_, i, all) => all.slice(0, i + 1).reduce((a, b) => a + b, 0));
+  }
+
+  it.each([40, -40])('the border the reader drags moves by exactly the pointer\'s %i px', (dx) => {
+    const t = table([['a', 'b', 'c'], ['1', '2', '3']]);
+    const host = mount(t, 600);
+    applyTableLayout(host, options(stubMeasure([{ min: 20, max: 100 }, { min: 20, max: 150 }, { min: 20, max: 100 }])));
+    const borders = drawLikeABrowser(t, 600);
+    const before = borders();
+
+    const handle = t.rows[0]!.cells[0]!.querySelector<HTMLElement>(`.${RESIZE_HANDLE_CLASS}`)!;
+    handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: before[0]!, bubbles: true }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: before[0]! + 1, bubbles: true }));
+    expect(borders()[0], 'one pixel of travel moves the border one pixel, with no jump').toBeCloseTo(before[0]! + 1, 0);
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: before[0]! + dx, bubbles: true }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: before[0]! + dx, bubbles: true }));
+
+    const after = borders();
+    expect(after[0], 'the dragged border sits under the pointer').toBeCloseTo(before[0]! + dx, 0);
+    expect(after[2], 'the table still fills its host, no wider (FR-060)').toBeCloseTo(600, 0);
+    expect(after[1], 'the border beyond the neighbour stays where it was').toBeCloseTo(before[1]!, 0);
+  });
+});
+
 describe('relayoutTables — a resize re-shares, it never re-measures (Principle XII, MT-07)', () => {
   const widthsOf = (t: HTMLTableElement): number[] =>
     [...t.querySelectorAll<HTMLElement>(':scope > colgroup > col')].map((c) => parseFloat(c.style.width));
@@ -455,5 +504,75 @@ describe('applyTableLayout — idempotent across repeated calls (a settings chan
     applyTableLayout(host, opts);
     expect(t.querySelectorAll(':scope > colgroup')).toHaveLength(1);
     expect(t.querySelectorAll(`.${RESIZE_HANDLE_CLASS}`)).toHaveLength(1);
+  });
+});
+
+/**
+ * 081 FR-020, SC-004 (#730) — a Markdown file rewritten while its preview is out of view (a collapsed panel, a tab
+ * behind) is redrawn into a host with no box, where a browser measures every width as 0: each column's intrinsic
+ * sizes, `8ch`, every token. Laid out from those zeros, the tables came back wrong when the preview was shown again.
+ * The stand-in measurer answers as a browser does: zeros while the host has no width, the real profiles once it has.
+ */
+describe('a table laid out while its host has no box (081 FR-020, SC-004)', () => {
+  const PROFILES = [{ min: 60, max: 120 }, { min: 120, max: 4000 }];
+  let width = 0;
+  const widthsOf = (t: HTMLTableElement): number[] =>
+    [...t.querySelectorAll<HTMLElement>(':scope > colgroup > col')].map((c) => parseFloat(c.style.width));
+
+  function mountSized(t: HTMLTableElement): HTMLElement {
+    const host = document.createElement('div');
+    Object.defineProperty(host, 'clientWidth', { get: () => width, configurable: true });
+    host.append(t);
+    document.body.append(host);
+    return host;
+  }
+  const layoutOptions = () => ({
+    measure: vi.fn<ColumnMeasurer>(() => PROFILES.map((p) => (width === 0 ? { min: 0, max: 0 } : p))),
+    minLegiblePx: () => (width === 0 ? 0 : 64),
+    measureToken: (text: string) => (width === 0 ? 0 : text.length * 10),
+    handSet: new Map<number, TableHandSet>(),
+  });
+  const prose = 'A long prose cell that wraps across the panel, as the report in the issue has: '.repeat(6);
+  const rows = (): string[][] => [['Field', 'Detail'], ['MT-01', prose], ['Owner', prose]];
+
+  afterEach(() => {
+    width = 0;
+  });
+
+  it('lays out at its first real width exactly as a fresh layout at that width does, each column within 1 px', () => {
+    width = 800;
+    const fresh = table(rows());
+    applyTableLayout(mountSized(fresh), layoutOptions());
+    const expected = widthsOf(fresh);
+
+    width = 0;
+    const redrawn = table(rows());
+    const host = mountSized(redrawn);
+    const opts = layoutOptions();
+    applyTableLayout(host, opts);
+    width = 800;
+    relayoutTables(host, opts);
+
+    const got = widthsOf(redrawn);
+    expect(got).toHaveLength(expected.length);
+    got.forEach((w, i) => expect(Math.abs(w - expected[i]!), `column ${i}: ${w} vs ${expected[i]}`).toBeLessThanOrEqual(1));
+  });
+
+  it('measures nothing while the host has no box, and says the table still needs measuring', () => {
+    const t = table(rows());
+    const host = mountSized(t);
+    const opts = layoutOptions();
+    expect(applyTableLayout(host, opts)).toEqual({ needsMeasure: true });
+    expect(opts.measure).not.toHaveBeenCalled();
+    expect(t.querySelector('colgroup')).toBeNull();
+  });
+
+  it('a resize that leaves the host box-less measures nothing either', () => {
+    const t = table(rows());
+    const host = mountSized(t);
+    const opts = layoutOptions();
+    applyTableLayout(host, opts);
+    relayoutTables(host, opts);
+    expect(opts.measure).not.toHaveBeenCalled();
   });
 });

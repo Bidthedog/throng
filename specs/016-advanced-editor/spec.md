@@ -1481,7 +1481,7 @@ lines) behaves without error.
   overlay the document text; it MUST remain visible while the document is scrolled, and MUST NOT reduce the
   usable text area enough to break scrolling or the large-file behaviour of FR-008.
 - **FR-010d**: The **editor content context menu** MUST additionally offer a **"Set Language…"** item that
-  opens the **same** language picker as the indicator (one picker, two entry points).
+  opens the **same** language picker as the indicator (one picker, two entry points). *(Amended 2026-11-28, v1 review, #732: **Set Language…** is on the panel **title** menu, View & state, not the content menu: it describes the file, not the text under the pointer. Still one picker, two entry points.)*
 - **FR-010e**: The language **picker** MUST be **searchable/filterable** across all supported languages,
   MUST indicate the **currently effective language**, and MUST apply the chosen language immediately on
   selection.
@@ -1508,7 +1508,7 @@ lines) behaves without error.
 - **FR-012**: Right-clicking within the **editor content area** MUST present a context menu offering the
   standard text-editing actions: **Cut, Copy, Paste, Select All, Undo, Redo** (at minimum), plus **"Set
   Language…"** (FR-010d). The user MUST be able to complete **cut, copy, and paste entirely via this menu**
-  (no keyboard required).
+  (no keyboard required). *(Amended 2026-11-28, v1 review, #732: "Set Language…" moved to the title menu (FR-010d, amended). The content menu gains Find, Replace and Replace All (043 FR-015, amended).)*
 - **FR-012a**: Right-clicking the content area MUST **preserve an existing selection when the click falls
   inside it**, and MUST **collapse the selection and move the caret to the click point when the click falls
   outside it**. The menu's actions then operate on the resulting selection/caret.

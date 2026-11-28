@@ -15,6 +15,7 @@ import type {
   IClipboard,
   IFileManagerRegistration,
   IFileAttributes,
+  IgnoreOracle,
   IFileAccessInfo,
   IOsPropertiesDialog,
   IConfigSettings,
@@ -40,6 +41,7 @@ import {
   NoTaskbarBadge,
 } from '@throng/core';
 import { NodeUserContext, selectPlatform } from '@throng/platform';
+import { GitIgnoreOracle } from '@throng/platform-node';
 import { NodeFileSystem } from './node-file-system.js';
 import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { UI_TYPES } from './tokens.js';
@@ -130,6 +132,8 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
       : new ElectronClipboard(electronClipboard, (payload) => new ClipboardItem(payload), platform.fileListCodec());
   container.bind<IClipboard>(UI_TYPES.Clipboard).toConstantValue(clipboardSeam);
   container.bind<IFileAttributes>(UI_TYPES.FileAttributes).toConstantValue(platform.fileAttributes());
+  // 081 US8 — git answers which explorer entries it ignores, off the main loop (XII). Same on every OS.
+  container.bind<IgnoreOracle>(UI_TYPES.IgnoreOracle).toConstantValue(new GitIgnoreOracle());
   container.bind<IOsPropertiesDialog>(UI_TYPES.OsPropertiesDialog).toConstantValue(platform.osPropertiesDialog());
   container.bind<IFileAccessInfo>(UI_TYPES.FileAccessInfo).toConstantValue(platform.fileAccessInfo());
   // 067 FR-034, FR-036: the OS registration is the state. A portable or archive copy registers nothing.

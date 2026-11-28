@@ -122,6 +122,9 @@ The widest you can drag the Projects pane.
 
 **Default:** 400 px · **Values:** 200 – 1,200 px, step 10 px
 
+Drag the pane's edge to resize it, between 250 px and this width. throng remembers the width you leave it
+at. Lower the limit below the pane's current width and the pane narrows to it at once.
+
 #### File Explorer pane max width
 
 **Cog › Settings › General › Window**
@@ -131,6 +134,9 @@ The widest you can drag the Projects pane.
 The widest you can drag the File Explorer pane.
 
 **Default:** 700 px · **Values:** 200 – 1,200 px, step 10 px
+
+As **Projects pane max width**, for the File Explorer pane on the right: it resizes between 250 px and this
+width, keeps the width you leave it at, and narrows at once when you lower the limit below it.
 
 ### Projects
 
@@ -143,6 +149,13 @@ The widest you can drag the File Explorer pane.
 What a folder from the OS file manager or command line does: switch to its project, or load it.
 
 **Default:** `switch` · **Values:** `switch` · `load`
+
+A folder reaches throng from outside when you run `throng <folder>` or choose **Open as throng project** in
+the file manager. A project's folder, or any folder inside it, switches to that project (`switch`), or
+loads it in the background while the project you are in stays in front (`load`). A folder that belongs to
+no project is added as a new one, named after the folder. A folder that holds another project's folder,
+a file, or a path that does not exist raises one notice and adds nothing. A request that arrives while a
+dialog is open waits until you close it.
 
 #### Project popover
 
@@ -166,6 +179,9 @@ How long the pointer must rest on a project before its popover appears. Zero sho
 
 **Default:** 300 ms · **Values:** 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box
 
+Applies only while **Project popover** is on. A longer delay keeps the popover from opening as you move the
+pointer down the Projects pane to a project further on.
+
 ### Behaviour
 
 #### Submenu hover delay
@@ -177,6 +193,10 @@ How long the pointer must rest on a project before its popover appears. Zero sho
 How long the pointer rests on a context-menu item before its submenu opens.
 
 **Default:** 100 ms · **Values:** 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box
+
+Applies to every menu throng draws, the right-click menus and the cog menu among them. Moving the pointer away before the delay ends opens
+nothing, so a longer delay stops submenus flicking open as you cross a menu. Clicking the item opens its
+submenu at once, and so does the keyboard.
 
 ### Attention
 
@@ -194,7 +214,7 @@ Show the number of marked panels, across every project, on throng's taskbar butt
 
 **Default:** on · **Values:** on · off
 
-Show the number of marked panels, across every project, on throng’s taskbar button, whether or not throng is focused. It uses the Failed style while any marked panel is Failed, and is not affected by the notification settings.
+The count shows whether or not throng is focused, so you can see from another app that something wants you. The badge uses the Failed style while any marked panel is Failed, and is not affected by the notification settings.
 
 ### File Manager
 
@@ -208,7 +228,7 @@ on Windows and for a portable or archive copy.
 
 `appearance.theme`
 
-The active appearance theme applied across the whole app.
+The colour theme throng draws every window in, chosen in the Themes tab.
 
 **Default:** `throng` · **Values:** any theme on disk, chosen in the **Themes** tab
 
@@ -301,6 +321,11 @@ How many times throng asks before it removes a project. It unregisters it and de
 
 **Default:** `double` · **Values:** `none` · `single` · `double`
 
+Removing a project takes it off the Projects pane and discards its tabs, panels and saved layout; its folder
+and every file in it stay on disk. Adding the folder again starts a project with a fresh layout. `single`
+shows one confirmation naming what goes; `double` follows it with a second, **Yes, I'm absolutely sure**.
+Unsaved editors in the project ask to be saved or discarded first, whatever this says.
+
 ### Unload project: default terminal action
 
 **Cog › Settings › Confirmations**
@@ -323,6 +348,11 @@ How many times throng asks before it destroys a tab and its panels.
 
 **Default:** `double` · **Values:** `none` · `single` · `double`
 
+Covers the tab's **✕**, **Destroy Tab** and **Destroy other tabs** on its menu, and the Resource Monitor's
+**Destroy Tab**. The first confirmation counts the panels and how many are running a program; `double`
+adds **Yes, I'm absolutely sure**. The last tab of a sub-workspace always asks once whatever this says,
+because destroying it destroys the sub-workspace.
+
 ### Destroy a panel
 
 **Cog › Settings › Confirmations**
@@ -333,6 +363,10 @@ How many times throng asks before it destroys a panel.
 
 **Default:** `double` · **Values:** `none` · `single` · `double`
 
+throng asks only when the panel's terminal is running a program; an idle shell, an editor or a preview
+closes without a confirmation. An editor with unsaved changes asks to save or discard them first, whatever
+this says, unless another panel still shows the same document.
+
 ### Destroy a sub-workspace
 
 **Cog › Settings › Confirmations**
@@ -342,6 +376,10 @@ How many times throng asks before it destroys a panel.
 How many times throng asks before it destroys a sub-workspace.
 
 **Default:** `double` · **Values:** `none` · `single` · `double`
+
+Destroying a sub-workspace destroys its tabs and the panels it owns, which cannot be recovered. A project
+panel it only mirrored closes there and stays in its project. `double` adds **Yes, I'm absolutely sure**
+after the first confirmation.
 
 ### Ask before opening external links
 
@@ -371,7 +409,7 @@ How long the tab strip takes to ease to a new position. Zero jumps there at once
 
 **Default:** 300 ms · **Values:** 0 – 1,500 ms, step 50 ms
 
-How long the tab strip takes to ease to a new position when it scrolls. Zero jumps there at once, and so does the system "reduce motion" setting, which overrides this without changing it.
+The strip scrolls when it has more tabs than fit, to bring a tab into view or follow the scroll chevrons. Your system's "reduce motion" setting also makes it jump, overriding this without changing it.
 
 ### Tab close-button delay
 
@@ -383,7 +421,7 @@ How long the pointer must rest on a tab before its close button will act.
 
 **Default:** 300 ms · **Values:** 0 – 1,500 ms, step 50 ms
 
-How long the pointer must rest on a tab before its close button will act. The delay is what stops a click landing on a tab the pointer was only passing over.
+The delay stops a click from closing a tab whose **✕** appeared under the pointer as it passed over the strip. A click before it has passed does nothing.
 
 ### Longest tab and panel name
 
@@ -395,7 +433,7 @@ The most characters a tab or panel name may have. throng shortens longer names o
 
 **Default:** 64 characters · **Values:** 10 – 128 characters, step 2 characters
 
-The most characters a tab or panel name may use. Longer names are shortened for display, with the full name still shown on hover. One limit covers both, because they are the same name in the same strip.
+A longer name is shortened on screen, and its full text still shows on hover. One limit covers tab names and panel names alike.
 
 ### Widest tab
 
@@ -419,7 +457,7 @@ Where a tab created with + goes: right of the active tab, or at the end of the s
 
 **Default:** `afterActive` · **Values:** `afterActive` · `end`
 
-Where a tab created with **+** goes: right of the active tab, or at the end of the strip.
+`afterActive` keeps a new tab beside the one you were working in; `end` lines tabs up in the order you create them. A tab you drag goes where you drop it, whatever this says.
 
 ### Chevron repeat delay
 
@@ -443,7 +481,7 @@ How long the pointer must rest on a tab before its popover appears. Zero shows i
 
 **Default:** 500 ms · **Values:** 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box
 
-How long the pointer must rest on a tab before its information popover appears. Zero shows it as soon as the pointer arrives; a longer delay keeps it out of the way while you cross the strip.
+The popover shows the tab's full name and what it holds. A longer delay keeps it out of the way while you cross the strip.
 
 ### Tab hover-activate delay
 
@@ -469,6 +507,11 @@ Offer Open in OS Default Program on the File Explorer menu and on the panel titl
 
 **Default:** on · **Values:** on · off
 
+**Open in OS Default Program** hands a file to the program your operating system opens it with, such as an
+image viewer or a spreadsheet application, and opens no panel in throng. Off, the item leaves the File
+Explorer's right-click menu, an editor or preview panel's title menu and the icon in its header. Setting
+a file type's **Open <files> in** to **Default OS Program** under [Previews](#previews) still works.
+
 ### File Explorer popover delay
 
 **Cog › Settings › File Explorer**
@@ -487,9 +530,14 @@ How long the pointer must rest on a file or folder before a popover shows its ic
 
 `editor.openOnClick`
 
-Which file-tree click opens a file into the last active editor.
+Whether one click or a double click on a file in File Explorer opens it, or neither does.
 
 **Default:** `single` · **Values:** `single` · `double` · `none`
+
+The file opens where **Open files in** below says, and as its type's **Open <files> in** says under
+[Previews](#previews). With `none`, a click only selects; **Enter** or **Open In** on the right-click menu
+opens the file. Whatever this says, a click on a folder selects it and a double click opens or closes it,
+and Ctrl- or Shift-clicking selects several items without opening any.
 
 ### Open files in
 
@@ -501,7 +549,7 @@ Where an opened file lands: the last active editor (reused), or a new editor pan
 
 **Default:** `lastActive` · **Values:** `lastActive` · `new`
 
-Where an opened file lands: the last active editor, reused, or a new editor panel. A preview's **Open in Editor** follows it too.
+`lastActive` loads the file into the editor you used last in the tab, adding it to that editor's Back history, and opens a new editor only when the tab has none; if that editor has unsaved changes, it asks what to do with them first. `new` gives every file a panel of its own. Either way, a file already open in an editor is brought forward there instead of opening twice. A preview's **Open in Editor** follows this too.
 
 ### Delete files to
 
@@ -513,6 +561,10 @@ Send deleted files to the OS Recycle Bin, or delete them for good.
 
 **Default:** `recycle` · **Values:** `recycle` · `permanent`
 
+Applies to **Delete** in File Explorer. With `recycle`, a deleted item goes to the Recycle Bin (the Trash
+on Linux and macOS), and throng's undo can bring it back. With `permanent`, the item is gone at once and
+undo cannot restore it. What a paste or drag does to an item it replaces is the next setting's job.
+
 ### When Paste replaces an item
 
 **Cog › Settings › File Explorer**
@@ -523,7 +575,7 @@ What happens to an item a paste or drag replaces: moved to the Recycle Bin for u
 
 **Default:** `recycle` · **Values:** `recycle` · `permanent`
 
-What happens to an item a paste or drag replaces after you choose **Replace**: the Recycle Bin, so undo can bring it back, or deleted for good. Independent of the delete setting.
+When a paste or drag meets an item of the same name, throng asks; this decides what happens to the old item once you choose **Replace**. With `recycle`, undoing the paste brings it back; with `permanent`, it is gone. Independent of **Delete files to**.
 
 ### Excluded globs
 
@@ -531,11 +583,11 @@ What happens to an item a paste or drag replaces after you choose **Replace**: t
 
 `explorer.excludeGlobs`
 
-Root-relative glob patterns hiding entries from the file tree.
+Files and folders File Explorer hides, as glob patterns relative to the project folder.
 
 **Default:** `**/.git`, `**/.svn`, `**/.hg`, `**/CVS`, `**/.DS_Store`, `**/Thumbs.db`, `**/node_modules` · **Values:** A list of root-relative glob patterns; may be empty
 
-Entries hidden from the file tree (and, by default, from Quick Open). An empty list hides nothing. Find in Files does not use it: see *Excluded from search*.
+A pattern such as `**/node_modules` hides every folder of that name, at any depth. Hidden entries also stay out of Quick Open while **Quick Open hides excluded files** is on. An empty list hides nothing. Find in Files keeps a list of its own: see *Excluded from search*.
 
 ### Sort names
 
@@ -559,15 +611,38 @@ Select the active editor's file in File Explorer, opening its folders to show it
 
 **Default:** on · **Values:** on · off
 
+Each time you move to another editor, File Explorer scrolls to its file and selects it, while keyboard focus
+stays in the editor. Off, the tree stays where you left it, and the open file still carries a quieter
+mark in the tree wherever focus is. A file outside the project leaves the tree as it is. The preview
+version is **Follow the active preview**, below.
+
+### Follow the active preview
+
+**Cog › Settings › File Explorer**
+
+`explorer.autoRevealActivePreview`
+
+Select the active preview's source file in File Explorer, opening its folders to show it.
+
+Focus stays in the preview, and a preview of a file outside the project leaves the tree as it is. It works
+independently of Follow the active editor.
+
+**Default:** on · **Values:** on · off
+
 ### Copy-drag modifier
 
 **Cog › Settings › File Explorer**
 
 `explorer.dragCopyModifier`
 
-The modifier key that makes a file-tree drag copy instead of move.
+The key you hold while dragging in File Explorer to copy instead of move.
 
 **Default:** `ctrl` · **Values:** `ctrl` · `shift` · `alt`
+
+A plain drag inside the tree moves what you drag; hold this key as you drop and it copies instead. A drag
+from your file manager into the tree copies unless you hold **Move-drag modifier**. The label beside the
+pointer says which will happen. Give the two settings different keys: when both are the same key, holding
+it copies.
 
 ### Open unsupported files in the OS
 
@@ -575,9 +650,15 @@ The modifier key that makes a file-tree drag copy instead of move.
 
 `explorer.openUnsupportedInOs`
 
-Open a file throng cannot show as text in your OS default program, when its preview is off.
+Open a file throng cannot show in your OS default program, instead of reporting it.
 
 **Default:** on · **Values:** on · off
+
+A file throng cannot show is one the editor refuses as binary, such as an executable, an archive or a
+document format with no throng preview, when that file type does not open as a preview. On, opening one
+from File Explorer, Quick Open or a link hands it to the program your operating system uses for it. Off,
+throng raises one notice saying why it cannot open the file and naming the setting that would open it. A file
+whose preview type is switched off under [Previews](#previews) counts as one throng cannot show.
 
 ### Move-drag modifier
 
@@ -585,9 +666,12 @@ Open a file throng cannot show as text in your OS default program, when its prev
 
 `explorer.dragMoveModifier`
 
-The modifier key that forces a file-tree drag to move.
+The key you hold while dragging in File Explorer to move instead of copy.
 
 **Default:** `shift` · **Values:** `ctrl` · `shift` · `alt`
+
+A drag from your file manager into the tree copies by default; hold this key and it moves the files
+instead. Inside the tree a plain drag already moves, so the key there only makes sure a drag moves.
 
 ## Editor
 
@@ -601,7 +685,9 @@ Save edits once you stop typing, without Ctrl+S.
 
 **Default:** off · **Values:** on · off
 
-Save edits once you stop typing, without `Ctrl+S`.
+On, each editor writes its file to disk once you have paused for **Auto-save delay**, so its unsaved marker
+clears without `Ctrl+S`. The CSV Preview Editor saves the same way after each edit. A new document that has
+never been saved has no file to write to, so it waits for **Save As**.
 
 ### Save Document Scroll Position
 
@@ -613,7 +699,7 @@ Remember each document's scroll position, so reopening a file returns to where y
 
 **Default:** off · **Values:** on · off
 
-Remember each document’s scroll position: reopening a file in the same editor restores where you were, instead of starting at the top.
+Reopening a file in the same editor then restores where you were, instead of starting at the top. Off, a file opens at its first line.
 
 ### Auto-save delay
 
@@ -621,9 +707,12 @@ Remember each document’s scroll position: reopening a file in the same editor 
 
 `editor.autoSaveDebounceMs`
 
-How long after typing stops an auto-save writes.
+How long after you stop typing auto-save writes the file.
 
 **Default:** 0.3 s (300 ms) · **Values:** 0 – 3 s, step 0.1 s
+
+Applies only while **Auto-save** is on. Every keystroke restarts the wait, so a file is written once per
+pause, not once per key. Zero writes after every change.
 
 ### Save-All scope
 
@@ -631,11 +720,13 @@ How long after typing stops an auto-save writes.
 
 `editor.saveAllScope`
 
-The scope a Ctrl+Shift+S Save-All covers.
+Which editors Save All saves: those in this tab, in this project, or in the whole window.
 
 **Default:** `project` · **Values:** `tab` · `project` · `all`
 
-What a `Ctrl+Shift+S` Save All covers.
+**Save All** (`Ctrl+Shift+S`) saves every editor with unsaved changes in its scope: `tab`, the tab you are
+in; `project`, every tab of the active project; `all`, every editor in the window. A new document that has
+never been saved is passed by, since it has no file yet; save it with **Save As**.
 
 ### New-file line ending
 
@@ -647,7 +738,7 @@ The line ending applied to brand-new documents.
 
 **Default:** `lf` · **Values:** `lf` · `crlf` · `cr`
 
-The line ending for brand-new documents. An existing file keeps its own.
+`lf` is the Linux and macOS convention and what most tools expect; `crlf` is the Windows one; `cr` is the old Mac one. It applies to a document you create in throng. An existing file keeps its own, and the line-ending menu on the status bar converts a document's endings.
 
 ### Fallback encoding
 
@@ -655,11 +746,15 @@ The line ending for brand-new documents. An existing file keeps its own.
 
 `editor.fallbackEncoding`
 
-The code page for a file with no BOM that is not valid UTF-8 or UTF-16 (what others call ANSI).
+The code page throng reads a file in when it is not UTF-8 or UTF-16, often called ANSI.
 
 **Default:** `windows1252` · **Values:** `windows1250` … `windows1258`
 
-Set it to your own code page and legacy files in it open without a notice.
+throng recognises UTF-8 and UTF-16, with or without a byte order mark. A text file in neither is read in
+this code page, the one older Windows programs saved in for your language, and saves back in it. Set it to
+your own code page (Windows-1250 for Central European, Windows-1251 for Cyrillic, and so on) and those
+files open with their accented letters intact. Find in Files and its replace read files the same way. A
+document's encoding shows on the status bar, where you can reopen it in another.
 
 ### Max open file size
 
@@ -667,9 +762,13 @@ Set it to your own code page and legacy files in it open without a notice.
 
 `editor.maxOpenFileBytes`
 
-Files larger than this report "too large" instead of opening.
+The largest file an editor opens. A larger file shows a notice instead.
 
 **Default:** 10 MB (10,485,760 bytes) · **Values:** 5 – 250 MB, step 5 MB; 1,024 – 2,147,483,648 bytes in the box
+
+The notice names the file's size and this limit. Raise the limit to open a large log or data file; a very
+large document makes the editor slower to load and scroll. Find in Files skips files over the same limit,
+and each preview type has a limit of its own under [Previews](#previews).
 
 ### Project editor path display
 
@@ -677,9 +776,13 @@ Files larger than this report "too large" instead of opening.
 
 `editor.projectPathDisplay`
 
-Show a project editor's pill as the full path or the file name alone.
+Show a project editor's header as the file's path in the project, or its name alone.
 
 **Default:** `full` · **Values:** `full` · `name`
+
+The file pill in an editor's header names the file it shows. With `full`, a file in a project's editor
+reads as its path from the project folder, such as `\src\app.ts`; with `name`, as `app.ts`. When the
+header is too narrow, the folders shorten first and the file name stays whole.
 
 ### Sub-workspace editor path display
 
@@ -687,9 +790,13 @@ Show a project editor's pill as the full path or the file name alone.
 
 `editor.subWorkspacePathDisplay`
 
-Show a sub-workspace editor's pill as the full path or the file name alone.
+Show a sub-workspace editor's header as the file's full path, or its name alone.
 
 **Default:** `full` · **Values:** `full` · `name`
+
+An editor a sub-workspace owns has no project folder to start from, so `full` shows the whole path from the
+drive or root, such as `D:\notes\todo.md`. A project editor mirrored into a sub-workspace follows **Project
+editor path display** instead.
 
 ### Warn on missing file
 
@@ -697,9 +804,14 @@ Show a sub-workspace editor's pill as the full path or the file name alone.
 
 `editor.warnOnMissingFile`
 
-Report an editor whose file is missing or deleted.
+Raise a notice for an editor whose file is missing or has been deleted.
 
 **Default:** on · **Values:** on · off
+
+throng checks when you switch to a tab: each editor in it whose file has gone, been moved or renamed
+outside throng gets a line in one notice, which grows as you visit more tabs. A file that cannot be opened
+for another reason, such as being too large, is reported whatever this says. Off, those editors stay in
+their panels and raise no notice.
 
 ### Editor default word wrap
 
@@ -711,7 +823,7 @@ Wrap long lines by default in new editors. Each editor can toggle it for itself.
 
 **Default:** on · **Values:** on · off
 
-Wrap long lines by default in new editors. Each editor toggles its own from its status bar, its content menu or [`Ctrl+E,W`](key-bindings.md#editor).
+A wrapped line continues on the next row of the screen instead of running off to the right; the file itself gains no line breaks. Each editor toggles its own from its status bar, its content menu or [`Ctrl+E,W`](key-bindings.md#editor), and keeps that choice.
 
 ### Editor default view whitespace
 
@@ -723,7 +835,7 @@ Show a symbol for every space, tab, line break and invisible character by defaul
 
 **Default:** off · **Values:** on · off
 
-Show a symbol for every space, tab, line break and invisible character by default in new editors. Each editor keeps its own toggle, from its status bar, its content menu or [View Whitespace](key-bindings.md#editor).
+The symbols show what the file holds where the screen shows blank space, such as trailing spaces, a tab among spaces, or an invisible character pasted in from elsewhere. Each editor keeps its own toggle, from its status bar, its content menu or [View Whitespace](key-bindings.md#editor).
 
 ### Editor whitespace hover names
 
@@ -731,11 +843,11 @@ Show a symbol for every space, tab, line break and invisible character by defaul
 
 `editor.whitespaceHoverNames`
 
-With View Whitespace on, resting the pointer on a marker names its character in a popover.
+Name a whitespace marker's character in a popover when the pointer rests on it.
 
 **Default:** on · **Values:** on · off
 
-With View Whitespace on, resting the pointer on a marker for half a second names its character in a popover above the pointer, and the pointer becomes the help cursor. Off, neither.
+Works while View Whitespace shows the markers. Rest the pointer on a marker for half a second and a popover above the pointer names its character, such as a tab or a no-break space, and the pointer becomes the help cursor. Off, neither happens.
 
 ### Show the editor gutter
 
@@ -771,7 +883,7 @@ Restore the undo history along with unsaved changes when throng reopens after a 
 
 **Default:** on · **Values:** on · off
 
-Restore the undo history along with unsaved changes when the app is reopened after a crash. Removed text lives in the recovery file until then.
+throng always recovers unsaved text after a crash; this also brings back each editor's undo history, so you can step back through edits made before it. Text you removed is kept in the recovery file until then. Off, a recovered editor starts with an empty undo history.
 
 ### Status Bar
 
@@ -781,11 +893,14 @@ Restore the undo history along with unsaved changes when the app is reopened aft
 
 `editor.showStatusBar`
 
-Off hides the bar in editor and preview panels, whatever the two below. Terminals have their own.
+Show the status bar along the bottom of editor and preview panels.
 
 **Default:** on · **Values:** on · off
 
-: [Show terminal status bar](#terminal).
+An editor's status bar carries the cursor position and counts, the encoding and line-ending menus, and the
+word wrap and View Whitespace toggles; a preview's carries the toggles its type offers. Off hides the whole
+bar in every editor and preview panel, whatever the two settings below say, and every toggle on it stays on
+the panel's right-click menu. Terminals have a bar of their own: **Show terminal status bar**, under [Terminal](#terminal).
 
 #### Show cursor position
 
@@ -793,9 +908,13 @@ Off hides the bar in editor and preview panels, whatever the two below. Terminal
 
 `editor.statusBar.showCursorPosition`
 
-The caret’s line and column, or the source lines a preview selection spans.
+Show the caret's line and column, or the lines a preview selection spans, in the status bar.
 
 **Default:** on · **Values:** on · off
+
+In an editor the readout is the caret's line and column, counting a tab as **Tab width** columns. In a
+Markdown preview, selecting text shows which lines of the source file it came from. Off, the readout is
+gone and the rest of the bar takes its room.
 
 #### Show character and word counts
 
@@ -803,9 +922,12 @@ The caret’s line and column, or the source lines a preview selection spans.
 
 `editor.statusBar.showCounts`
 
-The document’s lines, characters and words, and how many characters are selected.
+Show the document's line, character and word counts in the status bar.
 
 **Default:** on · **Values:** on · off
+
+The counts cover the whole document, and while text is selected the bar also shows how many characters
+the selection holds. Off, the counts are gone and the rest of the bar takes their room.
 
 The encoding indicator (`UTF-8`, `UTF-8 with BOM`, `UTF-16 LE`, `UTF-16 BE`, `Windows-1250 (Central European)` … `Windows-1258 (Vietnamese)`) and the
 line-ending indicator (`LF`, `CRLF`, `CR`, or `Mixed (…)` naming the dominant one) have no setting of
@@ -839,6 +961,10 @@ The settings in this table apply to every preview type.
 How long a preview waits after you stop typing before it shows your changes. Zero updates at once.
 
 **Default:** 300 ms · **Values:** 0 – 2,000 ms, step 25 ms; 0 – 10,000 ms in the box
+
+A preview beside its editor draws your unsaved text, so it follows as you type without a save. Each
+keystroke restarts the wait, which keeps a large document or diagram from redrawing on every key;
+**Preview maximum wait** below caps how long steady typing can hold it off.
 
 #### Preview maximum wait
 
@@ -874,7 +1000,7 @@ Keep a preview and its editor scrolled to the same place, in both directions.
 
 **Default:** on · **Values:** on · off
 
-Keep a preview and its editor at the same place, both ways: scrolling either scrolls the other, block by block. Also switched from either panel's right-click menu, the **Synchronise Scrolling** status-bar button, or the [`preview.toggleSyncScroll`](key-bindings.md#editor) command.
+Scrolling either panel scrolls the other, block by block, so the paragraph you are editing stays in view in the preview. Also switched from either panel's header menu, the **Synchronise Scrolling** status-bar button, or the [`preview.toggleSyncScroll`](key-bindings.md#editor) command.
 
 #### Scroll-sync highlight duration
 
@@ -920,7 +1046,7 @@ What opening a Markdown file from File Explorer, Quick Open, a link or a Find in
 
 `editor.previews.providers.markdown.openTarget`
 
-Where a Markdown preview opens: reuse the last one used in this tab, or a new panel.
+Where Markdown previews open: reuse the last one used in this tab, or a new panel.
 
 **Default:** `lastActive` · **Values:** `lastActive` (Last Active) · `new` (New Preview Panel)
 
@@ -936,7 +1062,7 @@ Draw a mermaid code block in a Markdown preview as its diagram. When off, the bl
 
 **Default:** on · **Values:** on · off
 
-Draw a `mermaid` code block in a Markdown preview as its diagram. Off, the block shows as code.
+A code block fenced as `mermaid` holds a diagram written in Mermaid's text syntax: flowcharts, sequence diagrams and the like. On, the preview draws the diagram in place of the code. Off, the block shows as code.
 
 ##### Markdown: Typeset math
 
@@ -960,7 +1086,7 @@ Show images a Markdown document links from the web over https. Off shows their a
 
 **Default:** on · **Values:** on · off
 
-Show images a Markdown document links from the web over a secure connection, such as build badges. When off, each shows its alternative text instead and nothing is requested.
+Such images include build badges and screenshots hosted online, and only secure `https:` addresses load. Off, each shows its alternative text and throng requests nothing from the web for them.
 
 ##### Markdown: Show front matter
 
@@ -983,8 +1109,6 @@ Show the block of metadata at the top of a Markdown document, such as its title 
 Show a gutter with a fold arrow beside each heading in a Markdown preview.
 
 **Default:** on · **Values:** on · off
-
-Show a narrow gutter beside each heading in a Markdown preview, with a fold arrow. It is the only control that shows or hides the gutter; folding stays available from the menus and key bindings while it is off.
 
 A narrow strip down a Markdown preview's left edge holding a fold arrow beside each heading; the document moves right to make room. Off, the strip and its arrows are gone and folding stays available from the menus and bindings.
 
@@ -1010,9 +1134,7 @@ How a Markdown document's heading sections start out, in the editor and a fresh 
 
 **Default:** `expanded` · **Values:** `expanded` · `collapsed`
 
-How a Markdown document’s heading sections start out, in the editor and in a fresh preview: expanded, or collapsed. Collapse All / Expand All and per-section folding still work either way.
-
-Whether a Markdown document opens with its heading sections expanded or collapsed, in the editor and its preview alike. Sections are then folded from the gutter, the right-click menu or the [Markdown bindings](key-bindings.md#markdown).
+Whether a Markdown document opens with its heading sections expanded or collapsed, in the editor and in a fresh preview alike. Either way, you then fold and unfold sections from the gutter, the right-click menu, **Collapse All** / **Expand All** or the [Markdown bindings](key-bindings.md#markdown).
 
 #### Mermaid
 
@@ -1046,11 +1168,9 @@ As **Open Markdown files in**, for Mermaid files. Ships as `preview`, so a diagr
 
 `editor.previews.providers.mermaid.openTarget`
 
-Where a Mermaid preview opens: reuse the last one used in this tab, or a new panel.
+Where Mermaid previews open: reuse the last one used in this tab, or a new panel.
 
 **Default:** `lastActive` · **Values:** `lastActive` (Last Active) · `new` (New Preview Panel)
-
-Where a Mermaid preview opens: Last Active reuses the most recently used Mermaid preview in the tab you are looking at; otherwise a new preview opens.
 
 As **Markdown: Open previews in**, for Mermaid previews; a Markdown preview is never reused for a Mermaid file, or the reverse.
 
@@ -1070,7 +1190,7 @@ Offer the CSV Preview Editor, the editable grid for .csv files. Off closes it.
 
 **Default:** on · **Values:** on · off
 
-Offer the CSV Preview Editor for `.csv` files. Off, every CSV Preview Editor closes (asking first about unsaved changes) and its preview commands are shown disabled; a CSV still opens in the text editor.
+Off, every CSV Preview Editor closes (asking first about unsaved changes) and its preview commands are shown disabled; a CSV still opens in the text editor.
 
 ##### Open CSVs in
 
@@ -1090,11 +1210,9 @@ As **Open Markdown files in**, for CSVs. Ships as `preview`, so a CSV opens in t
 
 `editor.previews.providers.csv.openTarget`
 
-Where a CSV preview opens: reuse the last one used in this tab, or a new panel.
+Where CSV previews open: reuse the last one used in this tab, or a new panel.
 
 **Default:** `lastActive` · **Values:** `lastActive` (Last Active) · `new` (New Preview Panel)
-
-Where a CSV preview opens: Last Active reuses the most recently used CSV preview in the tab you are looking at; otherwise a new preview opens.
 
 As **Markdown: Open previews in**, for CSV Preview Editors.
 
@@ -1120,7 +1238,7 @@ A cell with more characters than this opens in the cell dialog when you edit it.
 
 **Default:** 50 characters · **Values:** 10 – 1,000 characters, step 10 characters; 1 – 100,000 characters in the box
 
-A cell with more characters than this opens in the dialog on double-click, **F2** or **Enter**.
+Counts the cell's characters when you start editing it with a double-click, **F2** or **Enter**. Used only while **CSV: Edit long cells in a dialog** is on; lower it to edit more cells in the roomier dialog.
 
 ##### CSV: Edit multi-line cells in a dialog
 
@@ -1144,7 +1262,7 @@ Show every cell in full: line breaks kept, values wrapped, rows as tall as their
 
 **Default:** off · **Values:** on · off
 
-Show every cell in full: line breaks kept, each value wrapped to its column, and every row as tall as its tallest cell, with no line cap. Off, a cell is one truncated line. Each CSV Preview Editor can switch wrapping on or off for itself from the **Wrap** toggle on its status bar, or its **Wrap** menu item; a panel that has not follows this setting. Wrapping changes only how the grid draws and never edits the file.
+There is no cap on how tall a row grows. Off, a cell is one truncated line. Each CSV Preview Editor can switch wrapping on or off for itself from the **Wrap** toggle on its status bar, or its **Wrap** menu item; a panel that has not follows this setting. Wrapping changes only how the grid draws and never edits the file.
 
 ##### CSV: Lock first row
 
@@ -1186,7 +1304,7 @@ Offer previews of spreadsheet workbooks, such as .xlsx, .ods and .numbers. Off c
 
 **Default:** on · **Values:** on · off
 
-Offer previews of spreadsheet workbooks (.xlsx, .xlsm, .xlsb, .xls, .ods, .fods and .numbers). When off, every spreadsheet preview closes and their preview commands are shown disabled.
+Covers `.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`, `.fods` and `.numbers` files. Off, every spreadsheet preview closes and the preview commands are shown disabled.
 
 ##### Open spreadsheets in
 
@@ -1206,11 +1324,9 @@ As **Open Markdown files in**, for workbooks. There is no editor option: a workb
 
 `editor.previews.providers.spreadsheet.openTarget`
 
-Where a Spreadsheet preview opens: reuse the last one used in this tab, or a new panel.
+Where Spreadsheet previews open: reuse the last one used in this tab, or a new panel.
 
 **Default:** `lastActive` · **Values:** `lastActive` (Last Active) · `new` (New Preview Panel)
-
-Where a Spreadsheet preview opens: Last Active reuses the most recently used Spreadsheet preview in the tab you are looking at; otherwise a new preview opens.
 
 As **Markdown: Open previews in**, for spreadsheet previews.
 
@@ -1224,6 +1340,10 @@ Show each sheet's first row in the column header strip instead of the column let
 
 **Default:** off · **Values:** on · off
 
+For a workbook whose first row names its columns. On, that row moves into the strip above the grid, in place
+of the letters A, B, C; a column whose first cell is empty keeps its letter.
+Printing repeats the header row on every page. The workbook itself is never changed.
+
 ##### Spreadsheet: Preview size limit
 
 **Cog › Settings › Editor › Previews**
@@ -1234,7 +1354,8 @@ The largest workbook a spreadsheet preview loads.
 
 **Default:** 25 MB (26,214,400 bytes) · **Values:** 5 – 500 MB, step 5 MB; 1,024 – 2,147,483,648 bytes in the box
 
-The largest workbook a spreadsheet preview loads. A larger one shows a notice naming its size and this limit; raise the limit and choose **Refresh** to load it.
+A larger workbook shows a notice naming its size and this limit; raise the limit and choose **Refresh** to load it.
+
 #### Image
 
 An image opens in the centre of its panel, on a canvas filling the panel, with its transparent parts
@@ -1268,17 +1389,18 @@ Where images open from File Explorer, Quick Open, links and Find in Files.
 
 **Default:** `preview` · **Values:** `preview` (Throng Preview) · `os` (Default OS Program)
 
+As **Open Markdown files in**, for images. There is no editor option: an image is not text. Choose
+`os` to have your image viewer or editor open them instead of a throng panel.
+
 ##### Image: Open previews in
 
 **Cog › Settings › Editor › Previews**
 
 `editor.previews.providers.image.openTarget`
 
-Where a Image preview opens: reuse the last one used in this tab, or a new panel.
+Where Image previews open: reuse the last one used in this tab, or a new panel.
 
 **Default:** `lastActive` · **Values:** `lastActive` (Last Active) · `new` (New Preview Panel)
-
-Where a Image preview opens: Last Active reuses the most recently used Image preview in the tab you are looking at; otherwise a new preview opens.
 
 As **Markdown: Open previews in**, for Image previews.
 
@@ -1303,8 +1425,6 @@ A file larger than this is not read: the preview names its size and this limit i
 Hatch the transparent parts of images, so their edges show against the background.
 
 **Default:** on · **Values:** on · off
-
-Draw diagonal hatching behind the transparent parts of images, so their edges show against the background. The hatch colour is the theme's Picture Transparency Marker.
 
 Draw diagonal hatching behind an image's transparent parts, in the theme's Picture Transparency Marker. Off, the canvas shows through plainly.
 
@@ -1337,17 +1457,18 @@ Where SVG files open from File Explorer, Quick Open, links and Find in Files.
 
 **Default:** `preview` · **Values:** `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program)
 
+As **Open Markdown files in**, for SVG files. An SVG is text, so `editor` opens its markup; the preview's
+**Open in Editor** gets you there from a drawing too.
+
 ##### SVG: Open previews in
 
 **Cog › Settings › Editor › Previews**
 
 `editor.previews.providers.svg.openTarget`
 
-Where a SVG preview opens: reuse the last one used in this tab, or a new panel.
+Where SVG previews open: reuse the last one used in this tab, or a new panel.
 
 **Default:** `lastActive` · **Values:** `lastActive` (Last Active) · `new` (New Preview Panel)
-
-Where a SVG preview opens: Last Active reuses the most recently used SVG preview in the tab you are looking at; otherwise a new preview opens.
 
 As **Markdown: Open previews in**, for SVG previews.
 
@@ -1357,7 +1478,7 @@ As **Markdown: Open previews in**, for SVG previews.
 
 `editor.previews.providers.svg.maxFileBytes`
 
-SVG larger than this are not read; the preview says how large the file is instead.
+SVG files larger than this are not read; the preview says how large the file is instead.
 
 **Default:** 10 MB (10,485,760 bytes) · **Values:** 5 – 250 MB, step 5 MB; 1,024 – 2,147,483,648 bytes in the box
 
@@ -1372,8 +1493,6 @@ A file larger than this is not read: the preview names its size and this limit i
 Hatch the transparent parts of SVGs, so their edges show against the background.
 
 **Default:** on · **Values:** on · off
-
-Draw diagonal hatching behind the transparent parts of SVGs, so their edges show against the background. The hatch colour is the theme's Picture Transparency Marker.
 
 Draw diagonal hatching behind an SVG's transparent parts, in the theme's Picture Transparency Marker. Off, the canvas shows through plainly.
 
@@ -1409,17 +1528,18 @@ Where PDFs open from File Explorer, Quick Open, links and Find in Files.
 
 **Default:** `preview` · **Values:** `preview` (Throng Preview) · `os` (Default OS Program)
 
+As **Open Markdown files in**, for PDFs. There is no editor option: a PDF is not text. Choose `os` to
+read them in your own PDF reader instead.
+
 ##### PDF: Open previews in
 
 **Cog › Settings › Editor › Previews**
 
 `editor.previews.providers.pdf.openTarget`
 
-Where a PDF preview opens: reuse the last one used in this tab, or a new panel.
+Where PDF previews open: reuse the last one used in this tab, or a new panel.
 
 **Default:** `lastActive` · **Values:** `lastActive` (Last Active) · `new` (New Preview Panel)
-
-Where a PDF preview opens: Last Active reuses the most recently used PDF preview in the tab you are looking at; otherwise a new preview opens.
 
 As **Markdown: Open previews in**, for PDF previews.
 
@@ -1441,7 +1561,7 @@ An HTML page is shown as its static markup in a sandboxed frame, with the styles
 beside it in the project: no script runs and the page cannot navigate. A link follows only on Ctrl+click. The
 page fills its panel at every zoom; a click in it makes the panel active, and the zoom chords, Ctrl+wheel and
 the app's other shortcuts work while it has the keyboard. An edit updates the page in place, keeping where you
-were scrolled. Find searches the page, and a right-click offers Copy, Copy as Rich Text, Select All and Split.
+were scrolled. Find searches the page, and a right-click offers Copy as (rich or plain text) and Select All.
 
 Nothing is fetched from the network except stylesheets, fonts and images from a **safe source**: one listed in
 **HTML: Safe preview sources** below, which applies to every project, or in the project's own list in
@@ -1470,17 +1590,18 @@ Where HTML files open from File Explorer, Quick Open, links and Find in Files.
 
 **Default:** `preview` · **Values:** `editor` (Throng Editor) · `preview` (Throng Preview) · `os` (Default OS Program)
 
+As **Open Markdown files in**, for HTML files. Choose `editor` if you mostly edit pages, or `os` to have
+the program your system opens web pages with, usually a browser, show them with their scripts running.
+
 ##### HTML: Open previews in
 
 **Cog › Settings › Editor › Previews**
 
 `editor.previews.providers.html.openTarget`
 
-Where a HTML preview opens: reuse the last one used in this tab, or a new panel.
+Where HTML previews open: reuse the last one used in this tab, or a new panel.
 
 **Default:** `lastActive` · **Values:** `lastActive` (Last Active) · `new` (New Preview Panel)
-
-Where a HTML preview opens: Last Active reuses the most recently used HTML preview in the tab you are looking at; otherwise a new preview opens.
 
 As **Markdown: Open previews in**, for HTML previews.
 
@@ -1502,11 +1623,11 @@ A file larger than this is not read: the preview names its size and this limit i
 
 `editor.previews.providers.html.safeSources`
 
-https sources for an HTML preview's stylesheets, fonts and images. Project Settings can add more.
+Sites an HTML preview may load stylesheets, fonts and images from. Project Settings can add more.
 
 **Default:** `https://fonts.googleapis.com`, `https://fonts.gstatic.com` · **Values:** A list of `https:` addresses, each a host (`https://cdn.example.com`, with a port if it needs one) or every subdomain of one (`https://*.example.com`); may be empty
 
-Where an HTML preview may load stylesheets, fonts and images from, in every project. Scripts never run, whatever is listed. A project adds sources of its own in **Project Settings**.
+Each entry is an `https:` address an HTML preview may load stylesheets, fonts and images from, in every project. Scripts never run, whatever is listed. A project adds sources of its own in **Project Settings**, and a page's notice about blocked resources offers **Allow this source** to add one there.
 
 ### Links
 
@@ -1556,11 +1677,11 @@ Show every kind of link in terminal output. Off, none are shown and Ctrl+click f
 
 `editor.links.existenceCheckTimeoutMs`
 
-How long to resolve a link you follow or its Link menu. Raise it for a slow network; no restart.
+How long throng looks for a link's target when you follow it or open its Link menu.
 
 **Default:** 2 s (2,000 ms) · **Values:** 0.25 – 25 s, step 0.25 s
 
-How long throng waits for a link to resolve when you follow it or open its Link menu, in total, however many places it looks. Raise it for a slow network share. It applies to the next check, with no restart.
+A path link can name a file relative to several folders, so throng looks in each place it could be before it opens the file or fills the Link menu. This is how long that search may take in total. A link on a slow network share may need longer; raise it and the next link you follow uses it, with no restart. throng draws links without this check: it runs only when you act on one.
 
 #### Allowed link protocols
 
@@ -1568,13 +1689,11 @@ How long throng waits for a link to resolve when you follow it or open its Link 
 
 `editor.links.protocolAllowlist`
 
-URI schemes, besides web links, shown as links in terminals and editors, such as mailto or slack.
+Link types besides web addresses that terminals and editors make clickable, such as mailto.
 
 **Default:** `mailto`, `tel`, `slack` · **Values:** A list of scheme names, with or without the colon, any case; may be empty
 
-URI schemes, besides web links, that are drawn as links and followed with their handler, in terminals and editors alike, for example mailto, tel or slack. Enter a name with or without its colon; case does not matter. Schemes that run code are never links, even if listed here.
-
-Schemes, besides the web, that are drawn as links and go to their handler. An email address written on its own is a `mailto:` link while that scheme is listed. throng refuses schemes that run code (`javascript`, `data`, `vbscript`, `ms-msdt`, `search-ms` and the like) whatever the list says.
+Each entry is a URI scheme, the part before the colon in `mailto:` or `slack://`. A link with a listed scheme is drawn as a link in terminals and editors, and following it hands it to the app your system registers for that scheme. Enter a name with or without its colon; case does not matter. An email address written on its own is a `mailto:` link while that scheme is listed. throng refuses schemes that run code (`javascript`, `data`, `vbscript`, `ms-msdt`, `search-ms` and the like) whatever the list says.
 
 #### File extensions that end a spaced path
 
@@ -1582,13 +1701,11 @@ Schemes, besides the web, that are drawn as links and go to their handler. An em
 
 `editor.links.knownFileExtensions`
 
-Extensions that end an unquoted path with spaces, in terminals and editors. Any case, dot optional.
+Extensions that mark where an unquoted path with spaces ends, in terminals and editors.
 
 **Default:** The extensions throng ships with · **Values:** A list, each with or without its leading dot, any case; may be empty
 
-File extensions that end a path containing spaces when it is not quoted, in terminals and editors alike. Add or remove entries; each is taken with or without its leading dot, and without case.
-
-Extensions that let an unquoted path run across spaces, in terminals and editors. An empty list means none do. Once you have edited it, extensions added in a later release do not appear in it.
+A program often prints a path with spaces without quoting it, such as `D:\My Files\report final.pdf`. throng reads such a path as one link up to an extension in this list, so the whole path is clickable rather than only `D:\My`. Each entry is taken with or without its leading dot, and in any case. An empty list means an unquoted path ends at its first space. Once you have edited it, extensions added in a later release do not appear in it.
 
 ### Navigation
 
@@ -1602,7 +1719,7 @@ Leave the files this project hides out of Quick Open.
 
 **Default:** on · **Values:** on · off
 
-Leave the files this project hides out of Quick Open: the excluded file patterns and anything you chose "Hide in this project" for. A control in the modal shows them for that one search, without changing this.
+A project hides files through File Explorer's **Excluded globs** and through anything you chose **Hide in this project** for. A control in the modal shows them for that one search, without changing this.
 
 #### Remember the last Quick Open query
 
@@ -1614,7 +1731,7 @@ Reopen Quick Open with the last query that opened a file, until throng closes.
 
 **Default:** off · **Values:** on · off
 
-Reopen Quick Open with the last query that opened a file, selected so typing replaces it. throng forgets a query you abandoned with Escape, and one from another project. It lasts until throng closes and never reaches the disk.
+The query comes back with its results, selected so typing replaces it. throng forgets a query you abandoned with Escape, and one from another project. It lasts until throng closes and never reaches the disk.
 
 #### Remember the last Go To Line number
 
@@ -1626,7 +1743,7 @@ Reopen Go To Line with the last line number you went to, until throng closes.
 
 **Default:** off · **Values:** on · off
 
-Reopen Go To Line with the last line number you went to, selected so typing replaces it. It lasts until throng closes and never reaches the disk.
+The number comes back selected, so typing replaces it. It lasts until throng closes and never reaches the disk.
 
 #### Navigation history size
 
@@ -1638,7 +1755,7 @@ How many files Back and Forward remember in each editor and preview panel.
 
 **Default:** 10 entries · **Values:** 1 – 100 entries, step 1
 
-How many files Back and Forward remember in each editor and preview panel. Lowering it trims every open panel at once, keeping the file each one shows. History persists across restarts.
+Each panel keeps its own list: opening another file in it adds one, and Back and Forward move along it. Lowering this trims every open panel at once, keeping the file each one shows. History persists across restarts.
 
 ### Indentation
 
@@ -1656,6 +1773,10 @@ What a new indent inserts, unless the file or its language says otherwise.
 
 **Default:** `spaces` · **Values:** `spaces` · `tabs`
 
+What **Tab** and a new line's automatic indent insert: `spaces` puts in **Indent width** spaces per level,
+`tabs` one tab character. A file whose lines already indent one way keeps that way, and a language listed
+in **Indentation by language** uses its own entry.
+
 #### Indent width
 
 **Cog › Settings › Editor › Indentation**
@@ -1665,6 +1786,9 @@ What a new indent inserts, unless the file or its language says otherwise.
 How many spaces one indent level inserts.
 
 **Default:** 2 columns · **Values:** 1 – 16 columns, step 1
+
+Used when indenting with spaces. A file already indented with spaces keeps the width its lines use, so a
+four-space file stays four-space whatever this says.
 
 #### Tab width
 
@@ -1676,6 +1800,10 @@ How many columns a tab character takes on screen. The file stays as it is.
 
 **Default:** 4 columns · **Values:** 1 – 16 columns, step 1
 
+A tab is one character in the file; this decides only how wide it is drawn, and so where text after it lines
+up. The column number on the status bar counts a tab as this many columns. A language's entry in
+**Indentation by language** can set its own.
+
 #### Indentation by language
 
 **Cog › Settings › Editor › Indentation**
@@ -1686,9 +1814,7 @@ Indentation for new indents, by language. A file that already indents its own wa
 
 **Default:** Each language's convention · **Values:** A table: language → style, width (1 – 16 columns, step 1), tab width (1 – 16 columns, step 1); a value past a limit is stored as that limit, and a fraction is refused
 
-Indentation by language. A file that already indents its own way keeps it; this decides what a new indent inserts.
-
-Per-language indentation. It cannot be emptied, because that would re-indent every language with the global default.
+Each language's entry sets its indent style, width and tab width, so Go can indent with tabs and Python with four spaces while the defaults above cover the rest. It cannot be emptied, because that would re-indent every language with the global default.
 
 ### Languages
 
@@ -1716,7 +1842,7 @@ Make Option act as the Meta key in terminals, so programs that use Meta receive 
 
 **Default:** off · **Values:** on · off
 
-Make Option act as the Meta key in terminals, so shortcuts such as Option+B and Option+F reach programs that use Meta. Off, Option types the characters your keyboard layout puts on it, such as # or @.
+Shells and editors such as bash, zsh and Emacs use Meta for shortcuts like Meta+B and Meta+F, a word back and forward. On, Option+B and Option+F reach them as those shortcuts. Off, Option types the characters your keyboard layout puts on it, such as # or @.
 
 ### Custom terminal flavours
 
@@ -1724,7 +1850,7 @@ Make Option act as the Meta key in terminals, so shortcuts such as Option+B and 
 
 `terminals.flavours`
 
-User-defined shells shown in the Flavour dropdown (id, label, file, args, default shell arguments).
+Shells you add to the Flavour dropdown, each with its own program and arguments.
 
 **Default:** none · **Values:** A table of flavours, in order: an id (required, unique), a label, the executable (required), its arguments and default shell arguments
 
@@ -1736,7 +1862,7 @@ Shells of your own, offered in the Flavour dropdown after the built-ins, in this
 
 `terminals.defaultShellArguments`
 
-Shell arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).
+Arguments a shell gets every time it starts, by flavour, such as -NoLogo for pwsh.
 
 **Default:** none · **Values:** A table of flavour id → arguments
 
@@ -1748,7 +1874,7 @@ Shell arguments passed to a flavour every time it starts, for example `pwsh` →
 
 `terminals.disabledBuiltins`
 
-Built-in flavour ids to hide from the Flavour dropdown.
+Built-in shells to leave out of the Flavour dropdown.
 
 **Default:** none · **Values:** Any of the built-in flavours this machine has
 
@@ -1764,7 +1890,7 @@ Offer Startup Command and Shell Arguments values used before, per terminal type.
 
 **Default:** on · **Values:** on · off
 
-Offer Startup Command and Shell Arguments values used before, per terminal type. Off stops recording and offering them, and keeps what is already stored until cleared.
+The new-terminal form's Startup Command and Shell Arguments fields then suggest what you typed there before, kept separately for each terminal type. Off stops recording and offering them, and keeps what is already stored until cleared.
 
 ### Terminal form values remembered
 
@@ -1772,11 +1898,11 @@ Offer Startup Command and Shell Arguments values used before, per terminal type.
 
 `terminals.formHistory.maxEntries`
 
-How many values each field keeps per terminal type.
+How many past values each terminal form field remembers, per terminal type.
 
 **Default:** 10 entries · **Values:** 1 – 50 entries, step 1
 
-How many values each field keeps per terminal type. Lowering this trims every list to its newest entries.
+Used while **Remember terminal form values** is on. Each field keeps its newest values up to this many, for each terminal type, and drops the oldest past it. Lowering this trims every list to its newest entries.
 
 ### Show terminal status bar
 
@@ -1788,17 +1914,22 @@ Show the status bar along the bottom of each terminal panel.
 
 **Default:** on · **Values:** on · off
 
+The bar names the terminal's shell, shows where a link under the pointer leads, and holds the panel's
+toggles: **Remember the last running command**, **Reopen in the last directory** and **Terminal
+notifications**. Off hides it in every terminal, and the same toggles stay on the terminal's header
+menu. Editors and previews have a bar of their own: **Show panel status bar**, under [Editor](#editor).
+
 ### Shell integration
 
 **Cog › Settings › Terminal**
 
 `terminals.shellIntegration`
 
-Ask shells throng cannot watch from outside to report their working directory.
+Let PowerShell and Git Bash report their working directory, so throng follows your cd.
 
 **Default:** on · **Values:** on · off
 
-Ask shells throng cannot watch from outside to report their working directory, so terminals reopen where you left them. PowerShell needs this: its `cd` never moves the process's real working directory. It installs a prompt function that defers to any prompt you already have. Switch it off if it clashes with a custom prompt.
+throng reads most shells' working directory from outside, but `cd` in PowerShell and Git Bash never moves the directory another program can see. For those two, throng adds a small prompt hook that reports the directory after each command, so the panel title's `{path}` and **Reopen in the last directory** know where you are. The PowerShell hook also moves the real working directory along, so a folder you have left can be deleted. Each hook runs your own prompt afterwards, so a themed prompt still draws. Off, those two shells are not tracked, and **Reopen in the last directory** is unavailable for them. Switch it off if it clashes with a custom prompt.
 
 ### Reload terminals when a project opens
 
@@ -1818,11 +1949,11 @@ Automatic starts every terminal in every tab as a project opens. Manual starts n
 
 `terminals.defaultRememberCommand`
 
-New terminals remember their running command; a Claude Code session as a resume of that session.
+Tick “Remember the last running command” on new terminal panels.
 
 **Default:** off · **Values:** on · off
 
-Ticks **Remember the last running command** on new terminal panels: a command running when the terminal closes runs again next time. A running Claude Code session is remembered as a resume of that session, not a fresh start. A panel keeps its own choice.
+Ticks **Remember the last running command** on new terminal panels: a command running when the terminal closes runs again when it next starts. A running Claude Code session is remembered as a resume of that session, not a fresh start. A panel keeps its own choice.
 
 ### Reopen in the last directory by default
 
@@ -1870,7 +2001,7 @@ How often throng checks which command a busy terminal is running.
 
 **Default:** 1 s (1,000 ms) · **Values:** 0.25 – 5 s, step 0.25 s
 
-How often throng checks which command a terminal is running, while it has input or output. A quiet terminal is checked ten times less often. Lower notices a new command sooner; higher does less work. A command you start and leave running for longer than one interval is always remembered.
+throng checks while a terminal has input or output, to name the command in the panel title, remember it for **Remember the last running command**, and notice when it finishes for the **Command finished** mark. A quiet terminal is checked ten times less often. Lower notices a new command sooner; higher does less work. A command you start and leave running for longer than one interval is always remembered.
 
 ### Tell programs that links are supported
 
@@ -1878,11 +2009,11 @@ How often throng checks which command a terminal is running, while it has input 
 
 `terminals.advertiseHyperlinks`
 
-New terminals get FORCE_HYPERLINK=1 unless you set it. Terminals already running are not changed.
+Tell programs in new terminals that they can print clickable links.
 
 **Default:** on · **Values:** on · off
 
-Start terminal programs with `FORCE_HYPERLINK=1`, so tools that can print clickable links, Claude Code among them, do. Applies to terminals started afterwards. A `FORCE_HYPERLINK` the launching environment already carries is never overridden, in either direction, and throng never sets `WT_SESSION` or a borrowed `TERM_PROGRAM`. Off does not stop throng recognising paths printed as plain text.
+Start terminal programs with `FORCE_HYPERLINK=1`, so tools that can print clickable links, Claude Code among them, do. Applies to terminals started afterwards; a terminal already running keeps the environment it started with. A `FORCE_HYPERLINK` the launching environment already carries is never overridden, in either direction, and throng never sets `WT_SESSION` or a borrowed `TERM_PROGRAM`. Off does not stop throng recognising paths printed as plain text.
 
 ### Terminal title template
 
@@ -1893,6 +2024,12 @@ Start terminal programs with `FORCE_HYPERLINK=1`, so tools that can print clicka
 The name of a terminal panel, built from placeholders such as {command}, {shell} and {path}.
 
 **Default:** `({title} ? "{app}: {title} | " : {command} ? "{command} | " : ""){shell}({path} ? " ({path})" : "")` · **Values:** a [title template](#terminal-title-templates)
+
+The name shows in the panel header and wherever throng names the panel, such as its notices and menus, in
+every window that shows it. It updates as the command, directory or program title changes. Preferences refuses a template
+it cannot read; one hand-edited into `settings.json` that throng cannot read is replaced by the default.
+A template that renders to nothing names the panel after its shell. The placeholders and expressions are
+under [Terminal title templates](#terminal-title-templates).
 
 ### Longest command in a terminal title
 
@@ -1928,7 +2065,7 @@ Raise an attention mark on a terminal panel when something happens in it that yo
 
 **Default:** on · **Values:** on · off
 
-Raise an [attention mark](#attention) on a terminal panel when something happens in it that you may want to look at. Off, no terminal raises a mark and every existing terminal mark is withdrawn. The signals below are switched off with it.
+An [attention mark](#attention) flags the panel, its tab and its project, so you can leave a long job running and see when it wants you. The signals below choose what raises one. None of them marks the panel you are working in: while a terminal has keyboard focus in the focused window, its signals are ignored. A terminal whose own **Terminal notifications** toggle is off raises none either. Off, no terminal raises a mark and every existing terminal mark is withdrawn. The signals below are switched off with it.
 
 ### Program exited
 
@@ -1936,11 +2073,11 @@ Raise an [attention mark](#attention) on a terminal panel when something happens
 
 `terminals.attention.signals.processExited`
 
-Mark a terminal whose program ended without you ending it.
+Mark a terminal for attention when its program ends without you ending it.
 
 **Default:** on · **Values:** on · off
 
-Mark a terminal whose program ended without you ending it. A zero exit code raises the Attention mark, anything else the Failed mark. Exact: throng is told when the process exits.
+The terminal's program is the shell, or the command it was started with. When it ends on its own, such as a build started as the panel's command finishing or a shell crashing, the panel is marked: an exit code of zero raises the Attention mark, any other the Failed mark. An end you asked throng for, such as destroying the panel or unloading its project, raises nothing. throng hears of the exit the moment it happens, so this mark is never late.
 
 ### Command finished
 
@@ -1948,11 +2085,11 @@ Mark a terminal whose program ended without you ending it. A zero exit code rais
 
 `terminals.attention.signals.commandFinished`
 
-Mark a terminal when its foreground command ends, up to two Command tracking intervals late.
+Mark a terminal for attention when the command running in it finishes.
 
 **Default:** on · **Values:** on · off
 
-Mark a terminal when its foreground command ends and nothing replaces it. Always the Attention mark: the exit code is not known. Exact, but up to two Command tracking intervals late, because throng notices by watching the foreground command and waits for a second check that still finds nothing running, so the pause between two commands of a loop is not a finish; a command that starts and ends between two checks can be missed.
+A command is whatever you run at the shell's prompt, such as `npm test` or `git pull`. When it ends and the shell is back at its prompt, the panel takes the Attention mark; throng cannot see a command's exit code, so it never raises the Failed mark. throng finds out by checking which command the terminal is running every **Command tracking interval** (under [Terminal](#terminal)), and waits for a second check that still finds nothing, so the pause between two commands of a script does not count as a finish. The mark can therefore arrive up to two intervals after the command ends, and a command that starts and ends between two checks can be missed.
 
 ### Bell
 
@@ -1960,9 +2097,15 @@ Mark a terminal when its foreground command ends and nothing replaces it. Always
 
 `terminals.attention.signals.bell`
 
-Mark a terminal when a program rings the terminal bell. Exact: the program asked for it.
+Mark a terminal for attention when a program in it rings the bell.
 
 **Default:** on · **Values:** on · off
+
+The bell is a control character (BEL) a program prints to ask for your attention, the terminal's
+equivalent of a beep. Some tools ring it when a long job ends, and you can ring it yourself at the end of a
+command, as in `make; printf '\a'`. Each ring raises the Attention mark. The mark is never a guess: it
+appears only when a program asked for it. A shell that beeps at a failed tab completion is the panel you are
+typing in, so it marks nothing.
 
 ### Program notification
 
@@ -1970,9 +2113,14 @@ Mark a terminal when a program rings the terminal bell. Exact: the program asked
 
 `terminals.attention.signals.notification`
 
-Mark a terminal when a program sends a desktop notification request through it.
+Mark a terminal for attention when a program in it sends a desktop notification.
 
 **Default:** on · **Values:** on · off
+
+Some programs ask the terminal to show a desktop notification, with escape sequences other terminals
+support too (OSC 9, OSC 777 and OSC 99). throng turns each request into an Attention mark on the panel and
+carries the program's message, up to 200 characters, into the notice that announces it. Whether that notice
+reaches the OS is up to the [Notifications](#notifications) settings.
 
 ### Progress ended
 
@@ -1980,9 +2128,13 @@ Mark a terminal when a program sends a desktop notification request through it.
 
 `terminals.attention.signals.progressEnded`
 
-Mark a terminal when a program reports that its progress completed or failed.
+Mark a terminal for attention when a program in it reports its progress done or failed.
 
 **Default:** on · **Values:** on · off
+
+Some programs report a progress bar to the terminal (the OSC 9;4 sequence Windows Terminal reads), such as
+package installers and long builds. When a program clears its progress, the panel takes the Attention
+mark; when it reports an error, the Failed mark. A program that never reports progress raises neither.
 
 ### Unseen output
 
@@ -1990,9 +2142,14 @@ Mark a terminal when a program reports that its progress completed or failed.
 
 `terminals.attention.signals.unseenOutput`
 
-Mark a terminal that prints output while it is not the focused panel.
+Mark a terminal for attention when it prints output while you are working elsewhere.
 
 **Default:** off · **Values:** on · off
+
+The mark comes from the first output after at least a second of silence, so a steady stream marks the panel
+once rather than on every line, and a new shell printing its first prompt marks nothing. It is a guess:
+throng cannot tell output you care about from a progress counter or a log line, which is why it ships
+off.
 
 ### Output went quiet
 
@@ -2000,11 +2157,11 @@ Mark a terminal that prints output while it is not the focused panel.
 
 `terminals.attention.signals.outputQuiet`
 
-Mark a terminal whose output stops for the quiet time below, after it printed while not focused.
+Mark a terminal for attention when it prints and then stays silent for the quiet time below.
 
 **Default:** off · **Values:** on · off
 
-Mark a terminal whose output stops for the quiet time below, after it printed while not focused. A heuristic: throng cannot tell a program that waits for you from one that works without printing.
+Meant for a program that prints while it works and then waits for you, such as a prompt asking a question. Once a terminal has printed, throng starts timing; when the output has stayed silent for **Quiet time**, the panel takes the Attention mark, unless you are working in it. It is a guess: throng cannot tell a program waiting for you from one working without printing, so a long silent step can mark a panel too.
 
 ### Quiet time
 
@@ -2015,6 +2172,10 @@ Mark a terminal whose output stops for the quiet time below, after it printed wh
 How long a terminal must stay silent after activity before Output went quiet marks it.
 
 **Default:** 10 s (10,000 ms) · **Values:** 10 – 600 s, step 10 s; 1,000 – 3,600,000 ms in the box
+
+Used only while **Output went quiet** is on. Any new output restarts the count. A short time catches a
+waiting prompt sooner but marks more programs that are only pausing; raise it if a slow build keeps
+marking its panel mid-run.
 
 ### Terminal title templates
 
@@ -2043,6 +2204,11 @@ Where the new-project folder picker opens: your user profile, the last folder, o
 
 **Default:** `lastViewed` · **Values:** `profile` · `lastViewed` · `override`
 
+The picker opens when you add a project. `profile` starts in your home folder; `lastViewed` in the folder
+you last chose for a project; `override` in **Override start folder** below. A folder that no longer
+exists, or sits on a drive that is not connected, is passed over for the next choice: the last folder,
+then your home folder.
+
 ### Override start folder
 
 **Cog › Settings › New Project**
@@ -2053,9 +2219,7 @@ The folder the new-project picker opens at when you choose Override.
 
 **Default:** empty · **Values:** A folder path; may be empty
 
-The fixed folder the new-project picker opens at when "Override" is selected. Type a path or browse to pick one.
-
-The folder the picker opens at when **Override** is chosen. Empty falls back to the last folder, then the profile.
+Type a path or browse to pick one. Used only while **New project folder starts at** is `override`. Empty, or a folder that has gone, falls back to the last folder, then your home folder.
 
 ## Search
 
@@ -2071,6 +2235,10 @@ How long find waits after you stop typing before it re-runs the search and updat
 
 **Default:** 125 ms · **Values:** 0 – 2,000 ms, step 25 ms; 0 – 10,000 ms in the box
 
+The find bar opens in an editor, a terminal or a preview and searches as you type. Each keystroke restarts
+the wait, so a large document is searched once per pause rather than once per key. Zero searches on
+every key. Find in Files has its own delay, below.
+
 ### Find in Files
 
 #### Find in Files results open in
@@ -2083,6 +2251,10 @@ Whether a new search reuses the last Find in Files panel, or opens a fresh panel
 
 **Default:** `lastActive` · **Values:** `lastActive` (The last Find in Files panel) · `new` (A new panel)
 
+Applies to a search you start from its key binding or a menu. `lastActive` runs it in the Find in Files
+panel you used last in the current tab, replacing its results, and opens one when the tab has none; `new`
+opens a panel for every search, so earlier results stay. A panel always searches its own project.
+
 #### Find in Files searches
 
 **Cog › Settings › Search › Find in Files**
@@ -2093,7 +2265,7 @@ Whether a Find in Files search waits for Run, or starts on its own once you stop
 
 **Default:** `asYouType` · **Values:** `run` (When you press Run) · `asYouType` (As you type)
 
-Whether a search waits for **Run** or starts on its own once you stop typing.
+`asYouType` starts a search once you pause for **Find in Files delay**, and searches again as you change the term, its options or its folder. `run` searches only when you press **Run** or **Enter**, which suits a large project where each search takes a while.
 
 #### Find in Files delay
 
@@ -2105,6 +2277,10 @@ How long Find in Files waits after you stop typing before it searches, when sear
 
 **Default:** 500 ms · **Values:** 0 – 2,000 ms, step 25 ms; 0 – 10,000 ms in the box
 
+Used only while **Find in Files searches** is `asYouType`. Each keystroke restarts the wait, so a search of
+a large project starts once you pause. Typing without a pause still searches once four times this delay
+has passed.
+
 #### Find in Files groups results by
 
 **Cog › Settings › Search › Find in Files**
@@ -2115,7 +2291,7 @@ How Find in Files panels arrange their rows. Every open panel follows it.
 
 **Default:** `file` · **Values:** `file` (File) · `fileAndFolder` (Folder, then file) · `folderTree` (Folder structure: the File Explorer's tree)
 
-How Find in Files panels arrange their rows. Choosing a grouping in a panel changes this setting, and every open panel follows it.
+`file` lists each file with its matches beneath; `fileAndFolder` gathers those files under their folders; `folderTree` nests them as File Explorer does. Choosing a grouping in a panel changes this setting, and every open panel follows it.
 
 #### Show results
 
@@ -2127,7 +2303,7 @@ Whether Find in Files shows its result headings collapsed or expanded.
 
 **Default:** `expanded` · **Values:** `collapsed` (Collapsed) · `expanded` (Expanded)
 
-Whether Find in Files shows its result headings collapsed or expanded. The panel’s collapse toggle changes this setting too.
+`expanded` shows every match under its file; `collapsed` shows only the file and folder headings, for you to open one at a time. The panel’s collapse toggle changes this setting too.
 
 #### Excluded from search
 
@@ -2147,11 +2323,11 @@ What Find in Files skips. Separate from the File Explorer's excluded globs. A pa
 
 `search.inFiles.useExcludeGlobs`
 
-Whether a new Find in Files panel starts with its exclusions toggle on.
+Start each new Find in Files panel with its exclusions toggle on.
 
 **Default:** on · **Values:** on · off
 
-Whether a new Find in Files panel starts with its exclusions toggle on, applying the list above. Each panel can switch it for itself.
+With the toggle on, a panel skips everything in **Excluded from search** above. Each panel can switch it for itself, for example to search a build folder once, without changing this setting.
 
 #### Ask before a replace that cannot be undone
 
@@ -2223,11 +2399,11 @@ must stay in a marked panel before its mark clears.
 
 `notifications.os`
 
-Allow throng to send OS notifications at all.
+Let throng send OS notifications. Off sends none, whatever each type's OS Notify says.
 
 **Default:** on · **Values:** on · off
 
-Allow throng to send OS notifications at all. Off, nothing reaches the OS and every OS Notify is unavailable, though each keeps its setting.
+The master switch for the **OS Notify** box of each notification type below. On, each type's box decides; off, nothing reaches the OS, and every OS Notify box is greyed out but keeps its setting for when you turn this back on. Notices inside throng are not affected.
 
 ### Toast duration
 
@@ -2263,7 +2439,7 @@ How long the pointer must rest on a notification before it shows its whole text.
 
 **Default:** 250 ms · **Values:** 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box
 
-How long the pointer must rest on a notification before it shows more: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. Zero shows it as soon as the pointer arrives; a longer delay keeps the notifications still while you move the pointer across them. Keyboard focus never waits.
+What it shows: a Notifications panel entry expands to its whole text, and a cut-off toast shows its whole text in a popover. Zero shows it as soon as the pointer arrives; a longer delay keeps the notifications still while you move the pointer across them. Keyboard focus never waits.
 
 ### Confirm before dismissing all notifications
 
@@ -2275,7 +2451,7 @@ Ask for confirmation before Dismiss all clears every notification in the Notific
 
 **Default:** on · **Values:** on · off
 
-Ask before **Dismiss all** clears the Notifications panel.
+**Dismiss all** empties the Notifications panel in one go, and a dismissed notice cannot be brought back, so throng asks first. Off, it clears at once. Attention marks stay either way: dismissing their notices does not clear the marks.
 
 ### Notifications panel limit
 
@@ -2299,7 +2475,7 @@ Show error notices as a toast. Turn off both Toast and Panel and they appear now
 
 **Default:** on · **Values:** on · off
 
-Show error notices as a toast. Every toast leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. Turning errors off means a failed operation reports nothing on screen. Whatever these say, the event is still written to the log.
+A toast appears in the corner of the window that raised the notice. It leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. Turning errors off means a failed operation reports nothing on screen. Whatever these say, the event is still written to the log.
 
 ### Error: Panel
 
@@ -2310,6 +2486,8 @@ Show error notices as a toast. Every toast leaves after the toast duration, unle
 Keep error notices in the Notifications panel until you dismiss them, with or without a toast.
 
 **Default:** on · **Values:** on · off
+
+The Notifications panel sits at the bottom of the right pane. A kept error notice stays there after its toast has gone, survives a restart, and leaves only when you dismiss it there or choose **Dismiss all**. With neither Toast nor Panel ticked, error notices appear nowhere in throng. Clearing the last of Toast and Panel asks you to confirm first, because a failure would then show nothing on screen. Whatever these say, the event is still written to the log.
 
 ### Error: OS Notify
 
@@ -2333,7 +2511,7 @@ Show warning notices as a toast. Turn off both Toast and Panel and they appear n
 
 **Default:** on · **Values:** on · off
 
-Show warning notices as a toast. Every toast leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. Turning warnings off means a partly-failed operation reports nothing on screen. Whatever these say, the event is still written to the log.
+A toast appears in the corner of the window that raised the notice. It leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. Turning warnings off means a partly-failed operation reports nothing on screen. Whatever these say, the event is still written to the log.
 
 ### Warning: Panel
 
@@ -2344,6 +2522,8 @@ Show warning notices as a toast. Every toast leaves after the toast duration, un
 Keep warning notices in the Notifications panel until you dismiss them, with or without a toast.
 
 **Default:** on · **Values:** on · off
+
+The Notifications panel sits at the bottom of the right pane. A kept warning notice stays there after its toast has gone, survives a restart, and leaves only when you dismiss it there or choose **Dismiss all**. With neither Toast nor Panel ticked, warning notices appear nowhere in throng. Clearing the last of Toast and Panel asks you to confirm first, because a partial failure would then show nothing on screen. Whatever these say, the event is still written to the log.
 
 ### Warning: OS Notify
 
@@ -2367,7 +2547,7 @@ Show information notices as a toast. Turn off both Toast and Panel and they appe
 
 **Default:** on · **Values:** on · off
 
-Show information notices as a toast. Every toast leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. These are ordinary progress and status messages. Whatever these say, the event is still written to the log.
+A toast appears in the corner of the window that raised the notice. It leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. These are ordinary progress and status messages. Whatever these say, the event is still written to the log.
 
 ### Information: Panel
 
@@ -2378,6 +2558,8 @@ Show information notices as a toast. Every toast leaves after the toast duration
 Keep information notices in the Notifications panel until you dismiss them, with or without a toast.
 
 **Default:** on · **Values:** on · off
+
+The Notifications panel sits at the bottom of the right pane. A kept information notice stays there after its toast has gone, survives a restart, and leaves only when you dismiss it there or choose **Dismiss all**. With neither Toast nor Panel ticked, information notices appear nowhere in throng. Whatever these say, the event is still written to the log.
 
 ### Information: OS Notify
 
@@ -2401,7 +2583,7 @@ Show success notices as a toast. Turn off both Toast and Panel and they appear n
 
 **Default:** on · **Values:** on · off
 
-Show success notices as a toast. Every toast leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. These confirm an operation that worked, so they are the ones most worth switching off. Whatever these say, the event is still written to the log.
+A toast appears in the corner of the window that raised the notice. It leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. These confirm an operation that worked, so they are the ones most worth switching off. Whatever these say, the event is still written to the log.
 
 ### Success: Panel
 
@@ -2412,6 +2594,8 @@ Show success notices as a toast. Every toast leaves after the toast duration, un
 Keep success notices in the Notifications panel until you dismiss them, with or without a toast.
 
 **Default:** on · **Values:** on · off
+
+The Notifications panel sits at the bottom of the right pane. A kept success notice stays there after its toast has gone, survives a restart, and leaves only when you dismiss it there or choose **Dismiss all**. With neither Toast nor Panel ticked, success notices appear nowhere in throng. Whatever these say, the event is still written to the log.
 
 ### Success: OS Notify
 
@@ -2435,7 +2619,7 @@ Show attention notices as a toast. Turn off both Toast and Panel and they appear
 
 **Default:** on · **Values:** on · off
 
-Show attention notices as a toast. Every toast leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. These announce a terminal that needs you, Attention and Failed marks alike. The mark itself is raised whatever you choose. Whatever these say, the event is still written to the log.
+A toast appears in the corner of the window that raised the notice. It leaves after the toast duration, unless the pointer is over it or focus is inside it. With Panel ticked as well, the notice is also kept in the Notifications panel; with neither, it appears nowhere in throng. These announce a terminal that needs you, Attention and Failed marks alike. The mark itself is raised whatever you choose. Whatever these say, the event is still written to the log.
 
 ### Attention: Panel
 
@@ -2446,6 +2630,8 @@ Show attention notices as a toast. Every toast leaves after the toast duration, 
 Keep attention notices in the Notifications panel until you dismiss them, with or without a toast.
 
 **Default:** on · **Values:** on · off
+
+The Notifications panel sits at the bottom of the right pane. A kept attention notice stays there after its toast has gone, survives a restart, and leaves only when you dismiss it there or choose **Dismiss all**. With neither Toast nor Panel ticked, attention notices appear nowhere in throng. The attention mark on the panel stays whatever this says; Dismiss all never clears one. Whatever these say, the event is still written to the log.
 
 ### Attention: OS Notify
 
@@ -2504,7 +2690,7 @@ How large a single log file may grow before throng starts a new one.
 
 **Default:** 1 MB (1,048,576 bytes) · **Values:** 0.25 – 4 MB, step 0.25 MB; 1,024 – 67,108,864 bytes in the box
 
-How large a single log file may grow before throng starts a new one. Older files are kept for the days set below, up to the folder limit.
+A full file is renamed and kept, and logging carries on in a fresh one; nothing is deleted when a file rolls over. The older files then stay for the days set below, up to the folder limit.
 
 ### Days of logs kept
 
@@ -2515,6 +2701,10 @@ How large a single log file may grow before throng starts a new one. Older files
 How many days of logs to keep, counting days throng ran. throng deletes older logs.
 
 **Default:** 3 days · **Values:** 1 – 30 days, step 1
+
+Only days on which throng wrote a log count, so a fortnight away does not empty the folder: with the default,
+you keep the logs of the last three days you used throng. **Log folder limit** still applies on top, so a
+busy day at `debug` can push older days out sooner.
 
 ### Log folder limit
 
@@ -2544,9 +2734,7 @@ How often throng measures its own CPU, memory, GPU and I/O.
 
 **Default:** 2 s (2,000 ms) · **Values:** 2 – 60 s, step 1 s
 
-How often throng measures its own CPU, memory, GPU and I/O, for the status bar and the Resource Monitor alike. A longer history needs a slower capture: when the history window chosen needs a slower one than this, the capture interval in force is shown beside it.
-
-How often throng measures itself. A longer history needs a slower capture, so the monitor never keeps more than about 150 points for a process: the longer the history window, the slower the fastest capture it allows. A faster value than the history allows is raised, and Preferences says beside the field what it was raised to and why. Also changeable from the monitor's toolbar, which offers only the intervals the history allows.
+Each capture feeds the status bar's usage figures and the Resource Monitor alike. A longer history needs a slower capture, so the monitor never keeps more than about 150 points for a process: the longer the history window, the slower the fastest capture it allows. A faster value than the history allows is raised, and Preferences says beside the field what it was raised to and why. Also changeable from the monitor's toolbar, which offers only the intervals the history allows.
 
 ### History window
 
@@ -2557,6 +2745,11 @@ How often throng measures itself. A longer history needs a slower capture, so th
 How much history the Resource Monitor keeps for each process while it is open.
 
 **Default:** 5 min (300,000 ms) · **Values:** 1 – 30 min, step 1 min
+
+The monitor's charts span this window, and collecting starts when you open the monitor, not before. A
+longer window needs a slower **Capture interval**: up to 5 minutes allows every 2 seconds, up to 10
+minutes every 5, up to 20 minutes every 15, and up to 30 minutes every 30. Choosing a longer window raises
+the capture interval to match when it is faster than that.
 
 ### CPU warning
 
@@ -2580,6 +2773,9 @@ The share of the machine's CPU at which a figure turns the critical colour.
 
 **Default:** 80% · **Values:** 1 – 100%, step 1%
 
+Applies to the CPU figures on the status bar and in the Resource Monitor. A **CPU warning** at or above
+this is treated as one below it, so the warning colour always comes first.
+
 ### Memory warning
 
 **Cog › Settings › Resource Monitor**
@@ -2590,7 +2786,7 @@ The share of installed memory at which a figure turns the warning colour.
 
 **Default:** 50% · **Values:** 1 – 100%, step 1%
 
-The share of installed memory at which a figure shows the warning colour. A process at or above it is never hidden as idle.
+Applies to the memory figures on the status bar and in the Resource Monitor, and is kept below **Memory critical**. A process using this much or more is never hidden as idle.
 
 ### Memory critical
 
@@ -2602,6 +2798,9 @@ The share of installed memory at which a figure turns the critical colour.
 
 **Default:** 80% · **Values:** 1 – 100%, step 1%
 
+Applies to the memory figures on the status bar and in the Resource Monitor. A **Memory warning** at or
+above this is treated as one below it, so the warning colour always comes first.
+
 ### Popup delay
 
 **Cog › Settings › Resource Monitor**
@@ -2612,7 +2811,7 @@ How long the pointer rests on the status bar usage figures before their popup op
 
 **Default:** 500 ms · **Values:** 0 – 1,500 ms, step 25 ms; 0 – 10,000 ms in the box
 
-How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits.
+The popup shows CPU, memory, GPU and I/O for each part of throng, with small graphs, whichever figures the bar has room for. At 0 it opens as soon as the pointer arrives; moving keyboard focus onto the figures opens it without waiting, and **Esc** closes it.
 
 ### Kill processes
 

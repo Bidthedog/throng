@@ -10,8 +10,8 @@
  * count worth reporting, so its one readout is a hovered or focused link's target (FR-118, iteration
  * 2026-09-15) — the mounted behaviour is `preview-link-readout.test.ts`'s.
  *
- * One button, token `editorPanel`: *Open in Editor* while the preview is standalone, *Go to Editor*
- * (pressed) while it is parented. A binary provider has no editor at all, so its preview's bar would
+ * One button, token `editorPanel`, named *Open in Editor* in both states (v1 review, #732): unpressed while the
+ * preview is standalone, pressed while it is parented. A binary provider has no editor at all, so its preview's bar would
  * carry nothing — and is not shown (FR-015e).
  *
  * Mounted through the real `PanelPlaceholder` with a TEST provider (`preview-panel-mount.test.ts`'s
@@ -160,17 +160,18 @@ describe('its one button is the route back to the source (FR-015a, FR-015c, FR-0
     expect(drawnIcon(b)).toBe(iconMarkup('editorPanel'));
   });
 
-  it('parented: “Go to Editor”, pressed — and back to Open in Editor when the parent goes', async () => {
+  it('parented: still “Open in Editor”, pressed — and unpressed again when the parent goes', async () => {
     const mounted = await mountText();
     const { id } = mounted;
     mounted.push(previewUpdate({ panelId: id, providerId: 'testText', filePath: TEXT_FILE, revision: 2, content: null, parent: { panelId: 'ed', title: 'notes' } }));
 
-    await waitFor(() => expect(button(id)).toHaveAccessibleName('Go to Editor'));
-    expect(button(id)).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(button(id)).toHaveAttribute('aria-pressed', 'true'));
+    expect(button(id)).toHaveAccessibleName('Open in Editor');
+    expect(button(id)).toHaveAttribute('title', 'Open in Editor');
 
     mounted.push(previewUpdate({ panelId: id, providerId: 'testText', filePath: TEXT_FILE, revision: 3, content: null, parent: null }));
-    await waitFor(() => expect(button(id)).toHaveAccessibleName('Open in Editor'));
-    expect(button(id)).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() => expect(button(id)).toHaveAttribute('aria-pressed', 'false'));
+    expect(button(id)).toHaveAccessibleName('Open in Editor');
   });
 
   it('is never hidden by width: it lives in the measured controls group, with nothing fitted against it', async () => {
@@ -221,7 +222,7 @@ describe('the scroll-sync toggle (FR-122c)', () => {
     const mounted = await mountText();
     const { id } = mounted;
     mounted.push(previewUpdate({ panelId: id, providerId: 'testText', filePath: TEXT_FILE, revision: 2, content: null, parent: { panelId: 'ed', title: 'notes' } }));
-    await waitFor(() => expect(button(id)).toHaveAccessibleName('Go to Editor'));
+    await waitFor(() => expect(button(id)).toHaveAttribute('aria-pressed', 'true'));
     expect(toggle(id)?.nextElementSibling).toBe(button(id));
     expect(toggle(id)).toBeEnabled();
   });

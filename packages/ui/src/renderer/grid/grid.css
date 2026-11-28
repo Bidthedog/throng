@@ -224,6 +224,11 @@
   background: var(--throng-colour-editorBg);
 }
 
+/* T18 — a read-only grid (a workbook) draws its values in the theme's muted text, so it reads as not editable. */
+.data-grid[aria-readonly='true'] .data-grid__cell-text {
+  color: var(--throng-colour-textMuted);
+}
+
 .data-grid__row--locked .data-grid__cell {
   border-bottom-color: var(--throng-colour-accent);
 }
@@ -323,24 +328,48 @@
   font: inherit;
 }
 
-/* FR-006 — Column Width…, a small form over the grid's top edge. */
-.preview-grid-width {
+/*
+ * FR-006, T8, T10 — Column Width… and the counted inserts: a modal over the grid body. The scrim covers the body and
+ * takes every press; the form sits in its middle.
+ */
+.preview-grid-prompt {
   position: absolute;
-  top: 4px;
-  right: 8px;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 6px 8px;
-  border: 1px solid var(--throng-colour-border);
-  background: var(--throng-colour-inputSurface);
-  color: var(--throng-colour-text);
+  inset: 0;
   z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.preview-grid-width {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 6px;
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-text);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
 .preview-grid-width input {
   width: 6em;
   margin-left: 6px;
+}
+
+.preview-grid-width__buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* T8 — why a typed count cannot be used, beside the field. */
+.preview-grid-width__problem {
+  color: var(--throng-colour-errorText);
 }
 
 /*

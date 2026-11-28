@@ -19,6 +19,9 @@ const ROW_ORDER_BEFORE_079: unknown = JSON.parse(
   readFileSync(new URL('../fixtures/theme-row-order-079.json', import.meta.url), 'utf8'),
 );
 
+/** Tokens added after 079: the order guard measures the rows that existed then, so these are left out of it. */
+const ADDED_AFTER_079: readonly string[] = ['sizes.ignoredEntryOpacity'];
+
 /** A descriptor's heading path, for readable assertions. */
 const path = (d: FieldDescriptor): string => [d.group, d.subgroup, d.subsection].filter(Boolean).join(' / ');
 
@@ -186,7 +189,10 @@ describe('area grouping (021, FR-001..FR-009)', () => {
     const before = ROW_ORDER_BEFORE_079 as Record<string, string[]>;
     expect(Object.keys(before).sort()).toEqual(Object.keys(ALL_DEFAULT_THEMES).sort());
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      expect(buildThemeMetadata(theme).map((d) => d.key), name).toEqual(before[name]);
+      const keys = buildThemeMetadata(theme)
+        .map((d) => d.key)
+        .filter((k) => !ADDED_AFTER_079.includes(k));
+      expect(keys, name).toEqual(before[name]);
     }
   });
 

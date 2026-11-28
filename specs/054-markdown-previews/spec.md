@@ -428,6 +428,9 @@ starting state; repeat with a diagram's Full Pane.
   Expand This H*n*, Collapse All Inside This H*n*, Expand All Inside This H*n*, Collapse All, Expand
   All. No fold row remains at the top level. The editor and the preview MUST show identical submenus.
   The submenu uses the same submenu mechanism as the existing *Split* and *Open in* submenus.
+  *(Amended 2026-11-28, v1 review, #732: in a Markdown **preview** the rows show no keys, because the outlining
+  chords do not act there; the rows and their commands stay. The editor's rows show their chords as before. "Identical"
+  now means the same rows in the same order.)*
 - **FR-011**: **Collapse All Inside This H*n*** MUST collapse the innermost section at the point the
   menu was opened and every section nested beneath it, each individually (as 047 FR-037a does for the
   whole document); **Expand All Inside This H*n*** MUST expand the same set. Sections outside it MUST be
@@ -445,6 +448,9 @@ starting state; repeat with a diagram's Full Pane.
   already collapsed, or the target and everything under it already expanded — and enabled for any
   other mixture. The submenu MUST be divided into three groups: This Section, All Inside This Section,
   and the whole document's Collapse All / Expand All (manual test change request, 2026-10-12).
+  *(Amended 2026-11-28, v1 review, #732: both commands now ship a chord, so every Outlining row in the editor shows
+  one: Collapse All Inside **Ctrl+M, Shift+S** and Expand All Inside **Ctrl+M, Shift+E**, the This Section chords with
+  Shift added to the second key.)*
 - **FR-014**: Non-Markdown documents MUST show no Outlining submenu.
 
 #### Task-list checkboxes (#462)

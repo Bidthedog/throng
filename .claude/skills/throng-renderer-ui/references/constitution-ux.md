@@ -49,11 +49,13 @@ application's, not the menu's.
   | 0 | **Contextual** | Items present only because of what the pointer is over. Lead the menu when present. The test is **"would this item be absent if the pointer were elsewhere?"** — nothing else qualifies |
   | 1 | **Content** | Acts on the item's content or its name: Rename, Cut, Copy, Paste, Select All, Undo, Redo |
   | 2 | **Create** | Makes something new: New File, New Folder |
-  | 3 | **Destroy** | Removes something: Delete, Destroy Tab, Destroy Panel |
-  | 4 | **Navigate** | Takes you somewhere, or names where something is: Open In, Copy Path, Reveal, Go To Line, Sync to |
-  | 5 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Hide |
-  | 6 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
+  | 3 | **Navigate** | Takes you somewhere, or names where something is: Open In, Copy Path, Reveal, Go To Line, Sync to |
+  | 4 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Hide |
+  | 5 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
+  | 6 | **Destroy** | Removes something: Delete, Close Panel, Destroy Tab, Destroy Panel. Ends the menu when present |
 
+- Destroy sits last so that closing or removing is the final row of every menu. It was
+  third, after Create, until v8.0.0 (the maintainer's v1 review, 2026-11-27).
 - A divider MUST be drawn only at a real section boundary. A menu whose items fall in one
   section carries none, and no menu may begin or end with one — a divider is the rendering
   of a boundary, never a decoration placed by hand.
@@ -127,6 +129,10 @@ trip to Settings is a default they cannot trust.
   which 006 FR-030 and 043's clarification on the *Open In → Search* row forbid.
 - Where no preference chooses between variants — a submenu of explicit targets with no
   default, such as **Copy Path ▸** or **Send to Tab ▸** — this rule adds nothing.
+- **A copy in named formats** (8.3.0) is offered as one **Copy as ▸** submenu, built by
+  `common/copy-as-menu.ts`, and the menu draws no plain **Copy** beside it: one row, not two, for one
+  command. The leaf in the format the preference picks shows the copy key, which copies in that format
+  (*A menu row shows its key*); the other leaf shows none.
 
 ## Name the OS generically
 
@@ -173,6 +179,69 @@ a third over a status figure tells the user these are three kinds of thing when 
 - `packages/ui/tests/unit/popup-style.test.ts` fails the build for a popup that restyles itself,
   one whose root does not wear the shared class, or a window that stops mounting the tooltip. A
   new popup is added to its list in the change that adds it.
+
+## A menu row shows its key
+
+**A menu row shows its key.** A key the user can press instead of opening the menu is only
+learnable if the menu says so, and a row that hides its key on one menu while the same command shows
+it on another teaches nothing about either.
+
+- Every menu row whose command a key performs **in that context** MUST show that key beside its
+  label. Submenu rows count; a submenu's parent row has no key of its own.
+- A **rebindable** command shows the user's current binding, read live from Key Bindings
+  (`firstBinding`), so a rebinding is reflected the next time the menu opens. An **unbound** command
+  shows nothing; a menu never shows a key that does not work.
+- A key the **surface handles itself**, outside Key Bindings — the editor's Ctrl+Z and Ctrl+Y, the
+  grid's Delete, a preview's Ctrl+A — is shown as the fixed key, in the OS's own form.
+- The key shown MUST be the one that performs that command where the menu was opened. A command
+  whose key the surface takes for something else shows nothing there.
+- The fixed keys have one home, `packages/ui/src/renderer/common/fixed-shortcut.ts`, which shows each in
+  the OS's form (Cmd on macOS). A menu row names a fixed key through it, never as a literal string.
+- `packages/ui/tests/unit/menu-shortcuts.test.ts` builds every swept menu with every command bound and
+  fails a row that shows no key unless its `NO_KEY` entry says why, an entry whose reason no longer
+  holds, and a key that is neither a live binding nor a fixed key. A new menu builder is added to its
+  sweep in the change that adds it.
+- **Known gaps:** the Key Bindings tab's chord menu, the Sub-workspaces panel's Minimise/Restore row and
+  the Resource Monitor's node-action menus are built inline and are not yet in the sweep.
+
+## A row goes on the menu of what it acts on
+
+**A row goes on the menu of what it acts on.** A panel has two menus, and each row belongs on exactly one
+of them. A row in the wrong menu is a row the user looks for in the other, and a row in both makes one
+menu longer without making either easier to find.
+
+- The **body menu** is the menu a right-click inside the panel's body opens, including the menu of an
+  element inside it (a grid cell, row or column header, a preview image, a diagram, a link). It holds
+  only what acts on the content under the pointer, and how the body shows that content:
+  - the clipboard, Select All, Undo and Redo, and edits to the content (Insert ▸, Clear, Delete, Edit in
+    Dialog…, Column Width);
+  - finding and moving through the content: Find, Replace, Replace All, Go To Line…, Go to Heading…,
+    Go to Row…, Go to Page…;
+  - how the body draws it: Word Wrap, View Whitespace, Outlining, a grid's Wrap and Lock First Row or
+    Column, a PDF's page layouts;
+  - an element's own actions: Copy Image, Copy Diagram as Image, Open Link, and a diagram's Enter and
+    Exit Focus Mode, which maximise that diagram and not the panel.
+- The **title menu** (the panel header's menu, `workspace/panel-header-menu.ts`) holds what acts on the
+  panel itself, its file, and its link to other panels:
+  - the file: Save, Save As…, Revert, Reload from disk, Copy Path ▸, Print…, Find in File Explorer, the
+    Open in OS rows, Open Preview and Open in Editor, an editor's language, encoding and line endings;
+  - the panel: Split ▸, Send to Tab, Sync to, Refresh, Back and Forward, Zoom, Enter and Exit Focus
+    Mode, a panel's own toggles (a terminal's Remember Command, Remember Directory and Notifications,
+    Edit Long Cells in Dialog), Synchronise Scrolling, Flag, the failure rows, Destroy or Close Panel.
+- **The test**, for a row not listed: would it still mean the same thing if the user had right-clicked
+  somewhere else in the body? If yes, it acts on the panel or its file, so it is a title row. If what
+  it does depends on what is under the pointer, or on the body's view of the content, it is a body row.
+- A panel whose body menu would be left with no rows opens no body menu; it never opens an empty one.
+- Nothing moves to a status bar under this rule. A status bar control may repeat a title row; the menu
+  row stays.
+- **How to apply it to a menu:** list the menu's rows with their sections (the fixtures in
+  `menu-shortcuts.test.ts` build every swept menu), sort each row by the two lists and the test above,
+  then move each misplaced row to the other menu, keeping its label, icon, section, shortcut and
+  enablement. A row moved off a menu where it was the only route must arrive on the other menu in the
+  same change (*Every panel action is reachable*). Amend the FR that placed it, in its owning spec.
+- `packages/ui/tests/unit/menu-placement.test.ts` builds every body and title menu the key sweep builds
+  and fails a title row on a body menu, or a body row on a title menu. A new row is added to its lists
+  in the change that adds it.
 
 ## Quality gate — action controls are themeable icons with hover titles (known gaps included)
 

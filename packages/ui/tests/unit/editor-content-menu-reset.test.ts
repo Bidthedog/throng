@@ -1,32 +1,20 @@
 /**
- * *Reset Language* in the editor content menu (055 FR-024b, US6 scenario 7).
+ * *Reset Language* in the editor's format rows (055 FR-024b, US6 scenario 7), which the v1 review (#732) moved from
+ * the body menu to the panel title menu (`editorFormatItems`, drawn by `panelHeaderMenu`).
  *
  * Every panel action has a menu item, so the reset the status strip offers stays reachable with the status
- * bar hidden. `editorContentMenu` is a pure function over its arguments, so this is a unit test; the
- * two-member view stand-in is the one `menu-sections.test.ts` uses.
+ * bar hidden. `editorFormatItems` is a pure function over its arguments, so this is a unit test.
  */
-import type { EditorView } from '@codemirror/view';
 import { describe, expect, it, vi } from 'vitest';
-import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
-
-const noop = (): void => {};
+import { editorFormatItems } from '../../src/renderer/editor/content-menu.js';
 
 function menu(resetLanguage?: { enabled: boolean; reset: () => void }) {
-  return editorContentMenu({
-    view: {} as EditorView,
-    panelId: 'p1',
-    viewId: 'v1',
-    lineEnding: () => 'lf',
-    wordWrap: { on: false, toggle: noop },
-    gotoLine: { open: noop },
-    languageName: 'JSON',
-    resetLanguage,
-  });
+  return editorFormatItems({ panelId: 'p1', languageName: 'JSON', ...(resetLanguage ? { resetLanguage } : {}) });
 }
 
 describe('Reset Language', () => {
   it('sits immediately after Set Language…', () => {
-    const labels = menu({ enabled: true, reset: noop }).map((item) => item.label);
+    const labels = menu({ enabled: true, reset: () => {} }).map((item) => item.label);
     const set = labels.indexOf('Set Language… (JSON)');
     expect(set).toBeGreaterThanOrEqual(0);
     expect(labels[set + 1]).toBe('Reset Language');
@@ -41,7 +29,7 @@ describe('Reset Language', () => {
   });
 
   it('is disabled while the document has no override', () => {
-    const item = menu({ enabled: false, reset: noop }).find((i) => i.label === 'Reset Language');
+    const item = menu({ enabled: false, reset: () => {} }).find((i) => i.label === 'Reset Language');
     expect(item).toBeDefined();
     expect(item?.disabled).toBe(true);
   });

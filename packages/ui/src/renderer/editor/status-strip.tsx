@@ -322,9 +322,8 @@ function PreviewButton({
         token={previewIconOf(affordance.provider)}
         className="editor-status-strip__preview"
         testId={`editor-preview-${panelId}`}
-        title={
-          providerOff ? previewDisabledTitle(affordance.provider.displayName) : pressed ? 'Go to Preview' : 'Open Preview'
-        }
+        // v1 review (#732): one label, pressed or not, as every menu names it.
+        title={providerOff ? previewDisabledTitle(affordance.provider.displayName) : 'Open Preview'}
         disabled={providerOff}
         // No pressed state on a control that cannot be used: it would announce a toggle nobody can flip.
         ariaPressed={providerOff ? undefined : pressed}

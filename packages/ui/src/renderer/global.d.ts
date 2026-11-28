@@ -490,6 +490,8 @@ declare global {
           tabTitle: string;
           projectName: string;
         }) => void;
+        /** The title menu's Unflag (v1 review): clear the panel's mark. Fire and forget. */
+        unflag?: (panelId: string) => void;
         /** 057 FR-007 (#541) — panels a route ended for good: their marks and stored flags go too. */
         panelsDestroyed?: (panelIds: string[]) => void;
         /** 076 FR-022 — this panel's own notifications turned off and that was saved. */
@@ -508,6 +510,11 @@ declare global {
         list: (
           relDir: string,
         ) => Promise<{ entries: FileTreeEntry[] } | FilesFailure>;
+        /**
+         * 081 US8 — which of these root-relative paths git ignores (a folder with a trailing `/`), spelt as asked.
+         * Empty without git; never rejects.
+         */
+        ignored?: (relPaths: readonly string[]) => Promise<{ ignored: string[] }>;
         rename: (relPath: string, newName: string) => Promise<FilesOkOrError>;
         move: (srcRelPaths: string[], destRelDir: string) => Promise<FilesOkOrError>;
         delete: (relPaths: string[], mode: 'recycle' | 'permanent') => Promise<FilesOkOrError>;
@@ -537,7 +544,7 @@ declare global {
          * Something changed under the root. `relDirs` names every directory it touched (#482); when
          * it is absent the report could not name them, and whatever the reader holds is suspect.
          */
-        onChange: (cb: (evt: { relDir: string; relDirs?: string[] }) => void) => () => void;
+        onChange: (cb: (evt: { relDir: string; relDirs?: string[]; ignoreRulesChanged?: boolean }) => void) => () => void;
         /** 026 / #186 — live sync stopped and could not be restarted (FR-010a). */
         onWatchFailed?: (cb: (evt: { root: string; reason: string }) => void) => () => void;
         /**

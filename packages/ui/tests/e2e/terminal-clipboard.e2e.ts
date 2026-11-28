@@ -97,9 +97,9 @@ const MACOS_PAINT_SWITCHES: readonly string[] =
  *
  *   - a web link: Open Link and Copy Link to Clipboard, and nothing of the ordinary menu. Copy Link is
  *     performed and read back through the in-process clipboard seam this describe launches with.
- *   - a detected path in the project: Open In ▸ (New Editor, Active Editor), Open in OS Explorer, and —
- *     once main answers (FR-170c) — Open in OS Default Program; Copy Link to Clipboard last. The OS rows
- *     are NOT clicked: this app is launched without the harness's OS-open stubs.
+ *   - a detected path in the project: Open In ▸ with the File Explorer's rows (081 FR-050) — OS File
+ *     Explorer, Open in OS Default Program once main answers, New Editor — and Copy Link to Clipboard. The
+ *     OS rows are NOT clicked: this app is launched without the harness's OS-open stubs.
  */
 async function expectTerminalLinkMenu(win: Page, pid: string, root: string): Promise<void> {
   const term = win.getByTestId(`terminal-${pid}`);
@@ -166,13 +166,15 @@ async function expectTerminalLinkMenu(win: Page, pid: string, root: string): Pro
   await expect(menu).toHaveCount(1);
   await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();
   await expect(win.getByTestId('menu-item-Open In')).toBeVisible();
-  await expect(win.getByTestId('menu-item-Open in OS Explorer')).toBeVisible();
-  await expect(win.getByTestId('menu-item-Open in OS Default Program')).toBeVisible({ timeout: 10_000 });
+  // 081 FR-053 — the OS rows live in Open In ▸ now; Find in File Explorer enables once main answers.
+  await expect(win.getByTestId('menu-item-Find in File Explorer')).toHaveAttribute('aria-disabled', 'false', { timeout: 10_000 });
   await expect(win.getByTestId('menu-item-Copy Link to Clipboard')).toBeVisible();
   await expect(win.getByTestId('menu-item-Paste')).toHaveCount(0);
   await win.getByTestId('menu-item-Open In').click();
+  // 081 FR-050 — the File Explorer's Open In ▸ rows for the same file.
+  await expect(win.getByTestId('menu-item-OS File Explorer')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Open in OS Default Program')).toHaveAttribute('aria-disabled', 'false');
   await expect(win.getByTestId('menu-item-New Editor')).toBeVisible();
-  await expect(win.getByTestId('menu-item-Active Editor')).toBeVisible();
   await win.keyboard.press('Escape');
   await win.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);

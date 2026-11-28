@@ -66,16 +66,14 @@ describe('menu rows (contracts/menus-commands-controls.md)', () => {
     await waitFor(() => expect(screen.getByTestId(`heading-outline-${m!.id}`)).toBeInTheDocument());
   });
 
-  it('the header menu offers Go to Heading… too, with the same chord', async () => {
+  // v1 review (#732): Go to Heading… moves through the content, so the body menu holds it and the title menu does not.
+  it('the header menu leaves Go to Heading… to the body menu', async () => {
     m = await mountMarkdownPreview(DOC);
     await screen.findByTestId(`preview-body-${m.id}`, {}, COLD);
 
     fireEvent.contextMenu(screen.getByTestId(`panel-handle-${m.id}`), { clientX: 10, clientY: 10 });
-    const item = await screen.findByTestId('menu-item-Go to Heading…');
-    expect(item).toHaveTextContent('Ctrl+G');
-
-    fireEvent.click(item);
-    await waitFor(() => expect(screen.getByTestId(`heading-outline-${m!.id}`)).toBeInTheDocument());
+    await screen.findByTestId('menu-item-Back');
+    expect(screen.queryByTestId('menu-item-Go to Heading…')).toBeNull();
   });
 });
 

@@ -2,6 +2,9 @@
  * 060 FR-045 — a link menu's Open In ▸ when the file the link names is already open in an editor
  * anywhere: ONE "Current Editor" row replaces New Editor / Active Editor, and the named-editor rows
  * are drawn disabled (a file is never moved between editors). Not open: the menu is unchanged.
+ *
+ * These are 045's rows, which only a UNC link keeps (081 FR-054). A local link's Open In ▸ is the File
+ * Explorer's, whose Current Editor row `describeOpenInTargets` draws (`link-menu-open-in.test.ts`).
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { LinkMenuApplicable } from '@throng/core';
@@ -23,7 +26,7 @@ const editors = [
 function openInRows(fileOpen: boolean | undefined, performers?: LinkMenuPerformers): MenuAction[] {
   const rows = linkMenuActions(
     {
-      cls: 'onDevice',
+      cls: 'unc',
       applicable,
       openEditors: editors,
       openLink: () => {},

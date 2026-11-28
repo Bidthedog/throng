@@ -75,6 +75,8 @@ export interface TreeNodeData {
   relPath: string;
   isSymlink: boolean;
   children?: TreeNodeData[];
+  /** 081 FR-070 — git ignores this entry, or a folder above it: drawn faded. Absent until git has answered. */
+  ignored?: boolean;
 }
 
 export interface ExplorerApi {
@@ -196,6 +198,27 @@ function sameEntries(a: TreeNodeData[] | undefined, b: TreeNodeData[]): boolean 
       return false;
     }
   }
+  return true;
+}
+
+/**
+ * 081 FR-072a — how long the tree gathers folders to ask git about before asking. Long enough that a watch report's
+ * re-read and its `.gitignore` re-ask become one question per folder, short enough that the fade reads as part of the
+ * listing.
+ */
+const IGNORE_ASK_SETTLE_MS = 25;
+
+/** A listing's entries, order-free: two listings with the same signature need the same question asked of git. */
+function listingSignature(kids: readonly TreeNodeData[]): string {
+  return kids
+    .map((k) => `${k.kind === 'folder' ? 'd' : 'f'}:${k.relPath}`)
+    .sort()
+    .join('\n');
+}
+
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
   return true;
 }
 
@@ -680,17 +703,102 @@ export function useExplorerData(
   // Project-scoped hidden paths (004), applied on top of the global excludeGlobs.
   const hiddenSet = useMemo(() => new Set(hiddenPaths), [hiddenPaths]);
 
+  /*
+   * 081 US8 (FR-070, FR-072a) — which listed entries git ignores, per folder: `dir → relPaths` (no trailing `/`).
+   *
+   * A listing is drawn the moment it arrives; this is asked AFTER, so the tree never waits on git and the ignored rows
+   * fade in when the answer lands. Asked per listing, when a folder's entries load or change (`askedFor` remembers
+   * which entries each folder was last asked about, so a re-sort or an unchanged re-read asks nothing), and for every
+   * listed folder again when the watch reports a `.gitignore` change. The asks of one burst go out together after
+   * {@link IGNORE_ASK_SETTLE_MS}, each with the folder's latest entries.
+   */
+  const [ignoredByDir, setIgnoredByDir] = useState<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
+  const askedFor = useRef(new Map<string, string>());
+  const ignoreAsks = useRef<{ dirs: Set<string>; timer: ReturnType<typeof setTimeout> | null }>({ dirs: new Set(), timer: null });
+  const ignoreGeneration = useRef(0);
+  const askIgnored = useCallback((dirs: Iterable<string>): void => {
+    const pending = ignoreAsks.current;
+    for (const dir of dirs) pending.dirs.add(dir);
+    if (pending.timer !== null || pending.dirs.size === 0) return;
+    pending.timer = setTimeout(() => {
+      pending.timer = null;
+      const ask = window.throng?.files?.ignored;
+      const batch = [...pending.dirs];
+      pending.dirs.clear();
+      if (!ask) return;
+      const generation = ignoreGeneration.current;
+      for (const dir of batch) {
+        const kids = childrenMapRef.current.get(dir) ?? [];
+        const signature = listingSignature(kids);
+        askedFor.current.set(dir, signature);
+        const settle = (ignored: readonly string[]): void => {
+          // A newer tree, or a newer listing of this folder, has its own question in flight.
+          if (generation !== ignoreGeneration.current || askedFor.current.get(dir) !== signature) return;
+          const next = new Set(ignored.map((p) => (p.endsWith('/') ? p.slice(0, -1) : p)));
+          setIgnoredByDir((prev) => {
+            const was = prev.get(dir);
+            if (was ? sameSet(was, next) : next.size === 0) return prev;
+            const map = new Map(prev);
+            map.set(dir, next);
+            return map;
+          });
+        };
+        if (kids.length === 0) {
+          settle([]);
+          continue;
+        }
+        ask(kids.map((k) => (k.kind === 'folder' ? `${k.relPath}/` : k.relPath))).then(
+          (res) => settle(res?.ignored ?? []),
+          (error: unknown) => logCaught('use-explorer-data: ask which entries git ignores', error),
+        );
+      }
+    }, IGNORE_ASK_SETTLE_MS);
+  }, []);
+
+  // A new tree forgets the old one's answers; one still in flight is dropped by its generation.
+  useEffect(() => {
+    ignoreGeneration.current += 1;
+    askedFor.current.clear();
+    setIgnoredByDir(new Map());
+  }, [rootFolder, projectId]);
+
+  // A folder whose entries were never asked about, or have changed since, is asked about now.
+  useEffect(() => {
+    const changed: string[] = [];
+    for (const [dir, kids] of childrenMap) {
+      if (askedFor.current.get(dir) !== listingSignature(kids)) changed.push(dir);
+    }
+    askIgnored(changed);
+  }, [childrenMap, askIgnored]);
+
+  useEffect(
+    () => () => {
+      const pending = ignoreAsks.current;
+      if (pending.timer !== null) clearTimeout(pending.timer);
+      pending.timer = null;
+      pending.dirs.clear();
+    },
+    [],
+  );
+
   // Derive react-arborist data (single root node + nested loaded children),
   // dropping any entry the project has hidden (reactive — no re-fetch needed).
+  // An entry git ignores, or one beneath an ignored folder, is marked `ignored` (081 FR-070).
   const data = useMemo<TreeNodeData[]>(() => {
-    const build = (dir: string): TreeNodeData[] =>
-      (childrenMap.get(dir) ?? [])
+    const build = (dir: string, inIgnored: boolean): TreeNodeData[] => {
+      const ignoredHere = ignoredByDir.get(dir);
+      return (childrenMap.get(dir) ?? [])
         .filter((k) => !hiddenSet.has(k.relPath))
-        .map((k) => (k.kind === 'folder' ? { ...k, children: build(k.relPath) } : { ...k }));
+        .map((k) => {
+          const ignored = inIgnored || (ignoredHere?.has(k.relPath) ?? false);
+          const node: TreeNodeData = ignored ? { ...k, ignored } : { ...k };
+          return k.kind === 'folder' ? { ...node, children: build(k.relPath, ignored) } : node;
+        });
+    };
     return [
-      { id: ROOT_ID, name: rootName, kind: 'folder', relPath: '', isSymlink: false, children: build('') },
+      { id: ROOT_ID, name: rootName, kind: 'folder', relPath: '', isSymlink: false, children: build('', false) },
     ];
-  }, [childrenMap, rootName, hiddenSet]);
+  }, [childrenMap, rootName, hiddenSet, ignoredByDir]);
 
   // Snapshot the currently-open folder relPaths from react-arborist (the source
   // of truth for open-state), excluding the always-open root.
@@ -912,7 +1020,10 @@ export function useExplorerData(
     let timer: ReturnType<typeof setTimeout> | null = null;
     /** The directories the reports in this coalescing window named, or null once one named none. */
     let named: Set<string> | null = new Set();
+    /** Whether a report in this coalescing window named a `.gitignore` (081 FR-072a). */
+    let rulesChanged = false;
     const off = window.throng?.files?.onChange?.((evt) => {
+      if (evt?.ignoreRulesChanged) rulesChanged = true;
       if (named) {
         if (evt?.relDirs) for (const d of evt.relDirs) named.add(d);
         else named = null;
@@ -920,15 +1031,28 @@ export function useExplorerData(
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         const dirs = named;
+        const rules = rulesChanged;
         named = new Set();
-        void reloadChanged(dirs ? [...dirs] : undefined);
+        rulesChanged = false;
+        const reread = reloadChanged(dirs ? [...dirs] : undefined);
+        // 081 FR-072a — a changed `.gitignore` can move any listed entry, in any folder: once the re-read has
+        // landed, ask git about every listed folder again.
+        if (rules) {
+          reread.then(
+            () => {
+              askedFor.current.clear();
+              askIgnored(childrenMapRef.current.keys());
+            },
+            (error: unknown) => logCaught('use-explorer-data: re-read after a .gitignore change', error),
+          );
+        }
       }, 80); // coalesce bursts
     });
     return () => {
       if (timer) clearTimeout(timer);
       off?.();
     };
-  }, [rootFolder, reloadChanged]);
+  }, [rootFolder, reloadChanged, askIgnored]);
 
   /**
    * Ensure a folder's children are loaded (lazy, on first open).

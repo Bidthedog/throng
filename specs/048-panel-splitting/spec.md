@@ -331,8 +331,10 @@ Repeat with a tab from the tab strip, and with a panel dragged over another tab 
   showing its current chord. This satisfies Principle VI's *every panel action has a menu item* for the
   split commands; the **+** menu is an accelerator alongside them. A panel type with no content menu
   today (an empty placeholder) gains one carrying at least the **Split** item.
+  *(Amended 2026-11-28, v1 review, #732: the **Split** item is on the panel's title menu only; no body menu carries it, because it acts on the panel, not on the content under the pointer. The untyped placeholder and a dormant terminal had Split as their only body row, so a right-click in their body now opens nothing. The **+** menu is unchanged.)*
 - **FR-016**: The **Split** item MUST sit in the section Principle VI's section vocabulary assigns to
   layout actions, in both menus, and the menu section contract (033) MUST be updated to include it.
+  *(Amended 2026-11-28, v1 review, #732: one menu now, the title menu, where Split leads the panel-level View & state rows (FR-015, amended).)*
 
 #### Split mode — the keyboard route (#433)
 

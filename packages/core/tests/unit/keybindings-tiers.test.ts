@@ -76,6 +76,8 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   // 054 FR-071a — Maximise / Restore Panel: Shift+Alt, outside the tiers like column select;
   // a recorded exception (Constitution v5.10.0, live in a terminal).
   'panel.toggleMaximise': 'outside', // recorded exception
+  // v1 review — Flag or unflag acts on the panel that holds focus.
+  'panel.toggleFlag': 'tier2',
   'editor.toggleWordWrap': 'tier2', // recorded exception (multi-stroke, FR-091/FR-092)
   // 047 (research R5) — the six Markdown fold commands, the same multi-stroke exception as word wrap.
   'markdown.toggleSection': 'tier2', // recorded exception (multi-stroke)
@@ -84,14 +86,20 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'markdown.expandSection': 'tier2', // recorded exception (multi-stroke)
   'markdown.collapseAll': 'tier2', // recorded exception (multi-stroke)
   'markdown.expandAll': 'tier2', // recorded exception (multi-stroke)
-  // 054 FR-013 — unbound, so no chord to judge; the group's tier.
-  'markdown.collapseAllInside': 'tier2',
-  'markdown.expandAllInside': 'tier2',
+  // 054 FR-013 — the group's tier.
+  'markdown.collapseAllInside': 'tier2', // recorded exception (multi-stroke)
+  'markdown.expandAllInside': 'tier2', // recorded exception (multi-stroke)
   // 073 FR-038 — unbound, so no chord to judge; preview-only, like the Markdown group.
   'grid.insertRowAbove': 'tier2',
   'grid.insertRowBelow': 'tier2',
   'grid.insertColumnLeft': 'tier2',
   'grid.insertColumnRight': 'tier2',
+  'grid.insertRowsAbove': 'tier2',
+  'grid.insertRowsBelow': 'tier2',
+  'grid.insertColumnsLeft': 'tier2',
+  'grid.insertColumnsRight': 'tier2',
+  'grid.deleteRows': 'tier2',
+  'grid.deleteColumns': 'tier2',
   'terminal.scrollLineUp': 'tier2',
   'terminal.scrollLineDown': 'tier2',
   'editor.saveAs': 'tier2', // recorded exception (the Save pair)
@@ -124,6 +132,8 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'terminal.scrollToBottom': 'tier3',
   'terminal.redraw': 'tier3',
   'file.delete': 'tier3',
+  // Acts on the focused pane: tier 2, Ctrl+Shift+<key>.
+  'file.newFolder': 'tier2',
   'search.close': 'tier3',
   'file.rename': 'tier3',
   'search.findNext': 'tier3',
@@ -367,6 +377,7 @@ describe('the FR-101 tier guard', () => {
       'file.copy': ['Ctrl+C'],
       'file.paste': ['Ctrl+V'],
       'file.delete': ['Delete'],
+      'file.newFolder': ['Ctrl+Shift+N'], // v1 review, 2026-11-28: added on a chord no command held
       'file.undo': ['Ctrl+Z'],
       'file.redo': ['Ctrl+Y'],
       'editor.save': ['Ctrl+S'],
@@ -405,22 +416,31 @@ describe('the FR-101 tier guard', () => {
       'panel.destroy': ['Ctrl+Shift+Alt+F4'],
       // 054 FR-071a — Maximise / Restore Panel.
       'panel.toggleMaximise': ['Shift+Alt+Enter'],
+      // v1 review (2026-11-28) — Flag or unflag.
+      'panel.toggleFlag': ['Ctrl+Alt+G'],
       // 047 (research R5, R7) — Markdown section folding and Go to Heading.
       'markdown.toggleSection': ['Ctrl+M,M'],
       'markdown.toggleAll': ['Ctrl+M,L'],
       'markdown.collapseSection': ['Ctrl+M,S'],
-      'markdown.expandSection': [], // unbound by review, 2026-09-28
+      // Unbound by review 2026-09-28; bound again by the v1 review (#732, 2026-11-28).
+      'markdown.expandSection': ['Ctrl+M,E'],
       'markdown.collapseAll': ['Ctrl+M,A'],
-      'markdown.expandAll': [], // unbound by review, 2026-09-28
-      // 054 FR-013 — unbound.
-      'markdown.collapseAllInside': [],
-      'markdown.expandAllInside': [],
+      'markdown.expandAll': ['Ctrl+M,X'],
+      // 054 FR-013 — shipped unbound; bound by the v1 review (#732, 2026-11-28).
+      'markdown.collapseAllInside': ['Ctrl+M,Shift+S'],
+      'markdown.expandAllInside': ['Ctrl+M,Shift+E'],
       'preview.goToHeading': ['Ctrl+G'],
       // 073 FR-038 — unbound.
       'grid.insertRowAbove': [],
       'grid.insertRowBelow': [],
       'grid.insertColumnLeft': [],
       'grid.insertColumnRight': [],
+      'grid.insertRowsAbove': [],
+      'grid.insertRowsBelow': [],
+      'grid.insertColumnsLeft': [],
+      'grid.insertColumnsRight': [],
+      'grid.deleteRows': [],
+      'grid.deleteColumns': [],
       // 075 FR-064 — new command, scoped to {preview}.
       'preview.print': ['Ctrl+P'],
       // Print… for an editor's document — new command, scoped to {editor}.

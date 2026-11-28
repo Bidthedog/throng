@@ -87,6 +87,11 @@ export interface ExplorerSettings {
    * where only the manual "Reveal File" action moves it (#137).
    */
   autoRevealActiveFile: boolean;
+  /**
+   * Follow the active preview: expand and select a preview's source file in the tree whenever the
+   * active preview's file changes (081 FR-060, #724). Default ON, independent of the editor follow.
+   */
+  autoRevealActivePreview: boolean;
   /** Name ordering within folders and within files (#470). Default `natural`. */
   sortOrder: ExplorerSortOrder;
   /** Whether Open in OS Default Program shows on the tree's and the panel title's menus (067 FR-021). */
@@ -873,6 +878,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     dragMoveModifier: 'shift',
     openUnsupportedInOs: true,
     autoRevealActiveFile: true,
+    autoRevealActivePreview: true,
     sortOrder: 'natural',
     showOpenInOsDefaultProgram: true,
     popoverDelayMs: 500,
@@ -1235,6 +1241,8 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
     : fallback.dragMoveModifier;
   const autoRevealActiveFile =
     typeof v.autoRevealActiveFile === 'boolean' ? v.autoRevealActiveFile : fallback.autoRevealActiveFile;
+  const autoRevealActivePreview =
+    typeof v.autoRevealActivePreview === 'boolean' ? v.autoRevealActivePreview : fallback.autoRevealActivePreview;
   const sortOrder: ExplorerSortOrder =
     v.sortOrder === 'natural' || v.sortOrder === 'characters' ? v.sortOrder : fallback.sortOrder;
   const showOpenInOsDefaultProgram =
@@ -1247,6 +1255,7 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
     dragMoveModifier,
     openUnsupportedInOs: typeof v.openUnsupportedInOs === 'boolean' ? v.openUnsupportedInOs : fallback.openUnsupportedInOs,
     autoRevealActiveFile,
+    autoRevealActivePreview,
     sortOrder,
     showOpenInOsDefaultProgram,
     // 077 FR-016 — no clamp here: the bounds guard holds it to the descriptor's range, the one bound.
@@ -1268,6 +1277,7 @@ function cloneExplorer(e: ExplorerSettings): ExplorerSettings {
     dragMoveModifier: e.dragMoveModifier,
     openUnsupportedInOs: e.openUnsupportedInOs,
     autoRevealActiveFile: e.autoRevealActiveFile,
+    autoRevealActivePreview: e.autoRevealActivePreview,
     sortOrder: e.sortOrder,
     showOpenInOsDefaultProgram: e.showOpenInOsDefaultProgram,
     popoverDelayMs: e.popoverDelayMs,

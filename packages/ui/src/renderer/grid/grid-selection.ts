@@ -160,12 +160,16 @@ export function moveSelection(sel: GridSelection, key: GridMoveKey, opts: GridMo
       row += 1;
       break;
     case 'ArrowLeft':
-    case 'ShiftTab':
       col -= 1;
       break;
     case 'ArrowRight':
-    case 'Tab':
       col += 1;
+      break;
+    // T6 — Tab reads row by row: past the last column to the next row's first, before the first to the previous
+    // row's last. At the grid's first or last cell it stays, which tells the caller it is at the edge.
+    case 'Tab':
+    case 'ShiftTab':
+      ({ row, col } = tabStep({ row, col }, key === 'Tab' ? 1 : -1, lastRow, lastCol));
       break;
     case 'PageUp':
       row -= page;
@@ -190,15 +194,29 @@ export function moveSelection(sel: GridSelection, key: GridMoveKey, opts: GridMo
   return { anchor: sel.anchor, active };
 }
 
-/** The cell a commit moves to: one down or one right, staying inside the grid. */
-export function afterCommit(
-  active: GridCell,
-  move: 'down' | 'right' | 'none',
-  rowCount: number,
-  colCount: number,
-): GridCell {
+/** One Tab (`dir` 1) or Shift+Tab (-1) from `at`, wrapping between rows; the same cell at the grid's first or last. */
+function tabStep(at: GridCell, dir: 1 | -1, lastRow: number, lastCol: number): GridCell {
+  let { row, col } = at;
+  col += dir;
+  if (col > lastCol) {
+    col = 0;
+    row += 1;
+  } else if (col < 0) {
+    col = lastCol;
+    row -= 1;
+  }
+  return row < 0 || row > lastRow ? at : cell(row, col);
+}
+
+/** A commit's move: Enter's down, or Tab's right and Shift+Tab's left. */
+export type CommitMove = 'down' | 'right' | 'left' | 'none';
+
+/** The cell a commit moves to: one down, or one right / left wrapping as Tab does (T6), staying inside the grid. */
+export function afterCommit(active: GridCell, move: CommitMove, rowCount: number, colCount: number): GridCell {
   if (move === 'down') return cell(Math.min(active.row + 1, Math.max(0, rowCount - 1)), active.col);
-  if (move === 'right') return cell(active.row, Math.min(active.col + 1, Math.max(0, colCount - 1)));
+  if (move === 'right' || move === 'left') {
+    return tabStep(active, move === 'right' ? 1 : -1, Math.max(0, rowCount - 1), Math.max(0, colCount - 1));
+  }
   return active;
 }
 

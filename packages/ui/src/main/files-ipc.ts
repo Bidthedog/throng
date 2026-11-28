@@ -24,6 +24,8 @@ export function registerFilesIpc(service: FilesService, watcher: ExplorerWatcher
   });
 
   ipcMain.handle('throng:files:list', (_event, relDir: unknown) => service.list(asStr(relDir)));
+  // 081 US8 — which of a listing's entries git ignores (folders with a trailing /). Asked after the listing is drawn.
+  ipcMain.handle('throng:files:ignored', (_event, relPaths: unknown) => service.ignored(asStrArr(relPaths)));
   // The SENDING window is passed on so a named holder can say whether the panel is in a different
   // window from the one showing the notice (029, FR-013a). Rename is the only operation that names a
   // holder today, so it is the only one that needs it.

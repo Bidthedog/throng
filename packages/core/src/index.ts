@@ -28,6 +28,9 @@ export { resolveInboundDragEffect } from './explorer/inbound-drag.js';
 export { effectiveSidePanes, type SidePanes } from './workspace/model.js';
 export type { FileAttributes, FolderTally, ItemKind, ItemProperties } from './explorer/properties.js';
 export type { IFileAttributes } from './abstractions/file-attributes.js';
+// 081 US8 — which explorer entries git ignores.
+export type { IgnoreOracle } from './abstractions/ignore-oracle.js';
+export { NoIgnoreOracle } from './abstractions/ignore-oracle.js';
 export type { IOsPropertiesDialog } from './abstractions/os-properties-dialog.js';
 export type { IFileAccessInfo } from './abstractions/file-access-info.js';
 export { formatFileMode, type FileAccess } from './explorer/properties.js';
@@ -55,6 +58,8 @@ export { decideOpenFolder, type OpenFolderDecision, type OpenFolderPathKind } fr
 export type { ClipboardMode, ClipboardRecord, CursorRange, SelectionShape } from './editor/clipboard-mode.js';
 export { clipboardModeFor, pasteModeFor } from './editor/clipboard-mode.js';
 export { NOT_A_MISSING_FILE, isMissingReason } from './editor/refusal.js';
+// 081 FR-032 — the line a sync-scroll highlight names when the centre line is blank.
+export { nonBlankSyncLine, type SyncLineText } from './editor/sync-line.js';
 // `cut-line` (016, FR-016a) — what Ctrl+X takes when nothing is selected.
 export { cutLine } from './editor/cut-line.js';
 export type { CursorSpan, CutLineResult, LineIndex, LineRef } from './editor/cut-line.js';

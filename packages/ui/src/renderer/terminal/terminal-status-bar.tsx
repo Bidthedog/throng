@@ -3,6 +3,7 @@ import type { IconKey, TerminalToggleId } from '@throng/core';
 import { SettingToggleButton } from '../common/setting-toggle-button.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
 import { useTerminalLinkReadout } from './terminal-link-readout-store.js';
+import { FOCUS_MODE_STRIP_CLASS, FocusModeBadge, usePanelInFocusMode } from '../workspace/focus-mode-badge.js';
 
 /**
  * The terminal's per-panel status bar (024 US1, #152) — a NEW surface; terminals had none.
@@ -40,8 +41,14 @@ export interface TerminalStatusBarProps {
 
 export function TerminalStatusBar({ panelId, flavourLabel, toggles = [] }: TerminalStatusBarProps): ReactElement {
   const linkReadout = useTerminalLinkReadout(panelId);
+  // 081 FR-090 — Focus Mode paints this bar as it paints an editor's strip: the shared class and badge, no styling here.
+  const focusMode = usePanelInFocusMode(panelId);
   return (
-    <div className="terminal-status-bar" data-testid={`terminal-status-bar-${panelId}`}>
+    <div
+      className={`terminal-status-bar${focusMode ? ` ${FOCUS_MODE_STRIP_CLASS}` : ''}`}
+      data-testid={`terminal-status-bar-${panelId}`}
+    >
+      <FocusModeBadge panelId={panelId} active={focusMode} />
       <span className="terminal-status-bar__flavour">{flavourLabel}</span>
       <LinkTargetReadout testId={`terminal-status-link-readout-${panelId}`} target={linkReadout} />
       {toggles.length > 0 && (

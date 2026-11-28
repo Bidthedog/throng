@@ -19,6 +19,19 @@ import type { TaskToggle } from './task-toggle.js';
 
 import type { SyncMark, SyncMarkSource } from './sync-mark-store.js';
 
+/** One per-panel grid toggle: whether it is on for this panel, and its flip. */
+export interface GridViewToggle {
+  on: boolean;
+  onToggle: () => void;
+}
+
+/** A grid body's per-panel view toggles (073 FR-013, FR-039a), as its status bar and its body menus show them. */
+export interface GridViewToggles {
+  wrap?: GridViewToggle;
+  lockFirstRow?: GridViewToggle;
+  lockFirstColumn?: GridViewToggle;
+}
+
 export interface PreviewBodyProps {
   panelId: string;
   content: PreviewContent;
@@ -244,15 +257,10 @@ export interface PreviewBodyProps {
    */
   zoom?: number;
   /**
-   * 073 FR-046 — the chrome's Open in Editor / Go to Editor route (044 FR-015), for a body whose own
-   * notice or menu offers it. Optional: a body that offers no such route never calls it.
+   * 073 FR-046 — the chrome's Open in Editor route (044 FR-015), for a body whose own notice or menu offers it: it
+   * goes to the linked editor, or opens or focuses one. Optional: a body that offers no such route never calls it.
    */
   onOpenInEditor?(): void;
-  /**
-   * 044 FR-015 (073 T089) — whether that route goes to an editor this preview is linked to: a body's own menu then
-   * names it **Go to Editor**, as the preview content menu does, else **Open in Editor**.
-   */
-  editorRouteParented?: boolean;
   /**
    * 073 FR-024 (T082) — a grid's Copy or Cut stopped at the cell bound: `copied` of `selected` cells went to the
    * clipboard, and `bound` is the most one copy holds. A cut capped so removes nothing. The chrome says so, naming the
@@ -260,10 +268,11 @@ export interface PreviewBodyProps {
    */
   onCopyCapped?(copied: number, selected: number, bound: number, verb: 'copy' | 'cut' | 'paste'): void;
   /**
-   * 075 FR-075b — the chrome's Print…, for a body that builds its own menus (the grids). Absent when the preview's
-   * provider cannot print.
+   * v1 review (#732), amending 073 FR-013 and FR-039a — a grid's Wrap, Lock First Row and Lock First Column as its
+   * body menus show them: each one's value for this panel and its flip, the same pair the status bar's toggles hold.
+   * Absent (or a member absent): the provider has no such toggle, and the menus draw no row.
    */
-  onPrint?(): void;
+  gridToggles?: GridViewToggles;
   /**
    * 074 R8 (FR-022, FR-062) — a short sentence about what is drawn, for the status bar's readout slot: an image's
    * pixel size and file size, a PDF's page. `null` clears it. A followed link's target, when there is one, is shown

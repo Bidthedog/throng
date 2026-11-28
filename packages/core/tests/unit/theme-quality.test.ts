@@ -25,9 +25,11 @@ import {
   CLOSEST_MATCH_SURFACE_DELTA,
   closestMatchSurfacePair,
   assertMatchDistinctness,
+  blendOver,
+  WCAG_AA_LARGE_UI,
 } from '../../src/config/theme-quality.js';
 import { ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
-import { THRONG_THEME, type Theme } from '../../src/config/theme.js';
+import { IGNORED_ENTRY_OPACITY_DEFAULT, THRONG_THEME, type Theme } from '../../src/config/theme.js';
 
 describe('colour maths (theme-quality)', () => {
   it('hexToRgb parses #rrggbb case-insensitively', () => {
@@ -304,5 +306,46 @@ describe('contrast (WCAG 2.1 AA over enumerated pairings)', () => {
     // 069 FR-061 — plus each file icon category the theme sets (FR-064's `other` among them), on each of the
     // four tree backgrounds.
     expect(measureContrast(THRONG_THEME)).toHaveLength(CONTRAST_PAIRINGS.length + 8 * 4);
+  });
+});
+
+/**
+ * 081 US8 (FR-071, R11) — an entry git ignores is drawn with its text and icon faded to the theme's
+ * `sizes.ignoredEntryOpacity`, on a background that stays at full strength. The 078 gate measures the faded text,
+ * blended over each background a tree row is drawn on, at 3:1.
+ */
+describe('faded ignored entries (081 FR-071)', () => {
+  const themes = Object.values(ALL_DEFAULT_THEMES);
+
+  it('blends a colour over a background at an opacity, as the browser composites it', () => {
+    expect(blendOver('#ffffff', '#000000', 0.6)).toBe('#999999');
+    expect(blendOver('#ffffff', '#000000', 1)).toBe('#ffffff');
+    expect(blendOver('#204080', '#ffffff', 0)).toBe('#ffffff');
+  });
+
+  it('ships the default opacity in every bundled theme', () => {
+    for (const theme of themes) {
+      expect(theme.sizes?.ignoredEntryOpacity, theme.name).toBe(IGNORED_ENTRY_OPACITY_DEFAULT);
+    }
+  });
+
+  it('measures faded tree text on the tree, a hovered row, a selected row, the active file and a drop target', () => {
+    const faded = CONTRAST_PAIRINGS.filter((p) => p.fade === 'ignoredEntry');
+    expect(faded.map((p) => p.fg)).toEqual(['text', 'text', 'text', 'text', 'text']);
+    expect(faded.map((p) => p.bg)).toEqual(['sidebarBg', 'hoverSurface', 'surfaceActive', 'sidebarBg', 'sidebarBg']);
+    expect(faded.every((p) => p.min === WCAG_AA_LARGE_UI)).toBe(true);
+  });
+
+  it('every bundled theme keeps faded tree text at 3:1 at the default opacity', () => {
+    for (const theme of themes) {
+      for (const r of measureContrast(theme).filter((m) => m.label.startsWith('faded'))) {
+        expect(r.pass, `${theme.name}: ${r.label} = ${r.ratio.toFixed(2)} (needs ${r.min})`).toBe(true);
+      }
+    }
+  });
+
+  it("measures the theme's own opacity, so a theme that fades too far fails the gate", () => {
+    const ghostly: Theme = { ...ALL_DEFAULT_THEMES.throng, name: 'Ghostly', sizes: { ...ALL_DEFAULT_THEMES.throng.sizes, ignoredEntryOpacity: 0.2 } };
+    expect(() => assertInScopeContrast([ghostly])).toThrow(/Ghostly: faded ignored text on the tree/);
   });
 });

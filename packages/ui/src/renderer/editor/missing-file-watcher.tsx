@@ -24,7 +24,8 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
 import { getEditorState, subscribeEditorStates } from './editor-state.js';
-import { missingFileDetail, missingFileMessage } from './editor-missing-notice.js';
+import { isMissingReason, missingFileDetail, missingFileMessage } from './editor-missing-notice.js';
+import { isPanelHidden, subscribeMaximise } from '../workspace/maximise-store.js';
 
 const SCAN_DELAY_MS = 300; // let the tab's editors mount + publish their load state
 
@@ -72,6 +73,8 @@ export function MissingFileWatcher(): null {
 
     /** Torn down with the activation, so a tab change never leaves a watch behind (see below). */
     let unwatch: (() => void) | undefined;
+    /** The Focus Mode subscription holding hidden casualties (081 FR-012a), torn down with the activation too. */
+    let unwatchHidden: (() => void) | undefined;
 
     const timer = setTimeout(() => {
       const os = window.throng?.osName ?? 'windows';
@@ -105,12 +108,19 @@ export function MissingFileWatcher(): null {
          * This does NOT weaken FR-105. That rule is about not warning from an editor's own mount
          * effect; the guard enforcing it is this effect's once-per-activation gate above, which is
          * untouched.
+         *
+         * 081 FR-010 / FR-011 (#728) — the REASON the read returned, not `missing` for every unreadable path. A
+         * folder, a file too large or a file outside the project is there, and calling it missing sent the user
+         * looking for something sitting where they left it. A panel whose read nobody in this window saw (the
+         * authority's verdict alone carries no reason) keeps the missing wording, as the cold-restart case above
+         * needs.
          */
+        const reason = st.unloadableReason ?? 'missing';
         reportRef.current({
           panelId: p.id,
-          message: missingFileMessage('missing'),
+          message: missingFileMessage(reason),
           // The path rides as the row's own detail — copied and logged, never rendered (FR-034).
-          detail: missingFileDetail({ filePath: st.filePath, reason: 'missing' }, os),
+          detail: missingFileDetail({ filePath: st.filePath, reason }, os),
           /*
            * WHAT KIND OF FAILURE THIS IS (FR-029) — the half that was missing.
            *
@@ -122,10 +132,36 @@ export function MissingFileWatcher(): null {
            *
            * The KIND only. The subject has to be the project the notice is about, and this scan does
            * not know its name — `useReportPanelFailure` does, and supplies it.
+           *
+           * Only for a path that is not there (081 FR-011): a folder carrying `path-missing` superseded the File
+           * Explorer's report as an absent folder would.
            */
-          causeKind: 'path-missing',
+          ...(isMissingReason(reason) ? { causeKind: 'path-missing' as const } : {}),
         });
       };
+
+      /*
+       * 081 FR-012 / FR-012a (#728) — a notice names only a panel the user can find and open.
+       *
+       * A Back/Forward stand-in is skipped: the banner is that condition's one surface (044 FR-106d), and the path
+       * is one the user only stepped through. A panel Focus Mode hides is held until it is shown, then reported
+       * once, if its file still cannot be opened by then (Q3).
+       */
+      const hidden = new Map<string, Panel>();
+      const judge = (p: Panel, st: NonNullable<ReturnType<typeof getEditorState>>): void => {
+        if (st.movedOut || st.historyStandIn) return;
+        if (!st.fileMissing && !st.unloadable) return;
+        if (isPanelHidden(activeTabId, p.id)) hidden.set(p.id, p);
+        else report(p, st);
+      };
+      unwatchHidden = subscribeMaximise(() => {
+        for (const [id, p] of [...hidden]) {
+          if (isPanelHidden(activeTabId, id)) continue;
+          hidden.delete(id);
+          const st = getEditorState(id);
+          if (st) judge(p, st); // re-read: a file that opened meanwhile, or a closed panel, raises nothing
+        }
+      });
 
       /*
        * ══ THE SAMPLE, AND THE PANELS IT CANNOT JUDGE YET (#369) ══
@@ -159,8 +195,7 @@ export function MissingFileWatcher(): null {
           pending.set(p.id, p);
           continue;
         }
-        if (st.movedOut) continue; // moved out in this session, whatever its persisted config says yet
-        if (st.fileMissing || st.unloadable) report(p, st);
+        judge(p, st); // a panel moved out in this session is skipped, whatever its persisted config says yet
       }
       if (pending.size === 0) return;
 
@@ -181,8 +216,7 @@ export function MissingFileWatcher(): null {
           const st = getEditorState(id);
           if (!st || st.openPending) continue; // still undecided — keep waiting
           pending.delete(id);
-          if (st.movedOut) continue;
-          if (st.fileMissing || st.unloadable) report(p, st);
+          judge(p, st);
         }
         if (pending.size === 0) {
           unwatch?.();
@@ -193,6 +227,7 @@ export function MissingFileWatcher(): null {
     return () => {
       clearTimeout(timer);
       unwatch?.();
+      unwatchHidden?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId, warn]);

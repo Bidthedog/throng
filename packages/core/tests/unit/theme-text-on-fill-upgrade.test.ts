@@ -30,7 +30,7 @@ const FAMILIES = [ON_ACCENT, ON_DANGER];
 
 describe('the version-38 text-on-fill colours 078 moved', () => {
   it('is shipped-defaults version 40', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(40);
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(42);
   });
 
   it('moves Debian’s text on the accent from what an interim 39 build wrote — white on the crimson — to today’s', () => {

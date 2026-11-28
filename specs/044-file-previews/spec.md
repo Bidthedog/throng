@@ -431,7 +431,8 @@ type a heading, and see it rendered in the preview without saving.
    the unsaved marker; **When** the user saves in the parent editor, **Then** the marker clears on
    both. *(FR-040, FR-041)*
 5. **Given** a preview open for a file, **When** the user opens the editor's right-click menu,
-   **Then** Open Preview is shown disabled. *(FR-012)*
+   **Then** Open Preview is shown disabled. *(FR-012)* *(Superseded maintainer's v1 review, 2026-11-27: Open Preview is enabled and
+   focuses the open preview — FR-012.)*
 6. **Given** a long preview scrolled halfway down, **When** the source changes, **Then** the preview
    stays at the same place in the document rather than jumping to the top. *(FR-024)*
 7. **Given** a preview open for a file, **When** the user clicks that file's editor status-bar
@@ -829,7 +830,7 @@ restart; Back again. Repeat in a preview by following links.
   > part of the historical note; they are moved above it, verbatim.
 - **FR-002**: The same editor panel MUST offer **Open Preview** in its body's right-click menu and in
   its header's right-click menu, in the Navigate section, showing the command's chord when one is
-  bound (Principle VI, *Every panel action has a menu item*).
+  bound (Principle VI, *Every panel action has a menu item*). *(Amended 2026-11-28, v1 review, #732: the header (title) menu only; the body menu no longer offers Open Preview (the title menu holds the panel, its file and its link to other panels; the body menu holds what acts on the content under the pointer).)*
 - **FR-003**: Files & Folders MUST offer **Preview** inside the **Open In** submenu for a file that
   has a provider, drawn **disabled** while that provider is disabled (Principle VI, *disabled when
   unavailable*). It MUST be absent on folders and on files with no provider (*absent when
@@ -854,7 +855,12 @@ restart; Back again. Repeat in a preview by following links.
   asks about — the file being opened in an editor afterwards.)*
 - **FR-012**: A file has **at most one preview**. While it has one, Open Preview (FR-002) and Open In
   → Preview (FR-003) MUST be shown **disabled** (Principle VI, *disabled when unavailable*; the
-  **006 FR-011a** precedent for Open In targets whose file is already open).
+  **006 FR-011a** precedent for Open In targets whose file is already open). *(Superseded for Open Preview,
+  maintainer's v1 review, 2026-11-27: while the file has its preview, Open Preview stays **enabled**, on the editor's body and header
+  menus and its status-bar button, and choosing it focuses that preview, as FR-014's button does; no second
+  preview opens. Open Preview and Open in Editor behave alike: available means enabled, and each opens its
+  counterpart or focuses the one already open. Open Preview is disabled only while the provider is off
+  (FR-062).)*
 - **FR-013**: A preview MUST be bound to **the file it is currently showing, never to an editor
   panel** — from the moment it opens, however it was opened. It holds no reference to an editor.
   Whether it is **parented** is derived, never stored: a preview is parented exactly while a source
@@ -886,7 +892,8 @@ restart; Back again. Repeat in a preview by following links.
 - **FR-014**: While a file's preview is open, that file's editor status-bar preview button MUST show
   a **pressed** state, and choosing it MUST **focus the open preview**, bringing its tab to the front
   if needed. It MUST NOT close the preview; closing belongs to the preview's own menu (FR-033). The
-  menu items stay disabled meanwhile (FR-012). *(Focusing a panel is not a command a hidden status
+  menu items stay disabled meanwhile (FR-012). *(Superseded maintainer's v1 review, 2026-11-27: the menu items stay enabled and focus the
+  preview too — FR-012. The button keeps its pressed state and is titled **Open Preview**.)* *(Focusing a panel is not a command a hidden status
   bar could strand — the panel itself can be clicked — so Principle VI's menu-item rule adds no item
   for it.)*
 - **FR-015**: Every preview of a **text provider** MUST offer a route back to its source, placed
@@ -901,7 +908,7 @@ restart; Back again. Repeat in a preview by following links.
     *Partly superseded by FR-122c (Session 2026-09-16) — "a button" becomes two: the scroll-sync toggle
     sits immediately left of this one, in the same controls group, on every text-provider preview.*
   - **FR-015b**: An item in the preview panel's **body** right-click menu and **header** right-click
-    menu, in the Navigate section — the same sections Open Preview occupies on an editor.
+    menu, in the Navigate section — the same sections Open Preview occupies on an editor. *(Amended 2026-11-28, v1 review, #732: the header (title) menu only, as Open Preview now is (FR-002, amended); the preview body menu no longer offers Open in Editor. A CSV grid's own menus no longer offer it either (073).)*
   - **FR-015c**: On a **standalone** preview the item and button are **Open in Editor**: they open
     the file in an editor panel placed beside the preview — splitting the preview's slot, with the
     editor on the left — and the preview becomes parented to it in place (FR-013a). *(Amended 2026-11-20 by
@@ -909,7 +916,9 @@ restart; Back again. Repeat in a preview by following links.
     placement above holds under New Editor, or when the tab holds no editor.)*
   - **FR-015d**: On a **parented** preview the item and button are **Go to Editor**: the button shows
     pressed, and both focus the parent editor, bringing its tab to the front and focusing its window
-    if needed (the mirror of FR-014).
+    if needed (the mirror of FR-014). *(Amended maintainer's v1 review, 2026-11-27: one label in both states, **Open in Editor**, so
+    the route reads as Open Preview's mirror. On a parented preview it still shows pressed and focuses the
+    parent; on a standalone one it opens an editor as FR-015c says.)*
   - **FR-015e**: A binary provider's previews MUST offer neither (FR-073). Where a preview's status
     bar would carry nothing, it MUST NOT be shown.
 
@@ -1011,7 +1020,10 @@ restart; Back again. Repeat in a preview by following links.
   - **FR-035c**: Beside Copy, the body's right-click menu MUST offer **Copy as Rich Text** and **Copy
     as Plain Text**, each copying in its named format whatever the setting — the same pattern #394
     uses for a default action with explicit alternatives in the menu. All three MUST be disabled
-    while nothing is selected.
+    while nothing is selected. *(Amended maintainer's v1 review, 2026-11-27: the two variants sit in one **Copy as ▸** submenu, rows
+    **Rich Text** and **Plain Text**, straight after Copy, as every menu in the app now offers them.)* *(Amended 2026-11-28, maintainer's v1 review, constitution 8.3.0: **Copy as ▸** replaces the plain **Copy** row
+    rather than sitting beside it. The leaf in the format the preview copy format setting picks shows the copy key,
+    which copies in that format; the other leaf shows none.)*
 
 #### Dirty state
 
@@ -1455,6 +1467,7 @@ restart; Back again. Repeat in a preview by following links.
     it). On the preview header menu (`contracts/menus-and-controls.md` §1) and on the editor header menu
     it MUST follow **Zoom ▸** and precede the failure-banner items (030 FR-042c) where those are shown
     *(position within the section derived; not confirmed)*.
+    *(Amended 2026-11-28, v1 review, #732: the **body** menus no longer offer Synchronise Scrolling, the editor's or the preview's: it is a setting of the panel's link to its preview, so only the header (title) menus offer it, with the presence, check and chord above. FR-122a's "body menu item" no longer exists; the header item and the status-bar button remain.)*
   - **FR-122c**: The editor's status bar and the preview's status bar MUST carry a scroll-sync toggle
     button in their controls group, placed **immediately left of** the preview button (FR-001) and of
     the Open in Editor / Go to Editor button (FR-015a) respectively. It MUST use the themeable icon token

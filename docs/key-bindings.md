@@ -197,6 +197,18 @@ Focus Mode: let the focused panel fill its tab's middle section, or step back ou
 
 Focus Mode: let the focused panel fill its tab's middle section (Enter Focus Mode), or step back out of it one level at a time (Exit Focus Mode). While it is on, the panel's status bar shows it, the tab's other panels hide, and the panel cannot be split, moved or destroyed. In a terminal this chord no longer reaches the program; `Shift+Enter` still sends a line break.
 
+### Flag or unflag
+
+**Cog › Key Bindings › Focus & Zoom**
+
+`panel.toggleFlag`
+
+Mark the focused panel for attention, or clear its mark.
+
+**Default:** `Ctrl+Alt+G` · **Scope:** Everywhere
+
+Does what the panel menu's **Flag** row does, or its **Unflag** row when the panel already holds a mark; both rows show the key. A blank panel has nothing to flag, and with a side pane focused the key does nothing. On a Czech or Hungarian layout AltGr+G types `]`, so rebind it there.
+
 ### Focus panel to the left
 
 **Cog › Key Bindings › Focus & Zoom**
@@ -574,7 +586,7 @@ Jump to a heading in a preview; in a PDF, Go to Page; in a CSV or spreadsheet, G
 
 **Default:** `Ctrl+G` · **Scope:** Preview
 
-Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. In a CSV or workbook grid it is Go to Row: it opens the Go to dialog for rows (also **Go to Row…** on the panel header menu and the cell and row-number menus): Enter makes that row the active cell in the active column and scrolls it to the top. In a PDF preview, Go to Page: type a page number (the dialog names the current page and how many there are, and takes only a page that exists) and press Enter.
+Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. In a CSV or workbook grid it is Go to Row: it opens the Go to dialog for rows (also **Go to Row…** on the cell, row-number and corner menus): Enter makes that row the active cell in the active column and scrolls it to the top. In a PDF preview, Go to Page: type a page number (the dialog names the current page and how many there are, and takes only a page that exists) and press Enter.
 
 ### Print…
 
@@ -611,6 +623,18 @@ Live only while the File Explorer pane has focus.
 Rename the selected file or folder.
 
 **Default:** `F2` · **Scope:** File Explorer
+
+### New folder
+
+**Cog › Key Bindings › File Explorer**
+
+`file.newFolder`
+
+Create a folder in the selected folder, or beside the selected file.
+
+**Default:** `Ctrl+Shift+N` · **Scope:** File Explorer
+
+The folder is made where the toolbar's New folder makes one: inside the selected folder, beside a selected file, or at the project's root with nothing selected. It opens for its name straight away, and the File Explorer's right-click menu shows the key beside New Folder.
 
 ### Undo file operation
 
@@ -983,7 +1007,7 @@ Collapse the current section.
 
 Expand the section containing the caret (editor) or the top of the view (preview).
 
-**Default:** *(unbound)* · **Scope:** Editor · Preview
+**Default:** `Ctrl+M,E` · **Scope:** Editor · Preview
 
 Expand the current section.
 
@@ -1007,7 +1031,7 @@ Collapse every section, at every level.
 
 Expand every heading section.
 
-**Default:** *(unbound)* · **Scope:** Editor · Preview
+**Default:** `Ctrl+M,X` · **Scope:** Editor · Preview
 
 Expand every section, at every level.
 
@@ -1019,7 +1043,7 @@ Expand every section, at every level.
 
 Collapse every section nested under the current one, leaving that section itself open.
 
-**Default:** *(unbound)* · **Scope:** Editor · Preview
+**Default:** `Ctrl+M,Shift+S` · **Scope:** Editor · Preview
 
 Collapse every section nested under the current section, leaving the current section itself open; the rest of the document is unchanged.
 
@@ -1031,11 +1055,13 @@ Collapse every section nested under the current section, leaving the current sec
 
 Expand the current section and every section nested under it.
 
-**Default:** *(unbound)* · **Scope:** Editor · Preview
+**Default:** `Ctrl+M,Shift+E` · **Scope:** Editor · Preview
 
 Expand the current section, even when it is collapsed, and every section nested under it; the rest of the document is unchanged.
 
-In an editor of any other language `Ctrl+M` keeps the editor's own meaning. Whether a document opens
+Every row of the editor's **Outlining** menu shows its key. The two *All inside* chords are their section chords with
+Shift added to the second key: hold Ctrl, press M, then Shift+S. In an editor of any other language `Ctrl+M` keeps
+the editor's own meaning. Whether a document opens
 with its sections expanded or collapsed is [Markdown sections open](preferences.md#editor).
 
 ## CSV grid
@@ -1101,6 +1127,66 @@ Insert an empty column left of the active cell.
 `grid.insertColumnRight`
 
 Insert an empty column right of the active cell in the CSV Preview Editor.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Insert Rows Above…
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.insertRowsAbove`
+
+Ask how many, then insert that many empty rows above the active cell in the CSV Preview Editor.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Insert Rows Below…
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.insertRowsBelow`
+
+Ask how many, then insert that many empty rows below the active cell in the CSV Preview Editor.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Insert Columns Left…
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.insertColumnsLeft`
+
+Ask how many, then insert that many empty columns left of the active cell in the CSV grid.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Insert Columns Right…
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.insertColumnsRight`
+
+Ask how many, then insert that many empty columns right of the active cell in the CSV grid.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Delete Rows
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.deleteRows`
+
+Delete every row the selection spans in the CSV Preview Editor.
+
+**Default:** *(unbound)* · **Scope:** Preview
+
+### Delete Columns
+
+**Cog › Key Bindings › CSV grid**
+
+`grid.deleteColumns`
+
+Delete every column the selection spans, from every row, in the CSV Preview Editor.
 
 **Default:** *(unbound)* · **Scope:** Preview
 
@@ -1349,6 +1435,10 @@ different:
 | Toggle all sections | `markdown.toggleAll` | `Ctrl+M,L` | macOS keeps Cmd+M |
 | Collapse section | `markdown.collapseSection` | `Ctrl+M,S` | macOS keeps Cmd+M |
 | Collapse all sections | `markdown.collapseAll` | `Ctrl+M,A` | macOS keeps Cmd+M |
+| Expand section | `markdown.expandSection` | `Ctrl+M,E` | macOS keeps Cmd+M |
+| Expand all sections | `markdown.expandAll` | `Ctrl+M,X` | macOS keeps Cmd+M |
+| Collapse all inside section | `markdown.collapseAllInside` | `Ctrl+M,Shift+S` | macOS keeps Cmd+M |
+| Expand all inside section | `markdown.expandAllInside` | `Ctrl+M,Shift+E` | macOS keeps Cmd+M |
 | Redraw terminal | `terminal.redraw` | `Shift+Cmd+F5` | macOS keeps Cmd+F5 for VoiceOver |
 | Back | `navigate.back` | `Cmd+[` | The Mac convention |
 | Forward | `navigate.forward` | `Cmd+]` | The Mac convention |

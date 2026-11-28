@@ -150,7 +150,7 @@ export function TreeRow({
         isRoot ? ' tree-row--root' : ''
       }${isCut ? ' tree-row--cut' : ''}${willDrop ? ' tree-row--drop-target' : ''}${
         isActiveFile ? ' tree-row--active-file' : ''
-      }`}
+      }${data.ignored ? ' tree-row--ignored' : ''}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={(e) => {

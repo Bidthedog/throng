@@ -10,6 +10,8 @@
  * correct for every token shape. Pure; zero OS/DOM.
  */
 import {
+  IGNORED_ENTRY_OPACITY_MAX,
+  IGNORED_ENTRY_OPACITY_MIN,
   OPTIONAL_THEME_COLOUR_TOKENS,
   THRONG_THEME,
   TYPOGRAPHY_ROLES,
@@ -120,6 +122,8 @@ export const THEME_PROPERTY_VOCABULARY: readonly string[] = [
   'Underline',
   'Strikethrough',
   'Casing',
+  // 081 FR-071 — how strongly something is drawn, 0.2 to 1 (the faded ignored entry).
+  'Opacity',
 ];
 
 /** A description that merely restates that the token is a colour token — the pre-009 self-reference. */
@@ -296,6 +300,11 @@ function placementForToken(key: string): ThemePlacement | undefined {
   // `iconPx` stays in the General list (not the Icons area) because it is a slider rendered inline,
   // and an 'Icons' group here would collide with the icon section's own 'Icons' heading.
   if (key === 'sizes.iconPx' || key === 'sizes.scrollbarPx') return { group: 'General' };
+  // 081 FR-071 — the fade on an entry git ignores belongs to the tree it is drawn in.
+  if (key === 'sizes.ignoredEntryOpacity') {
+    const group = 'File Explorer';
+    return { group };
+  }
   if (key.startsWith('colours.')) {
     const name = lastSegment(key);
     // The three-type button model (021, FR-027): each token sits in its type's subsection of General →
@@ -365,7 +374,7 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
   let control: ControlKind;
   let allowedValues: readonly (string | number)[] | undefined;
   const isRole = key.startsWith('typography.');
-  if (field === 'iconPx' || field === 'scrollbarPx') control = 'slider';
+  if (field === 'iconPx' || field === 'scrollbarPx' || field === 'ignoredEntryOpacity') control = 'slider';
   else if (field === 'family') control = 'font-family';
   // 018 / FR-034 — a font SIZE is the first thing FR-034 names as a slider, and it declared bounds
   // (6-96, step 1) while still rendering as a bare text box: the bounds were there, the control was
@@ -412,6 +421,10 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
     ...(control === 'slider' && field === 'sizePx' ? { min: 6, max: roleSizeMax(key), step: 1 } : {}),
     ...(control === 'slider' && field === 'iconPx' ? { min: 10, max: 32, step: 1 } : {}),
     ...(control === 'slider' && field === 'scrollbarPx' ? { min: 6, max: 24, step: 1 } : {}),
+    // 081 FR-071 — the bounds `ignoredEntryOpacityOf` holds the CSS variable to, so the slider and the clamp agree.
+    ...(control === 'slider' && field === 'ignoredEntryOpacity'
+      ? { min: IGNORED_ENTRY_OPACITY_MIN, max: IGNORED_ENTRY_OPACITY_MAX, step: 0.05 }
+      : {}),
     ...(control === 'slider' && (field === 'normal' || field === 'bold' || field === 'weight')
       ? { min: 100, max: 900, step: 100 }
       : {}),

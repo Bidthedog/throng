@@ -961,6 +961,15 @@ lands on a marked panel and clears it.
   *Amended 2026-11-07 (maintainer): a blank panel — one with no type chosen yet — MUST NOT offer Flag; the
   item is absent, not disabled (constitution VI). This narrows "every panel" to every panel with a type: a
   blank panel has nothing to draw the user's attention to, and a flag on it only marks an empty form.*
+  *(Amended 2026-11-28, v1 review, #732: Unflag is no longer out of scope. On a panel that holds a mark, of any
+  kind and from any producer, the row reads **Unflag**, with a crossed-out flag icon (`unflag`), and choosing it
+  clears the mark at once, as a clear after attending does: its toast goes, and a stored user flag leaves the
+  daemon's store (FR-128).)*
+  *(Amended 2026-11-28, v1 review, #732: the key binding is no longer optional. **Flag or unflag**
+  (`panel.toggleFlag`) ships **Ctrl+Alt+G**, live in every panel: in a typed panel it runs the row that panel's menu
+  shows, Flag or Unflag, and both rows show the key. A blank panel has no row, so the key does nothing there, and with
+  a side pane focused it is not consumed. AltGr+G types no character on the seven common European layouts; Czech and
+  Hungarian type `]` there and lose the chord.)*
 - **FR-126** *(2026-10-24, round 12)*: A manual flag MUST NOT be announced: no toast and no Windows
   notification. It MUST otherwise be a mark like any other — on the panel header (FR-003, FR-118) and every
   holder, counted by FR-131 and by the taskbar badge (FR-039) *[derived]*.
@@ -1012,7 +1021,9 @@ lands on a marked panel and clears it.
 - **FR-139** *(2026-10-24, round 13; supersedes R11's mark tokens)*: The `attention` and `attentionFailed` icon
   tokens and the `attentionFailedMark` colour token MUST leave the theme. A theme or icon pack that still carries
   them loads without error, the entries dropped, as `goToPanel` was in round 12. The Flag and Go to Next Marked
-  Panel menu rows keep their labels without a glyph *[derived]*.
+  Panel menu rows keep their labels without a glyph *[derived]*. *(Amended 2026-11-28, v1 review, #732: both rows
+  wear a `flag` icon, a menu icon of its own in the icon set. The mark's tokens stay retired; the mark is still the
+  numbered circle.)*
 
 #### C. Notifications
 

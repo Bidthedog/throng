@@ -135,11 +135,41 @@ describe('DataGrid keyboard', () => {
     expect(g.ref.current!.selectedRange()).toEqual({ top: 0, left: 0, bottom: 49, right: 5 });
   });
 
-  it('Tab moves right, and leaves the grid at the last cell instead of trapping focus', () => {
+  it('Tab moves right, and stays on the last cell rather than leaving the grid (T11)', () => {
     const g = setup({ rowCount: 1, colCount: 2 });
     expect(g.key('Tab')).toBe(false);
     expect(sel(g).active.col).toBe(1);
-    expect(g.key('Tab')).toBe(true);
+    expect(g.key('Tab')).toBe(false);
+    expect(sel(g).active.col).toBe(1);
+  });
+
+  it('Tab wraps to the next row and Shift+Tab back; Shift+Tab at the first cell stays in the grid (T6)', () => {
+    const g = setup({ rowCount: 2, colCount: 2 });
+    g.key('Tab');
+    expect(g.key('Tab')).toBe(false);
+    expect(sel(g).active).toEqual({ row: 1, col: 0 });
+    expect(g.key('Tab', { shiftKey: true })).toBe(false);
+    expect(sel(g).active).toEqual({ row: 0, col: 1 });
+    g.key('Tab', { shiftKey: true });
+    expect(g.key('Tab', { shiftKey: true })).toBe(false);
+    expect(sel(g).active).toEqual({ row: 0, col: 0 });
+  });
+
+  it('Tab and Shift+Tab in the cell editor commit, then move with the same wrap (T6)', () => {
+    const g = setup({ rowCount: 3, colCount: 2 });
+    act(() => {
+      g.ref.current!.setSelection({ anchor: { row: 0, col: 1 }, active: { row: 0, col: 1 } });
+    });
+    g.key('x');
+    fireEvent.keyDown(screen.getByLabelText('Cell value'), { key: 'Tab' });
+    expect(g.onCommitEdit).toHaveBeenLastCalledWith(0, 1, 'x', 'right');
+    expect(sel(g).active).toEqual({ row: 1, col: 0 });
+    g.key('y');
+    const editor = screen.getByLabelText('Cell value');
+    const shiftTab = fireEvent.keyDown(editor, { key: 'Tab', shiftKey: true });
+    expect(shiftTab).toBe(false);
+    expect(g.onCommitEdit).toHaveBeenLastCalledWith(1, 0, 'y', 'left');
+    expect(sel(g).active).toEqual({ row: 0, col: 1 });
   });
 
   it('keeps its selection across a content update, clamped to what remains (FR-025)', () => {

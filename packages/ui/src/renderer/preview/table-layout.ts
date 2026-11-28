@@ -58,6 +58,11 @@ export interface TableLayoutOptions {
   readonly handSet: Map<number, TableHandSet>;
   /** A drag changed a column's width — the caller may want to know, beyond reading `handSet` later. */
   readonly onResize?: (tableIndex: number, columnIndex: number, widthPx: number) => void;
+  /**
+   * 081 FR-020 — whether an ancestor of a table hides it in a way this module cannot know: a provider's own fold (a
+   * Markdown callout's collapsed body). `hidden` and a closed `<details>` are HTML's, and checked here already.
+   */
+  readonly hides?: (ancestor: Element) => boolean;
 }
 
 /** The number of columns the FIRST row declares — every GFM/front-matter table renders with none spanned. */
@@ -163,9 +168,20 @@ function clearPreviousLayout(table: HTMLTableElement): void {
   }
 }
 
+/**
+ * A drag moves the border between `columnIndex` and the column after it, and only that border: the two columns trade
+ * width, so the table keeps the width it had (FR-060) and the border stays under the pointer.
+ *
+ * A table that fits draws wider than its `<col>` widths add up to (`fairColumnWidths` stops each column at its
+ * max-content, and the `width: 100%` fixed-layout table shares the rest out in proportion), so a drag that started
+ * from the `<col>` width jumped on the first move, and every later move was shared out again. The drag starts from
+ * the widths as drawn — one read of the header row, at pointerdown — and writes those to every `<col>`, so nothing is
+ * left over to share out. A move only writes (Principle XII).
+ */
 function attachDrag(
   handle: HTMLElement,
-  col: HTMLTableColElement,
+  table: HTMLTableElement,
+  cols: readonly HTMLTableColElement[],
   tableIndex: number,
   columnIndex: number,
   options: TableLayoutOptions,
@@ -176,18 +192,30 @@ function attachDrag(
     const doc = handle.ownerDocument;
     const win = doc.defaultView;
     const startX = e.clientX;
-    const startWidth = col.getBoundingClientRect().width || parseFloat(col.style.width) || 0;
+    const drawn = [...(table.rows[0]?.cells ?? [])].map((cell) => cell.getBoundingClientRect().width);
+    const starts = cols.map((col, i) => (drawn[i]! > 0 ? drawn[i]! : parseFloat(col.style.width) || 0));
+    cols.forEach((col, i) => (col.style.width = `${starts[i]}px`));
+    const left = starts[columnIndex]!;
+    const right = starts[columnIndex + 1]!;
+    // Neither column is dragged below `8ch`, or below what it already was if a reader made it narrower than that.
+    const floor = laidOut.get(table)?.minLegiblePx ?? 1;
+    const lowest = -(left - Math.min(floor, left));
+    const highest = right - Math.min(floor, right);
 
-    const onMove = (moveEvent: PointerEvent): void => {
-      const next = Math.max(1, Math.round(startWidth + (moveEvent.clientX - startX)));
-      col.style.width = `${next}px`;
+    const set = (index: number, width: number): void => {
+      cols[index]!.style.width = `${width}px`;
       let forTable = options.handSet.get(tableIndex);
       if (!forTable) {
         forTable = new Map();
         options.handSet.set(tableIndex, forTable);
       }
-      forTable.set(columnIndex, next);
-      options.onResize?.(tableIndex, columnIndex, next);
+      forTable.set(index, width);
+      options.onResize?.(tableIndex, index, width);
+    };
+    const onMove = (moveEvent: PointerEvent): void => {
+      const dx = Math.min(highest, Math.max(lowest, moveEvent.clientX - startX));
+      set(columnIndex, left + dx);
+      set(columnIndex + 1, right - dx);
     };
     const onUp = (): void => {
       win?.removeEventListener('pointermove', onMove);
@@ -206,7 +234,7 @@ function insertHandles(table: HTMLTableElement, colgroup: HTMLTableColElement[],
     const handle = table.ownerDocument.createElement('div');
     handle.className = RESIZE_HANDLE_CLASS;
     (cell as HTMLElement).style.position = 'relative';
-    attachDrag(handle, colgroup[columnIndex]!, tableIndex, columnIndex, options);
+    attachDrag(handle, table, colgroup, tableIndex, columnIndex, options);
     cell.append(handle);
   });
 }
@@ -238,6 +266,35 @@ interface LaidOutTable {
 }
 
 const laidOut = new WeakMap<HTMLTableElement, LaidOutTable>();
+
+/**
+ * 081 FR-020 (#730) — tables a draw left unmeasured because their host had no box: a preview redrawn while collapsed or
+ * behind another tab, where every width a browser reads is 0. Laid out from those zeros, the columns came back wrong
+ * once the preview was shown, and a resize handle broke the table outright. Such a table is measured at the first
+ * resize that gives its host a width (Principle XII: the 0 → W change, once; never every notification).
+ */
+const awaitingBox = new WeakSet<HTMLTableElement>();
+
+/** What a layout pass did: `needsMeasure` while some table under the root waits for its host to have a box. */
+export interface TableLayoutResult {
+  readonly needsMeasure: boolean;
+}
+
+/**
+ * Whether a fold hides `table` (it, or an ancestor below `root`, is `display: none`): a block with `hidden` (a collapsed
+ * section), any child but the summary of a closed `<details>`, or whatever `options.hides` names. Attributes only, so
+ * it forces no layout. A hidden table measures as 0 just as a box-less host does, its clone included (`cloneNode`
+ * copies `hidden`, and the clone is put inside the same fold).
+ */
+function foldedAway(table: HTMLTableElement, root: HTMLElement, options: TableLayoutOptions): boolean {
+  let via: Element = table;
+  for (let el: Element | null = table; el !== null && el !== root; via = el, el = el.parentElement) {
+    if (el.hasAttribute('hidden')) return true;
+    if (el !== table && el.tagName === 'DETAILS' && !el.hasAttribute('open') && via.tagName !== 'SUMMARY') return true;
+    if (options.hides?.(el) === true) return true;
+  }
+  return false;
+}
 
 /** The element a table's width is shared out of — its host, looking past a scroll wrapper this module added. */
 function hostOf(table: HTMLTableElement): HTMLElement | null {
@@ -291,22 +348,40 @@ function applyWidths(table: HTMLTableElement, entry: LaidOutTable, options: Tabl
  * every token read its own): all writes, then `8ch`, then every width read together, then the held
  * tokens settled, then every table measured together, then every write.
  */
-export function applyTableLayout(root: HTMLElement, options: TableLayoutOptions): void {
-  const prepared = [...root.querySelectorAll<HTMLTableElement>('table')]
+export function applyTableLayout(root: HTMLElement, options: TableLayoutOptions, only?: ReadonlySet<HTMLTableElement>): TableLayoutResult {
+  const all = [...root.querySelectorAll<HTMLTableElement>('table')];
+  // READS — the space each table may take, before anything is written (the host's width does not depend on the table).
+  const availables = all.map((table) => (only === undefined || only.has(table) ? availableFor(table) : 0));
+  let needsMeasure = false;
+  const prepared = all
     .map((table, tableIndex) => {
+      // `only` — the tables a fold or a resize has just given a box; every other table keeps its layout as it stands.
+      if (only !== undefined && !only.has(table)) {
+        if (awaitingBox.has(table)) needsMeasure = true;
+        return null;
+      }
       clearPreviousLayout(table);
+      awaitingBox.delete(table);
       const count = columnCountOf(table);
-      return count === 0 ? null : { table, tableIndex, count, spans: wrapHyphenatedTokens(table) };
+      if (count === 0) return null;
+      // 081 FR-020 — a host with no box, or a fold over the table, measures every width as 0: leave the table to the
+      // resize or the open that gives it one.
+      if (!(availables[tableIndex]! > 0) || foldedAway(table, root, options)) {
+        awaitingBox.add(table);
+        needsMeasure = true;
+        return null;
+      }
+      return { table, tableIndex, count, available: availables[tableIndex]!, spans: wrapHyphenatedTokens(table) };
     })
     .filter((p) => p !== null);
-  if (prepared.length === 0) return;
+  if (prepared.length === 0) return { needsMeasure };
 
   const minLegiblePx = options.minLegiblePx(prepared[0]!.table);
 
   // READS — every width this pass needs, with nothing written in between.
   const measureToken = options.measureToken;
-  const read = prepared.map(({ table, spans }) => ({
-    available: availableFor(table),
+  const read = prepared.map(({ available, spans }) => ({
+    available,
     tokens: spans.map((span) => ({
       span,
       width: measureToken
@@ -339,6 +414,7 @@ export function applyTableLayout(root: HTMLElement, options: TableLayoutOptions)
     applyWidths(table, entry, options);
     insertHandles(table, cols, tableIndex, options);
   });
+  return { needsMeasure };
 }
 
 /**
@@ -346,10 +422,16 @@ export function applyTableLayout(root: HTMLElement, options: TableLayoutOptions)
  * rebuilt, and nothing at all for a table whose width did not change (Principle XII). The only reads are
  * the hosts' widths, all taken before anything is written. A table no draw has laid out is left for the
  * next draw.
+ *
+ * 081 FR-020 — the one exception: a table the last draw left waiting for a box (see `awaitingBox`) whose host now has
+ * a width. Nothing was measured for it, so there is nothing to re-share: {@link layoutWaitingTables} measures it, once,
+ * as a fresh draw at this width would (SC-004). Hand-set widths survive it (`handSet`).
  */
-export function relayoutTables(root: HTMLElement, options: TableLayoutOptions): void {
+export function relayoutTables(root: HTMLElement, options: TableLayoutOptions): TableLayoutResult {
   const tables = [...root.querySelectorAll<HTMLTableElement>('table')].filter((t) => laidOut.has(t));
+  // Read before the waiting tables' layout writes anything, so the two together cost one layout, not two.
   const widths = tables.map(availableFor);
+  const waiting = layoutWaitingTables(root, options);
   tables.forEach((table, i) => {
     const entry = laidOut.get(table)!;
     const available = widths[i]!;
@@ -359,6 +441,20 @@ export function relayoutTables(root: HTMLElement, options: TableLayoutOptions): 
     for (const token of entry.tokens) holdToken(token.span, token.width < limit);
     applyWidths(table, entry, options);
   });
+  return waiting;
+}
+
+/**
+ * 081 FR-020 — lay out the tables a draw left waiting (see `awaitingBox`) that now have a box: after a resize, or a
+ * fold opening over them (a callout, a `<details>`, a section), which changes the body's height and not its width, so
+ * no resize reports it. Only those tables are measured; with none waiting it reads nothing at all (Principle XII).
+ */
+export function layoutWaitingTables(root: HTMLElement, options: TableLayoutOptions): TableLayoutResult {
+  const waiting = [...root.querySelectorAll<HTMLTableElement>('table')].filter((t) => awaitingBox.has(t));
+  if (waiting.length === 0) return { needsMeasure: false };
+  const ready = waiting.filter((t) => !foldedAway(t, root, options) && availableFor(t) > 0);
+  if (ready.length === 0) return { needsMeasure: true };
+  return applyTableLayout(root, options, new Set(ready));
 }
 
 /** `8ch` against `table`'s own font — a transient measuring span, never left in the document. */
