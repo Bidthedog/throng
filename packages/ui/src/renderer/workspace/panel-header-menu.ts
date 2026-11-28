@@ -748,6 +748,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       ...(args.flagged === true
         ? { label: 'Unflag', icon: 'unflag' as const, onClick: () => actions.unflag() }
         : { label: 'Flag', icon: 'flag' as const, onClick: () => actions.flag() }),
+      // v1 review — both rows run `panel.toggleFlag`, so both show its chord.
+      shortcut: firstBinding(keybindings, 'panel.toggleFlag'),
       section: 'viewState',
     });
   }

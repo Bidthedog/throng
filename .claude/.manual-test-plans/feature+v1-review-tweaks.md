@@ -28,6 +28,7 @@ Spec: `specs/081-v1-fixes-and-tweaks/spec.md`
 | MT-22 | Rename above New File in the File Explorer | untested | | | |
 | MT-23 | Copy as is the only copy row on preview and grid menus | untested | | | |
 | MT-24 | A preview's Outlining rows show no keys | untested | | | |
+| MT-25 | Ctrl+Alt+G flags and unflags the focused panel | untested | | | |
 
 ## MT-01: Menu order and the panel title menu's groups
 
@@ -333,3 +334,18 @@ Paths: `packages/ui/src/renderer/preview/preview-panel.tsx`
 1. Open a Markdown preview with a few headings and right-click a heading. **Outlining** lists its rows with no keys beside them.
 2. Choose **Collapse This H2** from it. The section collapses.
 3. Right-click the same heading in the Markdown editor. Its Outlining rows show their keys.
+
+## MT-25: Ctrl+Alt+G flags and unflags the focused panel
+
+Paths: `packages/core/src/config/keybindings.ts`, `packages/ui/src/renderer/workspace/panel-flag-registry.ts`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/keybindings/window-dispatcher.tsx`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`
+
+### Steps
+1. Click into an editor and press **Ctrl+Alt+G**. The panel header shows the flag mark, and its project row counts it. No toast appears.
+2. Press **Ctrl+Alt+G** again in the same panel. The mark goes.
+3. Click into a terminal and press **Ctrl+Alt+G**. The terminal is flagged, and the shell receives nothing.
+4. Open a panel's title menu. **Flag** shows Ctrl+Alt+G; on a flagged panel **Unflag** shows it too.
+5. In **Cog › Key Bindings › Focus & Zoom**, rebind **Flag or unflag**. Both menu rows show the new key, and the new key works.
+
+### Negative cases
+- In a blank panel (no type chosen), Ctrl+Alt+G flags nothing.
+- With the File Explorer or Projects focused, Ctrl+Alt+G flags nothing.

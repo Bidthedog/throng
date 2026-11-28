@@ -3,8 +3,8 @@
  *
  * Layer: component — the builder `panelHeaderMenu` is pure, so one row per panel kind is a DOM-free call.
  * That the click reaches `attention.flag` with the panel's project, tab and title is the call site's wiring
- * in `panel-placeholder.tsx`; the builder's contract is that it calls `actions.flag` exactly once. Flag is a
- * plain item with no command and no chord (the failure banner's *Try again* is the precedent).
+ * in `panel-placeholder.tsx`; the builder's contract is that it calls `actions.flag` exactly once. Since the v1
+ * review both rows show `panel.toggleFlag`'s chord, which runs the same flag or unflag.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_KEYBINDINGS, PREVIEW_KIND, type Panel } from '@throng/core';
@@ -12,8 +12,6 @@ import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import { panelHeaderMenu, type PanelHeaderMenuActions } from '../../src/renderer/workspace/panel-header-menu.js';
 
 const noop = (): void => {};
-const actionsWith = (flag: () => void): PanelHeaderMenuActions =>
-  new Proxy({} as PanelHeaderMenuActions, { get: (_t, key) => (key === 'flag' ? flag : noop) });
 
 const panel = (over: Partial<Panel>): Panel => ({ type: 'panel', id: 'p1', originProjectId: 'proj', title: 'Panel', ...over });
 
@@ -48,12 +46,12 @@ describe.each([
   ['an editor', panel({ kind: 'editor' })],
   ['a preview', panel({ kind: PREVIEW_KIND, config: { filePath: 'D:/proj/README.md' } })],
 ])('%s', (_name, p) => {
-  it('offers Flag in View & state, with the flag icon (057 FR-139 as amended, #732) and no chord', () => {
+  it('offers Flag in View & state, with the flag icon (057 FR-139 as amended, #732) and panel.toggleFlag\'s chord', () => {
     const flag = menu(p).filter((i) => i.label === 'Flag');
     expect(flag).toHaveLength(1);
     expect(flag[0]).toMatchObject({ section: 'viewState' });
     expect(flag[0]!.icon).toBe('flag');
-    expect(flag[0]!.shortcut).toBeUndefined();
+    expect(flag[0]!.shortcut).toBe('Ctrl+Alt+G');
     expect(flag[0]!.disabled).not.toBe(true);
   });
 
@@ -63,7 +61,7 @@ describe.each([
     const items = menu(p, flag, { flagged: true, unflag });
     expect(items.map((i) => i.label)).not.toContain('Flag');
     const row = items.find((i) => i.label === 'Unflag');
-    expect(row).toMatchObject({ section: 'viewState', icon: 'unflag' });
+    expect(row).toMatchObject({ section: 'viewState', icon: 'unflag', shortcut: 'Ctrl+Alt+G' });
     row!.onClick();
     expect(unflag).toHaveBeenCalledTimes(1);
     expect(flag).not.toHaveBeenCalled();

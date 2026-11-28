@@ -76,6 +76,8 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   // 054 FR-071a — Maximise / Restore Panel: Shift+Alt, outside the tiers like column select;
   // a recorded exception (Constitution v5.10.0, live in a terminal).
   'panel.toggleMaximise': 'outside', // recorded exception
+  // v1 review — Flag or unflag acts on the panel that holds focus.
+  'panel.toggleFlag': 'tier2',
   'editor.toggleWordWrap': 'tier2', // recorded exception (multi-stroke, FR-091/FR-092)
   // 047 (research R5) — the six Markdown fold commands, the same multi-stroke exception as word wrap.
   'markdown.toggleSection': 'tier2', // recorded exception (multi-stroke)
@@ -414,6 +416,8 @@ describe('the FR-101 tier guard', () => {
       'panel.destroy': ['Ctrl+Shift+Alt+F4'],
       // 054 FR-071a — Maximise / Restore Panel.
       'panel.toggleMaximise': ['Shift+Alt+Enter'],
+      // v1 review (2026-11-28) — Flag or unflag.
+      'panel.toggleFlag': ['Ctrl+Alt+G'],
       // 047 (research R5, R7) — Markdown section folding and Go to Heading.
       'markdown.toggleSection': ['Ctrl+M,M'],
       'markdown.toggleAll': ['Ctrl+M,L'],

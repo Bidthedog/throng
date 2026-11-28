@@ -161,7 +161,7 @@ export const GUIDE_MAP: readonly GuideTask[] = [
   task('attention', 'choose-what-raises-a-mark', 'Choose what raises a mark'),
   task('attention', 'get-notified-when-claude-code-needs-you', 'Get notified when Claude Code needs you'),
   task('attention', 'jump-to-the-next-panel-that-needs-you', 'Jump to the next panel that needs you', { commands: ['focus.nextMarkedPanel'] }),
-  task('attention', 'flag-a-panel-as-a-reminder', 'Flag a panel as a reminder'),
+  task('attention', 'flag-a-panel-as-a-reminder', 'Flag a panel as a reminder', { commands: ['panel.toggleFlag'] }),
   task('attention', 'silence-one-terminal', 'Silence one terminal', { commands: ['terminal.toggleNotifications'] }),
   task('attention', 'read-and-act-on-notifications', 'Read and act on notifications', { commands: ['focus.notice'] }),
   task('attention', 'keep-order-and-clear-the-notifications-panel', 'Keep, order and clear the Notifications panel'),

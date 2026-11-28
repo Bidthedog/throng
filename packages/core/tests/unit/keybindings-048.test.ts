@@ -192,6 +192,7 @@ describe('the terminal-tier rule judges a multi-stroke chord by its first stroke
         'panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft', 'panel.destroy', 'tabs.rename',
         'panel.toggleMaximise', 'view.resourceMonitor', // 055
         'help.open', // 080 FR-010
+        'panel.toggleFlag', // 057 FR-125, v1 review
         'app.settings', 'app.installCommandLine', 'app.uninstallCommandLine', // 070 FR-024a, FR-027
         // 076 FR-006 — the terminal status-bar toggles.
         'terminal.toggleRememberCommand', 'terminal.toggleRememberDirectory', 'terminal.toggleNotifications',

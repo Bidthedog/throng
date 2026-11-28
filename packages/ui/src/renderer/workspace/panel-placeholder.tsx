@@ -42,6 +42,7 @@ import { readPanelTitleExtras } from './panel-title-extras.js';
 import { useSplitMode } from './split-mode.js';
 import { getMaximiseStack, toggleMaximisePanel, useTabMaximise } from './maximise-store.js';
 import { registerPanelDestroy } from './panel-destroy.js';
+import { registerPanelFlagToggle } from './panel-flag-registry.js';
 import { usePreviewFailure, usePreviewState } from '../preview/preview-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { releasePreviewView } from '../preview/forget-preview-panel.js';
@@ -593,6 +594,30 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   destroyRef.current = destroyPanel;
   useEffect(() => registerPanelDestroy(panel.id, () => void destroyRef.current()), [panel.id]);
   const attentionMark = usePanelMark(panel.id);
+  /*
+   * 057 FR-125 — the mark's subject is the panel's place, the same three names a toast heads its card with. Main
+   * decides whether anything changes (a marked panel stays as it is). The title menu's Flag / Unflag rows and the
+   * `panel.toggleFlag` chord run these two.
+   */
+  const flagThisPanel = (): void => {
+    window.throng?.attention?.flag({
+      panelId: panel.id,
+      projectId: panel.originProjectId,
+      panelTitle: place?.name ?? panel.title,
+      tabTitle: place?.tab ?? '',
+      projectName: place?.project ?? '',
+    });
+  };
+  const unflagThisPanel = (): void => window.throng?.attention?.unflag?.(panel.id);
+  // Read through a ref, so the chord acts on the mark and place as they are when it is pressed.
+  const toggleFlagRef = useRef<() => void>(() => {});
+  toggleFlagRef.current = attentionMark !== null ? unflagThisPanel : flagThisPanel;
+  // A blank panel offers no Flag (057 FR-125, amended 2026-11-07), so it registers nothing.
+  const flaggable = panel.kind !== undefined;
+  useEffect(
+    () => (flaggable ? registerPanelFlagToggle(panel.id, () => toggleFlagRef.current()) : undefined),
+    [panel.id, flaggable],
+  );
 
   /*
    * The panel's own file: what Find in File Explorer and Open in OS Default Program act on. One pair of handlers
@@ -894,18 +919,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 reloadTerminal: () => {
                   ws.setPanelDormant(panel.id, false);
                 },
-                // 057 FR-125 — the mark's subject is the panel's place, the same three names a toast heads
-                // its card with. Main decides whether anything changes (a marked panel stays as it is).
-                unflag: () => window.throng?.attention?.unflag?.(panel.id),
-                flag: () => {
-                  window.throng?.attention?.flag({
-                    panelId: panel.id,
-                    projectId: panel.originProjectId,
-                    panelTitle: place?.name ?? panel.title,
-                    tabTitle: place?.tab ?? '',
-                    projectName: place?.project ?? '',
-                  });
-                },
+                unflag: unflagThisPanel,
+                flag: flagThisPanel,
                 copyDetails: () => {
                   if (terminalFailure) {
                     extras.terminal?.copyDetails();

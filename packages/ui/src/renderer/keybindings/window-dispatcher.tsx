@@ -60,6 +60,7 @@ import { getExplorerCommands } from '../explorer/explorer-commands.js';
 import { navigateFocusedHistory } from '../navigation/navigate-history.js';
 import { focusPanel } from '../workspace/panel-focus.js';
 import { runTerminalToggle } from '../terminal/terminal-toggle-registry.js';
+import { runPanelFlagToggle } from '../workspace/panel-flag-registry.js';
 import { getActivePane, setActivePane } from '../workspace/active-pane.js';
 import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
@@ -647,6 +648,8 @@ export function WindowDispatcher({
       // 054 FR-071 — Maximise / Restore Panel acts on the same panel Destroy Panel would, and the same way
       // passes the key on when that is none.
       if (action === 'panel.toggleMaximise' && destroyTarget(e.target as Element | null, activePanelId()) === null) return;
+      // v1 review — Flag or unflag, the same way.
+      if (action === 'panel.toggleFlag' && destroyTarget(e.target as Element | null, activePanelId()) === null) return;
       // Capture phase: stop the focused terminal/editor from ALSO acting on the chord
       // (e.g. Git Bash turning Ctrl+Alt+Arrow into an escape sequence), then handle it.
       e.preventDefault();
@@ -908,6 +911,15 @@ export function WindowDispatcher({
           const target = destroyTarget(document.activeElement, activePanelId());
           const id = TERMINAL_PANEL_TOGGLES.find((t) => t.command === action)?.id;
           if (!target || !id || !runTerminalToggle(target, id)) return 'unavailable';
+          break;
+        }
+        /*
+         * 057 FR-125, v1 review — flag or unflag the panel that holds focus. The panel runs its title menu's own
+         * Flag / Unflag; a blank panel offers no Flag, registers nothing, and is reported unavailable (048 FR-092).
+         */
+        case 'panel.toggleFlag': {
+          const target = destroyTarget(document.activeElement, activePanelId());
+          if (!target || !runPanelFlagToggle(target)) return 'unavailable';
           break;
         }
         case 'panel.toggleMaximise': {

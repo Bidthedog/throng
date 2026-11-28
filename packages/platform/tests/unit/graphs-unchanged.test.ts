@@ -38,7 +38,7 @@ function canonical(value: unknown): string {
  * Commands added after 070, each on a chord no earlier command held in its scope. They are new, not changed, so the
  * pinned figure leaves them out rather than being re-pinned to include them.
  */
-const ADDED_AFTER_070 = new Set(['preview.print', 'editor.print', 'help.open', 'file.newFolder']);
+const ADDED_AFTER_070 = new Set(['preview.print', 'editor.print', 'help.open', 'file.newFolder', 'panel.toggleFlag']);
 
 /**
  * Commands that shipped unbound at 070 and took a chord later, on a chord no other command held in their scope. Their

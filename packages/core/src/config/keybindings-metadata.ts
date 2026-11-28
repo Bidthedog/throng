@@ -88,6 +88,8 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Toggle Focus Mode',
     'Focus Mode: let the focused panel fill its tab\'s middle section, or step back out of it.',
   ),
+  // 057 FR-125, v1 review — beside Focus Mode: the title menu's Flag / Unflag row, from the keyboard.
+  chord('panel.toggleFlag', 'Focus & Zoom', 'Flag or unflag', 'Mark the focused panel for attention, or clear its mark.'),
   chord(
     'focus.left',
     'Focus & Zoom',

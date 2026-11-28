@@ -37,6 +37,11 @@ export type ActionId =
    * exception. Window-handled, so it never reaches the program.
    */
   | 'panel.toggleMaximise'
+  /*
+   * 057 FR-125, amended by the v1 review (2026-11-28) — flag the focused panel for attention, or clear its mark: the
+   * title menu's Flag / Unflag row from the keyboard. Window-handled and live in every panel, like Focus Mode.
+   */
+  | 'panel.toggleFlag'
   // Keyboard move-focus (012, FR-015). Directional moves + a stable-layout-order
   // cycle over the active tab's panels; tokens use the produced key names.
   | 'focus.left'
@@ -391,6 +396,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   // 054 FR-071 — EVERYWHERE for `panel.destroy`'s reason: the dispatcher, not the scope, decides that
   // focus in a side pane maximises nothing and leaves the key unconsumed.
   'panel.toggleMaximise': EVERYWHERE,
+  // v1 review — EVERYWHERE for `panel.destroy`'s reason: the dispatcher, not the scope, decides that focus in a side
+  // pane flags nothing and leaves the key unconsumed.
+  'panel.toggleFlag': EVERYWHERE,
   'focus.left': EVERYWHERE,
   'focus.right': EVERYWHERE,
   'focus.up': EVERYWHERE,
@@ -601,6 +609,11 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     // 054 FR-071a — Visual Studio's full-screen toggle, by the maintainer's choice; a Principle IV
     // recorded exception (v5.10.0). A brand-new command on a chord no shipped row held: no bump.
     'panel.toggleMaximise': ['Shift+Alt+Enter'],
+    // v1 review (2026-11-28) — tier 2, acting on the panel that holds focus; G is Go to Next Marked Panel's letter one
+    // modifier down. AltGr+G types no character on UK, German, French, Spanish, Italian, Nordic or Polish; Czech and
+    // Hungarian type `]` there and lose it. In a terminal it displaces only readline's Meta+Ctrl+G, an alias of
+    // Ctrl+G's abort. A brand-new command on a chord no shipped row held: the per-read fill supplies it, no bump.
+    'panel.toggleFlag': ['Ctrl+Alt+G'],
     // Keyboard move-focus (012) — TIER 1 (046, FR-102): Ctrl+Shift+Alt+Arrow*, freeing the plain
     // Ctrl+Alt+Arrow family back to the editor/shell. Arrow tokens use the produced key names
     // (`Arrow*`). The cycle chords are a RECORDED EXCEPTION (FR-103) and keep their pre-round
@@ -1477,6 +1490,7 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'panel.destroy',
   'tabs.rename',
   'panel.toggleMaximise',
+  'panel.toggleFlag',
   'app.settings',
   'app.installCommandLine',
   'app.uninstallCommandLine',

@@ -197,6 +197,18 @@ Focus Mode: let the focused panel fill its tab's middle section, or step back ou
 
 Focus Mode: let the focused panel fill its tab's middle section (Enter Focus Mode), or step back out of it one level at a time (Exit Focus Mode). While it is on, the panel's status bar shows it, the tab's other panels hide, and the panel cannot be split, moved or destroyed. In a terminal this chord no longer reaches the program; `Shift+Enter` still sends a line break.
 
+### Flag or unflag
+
+**Cog › Key Bindings › Focus & Zoom**
+
+`panel.toggleFlag`
+
+Mark the focused panel for attention, or clear its mark.
+
+**Default:** `Ctrl+Alt+G` · **Scope:** Everywhere
+
+Does what the panel menu's **Flag** row does, or its **Unflag** row when the panel already holds a mark; both rows show the key. A blank panel has nothing to flag, and with a side pane focused the key does nothing. On a Czech or Hungarian layout AltGr+G types `]`, so rebind it there.
+
 ### Focus panel to the left
 
 **Cog › Key Bindings › Focus & Zoom**
