@@ -239,21 +239,46 @@ export function openHelpWindow(deps: HelpWindowDeps, url: string = HELP_APP_BASE
 export async function coverHelpGuide(win: BrowserWindow): Promise<() => void> {
   const view = helpView;
   if (win !== helpWindow || win.isDestroyed() || !view) return () => undefined;
-  const still = await view.webContents.capturePage().catch((error: unknown) => {
+  const capture = view.webContents.capturePage().catch((error: unknown) => {
     logExpected('help-window: capture the guide', 'without a still the dialog shows over the toolbar page alone', error);
     return null;
   });
+  // The guide is hidden whether or not the still is ready: a dialog drawn while it shows sits under it, unseen. With no
+  // still by the bound the page covers the guide's place plainly, and a still that lands later takes its place. A Linux
+  // runner's capture failed to settle within 15 s about once in 30 launches; the plain cover keeps that cosmetic.
+  const still = await Promise.race([capture, new Promise<undefined>((r) => setTimeout(() => r(undefined), HELP_COVER_CAPTURE_MS))]);
   if (win.isDestroyed()) return () => undefined;
-  win.webContents.send('throng:help:cover', still ? new Uint8Array(still.toPNG()) : null);
+  let covered = true;
+  const sendStill = (image: Electron.NativeImage | null): void => {
+    if (covered && image && !image.isEmpty() && helpView === view && !win.isDestroyed()) win.webContents.send('throng:help:cover', new Uint8Array(image.toPNG()));
+  };
+  if (still) sendStill(still);
+  else {
+    logExpected(
+      'help-window: capture the guide',
+      'the dialog covers the guide plainly until a still arrives',
+      new Error(still === null ? 'the capture failed' : `no still within ${HELP_COVER_CAPTURE_MS} ms`),
+    );
+    // An empty image is the page's "cover it plainly".
+    win.webContents.send('throng:help:cover', new Uint8Array(0));
+    if (still === undefined) void capture.then(sendStill);
+  }
   view.setVisible(false);
   win.webContents.focus();
   return () => {
+    covered = false;
     if (helpView === view && !win.isDestroyed()) {
       view.setVisible(true);
       win.webContents.send('throng:help:cover', null);
     }
   };
 }
+
+/**
+ * How long the cover waits for the guide's still before it hides the guide without one. Under the link prompt's own
+ * bound (`LINK_PROMPT_COVER_MS`), so the prompt always asks over a hidden guide.
+ */
+export const HELP_COVER_CAPTURE_MS = 400;
 
 export function closeHelpWindow(): void {
   if (helpWindow && !helpWindow.isDestroyed()) helpWindow.close();
