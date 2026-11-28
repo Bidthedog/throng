@@ -1,6 +1,6 @@
 ---
 name: throng-renderer-ui
-description: Load before working on the React renderer — panes, tabs, panels and the docking model, the sidebar, title bar, status bars, explorer tree, context menus, notifications, dialogs, theming and icon controls, focus and keyboard scope, and renderer state clients. Triggers include adding or changing any visible UI, "where does this component go", a context menu or menu item, a theme token or icon, drag/tear-off/sub-workspace behaviour, focus or z-order problems, and any change that must satisfy the themeable-icon-control or every-panel-action-is-reachable rules.
+description: Load before working on the React renderer — panes, tabs, panels and the docking model, the sidebar, title bar, status bars, explorer tree, context menus, notifications, dialogs, theming and icon controls, focus and keyboard scope, and renderer state clients. Triggers include adding or changing any visible UI, "where does this component go", a context menu or menu item, "which menu does this row go on", moving rows between a panel's body and title menus, a theme token or icon, drag/tear-off/sub-workspace behaviour, focus or z-order problems, and any change that must satisfy the themeable-icon-control or every-panel-action-is-reachable rules.
 ---
 
 # throng — React renderer and the docking workspace
@@ -27,7 +27,8 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
 ## Rules a UI change must satisfy
 
 The binding text is in two references: [references/constitution-ux.md](references/constitution-ux.md)
-(binding: constitution Principle VI and the action-controls gate — reachability, menu sections,
+(binding: constitution Principle VI and the action-controls gate — reachability, menu sections, which
+menu a row goes on (body or title) and how to sort a menu by it, menu keys,
 disabled vs absent, links, variants, OS and setting naming, popups, icon controls, dialog defaults,
 toast controls, setting toggles, and their known gaps) and
 [references/constitution-workspace.md](references/constitution-workspace.md) (binding: constitution
@@ -44,6 +45,10 @@ Principle XI — layout, sub-workspaces, focus, Panel state). The bullets below 
 - **Every panel action is reachable.** Every discrete command or state toggle on a Panel has a
   mouse-click or keyboard route, and never only one the user can hide; which routes a command gets is
   the feature's choice.
+- **A row goes on the menu of what it acts on** (constitution **8.2.0**). A panel's body menu holds what
+  acts on the content under the pointer and how the body shows it; its title menu holds the panel, its
+  file and its link to other panels. Sort a new or changed row by the lists and the test in the
+  reference, and add it to `menu-placement.test.ts`.
 - **One gesture follows a link** (constitution **5.5.0**). A link rendered inside content — terminal
   output, document text, a preview, a dialog or notice body — follows on **Ctrl+click**, and on
   **Ctrl+Enter** where it holds a keyboard position; a plain click never navigates. Hover names the

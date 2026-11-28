@@ -200,6 +200,45 @@ it on another teaches nothing about either.
 - **Known gaps:** the Key Bindings tab's chord menu, the Sub-workspaces panel's Minimise/Restore row and
   the Resource Monitor's node-action menus are built inline and are not yet in the sweep.
 
+## A row goes on the menu of what it acts on
+
+**A row goes on the menu of what it acts on.** A panel has two menus, and each row belongs on exactly one
+of them. A row in the wrong menu is a row the user looks for in the other, and a row in both makes one
+menu longer without making either easier to find.
+
+- The **body menu** is the menu a right-click inside the panel's body opens, including the menu of an
+  element inside it (a grid cell, row or column header, a preview image, a diagram, a link). It holds
+  only what acts on the content under the pointer, and how the body shows that content:
+  - the clipboard, Select All, Undo and Redo, and edits to the content (Insert ▸, Clear, Delete, Edit in
+    Dialog…, Column Width);
+  - finding and moving through the content: Find, Replace, Replace All, Go To Line…, Go to Heading…,
+    Go to Row…, Go to Page…;
+  - how the body draws it: Word Wrap, View Whitespace, Outlining, a grid's Wrap and Lock First Row or
+    Column, a PDF's page layouts;
+  - an element's own actions: Copy Image, Copy Diagram as Image, Open Link, and a diagram's Enter and
+    Exit Focus Mode, which maximise that diagram and not the panel.
+- The **title menu** (the panel header's menu, `workspace/panel-header-menu.ts`) holds what acts on the
+  panel itself, its file, and its link to other panels:
+  - the file: Save, Save As…, Revert, Reload from disk, Copy Path ▸, Print…, Find in File Explorer, the
+    Open in OS rows, Open Preview and Open in Editor, an editor's language, encoding and line endings;
+  - the panel: Split ▸, Send to Tab, Sync to, Refresh, Back and Forward, Zoom, Enter and Exit Focus
+    Mode, a panel's own toggles (a terminal's Remember Command, Remember Directory and Notifications,
+    Edit Long Cells in Dialog), Synchronise Scrolling, Flag, the failure rows, Destroy or Close Panel.
+- **The test**, for a row not listed: would it still mean the same thing if the user had right-clicked
+  somewhere else in the body? If yes, it acts on the panel or its file, so it is a title row. If what
+  it does depends on what is under the pointer, or on the body's view of the content, it is a body row.
+- A panel whose body menu would be left with no rows opens no body menu; it never opens an empty one.
+- Nothing moves to a status bar under this rule. A status bar control may repeat a title row; the menu
+  row stays.
+- **How to apply it to a menu:** list the menu's rows with their sections (the fixtures in
+  `menu-shortcuts.test.ts` build every swept menu), sort each row by the two lists and the test above,
+  then move each misplaced row to the other menu, keeping its label, icon, section, shortcut and
+  enablement. A row moved off a menu where it was the only route must arrive on the other menu in the
+  same change (*Every panel action is reachable*). Amend the FR that placed it, in its owning spec.
+- `packages/ui/tests/unit/menu-placement.test.ts` builds every body and title menu the key sweep builds
+  and fails a title row on a body menu, or a body row on a title menu. A new row is added to its lists
+  in the change that adds it.
+
 ## Quality gate — action controls are themeable icons with hover titles (known gaps included)
 
 - **Action controls MUST be themeable icons with hover titles (NON-NEGOTIABLE).**

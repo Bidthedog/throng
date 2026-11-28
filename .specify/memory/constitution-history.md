@@ -12,6 +12,45 @@ Each record is an HTML comment, so read this file as source rather than rendered
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 8.0.0 → 8.1.0
+Bump rationale: MINOR. The maintainer's v1 review of 2026-11-27 asked that every context menu row whose
+                command has a key show that key, and that this be a constitution rule. Principle VI gains
+                one rule, "A menu row shows its key". Argued against the project's own test:
+                - Not MAJOR: no guarantee is withdrawn or reversed, and no principle is redefined; every
+                  other rule of VI reads as it did.
+                - MINOR, which decides it: a new obligation within an existing principle. Menus that left
+                  a bound command's key off their rows complied with 8.0.0 and fail 8.1.0, which is the
+                  ordinary case for an additive rule.
+                - Not PATCH: it adds an obligation, not a clarification.
+Modified principles: VI (A menu row shows its key: added).
+Modified sections: none outside VI. Added sections: none. Removed sections: none.
+Skill reference: .claude/skills/throng-renderer-ui/references/constitution-ux.md › A menu row shows its key
+                (new section): what counts, rebindable versus fixed keys, the context rule, the one home
+                of the fixed keys and the gate.
+Audit before the rule: every context-menu builder was swept on this branch (commits "Show every bound
+                command's key on its menu row" and "Fail a menu row that shows no key and says no reason").
+                The rows that lacked a key were the CSV and spreadsheet grids' Undo, Redo, Cut, Copy, Paste
+                and Select All, the spreadsheet's Go to Row…, the cog menu's Settings, Resource Monitor and
+                Help, and the notification entry's Dismiss. The editor, preview and terminal menus showed
+                Ctrl on macOS, where those surfaces answer to Cmd. All are fixed in the same branch, so the
+                shipped menus comply when the rule lands.
+Enforcement: packages/ui/tests/unit/menu-shortcuts.test.ts builds every swept builder's menus with every
+                command bound and fails a leaf row that shows no key and has no reason in its NO_KEY list,
+                a reason that no longer applies, or a shown key that is neither a live binding nor a fixed
+                key from packages/ui/src/renderer/common/fixed-shortcut.ts.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ spec-template.md, tasks-template.md, checklist-template.md — name no menu shortcut; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks.
+Artifacts: ✅ docs/key-bindings.md — no statement contradicts the rule.
+           ⚠ Known gaps, recorded in the reference: the Key Bindings tab's chord menu, the Sub-workspaces
+                panel's Minimise/Restore row and the Resource Monitor's node-action menus are not yet in the
+                gate's sweep.
+Deferred: none beyond the gaps above.
+-->
+
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 7.6.0 → 8.0.0 (an earlier 8.0.0 draft, superseded by 7.4.0 before release, sits in
                 constitution-history.md marked as never released; this is the first published 8.0.0)
 Bump rationale: MAJOR. The maintainer's v1 review of 2026-11-27 asked for "Close Panel, Destroy Panel etc"
