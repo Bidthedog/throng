@@ -30,6 +30,8 @@ reachable by chord is on a menu.
 group `panelType`, the rows only that panel type has, after the file's Navigate rows. Find… stays in
 Navigate.*
 
+*(Amended 2026-11-28, v1 review, #732: neither row is on the preview header menu any more. Find… and Go to Heading… are the body menu's alone (FR-007, FR-042a, amended), with their chords.)*
+
 ## Editor body menu (`editor/content-menu.ts`), Markdown documents only
 
 The same four fold rows as the preview body menu, in viewState, computed at the clicked position;

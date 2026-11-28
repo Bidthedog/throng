@@ -12,21 +12,24 @@ the tables.)*
 | Content | Cut · Copy · Copy as ▸ (Rich Text, Plain Text) · Paste · Select All · Clear Cells (Del) |
 | | Undo · Redo |
 | | Edit in Dialog… (FR-036a) |
-| | Save · Save As… |
 | Create | Insert ▸ (Row Above, Row Below, Column Left, Column Right · Rows Above…, Rows Below…, Columns Left…, Columns Right…) |
-| Navigate | Go to Row… · Open in Editor (opens the editor, or goes to the open one) · Print… |
+| Navigate | Go to Row… |
 | View & state | Column Width… |
+| | Wrap ✓ · Lock First Row ✓ · Lock First Column ✓ |
 
 **Row header (gutter)**: Cut (removes the rows) · Copy · Copy as ▸ · Paste · Clear Cells · Delete Row(s) | Undo ·
 Redo | Insert ▸ (Row Above, Row Below · Rows Above…, Rows Below… · Copied Rows Above/Below while whole rows are on
-the clipboard) | Go to Row… · Open in Editor · Print…. No Select Row (FR-037h), no Reset Row Height (FR-006c).
+the clipboard) | Go to Row… | Wrap · Lock First Row · Lock First Column. No Select Row (FR-037h), no Reset Row Height
+(FR-006c).
 
 **Column header**: Cut (clears values) · Copy · Copy as ▸ · Paste · Clear Cells · Delete Column(s) | Undo · Redo |
-Insert ▸ (Column Left, Column Right · Columns Left…, Columns Right… · Copied Columns Left/Right) | Open in Editor ·
-Print… | Column Width… · Reset Column Width. No Select Column (FR-037h).
+Insert ▸ (Column Left, Column Right · Columns Left…, Columns Right… · Copied Columns Left/Right) | Column Width… ·
+Reset Column Width | Wrap · Lock First Row · Lock First Column. No Select Column (FR-037h).
 
-**Select-all corner** (FR-008b): Cut · Copy · Copy as ▸ · Clear Cells | Undo · Redo | Save · Save As… | Go to Row… ·
-Open in Editor · Print…. Nothing that acts on the active cell, a row or a column.
+**Select-all corner** (FR-008b): Cut · Copy · Copy as ▸ · Clear Cells | Undo · Redo | Go to Row… | Wrap · Lock First
+Row · Lock First Column. Nothing that acts on the active cell, a row or a column.
+
+*(Amended 2026-11-28, v1 review, #732: Save, Save As…, Open in Editor and Print… left every grid menu for the panel title menu, which draws Save and Save As… in Content for a CSV Preview Editor (FR-035a). Wrap, Lock First Row and Lock First Column left the title menu for every grid menu, as checked rows in View & state (FR-013, FR-039a). The title menu no longer offers Go to Row….)*
 
 *(Amended 2026-11-19: FR-037e, FR-006a.)*
 *(Amended 2026-11-27, maintainer review on 081: Delete Row(s) and Delete Column(s) act on whole selected rows or columns, one undo step each, and are drawn disabled with the reason otherwise; a file keeps at least one column. A blank file takes Insert Row and Insert Column, writing records of empty fields. Later the same day: the deletes appear only on the row and column header menus, never on the cell or select-all menu (an exception to drawn-disabled, at the maintainer's request); the header menus carry Clear Cells; the counted inserts ask how many, 1 to 10,000, each one undo step. Commands `grid.deleteRows` and `grid.deleteColumns`, unbound.)*
@@ -36,9 +39,10 @@ grid and takes every press; the prompt sits in its middle with its number select
 applies; Esc or Cancel closes. Other panels stay usable (FR-006, amended 2026-11-27).
 
 **Spreadsheet preview** (read-only, FR-050c as superseded 2026-11-27): cell and row header menus with Copy ·
-Copy as ▸ · Select All · Go to Row… · Print…; column header with Copy · Copy as ▸ · Column Width… · Reset Column
-Width · Print…; the corner with Copy · Copy as ▸ · Go to Row… · Print…. Nothing that edits, not even disabled. Its
-values are drawn in the theme's muted text colour.
+Copy as ▸ · Select All · Go to Row…; column header with Copy · Copy as ▸ · Column Width… · Reset Column
+Width; the corner with Copy · Copy as ▸ · Go to Row…; every one then Wrap · Lock First Row · Lock First Column
+where the provider has them. Nothing that edits, not even disabled. Its values are drawn in the theme's muted text
+colour. *(Amended 2026-11-28, v1 review, #732: Print… left these menus for the panel title menu.)*
 
 Copy follows `editor.previews.copyFormat` (044 FR-035b); the two named variants copy in their format
 whatever it says (the constitution's *a preference picks the default; the menu offers every variant*).

@@ -89,6 +89,8 @@ content. *Copy details* copies a description of that state, not the panel's cont
 across sections was considered and rejected: it would separate three items that are only ever present
 together, and it would move them, which View & state does not.
 
+*(Amended 2026-11-28, v1 review, #732: the terminal content menu is Copy, Paste and Find now (Content). Refresh / redraw terminal, the failure trio, the per-terminal toggles and Split are on the panel title menu (028 FR-040, 029 FR-004d, 076 FR-005, 048 FR-015, amended).)*
+
 *Why the link items are Contextual and lead the menu*: they are absent when the pointer is not over a
 link — the constitution's exact test — and Assumption 8 records that demoting them below Copy/Paste was
 rejected as a behaviour regression shipped under a grouping pass.
@@ -106,6 +108,8 @@ its current chord via `firstBinding(keybindings, 'navigate.gotoLine')`, supplied
 `gotoLine: { chord?: string; open: () => void }` bundle on `ContentMenuArgs`, matching the shape
 `wordWrap` already uses.
 
+*(Amended 2026-11-28, v1 review, #732: Set Language… (and Reset Language, Encoding ▸, Line Endings ▸) left this menu for the panel title menu; Find, Replace and Replace All joined Content, a group below Undo / Redo. Open Preview, Print…, Synchronise Scrolling and Split are no longer on it.)*
+
 ### 3.4 Panel header menu — *11+ items, no dividers today; extracted to `panel-header-menu.ts`*
 
 | Section | Items | |
@@ -122,14 +126,16 @@ menu now draws, in order (the header comment of `panel-header-menu.ts` is author
 
 | Group | Section | Items |
 |---|---|---|
-| The document | Content | Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All |
-| The document's file | Navigate | Find in File Explorer, Open in OS Explorer, Open in OS Default Program, Open Preview / Open in Editor, Find…, Back, Forward, Print… |
-| This panel type only | View & state, group `panelType` | Go to Heading / Page / Row…, Edit Long Cells in Dialog, Wrap, Lock First Row / Column |
+| The document | Content | Save, Save As…, Revert, Reload from disk |
+| The document's file | Navigate | Find in File Explorer, Open in OS Explorer, Open in OS Default Program, Copy Path ▸, Open Preview / Open in Editor, Back, Forward, Print… |
+| This panel type only | View & state, group `panelType` | Set Language…, Reset Language, Encoding ▸, Line Endings ▸ (editor); Edit Long Cells in Dialog (grid); Remember Command, Remember Directory, Notifications (terminal) |
 | The panel itself | View & state | Split ▸, Send to Tab, Sync to, Refresh, Reload, Focus Mode, Zoom, Refresh / redraw terminal, Synchronise Scrolling, Flag, Try again, Copy details, Clear panel type |
 | Closing it | Destroy | Close Panel / Destroy Panel, last |
 
 *Split, Send to Tab and Sync to sit with the panel-level rows on the header. Split stays Create in the
 panel content menus (048).*
+
+*(Amended 2026-11-28, v1 review, #732: the title menu holds the panel, its file and its link to other panels; the body menu holds what acts on the content under the pointer. Find, Replace, Replace All, Find…, Go to Heading / Page / Row…, Wrap and the locks moved to the body menus; Copy Path ▸, the editor format rows, a CSV file's Save and Save As… and a terminal's toggles and start-failure trio moved here. No body menu carries Split now.)*
 
 *048 (FR-016, FR-043): panel Rename (Content) and Reset Name (View & state) are removed with panel
 renaming; the Split submenu joins in Create, and every panel content menu carries it too

@@ -590,7 +590,7 @@ ready-made pages; the first shows the print actions disabled, the second prints 
 #### Print commands (#484)
 
 - **FR-063**: Every preview panel MUST offer **Print…** in its header and body right-click menus, and in every
-  other menu that lists the panel's actions (every panel action has a menu item).
+  other menu that lists the panel's actions (every panel action has a menu item). *(Amended 2026-11-28, v1 review, #732: **Print…** is on the panel's header (title) menu only, with its chord; the body menus, the grid menus included, no longer offer it (the title menu holds the panel, its file and its link to other panels; the body menu holds what acts on the content under the pointer).)*
 - **FR-064**: **Print…** MUST be a bindable command scoped to the preview panel, shipping bound to **Ctrl+P**,
   which no shipped binding holds in that scope. Print… MUST open the Print Preview window (FR-071) for the
   preview's printable output and MUST NOT itself send anything to a printer: no print job is ever started
@@ -602,7 +602,7 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   language is known. A terminal is never offered it, and **Ctrl+P** there still reaches the shell.
   *(Amended 2026-11-20.)* An editor's right-click body menu MUST offer **Print…** too, in its Navigate section
   beside Go To Line… and Open Preview, as a preview's body menu does (FR-063): every panel action is reachable from
-  the panel's own menus.
+  the panel's own menus. *(Amended 2026-11-28, v1 review, #732: superseded: the editor body menu no longer offers Print…; the header menu and the chord do.)*
 - **FR-065**: Printing MUST go through the platform seam (Principle II), so every print path is testable with
   no printer, and MUST work on Windows and Linux, and on macOS as far as CI proves it.
 - **FR-066**: Printing, and opening or closing print preview, MUST NOT change the preview's scroll position,
@@ -770,7 +770,7 @@ ready-made pages; the first shows the print actions disabled, the second prints 
   **Lock first row**, a workbook's **First row is header**), repeated at the top of every page; the columns in the
   grid's width proportions across the page width; a cell's text wrapping within its column; a page break only
   between rows. A workbook prints the sheet on screen, not every sheet. The grids' own menus offer **Print…** as
-  every other preview's do (FR-063).
+  every other preview's do (FR-063). *(Amended 2026-11-28, v1 review, #732: the grids' menus no longer offer Print…; the panel title menu does (FR-063, amended).)*
 - **FR-075c**: *(2026-11-20 18:02.)* A PDF preview MUST print the PDF's own pages, one per sheet of paper, each fitted
   whole within the margins with its shape kept, read from the file (not from what the preview has drawn). The
   paper is Print Preview's choice; a page of another size is fitted to it.

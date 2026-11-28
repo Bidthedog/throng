@@ -418,7 +418,7 @@ Comments* again, the control is gone, and it stays that way after closing and re
   (016 FR-010b). *(Added 2026-10-14.)*
 - **FR-024b**: The editor content menu MUST offer **Reset Language** beside *Set Language…* (016 FR-010d),
   doing the same as the control. It MUST be **disabled** while the document has no override, so the menu
-  carries the action even with the status bar hidden. *(Added 2026-10-14.)*
+  carries the action even with the status bar hidden. *(Added 2026-10-14.)* *(Amended 2026-11-28, v1 review, #732: the panel **title** menu offers Reset Language, beside Set Language… (016 FR-010d, amended); the content menu does not.)*
 - **FR-024c**: The reset control and menu item MUST be covered at the lowest layer that can prove them: what
   the strip renders and when, and that a reset deletes the persisted override rather than overwriting it.
   *(Added 2026-10-14.)*

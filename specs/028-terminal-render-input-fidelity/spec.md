@@ -614,7 +614,7 @@ every route converges on. Delivers #198 alone — or retires it with evidence.
 ### Deliberate redraw action (#163)
 
 - **FR-040**: A **"Refresh / redraw terminal"** action MUST be available on the terminal's own
-  right-click context menu.
+  right-click context menu. *(Amended 2026-11-28, v1 review, #732: withdrawn from the content menu: the action is about the panel, so the header (title) menu (FR-041) is its one menu route, beside the `terminal.redraw` chord.)*
 - **FR-041**: The same action, under the same name, MUST be available on the terminal panel header's
   context menu.
 - **FR-042**: Invoking the action MUST correct a terminal that is in the mis-rendered state,

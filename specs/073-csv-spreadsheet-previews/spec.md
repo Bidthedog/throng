@@ -648,6 +648,7 @@ Markdown and Mermaid pattern, each setting working as labelled.
   state, be reachable by keyboard, and have a matching checked item on the panel menu. Whether Wrap is on is
   decided per panel: the panel's own choice, saved with the panel so it survives a restart, else **Wrap
   cells** (FR-060b). Scrolling with Wrap on still meets SC-009. *(Refines FR-004.)*
+  *(Amended 2026-11-28, v1 review, #732: the matching checked item is on **every grid menu** (cell, row header, column header, select-all corner; CSV and workbook), in View & state, not on the panel title menu: Wrap changes how the body shows its cells.)*
   *Refined (convergence T099, 2026-11-21): a wrapped cell draws at most its first 50,000 characters, so one huge
   value cannot stall the grid's layout (Principle XII); the cell's tooltip and its editors still hold the whole value.
   "No line cap" stands: the limit is on characters drawn in one cell, never on lines.*
@@ -753,6 +754,7 @@ Markdown and Mermaid pattern, each setting working as labelled.
   the editor's Save As dialog, writes the document there through the editor's save path (FR-045), and the
   preview then shows the file at its new path. *(Supersedes the Assumption "Save As and Revert are reached
   from a text editor" for Save As; Revert still is.)*
+  *(Amended 2026-11-28, v1 review, #732: **Save** and **Save As…** are on the panel **title** menu, Content, with their chords, and no longer on the grid's right-click menus: they act on the file. The grid menus no longer offer Open in Editor or Print… either; both stay on the title menu (044 FR-015b, 075 FR-063, amended).)*
 - **FR-036**: Editing a cell: typing on a selected cell or pressing F2 or Enter MUST open an in-cell
   editor; Enter commits and moves down, Tab commits and moves right, Esc cancels. Delete on a cell
   selection MUST clear their values. *(Amended 2026-11-27, maintainer review on 081: Tab moves right and wraps to
@@ -843,6 +845,7 @@ Markdown and Mermaid pattern, each setting working as labelled.
   keyboard and have a matching checked item on the panel menu. Each is decided per panel: the panel's own choice,
   saved with the panel, else its setting (FR-060d). Scrolling with either locked still meets SC-009, and Wrap
   (FR-013) still applies to locked cells. *(Supersedes FR-039 for these two.)*
+  *(Amended 2026-11-28, v1 review, #732: the matching checked items are on every grid menu (cell, row, column, corner; CSV and workbook), in View & state after Wrap, not on the panel title menu.)*
   *Refined (MT walk-through, 2026-11-21): as with Excel's frozen panes, Ctrl+Home (FR-008) goes to the first cell
   clear of the locked strips (A2 with row 1 locked, B1 with column A locked, B2 with both) and Home to the first
   column clear of a locked column, so each brings the table back to its start; with A1 always in view, Ctrl+Home to
@@ -869,7 +872,7 @@ Markdown and Mermaid pattern, each setting working as labelled.
   (`preview.goToHeading`, `Ctrl+G`) and a **Go to Row…** item on the cell and row-header menus MUST open
   the shared Go to dialog (FR-043b) for rows, naming the active cell's row and the row count as the row
   header numbers them. Enter MUST move the active cell to that row in the active column, scroll the row to
-  the top, and return focus to the grid.
+  the top, and return focus to the grid. *(Amended 2026-11-28, v1 review, #732: the panel title menu no longer offers Go to Row…; the grid menus and the chord do.)*
 - **FR-043b** *(Q21, 2026-11-19)*: The Go to dialog MUST be one shared component, used by the PDF preview's
   Go to Page (074 FR-062b), the grids' Go to Row (FR-043a) and the editor's Go to Line (033 FR-019). Each use
   MUST name the current position and the count ("Line 3 of 120", digit-grouped), accept only a whole number

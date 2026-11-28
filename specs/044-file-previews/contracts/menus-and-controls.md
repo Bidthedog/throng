@@ -32,6 +32,8 @@ moved to the end of the menu (Destroy is now last in every menu), and Send to Ta
 Navigate for the panel-level View & state group, beside Refresh and Zoom. The header comment of
 `panel-header-menu.ts` holds the current grouping.*
 
+*(Amended 2026-11-28, v1 review, #732: Navigate gains **Copy Path ▸** (the File Explorer's four forms) after the file rows, for a file inside the project, moved from the body menu (§4, 074 FR-028). A CSV Preview Editor also draws **Save** and **Save As…** in Content (073 FR-035a). Find… and Go to Heading / Page / Row… left this menu for the body menu (047 FR-007, FR-042a), and so did a grid's Wrap, Lock First Row and Lock First Column (073 FR-013, FR-039a).)*
+
 **The failure-banner items do on a preview what they do on an editor**, through the preview's own
 paths. `PanelHeaderMenuArgs.editorFailure` is renamed `panelFailure` (true while the editor's **or**
 the preview's `PanelFailureBanner` is up):
@@ -66,6 +68,8 @@ Inserted into the existing editor shape (`panel-header-menu.ts:212-305`), Naviga
 **Synchronise Scrolling** *(preview.toggleSyncScroll)* — [A] exactly where Open Preview is absent;
 **never** disabled (a disabled provider still shows it enabled, FR-122a); checked while on (§10).
 
+*(Amended 2026-11-28, v1 review, #732: the editor header menu also gains **Copy Path ▸** in Navigate (a file inside the project) and, in View & state group `panelType`, **Set Language…**, **Reset Language**, **Encoding ▸** and **Line Endings ▸**, moved from the body menu (016 FR-010d, 055 FR-024b, 059 FR-058). Find, Replace and Replace All left this menu for the body (043 FR-015).)*
+
 ## 3. Editor body menu addition (FR-002)
 
 `editorContentMenu` (`ui/src/renderer/editor/content-menu.ts:75-178`), Navigate section, after
@@ -74,14 +78,18 @@ Inserted into the existing editor shape (`panel-header-menu.ts:212-305`), Naviga
 *2026-09-16 (FR-122b)* — **View & state**, after *Word Wrap*: **Synchronise Scrolling** — same presence
 as in §2, checked while on (§10).
 
+*(Amended 2026-11-28, v1 review, #732: superseded. The editor body menu offers neither Open Preview nor Synchronise Scrolling, nor Print…, Split or the format rows; all are on the header menu (§2). It gains **Find**, **Replace** and **Replace All** in Content, a group of their own below Undo / Redo (043 FR-015).)*
+
 ## 4. Preview body menu (FR-035, FR-035c, FR-095)
 
 | Section | Items |
 |---|---|
 | **Contextual** — only when right-clicking a followable link **with no text selected** | **Open Link** *(Ctrl+Enter)* · **Copy Link Address** |
 | **Content** — [A] when the provider's `textSelection` is false | **Copy** [D] nothing selected · **Copy as ▸** (Rich Text, Plain Text) [D] nothing selected · **Select All** |
-| **Navigate** — [A] binary provider | **Open in Editor** |
-| *2026-09-16* **View & state** — [A] binary provider | **Synchronise Scrolling** — checked while on (§10, FR-122b). Present whether or not a link or a selection is under the pointer |
+| **Navigate** | **Find…** · **Go to Heading…** / **Go to Page…** (047 FR-007, FR-042a; 074 FR-062b) |
+| **View & state** | the page layouts (074 FR-062c) · **Outlining ▸** (054 FR-010) |
+
+*(Amended 2026-11-28, v1 review, #732: Open in Editor, Synchronise Scrolling, Copy Path ▸, Print… and Split left this menu for the header menu (§1). An inline element keeps the rows that act on it alone: Copy Image, Copy Diagram as Image, and the diagram's own Enter / Exit Focus Mode.)*
 
 - Over an `inert` link, the Contextual section is absent (FR-095).
 - With a selection, the Contextual section is absent even over a link ("the ordinary menu wins").
@@ -221,9 +229,9 @@ the window's config store.
 
 | Surface | Where | Rendering |
 |---|---|---|
-| Editor body menu | View & state, after *Word Wrap* (§3) | label `Synchronise Scrolling ✓` while on, `Synchronise Scrolling` while off (the Word Wrap idiom); test id `menu-item-Synchronise Scrolling`; icon `syncScroll`; shortcut = live chord |
+| ~~Editor body menu~~ *(removed 2026-11-28, v1 review, #732)* | View & state, after *Word Wrap* (§3) | label `Synchronise Scrolling ✓` while on, `Synchronise Scrolling` while off (the Word Wrap idiom); test id `menu-item-Synchronise Scrolling`; icon `syncScroll`; shortcut = live chord |
 | Editor header menu | View & state, after *Zoom ▸*, before the banner items (§2) | as above |
-| Preview body menu | View & state, last section (§4) | as above |
+| ~~Preview body menu~~ *(removed 2026-11-28, v1 review, #732)* | View & state, last section (§4) | as above |
 | Preview header menu | View & state, after *Zoom ▸*, before the banner items (§1) | as above |
 | Editor status bar | immediately before the preview button (§7) | `IconButton` token `syncScroll`, `aria-pressed` = setting, `title` *Synchronise Scrolling* + ` (<chord>)` when bound, test id `editor-sync-scroll-<panelId>` |
 | Preview status bar | immediately before Open in Editor (§8) | as above, test id `preview-sync-scroll-<panelId>` |
@@ -242,5 +250,7 @@ window, follows a successful write through the config store (032 FR-004).
 **Principle VI**: the four menu items are the canonical route; the two buttons are accelerators, so a
 hidden status bar strands nothing. `menu-sections.test.ts` pins the four shapes and `panelActions` gains
 `toggleSyncScroll`; `menu-icon-tokens.test.ts` gains `syncScroll`.
+
+*(Amended 2026-11-28, v1 review, #732: two menu items remain, the editor and preview header menus; the body-menu rows are gone (FR-122b, amended).)*
 
 *2026-10-24 (057 round 12, FR-125)* — a preview's header menu, like every panel header menu, ends **View & state** with **Flag** (icon `attention`, no command, no chord), after the failure-banner items.

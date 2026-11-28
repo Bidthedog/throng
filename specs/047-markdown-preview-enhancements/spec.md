@@ -333,7 +333,7 @@ all columns stay legible without a horizontal scrollbar, then drag a column bord
   (**013 FR-019**), so a match looks the same in an editor and a preview.
   *Refined by FR-074 (Session 2026-09-29) — every match is also outlined, in editors and previews alike.*
 - **FR-007**: Wherever a menu exposes Find for an editor panel, the same menu MUST expose it for a
-  preview panel (Principle VI, *every panel action has a menu item*).
+  preview panel (Principle VI, *every panel action has a menu item*). *(Amended 2026-11-28, v1 review, #732: Find is a **body** menu row on both, the editor's (043 FR-015, amended) and the preview's; the preview's header (title) menu no longer offers Find….)*
 - **FR-008**: When regular-expression match mode (#376) is delivered, it MUST apply to this surface too;
   nothing in this feature may prevent it.
 
@@ -506,7 +506,7 @@ all columns stay legible without a horizontal scrollbar, then drag a column bord
 - **FR-042a**: **Opening.** A bindable **Go to Heading** command MUST open it, shipping bound to **Ctrl+G**
   scoped to preview panels, and passing **046 FR-021**'s check within that scope; the preview's body and
   header menus MUST offer **Go to Heading…** (Principle VI). It opens with the **search box focused** and
-  the list scrolled so the entry for the reader's current section (FR-044) is visible and highlighted.
+  the list scrolled so the entry for the reader's current section (FR-044) is visible and highlighted. *(Amended 2026-11-28, v1 review, #732: the preview's **body** menu offers **Go to Heading…**; its header (title) menu no longer does, since the row acts on the content.)*
 - **FR-042b**: **Size and scrolling.** The pop-down MUST have a fixed height and a vertical scrollbar, and
   its list MUST scroll independently of the preview: scrolling it never scrolls the document.
 - **FR-042c**: **Jumping.** Clicking an entry, or pressing Enter on it, MUST scroll the preview to that

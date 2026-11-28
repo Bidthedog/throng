@@ -598,7 +598,7 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
   leaving the canvas showing plainly. Both colours are edited in Preferences → Themes; the toggles in
   Preferences → Settings with the provider.
 - **FR-028**: An Image Preview's body menu MUST offer **Copy Image** (the image as a bitmap on the
-  clipboard) and **Copy Path**; it MUST NOT offer text Copy or Select All.
+  clipboard) and **Copy Path**; it MUST NOT offer text Copy or Select All. *(Amended 2026-11-28, v1 review, #732: **Copy Path ▸** is on the panel **title** menu, Navigate, for a file inside the project, on every preview and on an editor, not on the body menu: it names the panel's file. The body keeps Copy Image.)*
 
 #### Image and SVG view controls (maintainer's additional requirement)
 
@@ -735,7 +735,7 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
   of 120", digit-grouped). Its field MUST accept only a whole number from 1 to the page count — any other
   keystroke is refused — and Enter MUST scroll that page to the top and close the modal; Escape or a click
   outside closes it; focus returns to the pages either way. One command keeps one chord (Principle IV):
-  the command a Markdown preview opens Go to Heading with goes to a page where the provider is paged.
+  the command a Markdown preview opens Go to Heading with goes to a page where the provider is paged. *(Amended 2026-11-28, v1 review, #732: the **Go to Page…** row is the body menu's only; the panel (title) menu no longer offers it, nor Go to Heading… or Go to Row….)*
 - **FR-062c**: *(2026-11-19, second round.)* A PDF Preview MUST offer three **page layouts**, as themeable icon
   controls beside the view controls (pressed while current) and as checked rows of the body menu's View & state
   section (Principle VI): **Single Page** (one under another, the default), **Two Pages** (two to a row, like an
@@ -796,7 +796,7 @@ Files & Folders and Quick Open; toggle each provider off and on; change each siz
 - **FR-068a**: A PDF's text MUST be selectable with the pointer and copyable with Copy, the Copy chord
   and Select All (the body menu offers both, and Copy Path), as plain text. The selectable text is PDF.js's
   text layer laid over each painted page at that page's scale (at 50% and above, FR-065e): spans whose text PDF.js sets as text, never
-  markup, so FR-066 holds. Links stay above the text.
+  markup, so FR-066 holds. Links stay above the text. *(Amended 2026-11-28, v1 review, #732: Copy Path is the title menu's (FR-028, amended).)*
 - **FR-069**: The PDF renderer MUST be an existing, actively maintained open-source library whose
   licence is compatible with throng's AGPL-3.0-only licence, recorded in the plan's research with its
   licence named (for example, PDF.js under Apache-2.0). Chromium's built-in PDF viewer is acceptable

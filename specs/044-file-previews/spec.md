@@ -830,7 +830,7 @@ restart; Back again. Repeat in a preview by following links.
   > part of the historical note; they are moved above it, verbatim.
 - **FR-002**: The same editor panel MUST offer **Open Preview** in its body's right-click menu and in
   its header's right-click menu, in the Navigate section, showing the command's chord when one is
-  bound (Principle VI, *Every panel action has a menu item*).
+  bound (Principle VI, *Every panel action has a menu item*). *(Amended 2026-11-28, v1 review, #732: the header (title) menu only; the body menu no longer offers Open Preview (the title menu holds the panel, its file and its link to other panels; the body menu holds what acts on the content under the pointer).)*
 - **FR-003**: Files & Folders MUST offer **Preview** inside the **Open In** submenu for a file that
   has a provider, drawn **disabled** while that provider is disabled (Principle VI, *disabled when
   unavailable*). It MUST be absent on folders and on files with no provider (*absent when
@@ -908,7 +908,7 @@ restart; Back again. Repeat in a preview by following links.
     *Partly superseded by FR-122c (Session 2026-09-16) — "a button" becomes two: the scroll-sync toggle
     sits immediately left of this one, in the same controls group, on every text-provider preview.*
   - **FR-015b**: An item in the preview panel's **body** right-click menu and **header** right-click
-    menu, in the Navigate section — the same sections Open Preview occupies on an editor.
+    menu, in the Navigate section — the same sections Open Preview occupies on an editor. *(Amended 2026-11-28, v1 review, #732: the header (title) menu only, as Open Preview now is (FR-002, amended); the preview body menu no longer offers Open in Editor. A CSV grid's own menus no longer offer it either (073).)*
   - **FR-015c**: On a **standalone** preview the item and button are **Open in Editor**: they open
     the file in an editor panel placed beside the preview — splitting the preview's slot, with the
     editor on the left — and the preview becomes parented to it in place (FR-013a). *(Amended 2026-11-20 by
@@ -1465,6 +1465,7 @@ restart; Back again. Repeat in a preview by following links.
     it). On the preview header menu (`contracts/menus-and-controls.md` §1) and on the editor header menu
     it MUST follow **Zoom ▸** and precede the failure-banner items (030 FR-042c) where those are shown
     *(position within the section derived; not confirmed)*.
+    *(Amended 2026-11-28, v1 review, #732: the **body** menus no longer offer Synchronise Scrolling, the editor's or the preview's: it is a setting of the panel's link to its preview, so only the header (title) menus offer it, with the presence, check and chord above. FR-122a's "body menu item" no longer exists; the header item and the status-bar button remain.)*
   - **FR-122c**: The editor's status bar and the preview's status bar MUST carry a scroll-sync toggle
     button in their controls group, placed **immediately left of** the preview button (FR-001) and of
     the Open in Editor / Go to Editor button (FR-015a) respectively. It MUST use the themeable icon token

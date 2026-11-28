@@ -261,7 +261,7 @@ project. The message names the folder and says it is missing.
   that adds a panel action to add its menu item **in the same increment** (Principle VI), and FR-004a
   makes clearing a panel a user-invoked action for the first time — today it happens only
   automatically, as a side effect of a terminal ending. An action reachable solely by an icon on a
-  transient failure surface is exactly the invisibility that rule exists to prevent.
+  transient failure surface is exactly the invisibility that rule exists to prevent. *(Amended 2026-11-28, v1 review, #732: the terminal Panel's menu here is its **title** menu: Try again, Copy details and Clear panel type sit there while a start failure is live, as on an editor or a preview. The terminal's content menu no longer carries them.)*
 - **FR-005**: When the cause of a start failure is rectified and the project is reopened, the
   terminal MUST start with its original flavour, shell arguments and startup command.
 - **FR-005a**: Where the terminal also remembers a WORKING DIRECTORY and that directory no longer

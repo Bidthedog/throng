@@ -680,6 +680,7 @@ persist independently, sync one into a sub-workspace and confirm the parent/chil
   item. `search.find` / `search.replace` / `search.replaceAll` are named as pre-existing gaps to be
   closed by tracked work; this feature closes them.)* Stepping through matches and closing the bar
   remain exempt as navigational input.
+  *(Amended 2026-11-28, v1 review, #732: the owning panel's menu is its **body** menu (the title menu holds the panel, its file and its link to other panels; the body menu holds what acts on the content under the pointer). An editor's body menu offers Find, Replace and Replace All in Content; a terminal's offers Find; a preview's offers Find… (047 FR-007). The panel title menu offers none of them.)*
 
 #### The Find in Files panel — type and lifecycle (User Story 5)
 
