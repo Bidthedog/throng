@@ -720,14 +720,14 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'markdown.toggleSection': ['Ctrl+M,M'],
     'markdown.toggleAll': ['Ctrl+M,L'],
     'markdown.collapseSection': ['Ctrl+M,S'],
-    // Unbound by the maintainer's review (2026-09-28): the context menus carry both, and a chord for
-    // them adds nothing Ctrl+M,M and Ctrl+M,L do not already toggle.
-    'markdown.expandSection': [],
+    // v1 review (2026-11-28, #732): every Outlining row gets a chord. Expand takes back the ReSharper E and X
+    // the 2026-09-28 review dropped; All Inside is its section chord with Shift added to the second stroke.
+    // `V41_KEYBINDINGS` moves an install that still saves these four unbound.
+    'markdown.expandSection': ['Ctrl+M,E'],
     'markdown.collapseAll': ['Ctrl+M,A'],
-    'markdown.expandAll': [],
-    // 054 FR-013 — unbound; the Outlining submenu carries both.
-    'markdown.collapseAllInside': [],
-    'markdown.expandAllInside': [],
+    'markdown.expandAll': ['Ctrl+M,X'],
+    'markdown.collapseAllInside': ['Ctrl+M,Shift+S'],
+    'markdown.expandAllInside': ['Ctrl+M,Shift+E'],
     /*
      * 047 (research R7) — Go to Heading. `Ctrl+G` is readline's `abort`, same as `navigate.gotoLine`
      * above; the two share the literal chord on DISJOINT scopes ({editor} vs {preview}), which
@@ -988,6 +988,10 @@ export const MACOS_BINDING_OVERRIDES: Readonly<Record<string, readonly string[]>
   'markdown.toggleAll': ['Ctrl+M,L'],
   'markdown.collapseSection': ['Ctrl+M,S'],
   'markdown.collapseAll': ['Ctrl+M,A'],
+  'markdown.expandSection': ['Ctrl+M,E'],
+  'markdown.expandAll': ['Ctrl+M,X'],
+  'markdown.collapseAllInside': ['Ctrl+M,Shift+S'],
+  'markdown.expandAllInside': ['Ctrl+M,Shift+E'],
   'terminal.redraw': ['Shift+Meta+F5'],
   'navigate.back': ['Meta+['],
   'navigate.forward': ['Meta+]'],

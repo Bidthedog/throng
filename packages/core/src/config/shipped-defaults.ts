@@ -409,7 +409,11 @@ import { setAtPath } from './metadata.js';
 //
 // Bumped by 081 (40 → 41): a THEMES payload, additive. One size token, `sizes.ignoredEntryOpacity`, the fade on a File
 // Explorer entry git ignores (FR-071). Every payload arrives, no existing value moves.
-export const SHIPPED_DEFAULTS_VERSION = 41;
+//
+// Bumped by the v1 review (41 → 42, #732): a KEYBINDINGS payload. Four outlining commands that shipped unbound now ship
+// a chord (Expand This Section, Expand All, and the two All Inside commands). Every earlier version wrote their empty
+// arrays into keybindings.json, so they move only through the guarded rewrite: {@link V41_KEYBINDINGS}.
+export const SHIPPED_DEFAULTS_VERSION = 42;
 
 /**
  * The colours this branch's interim shipped-defaults-39 builds wrote that differ from both version 38 and today: Debian's
@@ -965,6 +969,18 @@ export const V29_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deep
   'view.resourceMonitor': ['Ctrl+Shift+Alt+R'],
 });
 
+/**
+ * The v1 review's version-41 guard source (#732): the four outlining commands every version up to 41 wrote unbound. A
+ * frozen COPY, for {@link V13_KEYBINDINGS}'s reason. A saved `[]` cannot tell "never bound" from "unbound on purpose",
+ * but none of the four ever shipped a chord to unbind, so an empty array reads as the default.
+ */
+export const V41_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deepFreeze({
+  'markdown.expandSection': [],
+  'markdown.expandAll': [],
+  'markdown.collapseAllInside': [],
+  'markdown.expandAllInside': [],
+});
+
 /** The command FR-116 adds — the one FR-118's new-action fill rule guards. */
 const FOCUS_WORKSPACE = 'focus.workspace';
 
@@ -1104,6 +1120,7 @@ function planFR108Rows(
     ...Object.entries(V14_KEYBINDINGS),
     ...Object.entries(V15_KEYBINDINGS),
     ...Object.entries(V29_KEYBINDINGS),
+    ...Object.entries(V41_KEYBINDINGS),
   ];
   const shippedBindings = d.keybindings.bindings as Record<string, string[]>;
 

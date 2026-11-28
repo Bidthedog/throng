@@ -35,9 +35,10 @@ const MARKDOWN_DEFAULTS: Record<(typeof MARKDOWN_ACTIONS)[number], string | null
   'markdown.toggleSection': 'Ctrl+M,M',
   'markdown.toggleAll': 'Ctrl+M,L',
   'markdown.collapseSection': 'Ctrl+M,S',
-  'markdown.expandSection': null,
+  // Bound again by the v1 review (#732, 2026-11-28), after the 2026-09-28 review had dropped both.
+  'markdown.expandSection': 'Ctrl+M,E',
   'markdown.collapseAll': 'Ctrl+M,A',
-  'markdown.expandAll': null,
+  'markdown.expandAll': 'Ctrl+M,X',
 };
 
 describe('FIND_SURFACES — search.find/findNext/findPrevious/close widen to preview', () => {

@@ -650,9 +650,9 @@ describe.skipIf(skipOnMacos('upgrades a Windows or Linux seed from before v14; n
     // and 055 to 29 (its twelve resource monitor icon tokens), and 069 to 34 (icons leave every theme),
     // then to 35 (`fileIconOther` reaches every theme file, FR-070), 075 to 36 (the callout colours), and 077 to 37 (the
     // settings unit renames), and #105 to 38 (the readable editor selections), and 078 to 39 (the text on the accent and danger fills),
-    // then 40, and 081 to 41 (`sizes.ignoredEntryOpacity`).
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(41);
-    expect(await service.readAppliedVersion()).toBe(41);
+    // then 40, and 081 to 41 (`sizes.ignoredEntryOpacity`), and the v1 review to 42 (four outlining chords, #732).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(42);
+    expect(await service.readAppliedVersion()).toBe(42);
   });
 
   it('a second upgrade writes nothing', async () => {

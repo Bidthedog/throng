@@ -995,7 +995,7 @@ Collapse the current section.
 
 Expand the section containing the caret (editor) or the top of the view (preview).
 
-**Default:** *(unbound)* · **Scope:** Editor · Preview
+**Default:** `Ctrl+M,E` · **Scope:** Editor · Preview
 
 Expand the current section.
 
@@ -1019,7 +1019,7 @@ Collapse every section, at every level.
 
 Expand every heading section.
 
-**Default:** *(unbound)* · **Scope:** Editor · Preview
+**Default:** `Ctrl+M,X` · **Scope:** Editor · Preview
 
 Expand every section, at every level.
 
@@ -1031,7 +1031,7 @@ Expand every section, at every level.
 
 Collapse every section nested under the current one, leaving that section itself open.
 
-**Default:** *(unbound)* · **Scope:** Editor · Preview
+**Default:** `Ctrl+M,Shift+S` · **Scope:** Editor · Preview
 
 Collapse every section nested under the current section, leaving the current section itself open; the rest of the document is unchanged.
 
@@ -1043,11 +1043,13 @@ Collapse every section nested under the current section, leaving the current sec
 
 Expand the current section and every section nested under it.
 
-**Default:** *(unbound)* · **Scope:** Editor · Preview
+**Default:** `Ctrl+M,Shift+E` · **Scope:** Editor · Preview
 
 Expand the current section, even when it is collapsed, and every section nested under it; the rest of the document is unchanged.
 
-In an editor of any other language `Ctrl+M` keeps the editor's own meaning. Whether a document opens
+Every row of the editor's **Outlining** menu shows its key. The two *All inside* chords are their section chords with
+Shift added to the second key: hold Ctrl, press M, then Shift+S. In an editor of any other language `Ctrl+M` keeps
+the editor's own meaning. Whether a document opens
 with its sections expanded or collapsed is [Markdown sections open](preferences.md#editor).
 
 ## CSV grid
@@ -1421,6 +1423,10 @@ different:
 | Toggle all sections | `markdown.toggleAll` | `Ctrl+M,L` | macOS keeps Cmd+M |
 | Collapse section | `markdown.collapseSection` | `Ctrl+M,S` | macOS keeps Cmd+M |
 | Collapse all sections | `markdown.collapseAll` | `Ctrl+M,A` | macOS keeps Cmd+M |
+| Expand section | `markdown.expandSection` | `Ctrl+M,E` | macOS keeps Cmd+M |
+| Expand all sections | `markdown.expandAll` | `Ctrl+M,X` | macOS keeps Cmd+M |
+| Collapse all inside section | `markdown.collapseAllInside` | `Ctrl+M,Shift+S` | macOS keeps Cmd+M |
+| Expand all inside section | `markdown.expandAllInside` | `Ctrl+M,Shift+E` | macOS keeps Cmd+M |
 | Redraw terminal | `terminal.redraw` | `Shift+Cmd+F5` | macOS keeps Cmd+F5 for VoiceOver |
 | Back | `navigate.back` | `Cmd+[` | The Mac convention |
 | Forward | `navigate.forward` | `Cmd+]` | The Mac convention |

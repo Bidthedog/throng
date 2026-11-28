@@ -23,6 +23,7 @@ Spec: `specs/081-v1-fixes-and-tweaks/spec.md`
 | MT-17 | Flag icon on the Flag rows | untested | | | |
 | MT-18 | Body menus hold the content, title menus the panel | untested | | | |
 | MT-19 | Ctrl+Shift+N makes a folder in the File Explorer | untested | | | |
+| MT-20 | Markdown outlining from the keyboard and the "…" | untested | | | |
 
 ## MT-01: Menu order and the panel title menu's groups
 
@@ -261,3 +262,20 @@ Paths: `packages/core/src/config/keybindings.ts`, `packages/core/src/config/keyb
 ### Negative cases
 - With focus in an editor or a terminal, Ctrl+Shift+N makes no folder.
 
+## MT-20: Markdown outlining from the keyboard and the "…"
+
+Paths: `packages/ui/src/renderer/editor/markdown-fold.ts`, `packages/core/src/config/keybindings.ts`, `packages/core/src/config/shipped-defaults.ts`
+
+### Steps
+1. Open a Markdown file with an H1 and a few H2s under it in an editor, and open its preview beside it.
+2. Click the gutter arrow beside an H2. The editor folds the section and shows **…** after the heading; the preview folds it too.
+3. Click the **…**. The section unfolds in the editor, its gutter arrow turns back to **−**, and the preview unfolds it too.
+4. Put the caret in an H2's text. Hold **Ctrl**, press **M** then **S**: the section collapses. **Ctrl+M,E** expands it.
+5. **Ctrl+M,A** collapses every section; **Ctrl+M,X** expands them all.
+6. Put the caret in the H1's text. **Ctrl+M,Shift+S** collapses every H2 under it and leaves the H1 open; **Ctrl+M,Shift+E** opens them all again.
+7. Right-click in the editor and open **Outlining**. Every row shows its key.
+8. In **Cog › Key Bindings › Markdown**, rebind Expand all sections to another key. The Outlining row shows the new key and the new key works.
+
+### Negative cases
+- In an editor of any other language, Ctrl+M keeps the editor's own meaning and folds nothing.
+- On a config folder from before this build that never rebound the outlining keys, the four new keys work after the upgrade; a key you set yourself is kept.

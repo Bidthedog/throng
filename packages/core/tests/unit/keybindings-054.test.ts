@@ -23,14 +23,15 @@ const scopesOf = (action: ActionId): DispatchScope[] => [...COMMAND_SCOPES[actio
 const described = (action: string): boolean => KEYBINDINGS_METADATA.some((d) => d.key === action);
 
 describe('Collapse / Expand All Inside This Section (FR-013)', () => {
-  it.each(['markdown.collapseAllInside', 'markdown.expandAllInside'] as ActionId[])(
-    '%s is scoped to Markdown editors and previews, ships unbound, and is described',
-    (action) => {
-      expect(scopesOf(action)).toEqual(['editor', 'preview']);
-      expect(DEFAULT_KEYBINDINGS.bindings[action]).toEqual([]);
-      expect(described(action)).toBe(true);
-    },
-  );
+  // Amended by the v1 review (#732, 2026-11-28): both ship a chord, the section chord with Shift added to its second stroke.
+  it.each([
+    ['markdown.collapseAllInside', 'Ctrl+M,Shift+S'],
+    ['markdown.expandAllInside', 'Ctrl+M,Shift+E'],
+  ] as Array<[ActionId, string]>)('%s is scoped to Markdown editors and previews, ships %s, and is described', (action, chord) => {
+    expect(scopesOf(action)).toEqual(['editor', 'preview']);
+    expect(DEFAULT_KEYBINDINGS.bindings[action]).toEqual([chord]);
+    expect(described(action)).toBe(true);
+  });
 });
 
 describe('Maximise / Restore Panel (FR-071, FR-071a)', () => {

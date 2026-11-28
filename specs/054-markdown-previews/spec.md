@@ -445,6 +445,9 @@ starting state; repeat with a diagram's Full Pane.
   already collapsed, or the target and everything under it already expanded — and enabled for any
   other mixture. The submenu MUST be divided into three groups: This Section, All Inside This Section,
   and the whole document's Collapse All / Expand All (manual test change request, 2026-10-12).
+  *(Amended 2026-11-28, v1 review, #732: both commands now ship a chord, so every Outlining row in the editor shows
+  one: Collapse All Inside **Ctrl+M, Shift+S** and Expand All Inside **Ctrl+M, Shift+E**, the This Section chords with
+  Shift added to the second key.)*
 - **FR-014**: Non-Markdown documents MUST show no Outlining submenu.
 
 #### Task-list checkboxes (#462)

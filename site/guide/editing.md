@@ -110,9 +110,12 @@ The status bar shows each file's encoding and line endings, and changes either.
 
 Folding a Markdown file's sections leaves its headings in view, so you see a long document's outline.
 
-1. Click the arrow in the gutter beside a heading to fold or unfold its section.
-2. Or use the **Outlining** submenu, or the **Ctrl+M** chords in
-   [Markdown bindings](../../docs/key-bindings.md#markdown).
+1. Click the arrow in the gutter beside a heading to fold or unfold its section. A folded section shows **…** after
+   its heading; click that to unfold it too.
+2. Or use the **Outlining** submenu on the right-click menu. Each row shows its key.
+3. Or keep your hands on the keyboard: hold **Ctrl**, press **M**, then **S** to collapse the section the caret is in,
+   **E** to expand it, **A** to collapse all and **X** to expand all. Add **Shift** to S or E to act on everything
+   inside the section. The full list is in [Markdown bindings](../../docs/key-bindings.md#markdown).
 
 An editor and its preview fold together.
 

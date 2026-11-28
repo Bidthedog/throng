@@ -47,6 +47,9 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Changed
 
+- Every row of a Markdown editor's **Outlining** menu has a key: **Ctrl+M,E** expands the section, **Ctrl+M,X**
+  expands all, and **Ctrl+M,Shift+S** / **Ctrl+M,Shift+E** collapse or expand everything inside the section. An install
+  that left them unbound takes the new keys. ([guide](https://throng-ide.com/guide/editing/#fold-markdown-sections), [#732](https://github.com/Bidthedog/throng/issues/732))
 - Right-clicking a link to a local file or folder offers the File Explorer's **Open In** submenu, with the same
   rows in the same order. ([guide](https://throng-ide.com/guide/editing/#follow-links-in-your-files), [#731](https://github.com/Bidthedog/throng/issues/731))
 - A terminal in Focus Mode shows the Focus Mode status-bar highlight that editors and previews already show. ([guide](https://throng-ide.com/guide/layout/#concentrate-on-one-panel), [#727](https://github.com/Bidthedog/throng/issues/727))
@@ -74,6 +77,8 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Fixed
 
+- Clicking the **…** on a folded Markdown section unfolds it the way its gutter arrow does: the arrow updates and the
+  linked preview unfolds it too. ([#732](https://github.com/Bidthedog/throng/issues/732))
 - **Select All** in a preview, from the menu or **Ctrl+A**, selects the whole document on the first try when
   something is already selected.
 - "Couldn't open" notices no longer name panels you cannot see, no longer call an existing folder missing, and no

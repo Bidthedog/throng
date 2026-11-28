@@ -302,9 +302,36 @@ function foldRangeSync(deps: MarkdownFoldDeps): Extension {
   });
 }
 
+/**
+ * The "…" a folded section shows after its heading. CodeMirror's own placeholder unfolds the range itself, behind
+ * the fold state's back: the text opened while the marker and the linked preview still read collapsed (#732). This
+ * one draws the same chip and runs the marker's own toggle for the heading on its line, so the document's fold
+ * state changes and every view follows from that.
+ */
+function sectionPlaceholder(deps: MarkdownFoldDeps) {
+  return (view: EditorView): HTMLElement => {
+    const el = document.createElement('span');
+    el.textContent = '…';
+    el.setAttribute('aria-label', view.state.phrase('folded code'));
+    el.title = 'Expand section';
+    el.className = 'cm-foldPlaceholder';
+    el.onclick = (event) => {
+      event.preventDefault();
+      const line0 = view.state.doc.lineAt(view.posAtDOM(el)).number - 1;
+      const section = liveSections(view).find((candidate) => candidate.startLine === line0);
+      if (section) deps.onToggle(section.slug);
+    };
+    return el;
+  };
+}
+
 /** `codeFolding()` plus the heading gutter (while `showGutter` is on) — the whole of `foldCompartment`'s Markdown content. */
 export function markdownFoldExtension(deps: MarkdownFoldDeps): Extension {
-  return [codeFolding(), foldRangeSync(deps), ...(deps.showGutter ? [markdownHeadingGutter(deps)] : [])];
+  return [
+    codeFolding({ placeholderDOM: sectionPlaceholder(deps) }),
+    foldRangeSync(deps),
+    ...(deps.showGutter ? [markdownHeadingGutter(deps)] : []),
+  ];
 }
 
 /** The six `markdown.*` commands (R5): what each one does to a document's `FoldState`. */

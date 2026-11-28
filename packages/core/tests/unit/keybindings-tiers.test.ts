@@ -84,9 +84,9 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'markdown.expandSection': 'tier2', // recorded exception (multi-stroke)
   'markdown.collapseAll': 'tier2', // recorded exception (multi-stroke)
   'markdown.expandAll': 'tier2', // recorded exception (multi-stroke)
-  // 054 FR-013 — unbound, so no chord to judge; the group's tier.
-  'markdown.collapseAllInside': 'tier2',
-  'markdown.expandAllInside': 'tier2',
+  // 054 FR-013 — the group's tier.
+  'markdown.collapseAllInside': 'tier2', // recorded exception (multi-stroke)
+  'markdown.expandAllInside': 'tier2', // recorded exception (multi-stroke)
   // 073 FR-038 — unbound, so no chord to judge; preview-only, like the Markdown group.
   'grid.insertRowAbove': 'tier2',
   'grid.insertRowBelow': 'tier2',
@@ -418,12 +418,13 @@ describe('the FR-101 tier guard', () => {
       'markdown.toggleSection': ['Ctrl+M,M'],
       'markdown.toggleAll': ['Ctrl+M,L'],
       'markdown.collapseSection': ['Ctrl+M,S'],
-      'markdown.expandSection': [], // unbound by review, 2026-09-28
+      // Unbound by review 2026-09-28; bound again by the v1 review (#732, 2026-11-28).
+      'markdown.expandSection': ['Ctrl+M,E'],
       'markdown.collapseAll': ['Ctrl+M,A'],
-      'markdown.expandAll': [], // unbound by review, 2026-09-28
-      // 054 FR-013 — unbound.
-      'markdown.collapseAllInside': [],
-      'markdown.expandAllInside': [],
+      'markdown.expandAll': ['Ctrl+M,X'],
+      // 054 FR-013 — shipped unbound; bound by the v1 review (#732, 2026-11-28).
+      'markdown.collapseAllInside': ['Ctrl+M,Shift+S'],
+      'markdown.expandAllInside': ['Ctrl+M,Shift+E'],
       'preview.goToHeading': ['Ctrl+G'],
       // 073 FR-038 — unbound.
       'grid.insertRowAbove': [],

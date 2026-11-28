@@ -417,6 +417,9 @@ all columns stay legible without a horizontal scrollbar, then drag a column bord
   the section is expanded and **+** while collapsed. Clicking it toggles that section. The markers
   live in the editor's gutter, so they are hidden with it when `editor.showGutter` is off; folding
   stays available from the menus and bindings. *[derived, plan Complexity Tracking]*
+  *(Amended 2026-11-28, v1 review, #732: the **…** a collapsed section shows after its heading MUST do exactly what
+  that heading's marker does: clicking it expands the section in the document's fold state, so the marker reads **−**
+  and every linked view, the preview included, expands it too. It no longer unfolds the editor's text alone.)*
   **Supersedes 040 FR-046 in part.** 040 FR-046 kept the editor gutter to line numbers alone; this adds
   the Markdown fold markers as its one other content, governed by `editor.showGutter` as FR-046 feared
   they would not be. FR-046's other half — no per-document or per-language gutter override — still
@@ -468,7 +471,10 @@ all columns stay legible without a horizontal scrollbar, then drag a column bord
     Ctrl+M, which the binding must take over there. *(Clarified 2026-09-28: the maintainer asked for
     the ReSharper chords.)* *(Amended 2026-09-28, maintainer review: **Expand This Section** and
     **Expand All** ship **unbound** — Ctrl+M, E and Ctrl+M, X are dropped. Both stay bindable and on
-    the context menus; Toggle This Section and Toggle All already expand.)*
+    the context menus; Toggle This Section and Toggle All already expand.)* *(Amended 2026-11-28, v1 review, #732:
+    every outlining action needs a working key in the editor, so **Expand This Section** ships **Ctrl+M, E** and
+    **Expand All** ships **Ctrl+M, X** again. An install that saved them unbound takes the chords through the guarded
+    keybindings upgrade, unless another Markdown command already holds the chord.)*
 - **FR-038**: A preview panel's status bar (044 FR-015a) MUST carry a **Collapse All / Expand All** toggle
   for a Markdown preview, invoking Toggle All (FR-037a). It MUST use a themeable icon token, carry an
   accessible name, and never be hidden by width.
