@@ -63,7 +63,6 @@ const GRID_MENUS = ['CSV cell', 'CSV row header', 'CSV column header', 'CSV corn
  */
 const NO_KEY: Readonly<Record<string, string>> = {
   'Explorer file › New File': NONE,
-  'Explorer file › New Folder': NONE,
   'Explorer file › Open In › OS File Explorer': NONE,
   'Explorer file › Open In › Open in OS Default Program': NONE,
   'Explorer file › Open In › New Editor': NONE,
@@ -77,7 +76,6 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Explorer file › Exclude from Find in Files in this project': NONE,
   'Explorer file › Properties': NONE,
   'Explorer folder › New File': NONE,
-  'Explorer folder › New Folder': NONE,
   'Explorer folder › Open In › OS File Explorer': NONE,
   'Explorer folder › Open In › Terminal › *': PICK,
   'Explorer folder › Open In › Search › Find': SEARCH_SCOPE,
@@ -89,7 +87,6 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Explorer folder › Exclude from Find in Files in this project': NONE,
   'Explorer folder › Properties': NONE,
   'Explorer root › New File': NONE,
-  'Explorer root › New Folder': NONE,
   'Explorer root › Open In › OS File Explorer': NONE,
   'Explorer root › Open In › Terminal › *': PICK,
   'Explorer root › Open In › Search › Find': SEARCH_SCOPE,

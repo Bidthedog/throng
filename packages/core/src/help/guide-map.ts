@@ -170,7 +170,7 @@ export const GUIDE_MAP: readonly GuideTask[] = [
   task('files', 'browse-your-projects-files', "Browse your project's files"),
   task('files', 'select-several-files', 'Select several files'),
   task('files', 'open-a-file', 'Open a file'),
-  task('files', 'create-rename-and-delete-files-and-folders', 'Create, rename and delete files and folders', { commands: ['file.rename', 'file.delete'] }),
+  task('files', 'create-rename-and-delete-files-and-folders', 'Create, rename and delete files and folders', { commands: ['file.rename', 'file.newFolder', 'file.delete'] }),
   task('files', 'move-or-copy-files-by-dragging', 'Move or copy files by dragging'),
   task('files', 'cut-copy-and-paste-including-between-projects', 'Cut, copy and paste, including between projects', { commands: ['file.cut', 'file.copy', 'file.paste'] }),
   task('files', 'choose-what-happens-when-a-name-already-exists', 'Choose what happens when a name already exists'),

@@ -89,6 +89,8 @@ export type ActionId =
   | 'file.copy'
   | 'file.paste'
   | 'file.delete'
+  // v1 review (2026-11-28): New Folder, where the toolbar's New folder makes one (004 FR-031).
+  | 'file.newFolder'
   // 024 US3 (#85): undo/redo the last file OPERATION — a move, a rename, a delete. Explorer-scoped,
   // so Ctrl+Z means "put that file back" in the tree and "undo my typing" in an editor, which is
   // exactly what a user means by it in each place.
@@ -455,6 +457,7 @@ export const COMMAND_SCOPES: CommandScopes = {
   'file.copy': EXPLORER_ONLY,
   'file.paste': EXPLORER_ONLY,
   'file.delete': EXPLORER_ONLY,
+  'file.newFolder': EXPLORER_ONLY,
   'file.undo': EXPLORER_ONLY,
   'file.redo': EXPLORER_ONLY,
   // Save acts on the active panel's document; it is inert, not wrong, in a terminal.
@@ -759,6 +762,9 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'file.copy': ['Ctrl+C'],
     'file.paste': ['Ctrl+V'],
     'file.delete': ['Delete'],
+    // Tier 2, Ctrl+Shift+<key>: it acts on the focused pane. A saved file that lacks the action is filled from here on
+    // read, so an existing install gets it with no upgrade step. macOS derives Cmd+Shift+N.
+    'file.newFolder': ['Ctrl+Shift+N'],
     'file.undo': ['Ctrl+Z'],
     'file.redo': ['Ctrl+Y'],
     'editor.save': ['Ctrl+S'],

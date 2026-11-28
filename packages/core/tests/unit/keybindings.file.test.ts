@@ -23,6 +23,15 @@ describe('file.* keybindings (004 T006/T007)', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Delete' }, 'explorer')).toBe('file.delete');
   });
 
+  it('makes a new folder on Ctrl+Shift+N in the tree, and nowhere else (v1 review, 004 FR-021)', () => {
+    expect(DEFAULT_KEYBINDINGS.bindings['file.newFolder']).toEqual(['Ctrl+Shift+N']);
+    const press = { key: 'N', ctrl: true, shift: true };
+    expect(resolveAction(DEFAULT_KEYBINDINGS, press, 'explorer')).toBe('file.newFolder');
+    for (const scope of ['editor', 'terminal', 'preview', 'projects', 'findInFiles'] as const) {
+      expect(resolveAction(DEFAULT_KEYBINDINGS, press, scope), scope).not.toBe('file.newFolder');
+    }
+  });
+
   it('honours a remapped binding', () => {
     const remapped = {
       version: 1,

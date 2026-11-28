@@ -509,6 +509,7 @@ export function FileTree({
     clearClipboard,
     paste,
     remove,
+    newFolder: createFolder,
     undoFileOp,
     redoFileOp,
     // 044 FR-005 — `preview.open` for the selected FILE; a folder has no preview. Main decides the rest.

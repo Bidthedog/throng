@@ -612,6 +612,18 @@ Rename the selected file or folder.
 
 **Default:** `F2` · **Scope:** File Explorer
 
+### New folder
+
+**Cog › Key Bindings › File Explorer**
+
+`file.newFolder`
+
+Create a folder in the selected folder, or beside the selected file.
+
+**Default:** `Ctrl+Shift+N` · **Scope:** File Explorer
+
+The folder is made where the toolbar's New folder makes one: inside the selected folder, beside a selected file, or at the project's root with nothing selected. It opens for its name straight away, and the File Explorer's right-click menu shows the key beside New Folder.
+
 ### Undo file operation
 
 **Cog › Key Bindings › File Explorer**

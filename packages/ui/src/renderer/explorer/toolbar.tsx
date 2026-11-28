@@ -43,6 +43,7 @@ export function ExplorerToolbar({
 }): ReactElement {
   const chord = firstBinding(keybindings, 'navigate.quickOpen');
   const findInFilesChord = firstBinding(keybindings, 'search.findInFiles');
+  const newFolderChord = firstBinding(keybindings, 'file.newFolder');
   return (
     <div className="explorer-toolbar" data-testid="explorer-toolbar">
       <button
@@ -136,7 +137,7 @@ export function ExplorerToolbar({
       <button
         type="button"
         className="explorer-toolbar__btn"
-        title="New folder"
+        title={`New folder${newFolderChord === undefined ? '' : ` (${newFolderChord})`}`}
         aria-label="New folder"
         disabled={onNewFolder === undefined}
         onClick={onNewFolder}

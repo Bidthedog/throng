@@ -130,6 +130,8 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'terminal.scrollToBottom': 'tier3',
   'terminal.redraw': 'tier3',
   'file.delete': 'tier3',
+  // Acts on the focused pane: tier 2, Ctrl+Shift+<key>.
+  'file.newFolder': 'tier2',
   'search.close': 'tier3',
   'file.rename': 'tier3',
   'search.findNext': 'tier3',
@@ -373,6 +375,7 @@ describe('the FR-101 tier guard', () => {
       'file.copy': ['Ctrl+C'],
       'file.paste': ['Ctrl+V'],
       'file.delete': ['Delete'],
+      'file.newFolder': ['Ctrl+Shift+N'], // v1 review, 2026-11-28: added on a chord no command held
       'file.undo': ['Ctrl+Z'],
       'file.redo': ['Ctrl+Y'],
       'editor.save': ['Ctrl+S'],

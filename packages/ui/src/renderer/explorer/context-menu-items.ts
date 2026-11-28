@@ -211,7 +211,7 @@ export function buildContextMenuItems(args: {
 
   // Create section.
   items.push({ label: 'New File', icon: 'add', section: 'create', onClick: () => ops.newFile(node) });
-  items.push({ label: 'New Folder', icon: 'newFolder', section: 'create', onClick: () => ops.newFolder(node) });
+  items.push({ label: 'New Folder', icon: 'newFolder', section: 'create', shortcut: sc('file.newFolder'), onClick: () => ops.newFolder(node) });
 
   // Destructive section. The root has none, and an EMPTY group draws no divider — which is why the
   // tree's empty space still opens with two boundaries rather than four (M5).

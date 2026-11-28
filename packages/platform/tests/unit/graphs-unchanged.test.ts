@@ -38,7 +38,7 @@ function canonical(value: unknown): string {
  * Commands added after 070, each on a chord no earlier command held in its scope. They are new, not changed, so the
  * pinned figure leaves them out rather than being re-pinned to include them.
  */
-const ADDED_AFTER_070 = new Set(['preview.print', 'editor.print', 'help.open']);
+const ADDED_AFTER_070 = new Set(['preview.print', 'editor.print', 'help.open', 'file.newFolder']);
 
 /** Every chord shipped before 070. Commands 070 adds unbound on these platforms (`app.settings` and the like) are left out. */
 function boundDigest(os: OsName): string {

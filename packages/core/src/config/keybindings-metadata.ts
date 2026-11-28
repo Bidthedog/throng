@@ -325,6 +325,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),
+  chord('file.newFolder', 'File Explorer', 'New folder', 'Create a folder in the selected folder, or beside the selected file.'),
   chord(
     'file.undo',
     'File Explorer',

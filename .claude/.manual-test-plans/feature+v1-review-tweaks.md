@@ -22,6 +22,7 @@ Spec: `specs/081-v1-fixes-and-tweaks/spec.md`
 | MT-16 | Setting descriptions and their Help | untested | | | |
 | MT-17 | Flag icon on the Flag rows | untested | | | |
 | MT-18 | Body menus hold the content, title menus the panel | untested | | | |
+| MT-19 | Ctrl+Shift+N makes a folder in the File Explorer | untested | | | |
 
 ## MT-01: Menu order and the panel title menu's groups
 
@@ -246,4 +247,17 @@ Paths: `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/s
 
 ### Negative cases
 - Every row that left one menu is on the other: nothing a menu used to offer is unreachable.
+
+## MT-19: Ctrl+Shift+N makes a folder in the File Explorer
+
+Paths: `packages/core/src/config/keybindings.ts`, `packages/core/src/config/keybindings-metadata.ts`, `packages/ui/src/renderer/explorer/explorer-keybindings.ts`, `packages/ui/src/renderer/explorer/context-menu-items.ts`, `packages/ui/src/renderer/explorer/toolbar.tsx`
+
+### Steps
+1. In the File Explorer, select a folder and press **Ctrl+Shift+N**. A new folder appears inside it with its name box open; type a name and press Enter.
+2. Select a file and press **Ctrl+Shift+N**. The new folder appears beside the file.
+3. Right-click a folder. **New Folder** shows **Ctrl+Shift+N**. Hover the toolbar's New folder button: its title reads "New folder (Ctrl+Shift+N)".
+4. Open **Cog › Key Bindings › File Explorer**. **New folder** is listed with Ctrl+Shift+N. Rebind it to another key; the menu row and the toolbar title show the new key, and it works in the tree.
+
+### Negative cases
+- With focus in an editor or a terminal, Ctrl+Shift+N makes no folder.
 

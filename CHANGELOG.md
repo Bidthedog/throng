@@ -31,6 +31,9 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Added
 
+- **Ctrl+Shift+N** (Cmd+Shift+N on macOS) makes a new folder in the File Explorer, where the toolbar's New folder
+  would. It is the **New folder** binding under Key Bindings › File Explorer, and the right-click menu shows it beside
+  New Folder. ([guide](https://throng-ide.com/guide/files/#create-rename-and-delete-files-and-folders))
 - Editor and preview title bars have **Open in OS Default Program** and **Find in File Explorer** buttons; the panel
   menu's Reveal File in File Explorer is now called Find in File Explorer. ([guide](https://throng-ide.com/guide/layout/#read-a-panels-header), [#725](https://github.com/Bidthedog/throng/issues/725))
 - **Follow the active preview** (Preferences › Settings › File Explorer, on by default) reveals a preview's file in

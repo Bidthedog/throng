@@ -54,7 +54,8 @@ A file throng cannot show as text opens in your OS program instead.
 
 The File Explorer's menu creates, renames and deletes files and folders, so you shape the project without leaving throng.
 
-1. Right-click a folder and choose **New File** or **New Folder**.
+1. Right-click a folder and choose **New File** or **New Folder**. For a folder, you can also select where it goes and
+   press **Ctrl+Shift+N**.
 2. Select an item and press **F2** to rename it.
 3. Press **Delete** to delete it.
 
