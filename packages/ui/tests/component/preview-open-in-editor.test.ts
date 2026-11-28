@@ -281,7 +281,9 @@ const views: Record<string, PreviewProviderView> = {
   testText: { id: 'testText', textSelection: true, load: () => Promise.resolve(FakeBody) },
 };
 
-describe('the status bar, the body menu and the header menu reach the one route (FR-015b)', () => {
+// v1 review (#732): Open in Editor names the panel's link to its source, so the title menu holds it and the body
+// menu does not; the status bar and the title menu reach the one route.
+describe('the status bar and the header menu reach the one route (FR-015b)', () => {
   let m: MountedPreviewWindow | undefined;
   const mountText = async (): Promise<MountedPreviewWindow> => {
     m = await mountMarkdownPreview('hello', FILE, { providers: { registry, views }, providerId: 'testText' });
@@ -304,11 +306,11 @@ describe('the status bar, the body menu and the header menu reach the one route 
     await waitFor(() => expect(openInto()).toHaveBeenCalledWith(expect.objectContaining({ absPath: FILE })));
   });
 
-  it('the body menu’s Open in Editor, in Navigate', async () => {
+  it('the body menu carries no Open in Editor', async () => {
     const { id } = await mountText();
     fireEvent.contextMenu(screen.getByTestId(`preview-body-${id}`));
-    fireEvent.click(await screen.findByTestId('menu-item-Open in Editor'));
-    await waitFor(() => expect(openInto()).toHaveBeenCalledWith(expect.objectContaining({ absPath: FILE })));
+    await screen.findByTestId('context-menu');
+    expect(screen.queryByTestId('menu-item-Open in Editor')).toBeNull();
   });
 
   it('the header menu’s Open in Editor', async () => {
@@ -318,7 +320,7 @@ describe('the status bar, the body menu and the header menu reach the one route 
     await waitFor(() => expect(openInto()).toHaveBeenCalledWith(expect.objectContaining({ absPath: FILE })));
   });
 
-  it('parented, all three still read Open in Editor — and the header’s focuses the parent through openInto', async () => {
+  it('parented, both still read Open in Editor — and the header’s focuses the parent through openInto', async () => {
     const mounted = await mountText();
     const { id } = mounted;
     const ws = mounted.ws();
@@ -336,12 +338,10 @@ describe('the status bar, the body menu and the header menu reach the one route 
     await waitFor(() => expect(screen.getByTestId(`preview-editor-${id}`)).toHaveAttribute('aria-pressed', 'true'));
     expect(screen.getByTestId(`preview-editor-${id}`)).toHaveAccessibleName('Open in Editor');
 
-    fireEvent.contextMenu(screen.getByTestId(`preview-body-${id}`));
-    expect(await screen.findByTestId('menu-item-Open in Editor')).toBeInTheDocument();
-    expect(screen.queryByTestId('menu-item-Go to Editor')).toBeNull();
-
     fireEvent.contextMenu(screen.getByTestId(`panel-handle-${id}`));
-    fireEvent.click(await screen.findByTestId('menu-item-Open in Editor'));
+    const entry = await screen.findByTestId('menu-item-Open in Editor');
+    expect(screen.queryByTestId('menu-item-Go to Editor')).toBeNull();
+    fireEvent.click(entry);
 
     await waitFor(() => expect(mounted.openInto).toHaveBeenCalledWith(expect.objectContaining({ absPath: FILE })));
     await waitFor(() => {

@@ -163,7 +163,8 @@ import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { isPanelSectionMaximised } from '../workspace/maximise-store.js';
 import { findHeading, linkOf, type EditorPreviewLink } from './link-dom.js';
 import { holdHeading, type HeadingHold } from './heading-hold.js';
-import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
+import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSection } from './content-menu.js';
+import { registerPanelTitleExtras } from '../workspace/panel-title-extras.js';
 import { docDirectory, openPreviewLinkMenu } from './preview-link-menu.js';
 import { focusLocalPanel, requestPreviewOpen } from './open-preview.js';
 import { FindBar } from '../search/find-bar.js';
@@ -257,7 +258,7 @@ import { clearPreviewReservation, previewReservationFor } from './preview-reserv
 import { useMiddleDragScroll } from './middle-drag-scroll.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import type { PageLayout, PageLayoutControl, PreviewBody, PreviewBodyProps } from './provider-view.js';
-import { PRINT_UNAVAILABLE, printPreviewPanel } from './print/print-command.js';
+import { printPreviewPanel } from './print/print-command.js';
 import { usePrintFailureNotice } from '../print/print-failure.js';
 import {
   TASK_NOTICE_ACTION,
@@ -722,8 +723,6 @@ export function PreviewPanel({
   const panelRootRef = useRef<HTMLDivElement | null>(null);
   /** Whether the body is covered by a file notice right now — read by the focus callback below. */
   const bodyCoveredRef = useRef(false);
-  /** 050 R26 — the moved notice is up: every route to the linked editor is unavailable. */
-  const movedOutRef = useRef(false);
   useEffect(() => {
     registerPanelFocus(panelId, () => {
       // US2 fix round 1 — while a file notice covers the body, the body is inert and cannot take the
@@ -2368,6 +2367,21 @@ export function PreviewPanel({
     [registry, settings.editor.previews, settings.editor.openTarget],
   );
 
+  /*
+   * v1 review (#732) — Copy Path moved from this panel's body menu to its title menu (074 FR-028, FR-068a, amended),
+   * which reads it here when it opens: the File Explorer's four forms, for a file inside the project.
+   */
+  useEffect(
+    () =>
+      registerPanelTitleExtras(panelId, () => {
+        const root = projectRootRef.current;
+        const file = stateRef.current?.filePath;
+        const rel = root !== null && file !== undefined ? relPathUnderRoot(root, file) : null;
+        return { copyPath: root !== null && rel !== null ? pathForms(root, rel) : null };
+      }),
+    [panelId],
+  );
+
   /**
    * The ORDINARY body menu, for a right-click over plain text, over a link WITH a selection (024
    * FR-019d), or over an inert link. The selection is captured NOW: a menu row that copies copies what
@@ -2390,30 +2404,9 @@ export function PreviewPanel({
             pageSelectAll: bodySelectionHost.current !== null,
           }
         : null;
-      const editorRoute: PreviewEditorRouteItem | null =
-        providerKind === 'text' && onEditorRoute !== undefined
-          ? { run: onEditorRoute, disabled: movedOutRef.current }
-          : null;
       const items = previewContentMenu({
         selectionEmpty,
         content,
-        editorRoute,
-        // 074 FR-028, FR-068a — Copy Path, in the File Explorer's four forms, for a file inside the project.
-        copyPath: (() => {
-          const root = projectRootRef.current;
-          const file = stateRef.current?.filePath;
-          const rel = root !== null && file !== undefined ? relPathUnderRoot(root, file) : null;
-          return root !== null && rel !== null ? pathForms(root, rel) : null;
-        })(),
-        // FR-122a/b — every text-provider preview, whatever is under the pointer; never a binary one.
-        syncScroll:
-          flowingRef.current
-            ? {
-                on: syncScrollRef.current,
-                toggle: onToggleSyncScroll,
-                chord: firstBinding(keybindings, 'preview.toggleSyncScroll'),
-              }
-            : null,
         // 047 US1 (FR-007) — always offered, whatever is under the pointer.
         find: {
           run: () => openFind(panelId, 'preview'),
@@ -2426,16 +2419,8 @@ export function PreviewPanel({
           chord: firstBinding(keybindings, 'preview.goToHeading'),
           kind: goToKindRef.current,
         },
-        // 075 FR-062, FR-063 — always drawn; disabled, with the reason, for a provider that cannot print.
-        print: {
-          run: () => void printPanel(),
-          chord: firstBinding(keybindings, 'preview.print'),
-          ...(canPrint(stateRef.current ? registry.get(stateRef.current.providerId) : undefined) ? {} : { unavailable: PRINT_UNAVAILABLE }),
-        },
         // 047 US3 (T048, FR-036) — the fold rows, resolved at the point the menu opened.
         fold: buildFoldMenuArgs(target),
-        // 048 — the Split submenu, splitting this panel.
-        split: { panelId, keybindings },
         // 054 FR-074 — this panel's inline diagram is maximised over the document.
         focusLocked: isPanelSectionMaximised(panelId),
         flowingDocument: flowingRef.current,
@@ -2463,18 +2448,13 @@ export function PreviewPanel({
       textSelection,
       copySelection,
       selectAll,
-      providerKind,
-      onEditorRoute,
       keybindings,
       openMenu,
-      onToggleSyncScroll,
       panelId,
       openHeadingOutlineHandler,
       buildFoldMenuArgs,
       findable,
       selectionHost,
-      printPanel,
-      registry,
     ],
   );
 
@@ -2636,7 +2616,6 @@ export function PreviewPanel({
         : null;
   const bodyCovered = fileNotice !== null || movedOutTo !== null;
   bodyCoveredRef.current = bodyCovered;
-  movedOutRef.current = movedOutTo !== null;
 
   /*
    * US2 scenario 6 — while the file cannot be shown, the notice and nothing else. The body is COVERED
@@ -2831,8 +2810,16 @@ export function PreviewPanel({
             zoom={zoomFactor(panelZoomLevel(panel))}
             {...(onEditorRoute !== undefined ? { onOpenInEditor: onEditorRoute } : {})}
             onCopyCapped={onCopyCapped}
-            // 075 FR-075b — a grid's own menus carry Print…, the same command as the header's.
-            {...(state && canPrint(registry.get(state.providerId)) ? { onPrint: () => void printPanel() } : {})}
+            // v1 review (#732) — a grid's body menus carry its view toggles, the same pairs its status bar holds.
+            gridToggles={{
+              ...(hasWrapToggle ? { wrap: { on: wrapEffective, onToggle: onToggleWrap } } : {}),
+              ...(hasLockToggles
+                ? {
+                    lockFirstRow: { on: lockRowEffective, onToggle: onToggleLockRow },
+                    lockFirstColumn: { on: lockColumnEffective, onToggle: onToggleLockColumn },
+                  }
+                : {}),
+            }}
           />
         ) : null}
         {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a

@@ -34,11 +34,10 @@ import { DEFAULT_KEYBINDINGS, DEFAULT_ICON_SET } from '@throng/core';
 import type { EditorView } from '@codemirror/view';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import { buildContextMenuItems } from '../../src/renderer/explorer/context-menu-items.js';
-import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
+import { editorContentMenu, editorFormatItems } from '../../src/renderer/editor/content-menu.js';
 import { terminalContentMenu } from '../../src/renderer/terminal/terminal-content-menu.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
 import { panelHeaderMenu } from '../../src/renderer/workspace/panel-header-menu.js';
-import { previewContentMenu } from '../../src/renderer/preview/content-menu.js';
 
 const noop = (): void => {};
 
@@ -84,22 +83,14 @@ const editorMenu = (): MenuAction[] =>
     lineEnding: () => 'lf',
     wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
     gotoLine: { open: noop, chord: 'Ctrl+G' },
+    search: { find: noop, replace: noop, replaceAll: noop },
   });
 
 /** The terminal menu with NO selection — the state the spec asserted in, where Copy is disabled. */
 const terminalMenu = (): MenuAction[] =>
   terminalContentMenu({
     selection: '',
-    redrawChord: 'Ctrl+Shift+R',
-    startFailure: false,
-    actions: {
-      copySelection: noop,
-      paste: noop,
-      redraw: noop,
-      tryAgain: noop,
-      copyDetails: noop,
-      clearPanelType: noop,
-    },
+    actions: { copySelection: noop, paste: noop, find: noop },
   });
 
 const cogMenu = (): MenuAction[] =>
@@ -205,10 +196,19 @@ describe('the rows #126 shipped blank now carry a glyph (#127)', () => {
 
   it('every editing row of the editor content menu', () => {
     const items = editorMenu();
-    for (const label of ['Cut', 'Copy', 'Paste', 'Select All', 'Undo', 'Redo', 'Set Language…']) {
+    for (const label of ['Cut', 'Copy', 'Paste', 'Select All', 'Undo', 'Redo', 'Find', 'Replace', 'Replace All']) {
       const item = row(items, label);
       expect(item.icon, `${label} has no icon token`).toBeDefined();
       expect(glyphFor(item.icon!)?.trim(), `${label}: icon="${item.icon}"`).toBeTruthy();
+    }
+  });
+
+  // v1 review (#732) — Set Language… moved to the title menu with the other format rows; it keeps its glyph there.
+  it('the editor’s format rows, on its title menu', () => {
+    const items = editorFormatItems({ panelId: 'p1', languageName: 'JSON', resetLanguage: { enabled: true, reset: noop } });
+    for (const label of ['Set Language… (JSON)', 'Reset Language']) {
+      const item = row(items, label);
+      expect(glyphFor(item.icon ?? '')?.trim(), `${label}: icon="${item.icon}"`).toBeTruthy();
     }
   });
 
@@ -246,8 +246,8 @@ describe('the rows #126 shipped blank now carry a glyph (#127)', () => {
 });
 
 /*
- * 044 FR-122b — Synchronise Scrolling carries the `syncScroll` token on all four menus that offer it
- * (contracts/menus-and-controls.md §10), and the shipped theme draws that token. Named here rather than
+ * 044 FR-122b — Synchronise Scrolling carries the `syncScroll` token on both menus that offer it, an editor's and a
+ * preview's title menu (v1 review, #732, took it off the body menus), and the shipped theme draws that token. Named here rather than
  * left to a sweep, because a row that named no icon would pass every sweep above.
  */
 describe('Synchronise Scrolling wears the syncScroll glyph on every menu that offers it (044 FR-122b)', () => {
@@ -285,30 +285,6 @@ describe('Synchronise Scrolling wears the syncScroll glyph on every menu that of
   >;
 
   const SURFACES: { name: string; build: () => MenuAction[] }[] = [
-    {
-      name: 'editor body',
-      build: () =>
-        editorContentMenu({
-          view: {} as EditorView,
-          panelId: 'p1',
-          viewId: 'v1',
-          lineEnding: () => 'lf',
-          wordWrap: { on: true, toggle: noop },
-          gotoLine: { open: noop },
-          openPreview: { affordance: PREVIEWABLE, open: noop },
-          syncScroll: { on: true, toggle: noop },
-        }),
-    },
-    {
-      name: 'preview body',
-      build: () =>
-        previewContentMenu({
-          selectionEmpty: true,
-          syncScroll: { on: true, toggle: noop },
-          find: { run: noop },
-          goToHeading: { run: noop },
-        }),
-    },
     {
       name: 'editor header',
       build: () => header(editorPanel, { editor: { dirty: false, hasFilePath: true }, openPreview: PREVIEWABLE }),
@@ -407,11 +383,12 @@ describe('FR-014 — the content menu and the panel-header menu are distinct', (
     expect(labelsOf(headerMenu()).length).toBeGreaterThan(3);
   });
 
-  it('the CONTENT menu acts on the text: Cut and Set Language, and no Save', () => {
+  it('the CONTENT menu acts on the text: Cut and Find, and no Save or Set Language', () => {
     const labels = labelsOf(editorMenu());
     expect(labels).toContain('Cut');
-    expect(labels.some((l) => l.startsWith('Set Language'))).toBe(true);
+    expect(labels).toContain('Find');
     expect(labels).not.toContain('Save');
+    expect(labels.some((l) => l.startsWith('Set Language'))).toBe(false);
   });
 
   it('the HEADER menu acts on the panel: Save, and no Cut', () => {
@@ -433,45 +410,20 @@ describe('FR-014 — the content menu and the panel-header menu are distinct', (
   });
 
   /*
-   * THE EXCEPTIONS, STATED RATHER THAN DODGED (044).
-   *
-   * The fixtures above offer no preview, which is the only reason the rule above holds for them. Where the
-   * editor's file HAS a preview provider, 044 requires two rows in both menus by name: Open Preview (FR-002,
-   * "in its body's right-click menu and in its header's right-click menu") and Synchronise Scrolling
-   * (FR-122b, extended 2026-09-16 to the header menus, checked while the setting is on — so both of its
-   * labels). Those rows are the exceptions, and the only ones: anything else in both menus still fails.
+   * 044 used to require Open Preview and Synchronise Scrolling in both menus. The v1 review (#732) put them on the
+   * title menu alone, so a previewable file now shares no label between the two menus either.
    */
-  const REQUIRED_IN_BOTH = new Set(['Open Preview', 'Synchronise Scrolling']);
   const PREVIEWABLE = {
     state: 'enabled',
     provider: { id: 'markdown', displayName: 'Markdown', kind: 'text' },
   } as unknown as NonNullable<Parameters<typeof panelHeaderMenu>[0]['openPreview']>;
-  const previewableContent = (sync: boolean): MenuAction[] =>
-    editorContentMenu({
-      view: {} as EditorView,
-      panelId: 'p1',
-      viewId: 'v1',
-      lineEnding: () => 'lf',
-      wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
-      gotoLine: { open: noop, chord: 'Ctrl+G' },
-      openPreview: { affordance: PREVIEWABLE, open: noop },
-      syncScroll: { on: sync, toggle: noop },
-    });
-  const previewableHeader = (sync: boolean): MenuAction[] =>
-    panelHeaderMenu({
-      ...headerMenuArgs(),
-      openPreview: PREVIEWABLE,
-      syncScroll: sync,
-    });
 
-  it.each([true, false])('with a previewable file (sync %s), ONLY the rows 044 requires in both menus are shared', (sync) => {
-    const content = new Set(labelsOf(previewableContent(sync)));
-    const shared = labelsOf(previewableHeader(sync)).filter((l) => content.has(l));
-    // Not vacuous: both required rows really are in both menus with this fixture.
-    expect(shared).toContain('Open Preview');
-    expect(shared).toContain('Synchronise Scrolling');
-    const unexpected = shared.filter((l) => !REQUIRED_IN_BOTH.has(l));
-    expect(unexpected, `these labels appear in BOTH menus without a requirement: ${unexpected.join(', ')}`).toEqual([]);
+  it.each([true, false])('with a previewable file (sync %s), the two menus still share no label', (sync) => {
+    const header = labelsOf(panelHeaderMenu({ ...headerMenuArgs(), openPreview: PREVIEWABLE, syncScroll: sync }));
+    expect(header).toContain('Open Preview');
+    expect(header).toContain('Synchronise Scrolling');
+    const content = new Set(labelsOf(editorMenu()));
+    expect(header.filter((l) => content.has(l))).toEqual([]);
   });
 });
 
@@ -502,15 +454,7 @@ describe('FR-014 — the content menu and the panel-header menu are distinct', (
  */
 describe('the Set Language item states the language, not just the offer', () => {
   const setLanguageLabel = (languageName?: string): string | undefined => {
-    const items = editorContentMenu({
-      view: {} as EditorView,
-      panelId: 'p1',
-      viewId: 'v1',
-      lineEnding: () => 'lf',
-      wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
-      gotoLine: { open: noop, chord: 'Ctrl+G' },
-      languageName,
-    } as Parameters<typeof editorContentMenu>[0]);
+    const items = editorFormatItems({ panelId: 'p1', ...(languageName !== undefined ? { languageName } : {}) });
     return flatten(items).find((i) => i.testId === 'menu-item-Set Language…')?.label;
   };
 
@@ -561,8 +505,8 @@ describe('the Set Language item states the language, not just the offer', () => 
  * driven into a real start failure, two right-clicks and two menu dismissals — to check that three
  * labels are present twice.
  *
- * Both menus gate those rows on a plain boolean: `panelFailure` for the panel header,
- * `startFailure` for the terminal content menu. Neither needs a broken file or a dead shell to say
+ * The title menu gates those rows on a plain boolean, `panelFailure`, for an editor and (since the v1 review, #732)
+ * a terminal alike. Neither needs a broken file or a dead shell to say
  * what it contains; producing the failure was the expensive half, and it is not the claim.
  *
  * The NEGATIVE case below is the one the E2E never made, and it is the one that matters most: these
@@ -596,20 +540,18 @@ describe('the failure rows appear only while there is a failure (FR-042c)', () =
       .map((i) => i.label)
       .filter((l): l is string => typeof l === 'string');
 
+  // v1 review (#732) — a terminal's three rows moved from its body menu to its title menu.
   const terminalLabels = (startFailure: boolean): string[] =>
     flatten(
-      terminalContentMenu({
-        selection: '',
-        redrawChord: 'Ctrl+Shift+R',
-        startFailure,
-        actions: {
-          copySelection: noop,
-          paste: noop,
-          redraw: noop,
-          tryAgain: noop,
-          copyDetails: noop,
-          clearPanelType: noop,
-        },
+      panelHeaderMenu({
+        panel: { id: 'p1', kind: 'terminal', title: 'bash' } as unknown as Parameters<typeof panelHeaderMenu>[0]['panel'],
+        panelVerb: 'Destroy',
+        keybindings: DEFAULT_KEYBINDINGS,
+        otherTabs: [],
+        editor: null,
+        panelFailure: startFailure,
+        detach: null,
+        actions: new Proxy({}, { get: () => noop }) as Parameters<typeof panelHeaderMenu>[0]['actions'],
       }),
     )
       .map((i) => i.label)
@@ -620,7 +562,7 @@ describe('the failure rows appear only while there is a failure (FR-042c)', () =
     for (const row of FAILURE_ROWS) expect(labels).toContain(row);
   });
 
-  it('the TERMINAL content menu offers all three while it is failing', () => {
+  it('the TERMINAL panel menu offers all three while it is failing', () => {
     const labels = terminalLabels(true);
     for (const row of FAILURE_ROWS) expect(labels).toContain(row);
   });

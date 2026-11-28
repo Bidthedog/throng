@@ -25,7 +25,6 @@ function previewMenu(flowingDocument: boolean) {
   return previewContentMenu({
     selectionEmpty: false,
     content: { copyFormat: 'rich', copy: () => {}, selectAll: () => {} },
-    editorRoute: { run: () => {} },
     find: { run: () => {} },
     goToHeading: { run: () => {} },
     flowingDocument,
@@ -54,11 +53,12 @@ describe('isFlowingDocument', () => {
 });
 
 describe('a Mermaid preview’s body menu', () => {
-  it('offers no Select All or Go to Heading, and keeps Open in Editor', () => {
+  // Open in Editor is the title menu's since the v1 review (#732), where a Mermaid preview keeps it.
+  it('offers no Select All or Go to Heading, and keeps Find…', () => {
     const l = labels(previewMenu(false));
     expect(l).not.toContain('Select All');
     expect(l).not.toContain('Go to Heading…');
-    expect(l).toContain('Open in Editor');
+    expect(l).toContain('Find…');
   });
 
   it('a Markdown preview keeps both', () => {
@@ -87,15 +87,13 @@ describe('Synchronise Scrolling in the panel menu', () => {
     expect(labels(previewWith(false))).not.toContain('Synchronise Scrolling');
   });
 
-  // 074 FR-062b — the header's Go to row names where a PDF goes.
-  it('names Go to Page… in a PDF preview’s menu, and Go to Heading… in a Markdown one', () => {
-    const pdf = headerMenu({
-      panel: { type: 'panel', id: 'p', kind: 'preview', title: 'P' },
-      preview: { providerKind: 'binary', parented: false, flowingDocument: false, goTo: 'page' },
-    });
+  // 074 FR-062b, amended by the v1 review (#732) — the body menu names where Go to goes; the title menu has no Go to row.
+  it('names Go to Page… in a PDF preview’s body menu, and Go to Heading… in a Markdown one', () => {
+    const pdf = previewContentMenu({ selectionEmpty: true, find: { run: () => {} }, goToHeading: { run: () => {}, kind: 'page' }, flowingDocument: false });
     expect(labels(pdf)).toContain('Go to Page…');
     expect(labels(pdf)).not.toContain('Go to Heading…');
-    expect(labels(previewWith(true))).toContain('Go to Heading…');
+    expect(labels(previewMenu(true))).toContain('Go to Heading…');
+    expect(labels(previewWith(true))).not.toContain('Go to Heading…');
   });
 
   it('is offered for a Markdown editor and its preview', () => {

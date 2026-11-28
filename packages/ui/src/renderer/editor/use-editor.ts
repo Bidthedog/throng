@@ -29,6 +29,8 @@ import {
   isDefaultPanelName,
   BLANK_PANEL_NAME,
   languageName,
+  pathForms,
+  relPathUnderRoot,
   PLAIN_TEXT_ID,
   resolveIcon,
   selectedCharacters,
@@ -57,11 +59,19 @@ import {
   flashReplacedNotice,
 } from './editor-state.js';
 import { getEditorActions, registerEditorActions, unregisterEditorActions, type EditorLoadNavigation } from './editor-actions.js';
+import { registerPanelTitleExtras } from '../workspace/panel-title-extras.js';
 import { setPanelHistory } from '../navigation/history-store.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { getActivePane } from '../workspace/active-pane.js';
 import { unregisterPanelSearch } from '../search/search-controller.js';
-import { attachPanelSearch, destroyPanelSearch, updateCount } from '../search/search-store.js';
+import {
+  attachPanelSearch,
+  destroyPanelSearch,
+  getFindSession,
+  openFind,
+  replaceAll as replaceAllMatches,
+  updateCount,
+} from '../search/search-store.js';
 import {
   createEditorSearchController,
   searchHighlightExtension,
@@ -107,8 +117,6 @@ import { occurrenceCompartment, occurrenceExtensionFor } from './occurrence-high
 import { clearDocumentOverride, loadDocumentOverride, toRelPath } from './language-override.js';
 import { isSameDocument, subscribeDocumentLanguageChange } from './document-language-events.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
-import { printEditorPanel } from './editor-print.js';
-import { usePrintFailureNotice } from '../print/print-failure.js';
 import {
   clampSelection,
   clearEditorViewState,
@@ -162,7 +170,6 @@ import {
   placeCaretForContextMenu,
   type LineEndingTarget,
 } from './content-menu.js';
-import { currentEditorPreviewAffordance } from './editor-preview.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
 import { openFileInTab } from './editor-open.js';
 import { positionRevealTarget } from './reveal-range.js';
@@ -188,7 +195,6 @@ import {
   type EditorLinkDeps,
   type EditorLinkHit,
 } from './link-decorations.js';
-import { toggleSyncScroll } from '../preview/sync-scroll-toggle.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 // 033 US2 (FR-027) — the content menu's Go To Line item opens the ONE navigation-modal slot. A leaf
 // store with no imports of its own, so this creates no cycle back into `navigate/`.
@@ -433,8 +439,6 @@ function commandsFor(deps: {
 const docScrollByPath = new Map<string, number>();
 
 export function useEditor(params: UseEditorParams): void {
-  // 075 FR-080 — a Print… that cannot reach Print Preview says so here.
-  const printFailedRef = useRef(usePrintFailureNotice());
   const { panel, tabId, projectRoot, rootless, ownerProjectId, container } = params;
   const onReadyRef = useRef(params.onReady);
   onReadyRef.current = params.onReady;
@@ -1845,6 +1849,74 @@ export function useEditor(params: UseEditorParams): void {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelId]);
 
+  /*
+   * v1 review (#732) — what the panel's TITLE menu reads from this editor when it opens: the format rows (Set
+   * Language…, Reset Language, Encoding, Line Endings) and Copy Path. Read at menu-open time, not captured: the
+   * language and the format change under a live view (detection settling, an override chosen, a conversion), and a
+   * captured copy would name a state the document has since left.
+   */
+  useEffect(
+    () =>
+      registerPanelTitleExtras(panelId, () => {
+        const cfg = configRef.current;
+        const meta = metaRef.current;
+        const kb = keybindingsRef.current;
+        const f = getDocumentFormat(panelId);
+        const root = meta.rootless ? null : meta.projectRoot;
+        const file = cfg.filePath ?? null;
+        const rel = root !== null && file !== null ? relPathUnderRoot(root, file) : null;
+        return {
+          // 074 FR-028 — for a file inside the project, as the File Explorer's row offers it.
+          copyPath: root !== null && rel !== null ? pathForms(root, rel) : null,
+          editorFormat: {
+            panelId,
+            languageName: languageName(getPanelLanguage(panelId)?.languageId ?? 'plaintext'),
+            // 055 FR-024b
+            resetLanguage: {
+              enabled: getPanelLanguage(panelId)?.source === 'override',
+              reset: () =>
+                void clearDocumentOverride({
+                  panelId,
+                  projectId: meta.ownerProjectId ?? null,
+                  relPath: toRelPath(meta.projectRoot, file),
+                  documents: meta.documents,
+                }),
+            },
+            // 059 FR-058 — the document's format as the authority last relayed it.
+            encoding: {
+              current: { encoding: f?.encoding ?? cfg.encoding ?? 'utf8', hasBom: f?.hasBom ?? cfg.hasBom ?? false },
+              canReopen: !!file && !fileMissingRef.current && !historyStandInRef.current && !movedOutRef.current,
+              change: (c: { encoding: EncodingId; hasBom: boolean }) => void changeEncoding(c.encoding, c.hasBom),
+              openReopenPicker: () => requestEncodingPicker(panelId, 'reopen'),
+              changeChord: firstBinding(kb, 'editor.changeEncoding'),
+              chords: { reopen: firstBinding(kb, 'editor.reopenWithEncoding') },
+            },
+            lineEndings: {
+              lineEnding: f?.lineEnding ?? cfg.lineEnding ?? meta.settings.defaultLineEnding,
+              mixed: f?.mixed ?? false,
+              convert: (target: LineEndingTarget) => void convertLineEndings(target),
+              chords: {
+                lf: firstBinding(kb, 'editor.convertLineEndingsToLf'),
+                cr: firstBinding(kb, 'editor.convertLineEndingsToCr'),
+                crlf: firstBinding(kb, 'editor.convertLineEndingsToCrlf'),
+              },
+              insert: {
+                insert: (ending: LineEndingTarget) => void insertLineBreak(ending),
+                chords: {
+                  lf: firstBinding(kb, 'editor.insertLineBreakLf'),
+                  cr: firstBinding(kb, 'editor.insertLineBreakCr'),
+                  crlf: firstBinding(kb, 'editor.insertLineBreakCrlf'),
+                },
+              },
+            },
+          },
+        };
+      }),
+    // The reader reads refs, and the format commands read refs too, so one registration per panel is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [panelId],
+  );
+
   /**
    * An indentation SETTING changed — bring open editors into step (FR-018).
    *
@@ -2127,8 +2199,6 @@ export function useEditor(params: UseEditorParams): void {
                   view: target,
                   panelId,
                   viewId,
-                  // 048 FR-015 — the Split submenu, with the live chords.
-                  split: { panelId, keybindings: keybindingsRef.current },
                   lineEnding: () =>
                     configRef.current.lineEnding ?? metaRef.current.settings.defaultLineEnding,
                   wordWrap: {
@@ -2162,104 +2232,24 @@ export function useEditor(params: UseEditorParams): void {
                     open: () => setNavigationModal({ kind: 'gotoLine', panelId }),
                     chord: firstBinding(keybindingsRef.current, 'navigate.gotoLine'),
                   },
-                  // 075 FR-064a — the editor's Print…, as the header row and Ctrl+P run it.
-                  print: {
-                    run: () => void printEditorPanel(panelId, undefined, printFailedRef.current),
-                    chord: firstBinding(keybindingsRef.current, 'editor.print'),
-                  },
                   /*
-                   * 044 FR-002 — Open Preview, decided at MENU-OPEN time for Go To Line's reason: the
-                   * file, the provider's enabled setting and whether a preview is already open (in any
-                   * window) all change under a live view, and a captured answer would offer a preview
-                   * that already exists. `rootless` editors belong to no project and are offered none.
+                   * v1 review (#732) — Find, Replace and Replace All, the same store actions the chords run
+                   * (`search.find`, `search.replace`, `search.replaceAll`). Replace All with no bar open opens
+                   * the bar with its replace row, as the chord does: there is no term to replace yet.
                    */
-                  openPreview: (() => {
-                    const filePath = configRef.current.filePath ?? null;
-                    const meta = metaRef.current;
-                    return {
-                      affordance: currentEditorPreviewAffordance({
-                        registry: previewProvidersRef.current.registry,
-                        settings: meta.settings.previews,
-                        filePath,
-                        projectRoot: meta.rootless ? null : meta.projectRoot,
-                      }),
-                      open: () => {
-                        if (filePath === null) return;
-                        void requestPreviewOpen({
-                          absPath: filePath,
-                          projectId: meta.ownerProjectId ?? panel.originProjectId,
-                          requesterPanelId: panelId,
-                        });
-                      },
-                      chord: firstBinding(keybindingsRef.current, 'preview.open'),
-                    };
-                  })(),
-                  /*
-                   * 044 FR-122b — Synchronise Scrolling, read at menu-open time for the same reason. The
-                   * builder draws it only where Open Preview is drawn (FR-122a); choosing it flips the one
-                   * global setting from the value this window holds NOW.
-                   */
-                  syncScroll: {
-                    on: metaRef.current.settings.previews.syncScroll,
-                    toggle: () => void toggleSyncScroll(metaRef.current.settings.previews.syncScroll),
-                    chord: firstBinding(keybindingsRef.current, 'preview.toggleSyncScroll'),
+                  search: {
+                    find: () => openFind(panelId, 'editor'),
+                    replace: () => openFind(panelId, 'editor', { replace: true }),
+                    replaceAll: () => {
+                      if (getFindSession(panelId)) void replaceAllMatches(panelId);
+                      else openFind(panelId, 'editor', { replace: true });
+                    },
+                    chords: {
+                      find: firstBinding(keybindingsRef.current, 'search.find'),
+                      replace: firstBinding(keybindingsRef.current, 'search.replace'),
+                      replaceAll: firstBinding(keybindingsRef.current, 'search.replaceAll'),
+                    },
                   },
-                  // Read at menu-open time, not captured: the language changes under a live view
-                  // (detection settling, an override chosen), and a captured copy would name a
-                  // language the document has since stopped being.
-                  languageName: languageName(getPanelLanguage(panelId)?.languageId ?? 'plaintext'),
-                  // 055 FR-024b — read at menu-open time for the same reason.
-                  resetLanguage: {
-                    enabled: getPanelLanguage(panelId)?.source === 'override',
-                    reset: () =>
-                      void clearDocumentOverride({
-                        panelId,
-                        projectId: metaRef.current.ownerProjectId ?? null,
-                        relPath: toRelPath(metaRef.current.projectRoot, configRef.current.filePath ?? null),
-                        documents: metaRef.current.documents,
-                      }),
-                  },
-                  /*
-                   * 059 FR-058 — the Encoding and Line Endings items, beside Set Language, stating the
-                   * document's format as the authority last relayed it. Read at menu-open time, for the
-                   * language's reason: the format changes under a live view.
-                   */
-                  ...(() => {
-                    const f = getDocumentFormat(panelId);
-                    const cfg = configRef.current;
-                    const enc = f?.encoding ?? cfg.encoding ?? 'utf8';
-                    const bom = f?.hasBom ?? cfg.hasBom ?? false;
-                    const kb = keybindingsRef.current;
-                    return {
-                      encoding: {
-                        current: { encoding: enc, hasBom: bom },
-                        canReopen: !!cfg.filePath && !fileMissingRef.current && !historyStandInRef.current && !movedOutRef.current,
-                        change: (c: { encoding: EncodingId; hasBom: boolean }) =>
-                          void changeEncoding(c.encoding, c.hasBom),
-                        openReopenPicker: () => requestEncodingPicker(panelId, 'reopen'),
-                        changeChord: firstBinding(kb, 'editor.changeEncoding'),
-                        chords: { reopen: firstBinding(kb, 'editor.reopenWithEncoding') },
-                      },
-                      lineEndings: {
-                        lineEnding: f?.lineEnding ?? cfg.lineEnding ?? metaRef.current.settings.defaultLineEnding,
-                        mixed: f?.mixed ?? false,
-                        convert: (target: LineEndingTarget) => void convertLineEndings(target),
-                        chords: {
-                          lf: firstBinding(kb, 'editor.convertLineEndingsToLf'),
-                          cr: firstBinding(kb, 'editor.convertLineEndingsToCr'),
-                          crlf: firstBinding(kb, 'editor.convertLineEndingsToCrlf'),
-                        },
-                        insert: {
-                          insert: (ending: LineEndingTarget) => void insertLineBreak(ending),
-                          chords: {
-                            lf: firstBinding(kb, 'editor.insertLineBreakLf'),
-                            cr: firstBinding(kb, 'editor.insertLineBreakCr'),
-                            crlf: firstBinding(kb, 'editor.insertLineBreakCrlf'),
-                          },
-                        },
-                      },
-                    };
-                  })(),
                   /*
                    * 047 US3 (FR-036, contracts "Editor body menu") — the fold rows, Markdown
                    * documents only. `at` is the innermost section containing the CLICKED position:

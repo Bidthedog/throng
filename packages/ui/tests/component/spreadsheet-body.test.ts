@@ -19,7 +19,6 @@ import { setGridWorkerFactory, type GridWorker } from '../../src/renderer/grid/w
 import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { PREVIEW_LOADING_CLASS } from '../../src/renderer/preview/loading-placeholder.js';
-import { PRINT_UNAVAILABLE } from '../../src/renderer/preview/print/print-command.js';
 import { gridPrintable } from '../../src/renderer/grid/grid-print.js';
 import { subscribeReadOnlyFlash } from '../../src/renderer/preview/read-only-marker.js';
 
@@ -221,16 +220,28 @@ describe('SpreadsheetBody', () => {
         (el.getAttribute('data-testid') ?? '').replace(/^menu-item-/, ''),
       );
 
-    it('every grid menu offers Print…, which runs the chrome\'s Print… (075 FR-063, FR-075b)', async () => {
-      const onPrint = vi.fn();
-      mount('throng-preview://source/s1?rev=1', { onPrint });
+    // v1 review (#732) — Wrap and the two locks moved here from the panel's title menu, on every grid menu.
+    it('every grid menu offers Wrap and both locks as checked toggles, each running its flip', async () => {
+      const wrap = vi.fn();
+      const row = vi.fn();
+      mount('throng-preview://source/s1?rev=1', {
+        gridToggles: {
+          wrap: { on: true, onToggle: wrap },
+          lockFirstRow: { on: false, onToggle: row },
+          lockFirstColumn: { on: false, onToggle: () => {} },
+        },
+      });
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
       const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;
-      for (const target of [cellEl, () => rowHead(0), () => colHead(0)]) {
+      const corner = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-corner]')!;
+      for (const target of [cellEl, () => rowHead(0), () => colHead(0), corner]) {
         fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
-        fireEvent.click(screen.getByTestId('menu-item-Print…'));
+        expect(screen.getByTestId('menu-item-Wrap')).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByTestId('menu-item-Lock First Column')).toHaveAttribute('aria-checked', 'false');
+        fireEvent.click(screen.getByTestId('menu-item-Lock First Row'));
       }
-      expect(onPrint).toHaveBeenCalledTimes(3);
+      expect(row).toHaveBeenCalledTimes(4);
+      expect(wrap).not.toHaveBeenCalled();
     });
 
     // FR-037g (convergence T104) — both grids: each Copy variant carries the copy icon, as the CSV grid's do.
@@ -243,12 +254,6 @@ describe('SpreadsheetBody', () => {
       }
     });
 
-    it('the grid menu\'s Print… shows its key binding, as every other preview\'s does (075 FR-063, FR-075b)', async () => {
-      mount('throng-preview://source/s1?rev=1', { onPrint: vi.fn() });
-      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
-      fireEvent.contextMenu(document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
-      expect(screen.getByTestId('menu-item-Print…').textContent).toContain('Ctrl+P');
-    });
 
     it('prints the sheet on screen as a table, every row (075 FR-075b)', async () => {
       const { container } = mount('throng-preview://source/s1?rev=1');
@@ -259,18 +264,6 @@ describe('SpreadsheetBody', () => {
       expect(doc.querySelector('tbody tr td')?.textContent).toBe('h1');
     });
 
-    it('without the chrome\'s Print… route, every grid menu draws Print… disabled with the reason (075 FR-062)', async () => {
-      mount('throng-preview://source/s1?rev=1');
-      await waitFor(() => expect(cell(0, 0)).toBe('h1'));
-      const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;
-      for (const target of [cellEl, () => rowHead(0), () => colHead(0)]) {
-        fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
-        const print = screen.getByTestId('menu-item-Print…');
-        expect(print.getAttribute('aria-disabled')).toBe('true');
-        expect(print.getAttribute('title')).toBe(PRINT_UNAVAILABLE);
-        fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
-      }
-    });
 
     // T18 (2026-11-27), superseding 073 FR-050c: a workbook stays read-only, so the menus draw no editing row at all.
     it('every grid menu offers Copy and Copy as, and draws no Cut, Paste, Clear Cells, delete or insert (T18)', async () => {
@@ -295,10 +288,11 @@ describe('SpreadsheetBody', () => {
         'Redo',
       ];
       const menus: [string, () => HTMLElement, string[]][] = [
-        ['cell', cellEl, ['Copy', 'Copy as', 'Select All', 'Go to Row…', 'Print…']],
-        ['row header', () => rowHead(0), ['Copy', 'Copy as', 'Select All', 'Go to Row…', 'Print…']],
-        ['column header', () => colHead(0), ['Copy', 'Copy as', 'Column Width…', 'Reset Column Width', 'Print…']],
-        ['corner', corner, ['Copy', 'Copy as', 'Go to Row…', 'Print…']],
+        // v1 review (#732): Print… is the panel's title menu's, so no grid menu draws it.
+        ['cell', cellEl, ['Copy', 'Copy as', 'Select All', 'Go to Row…']],
+        ['row header', () => rowHead(0), ['Copy', 'Copy as', 'Select All', 'Go to Row…']],
+        ['column header', () => colHead(0), ['Copy', 'Copy as', 'Column Width…', 'Reset Column Width']],
+        ['corner', corner, ['Copy', 'Copy as', 'Go to Row…']],
       ];
       for (const [name, target, expected] of menus) {
         fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });

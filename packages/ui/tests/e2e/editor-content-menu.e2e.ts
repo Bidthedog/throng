@@ -288,7 +288,8 @@ test('picking a language returns focus to the editor', { tag: ['@extended', '@ed
       await createProject(win, 'Menu', root);
       const pid = await openEditorWithFile(win);
 
-      await line(win, pid, 'alpha').click({ button: 'right' });
+      // v1 review (#732) — Set Language… is on the panel's title menu: it describes the file, not the text.
+      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
       await win.getByTestId('menu-item-Set Language…').click();
       await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible({ timeout: 5000 });
 

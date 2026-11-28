@@ -307,10 +307,11 @@ describe('Copy and the copy gesture follow editor.previews.copyFormat; the named
 });
 
 describe('the body menu’s Navigate section (FR-015b, FR-015e)', () => {
-  it('a text provider’s preview offers Open in Editor', async () => {
+  // v1 review (#732): Open in Editor names the panel's link to its source, so the TITLE menu offers it.
+  it('a text provider’s preview leaves Open in Editor to the title menu', async () => {
     await mountDoc();
     await openBodyMenu();
-    expect(item('Open in Editor')).toBeInTheDocument();
+    expect(screen.queryByTestId('menu-item-Open in Editor')).toBeNull();
   });
 
   it('a binary provider’s preview offers neither Open in Editor nor Go to Editor — nor a Content section', async () => {

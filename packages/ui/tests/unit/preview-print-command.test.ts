@@ -1,5 +1,6 @@
 /**
- * 075 FR-061 – FR-064 — Print…: one command body behind the chord and both menus, drawn on every preview,
+ * 075 FR-061 – FR-064 — Print…: one command body behind the chord and the title menu (the v1 review, #732, took it off
+ * the body menus), drawn on every preview,
  * disabled with the reason for a provider that cannot print, and never printing — it opens Print Preview.
  */
 import { describe, expect, it, vi } from 'vitest';
@@ -33,13 +34,8 @@ function header(printable: boolean, print = vi.fn()): MenuAction | undefined {
   }).find((i) => i.label === 'Print…');
 }
 
-function body(unavailable?: string, run = vi.fn()): MenuAction | undefined {
-  return previewContentMenu({
-    selectionEmpty: true,
-    find: { run: noop },
-    goToHeading: { run: noop },
-    print: { run, chord: 'Ctrl+P', ...(unavailable !== undefined ? { unavailable } : {}) },
-  }).find((i) => i.label === 'Print…');
+function body(): MenuAction | undefined {
+  return previewContentMenu({ selectionEmpty: true, find: { run: noop }, goToHeading: { run: noop } }).find((i) => i.label === 'Print…');
 }
 
 describe('Print… in the menus (FR-062, FR-063)', () => {
@@ -54,16 +50,10 @@ describe('Print… in the menus (FR-062, FR-063)', () => {
 
   it('is drawn disabled, saying why, for a provider that cannot print', () => {
     expect(header(false)).toMatchObject({ disabled: true, title: PRINT_UNAVAILABLE });
-    expect(body(PRINT_UNAVAILABLE)).toMatchObject({ disabled: true, title: PRINT_UNAVAILABLE });
   });
 
-  it('is in the body menu, enabled, and runs the command', () => {
-    const run = vi.fn();
-    const row = body(undefined, run);
-    expect(row).toMatchObject({ section: 'navigate', shortcut: 'Ctrl+P' });
-    expect(row?.disabled).toBeFalsy();
-    row!.onClick!();
-    expect(run).toHaveBeenCalledTimes(1);
+  it('is not in the body menu: it prints the panel, not the content under the pointer (v1 review, #732)', () => {
+    expect(body()).toBeUndefined();
   });
 });
 

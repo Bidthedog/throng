@@ -490,15 +490,17 @@ async function rightClickSelected(m: MountedPreviewWindow, html: string, selecto
 }
 
 describe('a right-click in the page opens the panel’s body menu (FR-085a)', () => {
-  it('offers Find…, Copy, Copy as ▸, Select All and Split, enabled over a selection', async () => {
+  it('offers Find…, Copy, Copy as ▸ and Select All, enabled over a selection, and no Split (v1 review, #732)', async () => {
     const m = await mount(PLAIN);
     await rightClickSelected(m, '<p id="t">Some <b>bold</b> words</p>', '#t');
     await waitFor(() => expect(menuLabels().length).toBeGreaterThan(0));
     const labels = menuLabels();
-    for (const row of ['Find…', 'Copy', 'Copy as', 'Select All', 'Split']) {
+    for (const row of ['Find…', 'Copy', 'Copy as', 'Select All']) {
       expect(labels.some((l) => l.startsWith(row)), `${row} in ${labels.join(' | ')}`).toBe(true);
     }
     expect(labels.some((l) => l.startsWith('Go to Heading'))).toBe(false);
+    // Split acts on the panel: the title menu holds it.
+    expect(labels.some((l) => l.startsWith('Split'))).toBe(false);
   });
 
   it('Copy as Rich Text puts the selection on the clipboard as HTML with its plain text', async () => {

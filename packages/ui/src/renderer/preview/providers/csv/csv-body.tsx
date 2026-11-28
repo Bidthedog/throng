@@ -146,7 +146,7 @@ type GridEditAnswer = Awaited<ReturnType<NonNullable<NonNullable<NonNullable<Win
 const CSV_PREVIEW_LABEL = previewPanelTypeLabel(SHIPPED_PREVIEW_PROVIDERS.get('csv') ?? { displayName: 'CSV' });
 
 export function CsvBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, onCopyCapped, onPrint, zoom = 1 } = props;
+  const { panelId, content, filePath, projectRoot, providerSettings, cellDialogChoice, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, registerGoTo, navigationSeq, syncLine, syncEcho, onTopLineChange, onTopLineRead, syncMark: syncMarkProp, syncMarkSource, onDrawn, onViewStateCapture, onOpenInEditor, onCopyCapped, gridToggles, zoom = 1 } = props;
   const text = content.kind === 'text' ? content.text : '';
   const parsed = useCsvModel(text);
   const run = usePreviewState(panelId);
@@ -600,6 +600,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
         copied,
         keybindings,
         cellDialogAvailable,
+        ...(gridToggles !== undefined ? { toggles: gridToggles } : {}),
         actions: {
           insertRows,
           insertColumn,
@@ -610,21 +611,17 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
           paste: pasteFromMenu,
           selectAll: () => grid.selectAll(),
           history,
-          save: () => void save(),
-          saveAs: () => void saveAs(),
           goToRow: goTo.open,
           deleteRows,
           deleteColumns,
           columnWidth: (col) => setWidthPrompt({ col, value: String(widths[col] ?? GRID_DEFAULT_COLUMN_WIDTH) }),
           resetWidth,
           openCellDialog,
-          ...(onOpenInEditor !== undefined ? { openInEditor: onOpenInEditor } : {}),
-          ...(onPrint !== undefined ? { print: onPrint } : {}),
         },
       });
       openMenu(point.x, point.y, items);
     },
-    [askInsertMany, cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, deleteColumns, deleteRows, history, insertColumn, insertRows, keybindings, onOpenInEditor, onPrint, openCellDialog, openMenu, pasteFromMenu, resetWidth, rowCount, save, saveAs, widths],
+    [askInsertMany, cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, deleteColumns, deleteRows, gridToggles, history, insertColumn, insertRows, keybindings, openCellDialog, openMenu, pasteFromMenu, resetWidth, rowCount, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard

@@ -6,14 +6,18 @@
  * Every row a key performs shows that key (maintainer's v1 review, #732): a rebindable command's live binding
  * (`firstBinding`, nothing when unbound), or the grid's own fixed key — Cut, Copy, Paste, Select All, Undo and Redo
  * (`fixedShortcut`, the keys `grid/data-grid.tsx` handles), and Delete for Clear Cells.
+ *
+ * v1 review (#732): these menus hold what acts on the cells and how the grid shows them. Save, Save As…, Open in
+ * Editor and Print… act on the panel's file, so the panel's title menu holds them; Wrap, Lock First Row and Lock First
+ * Column moved here from it, on every menu.
  */
 import { firstBinding, type ActionId, type Keybindings, type PreviewCopyFormat } from '@throng/core';
 import { GRID_MAX_ROW_COUNT } from '@throng/core/csv';
 import type { GridMenuTarget } from '../../../grid/data-grid.js';
 import type { GridRange, GridSelection } from '../../../grid/grid-selection.js';
 import type { CopiedBlock } from '../../../grid/copied-block.js';
-import { gridPrintRow } from '../../../grid/grid-print-row.js';
-import { CLEAR_CELLS_SHORTCUT, gridCopyAs } from '../../../grid/grid-menu-items.js';
+import { CLEAR_CELLS_SHORTCUT, gridCopyAs, gridViewToggleRows } from '../../../grid/grid-menu-items.js';
+import type { GridViewToggles } from '../../provider-view.js';
 import { fixedShortcut } from '../../../common/fixed-shortcut.js';
 import type { MenuAction } from '../../../workspace/context-menu.js';
 
@@ -80,8 +84,6 @@ export interface CsvGridMenuActions {
   paste(): void;
   selectAll(): void;
   history(step: 'undo' | 'redo'): void;
-  save(): void;
-  saveAs(): void;
   goToRow(): void;
   deleteRows(range: GridRange): void;
   deleteColumns(range: GridRange): void;
@@ -89,10 +91,6 @@ export interface CsvGridMenuActions {
   columnWidth(col: number): void;
   resetWidth(col: number): void;
   openCellDialog(row: number, col: number): void;
-  /** Absent: no Open in Editor row. */
-  openInEditor?: () => void;
-  /** Absent: Print… is drawn disabled (`gridPrintRow`). */
-  print?: () => void;
 }
 
 export interface CsvGridMenuArgs {
@@ -106,6 +104,8 @@ export interface CsvGridMenuArgs {
   copied: CopiedBlock | null;
   keybindings: Keybindings;
   cellDialogAvailable: boolean;
+  /** The panel's Wrap and lock toggles; absent draws none. */
+  toggles?: GridViewToggles;
   actions: CsvGridMenuActions;
 }
 
@@ -162,10 +162,6 @@ export function csvGridMenu(args: CsvGridMenuArgs): MenuAction[] {
     { label: 'Undo', icon: 'undo', section: 'content', group: 'history', shortcut: fixedShortcut('undo'), onClick: () => a.history('undo') },
     { label: 'Redo', icon: 'redo', section: 'content', group: 'history', shortcut: fixedShortcut('redo'), onClick: () => a.history('redo') },
   ];
-  const fileItems: MenuAction[] = [
-    { label: 'Save', icon: 'save', section: 'content', group: 'file', onClick: a.save, shortcut: chord('editor.save') },
-    { label: 'Save As…', icon: 'saveAs', section: 'content', group: 'file', onClick: a.saveAs, shortcut: chord('editor.saveAs') },
-  ];
   const goToRow: MenuAction = { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: a.goToRow, shortcut: chord('preview.goToHeading') };
   const deletes = deleteMenuItems(sel, range, rowCount, colCount, { rows: a.deleteRows, columns: a.deleteColumns }, {
     rows: chord('grid.deleteRows'),
@@ -206,9 +202,9 @@ export function csvGridMenu(args: CsvGridMenuArgs): MenuAction[] {
       { label: 'Reset Column Width', icon: 'resetColumnWidth', section: 'viewState', onClick: () => a.resetWidth(target.col) },
     );
   } else if (target.kind === 'corner') {
-    // T13 — the corner selected every cell: only what acts on all of them, and what acts on the file. Nothing that
+    // T13 — the corner selected every cell: only what acts on all of them. Nothing that
     // acts on the active cell, a row or a column — no Paste, Insert, Edit in Dialog or Column Width.
-    items.push(cutItem(false), ...copyItems, clearCells, ...historyItems, ...fileItems, goToRow);
+    items.push(cutItem(false), ...copyItems, clearCells, ...historyItems, goToRow);
   } else {
     items.push(
       cutItem(false),
@@ -233,16 +229,11 @@ export function csvGridMenu(args: CsvGridMenuArgs): MenuAction[] {
             },
           ]
         : []),
-      ...fileItems,
       goToRow,
       insertSubmenu([...insertOne, ...insertMany]),
       width(at.col),
     );
   }
-  if (a.openInEditor !== undefined) {
-    // T17 — one label: it opens the file's editor, or goes to the one already open.
-    items.push({ label: 'Open in Editor', icon: 'editorPanel', section: 'navigate', onClick: a.openInEditor });
-  }
-  items.push(gridPrintRow(chord('preview.print'), a.print));
+  items.push(...gridViewToggleRows(args.toggles));
   return items;
 }

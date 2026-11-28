@@ -112,7 +112,8 @@ test('hiding the editor status bar keeps the word-wrap command working (#152)', 
       // …and "Set Language…" temporarily REVEALS the hidden strip with its picker open, rather than
       // doing nothing at all (#152 follow-up). The strip owns the picker, so an unmounted strip used
       // to make an enabled menu item inert.
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click({ button: 'right' });
+      // v1 review (#732) — from the panel's title menu, where Set Language… lives now.
+      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
       await win.getByTestId('menu-item-Set Language…').click();
       await expect(win.getByTestId(`editor-status-strip-${pid}`)).toBeVisible({ timeout: 5000 });
       await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible();

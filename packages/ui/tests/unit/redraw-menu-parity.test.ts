@@ -1,6 +1,8 @@
 /**
- * "Refresh / redraw terminal" is on BOTH menus, under the same name, showing the chord it is bound
- * to right now (028 / #163, FR-040/FR-041/FR-049c).
+ * "Refresh / redraw terminal" is on the terminal's TITLE menu, showing the chord it is bound to right now
+ * (028 / #163, FR-041/FR-049c). The v1 review (#732) took it off the body menu (FR-040, amended): a redraw acts on
+ * the panel, not on the text under the pointer. The tests below were written for both menus; the body half now
+ * asserts the row is absent there.
  *
  * PLACE AT: `packages/ui/tests/unit/redraw-menu-parity.test.ts`
  * SPLIT OUT OF `packages/ui/tests/e2e/terminal-redraw-action.e2e.ts` (034 FR-045). That test is not
@@ -76,14 +78,6 @@ const headerActions = {
   destroy: noop,
 };
 
-const contentActions = {
-  copySelection: noop,
-  paste: noop,
-  redraw: noop,
-  tryAgain: noop,
-  copyDetails: noop,
-  clearPanelType: noop,
-};
 
 /**
  * The panel HEADER menu for a panel of the given kind (FR-041).
@@ -106,22 +100,9 @@ const header = (
     actions: { ...headerActions, ...(over.redraw ? { redraw: over.redraw } : {}) },
   });
 
-/**
- * The terminal's own CONTENT menu (FR-040).
- *
- * `redrawChord` is a PROP here because a `.ts` module cannot call a hook — `terminal-panel.tsx:273`
- * fills it with `firstBinding(keybindings, 'terminal.redraw')`, the identical call
- * `panel-header-menu.ts:254` makes. So the composition below is the one the application performs,
- * and the parity claim is about two menus reading ONE binding rather than two menus agreeing by
- * luck.
- */
-const content = (over: { keybindings?: Keybindings; redraw?: () => void } = {}): MenuAction[] =>
-  terminalContentMenu({
-    selection: '',
-    redrawChord: firstBinding(over.keybindings ?? DEFAULT_KEYBINDINGS, 'terminal.redraw'),
-    startFailure: false,
-    actions: { ...contentActions, ...(over.redraw ? { redraw: over.redraw } : {}) },
-  });
+/** The terminal's own body menu: Copy, Paste and Find (v1 review, #732). */
+const content = (): MenuAction[] =>
+  terminalContentMenu({ selection: '', findChord: firstBinding(DEFAULT_KEYBINDINGS, 'search.find'), actions: { copySelection: noop, paste: noop, find: noop } });
 
 /** The redraw row of a menu, or a failure that names which menu has stopped offering it. */
 function redrawRow(items: MenuAction[], where: string): MenuAction {
@@ -136,22 +117,15 @@ function redrawRow(items: MenuAction[], where: string): MenuAction {
 
 const headerRedraw = (over?: Parameters<typeof header>[0]): MenuAction =>
   redrawRow(header(over), 'the panel header menu');
-const contentRedraw = (over?: Parameters<typeof content>[0]): MenuAction =>
-  redrawRow(content(over), 'the terminal content menu');
 
-describe('the redraw action is on both menus, under one name (FR-040/FR-041)', () => {
-  it('both menus draw the SAME label — compared with each other, not restated', () => {
-    /*
-     * A user hunting for this opens whichever menu is nearest, so the words have to match. Two
-     * literals in a test agree by construction; reading one against the other is what makes a
-     * reword on one side a failure rather than a silent divergence.
-     */
-    expect(headerRedraw().label).toBe(contentRedraw().label);
-    // …and it is the name the requirement (and every user-facing doc) uses, stated once.
+describe('the redraw action is on the title menu alone (FR-041; FR-040 amended by the v1 review, #732)', () => {
+  it('the title menu draws it under the requirement’s name, in View & state; the body menu draws none', () => {
     expect(headerRedraw().label).toBe('Refresh / redraw terminal');
-    // Both belong to View & state: a redraw changes nothing about the content (FR-043–046).
+    // View & state: a redraw changes nothing about the content (FR-043–046).
     expect(headerRedraw().section).toBe('viewState');
-    expect(contentRedraw().section).toBe('viewState');
+    const body = content();
+    expect(body.length).toBeGreaterThan(0);
+    expect(body.some((i) => i.label?.startsWith('Refresh'))).toBe(false);
   });
 
   it('only a TERMINAL panel’s header offers it — an untyped panel has nothing to redraw', () => {
@@ -167,17 +141,16 @@ describe('the redraw action is on both menus, under one name (FR-040/FR-041)', (
   });
 });
 
-describe('the chord is SHOWN on both, and follows the binding (FR-049c, constitution v4.3.0)', () => {
-  it('shows Ctrl+F5 out of the box, on both menus', () => {
+describe('the chord is SHOWN, and follows the binding (FR-049c, constitution v4.3.0)', () => {
+  it('shows Ctrl+F5 out of the box', () => {
     // FR-049d's other half — bare F5 is deliberately NOT taken — is
     // `packages/core/tests/unit/keybindings.test.ts`'s business; what is asserted here is that the
     // menus SHOW whatever `terminal.redraw` is bound to, and by default that is Ctrl+F5.
     expect(firstBinding(DEFAULT_KEYBINDINGS, 'terminal.redraw')).toBe('Ctrl+F5');
     expect(headerRedraw().shortcut).toBe('Ctrl+F5');
-    expect(contentRedraw().shortcut).toBe('Ctrl+F5');
   });
 
-  it('a rebind moves what BOTH menus show — neither hard-codes the string', () => {
+  it('a rebind moves what the menu shows — it does not hard-code the string', () => {
     /*
      * The regression the E2E could not see: it only ever ran against the shipped bindings, so a menu
      * that printed the literal "Ctrl+F5" passed it and would go on printing it after the user had
@@ -190,24 +163,18 @@ describe('the chord is SHOWN on both, and follows the binding (FR-049c, constitu
     };
 
     expect(headerRedraw({ keybindings: rebound }).shortcut).toBe('Ctrl+Shift+R');
-    expect(contentRedraw({ keybindings: rebound }).shortcut).toBe('Ctrl+Shift+R');
   });
 });
 
-describe('both rows actually invoke the redraw', () => {
-  it('each menu’s row calls its own redraw action exactly once', () => {
+describe('the row actually invokes the redraw', () => {
+  it('the title menu’s row calls its redraw action exactly once', () => {
     /*
      * The E2E clicked both rows, but a redraw is DEFINED as changing nothing visible — so a row
      * wired to nothing, or wired to `tryAgain`, produced an identical screen and an identical pass.
      * Here the action is observed.
      */
     const fromHeader = vi.fn();
-    const fromContent = vi.fn();
-
     headerRedraw({ redraw: fromHeader }).onClick?.();
-    contentRedraw({ redraw: fromContent }).onClick?.();
-
     expect(fromHeader).toHaveBeenCalledTimes(1);
-    expect(fromContent).toHaveBeenCalledTimes(1);
   });
 });

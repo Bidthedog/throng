@@ -1,6 +1,6 @@
 /**
- * 074 FR-085a — an HTML page's body menu: Find…, Copy, Copy as ▸ (Rich Text, Plain Text), Select All and Split,
- * as a Markdown preview's body menu offers them — though the page is not a flowing document (no Go to Heading, no
+ * 074 FR-085a — an HTML page's body menu: Find…, Copy, Copy as ▸ (Rich Text, Plain Text) and Select All, as a
+ * Markdown preview's body menu offers them (Split is the title menu's since the v1 review, #732) — though the page is not a flowing document (no Go to Heading, no
  * Synchronise Scrolling, FR-087).
  *
  * Layer: unit — `previewContentMenu` is a pure builder. The right-click in a real page reaching it is
@@ -15,17 +15,17 @@ const page = (over: Partial<PreviewContentMenuArgs> = {}): PreviewContentMenuArg
   find: { run: vi.fn() },
   goToHeading: { run: vi.fn(), kind: null },
   content: { copyFormat: 'plain', copy: vi.fn(), selectAll: vi.fn(), pageSelectAll: true },
-  split: { panelId: 'p1', keybindings: { bindings: {} } },
   ...over,
 });
 
 describe('an HTML page’s body menu (FR-085a)', () => {
-  it('offers Find…, Copy, Copy as ▸ with both formats, Select All and Split — and no Go to Heading', () => {
+  it('offers Find…, Copy, Copy as ▸ with both formats and Select All — and no Go to Heading or Split', () => {
     const rows = previewContentMenu(page());
     const labels = rows.map((m) => m.label);
-    expect(labels).toEqual(expect.arrayContaining(['Find…', 'Copy', 'Copy as', 'Select All', 'Split']));
+    expect(labels).toEqual(expect.arrayContaining(['Find…', 'Copy', 'Copy as', 'Select All']));
     expect(rows.find((r) => r.label === 'Copy as')?.submenu?.map((m) => m.label)).toEqual(['Rich Text', 'Plain Text']);
     expect(labels).not.toContain('Go to Heading…');
+    expect(labels).not.toContain('Split');
   });
 
   it('runs Select All and each copy in its format', () => {

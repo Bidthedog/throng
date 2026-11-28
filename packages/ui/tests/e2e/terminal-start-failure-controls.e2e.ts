@@ -47,8 +47,9 @@ const PERSISTED_FLAVOUR = `"flavourId":"${TEST_SHELL}"`;
  *     claims survive. Addressing them by name rather than by a new test id also states the
  *     requirement itself — a control the constitution demands be named is found by its name.
  *   CHANGED — the FR-004 prose check, split in two. See the comment at its site.
- *   UNCHANGED — every menu-item assertion (`menu-item-Try again`, `menu-item-Clear panel type`),
- *     every `panel-type-form-{pid}` assertion, the context-menu open/close, the persisted-layout
+ *   UNCHANGED — every menu-item assertion (`menu-item-Try again`, `menu-item-Clear panel type`; the
+ *     v1 review, #732, opens them from the title menu now), every `panel-type-form-{pid}` assertion,
+ *     the context-menu open/close, the persisted-layout
  *     polls and the whole daemon-death test's subject matter.
  *
  * ══ WHY ONE HELPER, AND NOT AN INLINE `getByTestId` PER SITE ══
@@ -240,13 +241,10 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
         }
 
         /**
-         * FR-004d — and both are in the panel's CONTEXT MENU.
-         *
-         * Right-clicking the panel BODY, not the badge: the badge is a sibling with no handler of
-         * its own, so a right-click on it bubbles past and opens nothing. The menu handler sits on a
-         * div rendered in every state, which is what makes it reachable while the panel is failed.
+         * FR-004d — and both are in the panel's TITLE menu. The v1 review (#732) moved the failure's
+         * commands there from the body menu: they act on the panel's failed state, not on its content.
          */
-        await win.locator('.panel-box').first().click({ button: 'right', position: { x: 20, y: 120 } });
+        await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
         await expect(win.getByTestId('context-menu')).toBeVisible();
         await expect(win.getByTestId('menu-item-Try again')).toBeVisible();
         await expect(win.getByTestId('menu-item-Clear panel type')).toBeVisible();

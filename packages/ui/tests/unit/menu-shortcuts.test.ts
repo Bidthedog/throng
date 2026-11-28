@@ -61,7 +61,7 @@ import { buildContextMenuItems } from '../../src/renderer/explorer/context-menu-
 import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
 import { panelHeaderMenu, type PanelHeaderMenuArgs } from '../../src/renderer/workspace/panel-header-menu.js';
 import { tabContextMenu } from '../../src/renderer/workspace/tab-menu.js';
-import { placeholderContentMenu, splitMenuItems } from '../../src/renderer/workspace/split-menu.js';
+import { splitMenuItems } from '../../src/renderer/workspace/split-menu.js';
 import { terminalContentMenu } from '../../src/renderer/terminal/terminal-content-menu.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
 import { findInFilesContentMenu } from '../../src/renderer/find-in-files/content-menu.js';
@@ -100,7 +100,6 @@ const SHOWABLE = new Set<string>([
 const FLAVOURS: readonly FlavourOption[] = [{ value: 'bash', label: 'Bash', defaultShellArguments: '' }];
 const markdown = SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.find((p) => p.id === 'markdown')!;
 const AFFORDANCE: PreviewAffordance = { state: 'enabled', provider: markdown };
-const split = { panelId: 'p1', keybindings: ALL_BOUND };
 const FORMS = pathForms('/project', 'src/app.ts');
 
 const explorerOps = {
@@ -159,7 +158,6 @@ const fold = (collapsed: boolean) => ({
 
 const editor = (collapsed: boolean): MenuAction[] =>
   editorContentMenu({
-    split,
     view: {} as EditorView,
     panelId: 'p1',
     viewId: 'v1',
@@ -167,39 +165,47 @@ const editor = (collapsed: boolean): MenuAction[] =>
     wordWrap: { on: true, toggle: noop, chord: bound('editor.toggleWordWrap') },
     whitespace: { on: false, toggle: noop, chord: bound('editor.toggleWhitespace') },
     gotoLine: { open: noop, chord: bound('navigate.gotoLine') },
-    openPreview: { affordance: AFFORDANCE, open: noop, chord: bound('preview.open') },
-    syncScroll: { on: true, toggle: noop, chord: bound('preview.toggleSyncScroll') },
-    print: { run: noop, chord: bound('editor.print') },
-    languageName: 'Markdown',
-    resetLanguage: { enabled: true, reset: noop },
-    encoding: {
-      current: { encoding: 'utf8', hasBom: false },
-      canReopen: true,
-      change: noop,
-      openReopenPicker: noop,
-      chords: { reopen: bound('editor.reopenWithEncoding') },
-      changeChord: bound('editor.changeEncoding'),
-    },
-    lineEndings: {
-      lineEnding: 'lf',
-      mixed: false,
-      convert: noop,
-      chords: {
-        lf: bound('editor.convertLineEndingsToLf'),
-        cr: bound('editor.convertLineEndingsToCr'),
-        crlf: bound('editor.convertLineEndingsToCrlf'),
-      },
-      insert: {
-        insert: noop,
-        chords: {
-          lf: bound('editor.insertLineBreakLf'),
-          cr: bound('editor.insertLineBreakCr'),
-          crlf: bound('editor.insertLineBreakCrlf'),
-        },
-      },
+    search: {
+      find: noop,
+      replace: noop,
+      replaceAll: noop,
+      chords: { find: bound('search.find'), replace: bound('search.replace'), replaceAll: bound('search.replaceAll') },
     },
     markdownFold: fold(collapsed),
   });
+
+/** v1 review (#732) — the editor's format rows, on its title menu now. */
+const EDITOR_FORMAT: NonNullable<PanelHeaderMenuArgs['editorFormat']> = {
+  panelId: 'p1',
+  languageName: 'Markdown',
+  resetLanguage: { enabled: true, reset: noop },
+  encoding: {
+    current: { encoding: 'utf8', hasBom: false },
+    canReopen: true,
+    change: noop,
+    openReopenPicker: noop,
+    chords: { reopen: bound('editor.reopenWithEncoding') },
+    changeChord: bound('editor.changeEncoding'),
+  },
+  lineEndings: {
+    lineEnding: 'lf',
+    mixed: false,
+    convert: noop,
+    chords: {
+      lf: bound('editor.convertLineEndingsToLf'),
+      cr: bound('editor.convertLineEndingsToCr'),
+      crlf: bound('editor.convertLineEndingsToCrlf'),
+    },
+    insert: {
+      insert: noop,
+      chords: {
+        lf: bound('editor.insertLineBreakLf'),
+        cr: bound('editor.insertLineBreakCr'),
+        crlf: bound('editor.insertLineBreakCrlf'),
+      },
+    },
+  },
+};
 
 const panelActions: PanelHeaderMenuArgs['actions'] = new Proxy({} as PanelHeaderMenuArgs['actions'], { get: () => noop });
 const panel = (over: Partial<Panel>): Panel => ({ type: 'panel', id: 'p1', originProjectId: 'proj', title: 'Panel 1', ...over });
@@ -225,18 +231,15 @@ const PREVIEW_PANEL = panel({ kind: 'preview', config: { filePath: '/project/REA
 
 const preview = (over: Partial<Parameters<typeof previewContentMenu>[0]>): MenuAction[] =>
   previewContentMenu({
-    split,
-    copyPath: FORMS,
     selectionEmpty: false,
     content: { copyFormat: 'rich', copy: noop, selectAll: noop },
-    editorRoute: { run: noop },
-    syncScroll: { on: true, toggle: noop, chord: bound('preview.toggleSyncScroll') },
     find: { run: noop, chord: bound('search.find') },
     goToHeading: { run: noop, chord: bound('preview.goToHeading') },
-    print: { run: noop, chord: bound('preview.print') },
     ...over,
   });
 
+const toggle = { on: true, onToggle: noop };
+const GRID_TOGGLES = { wrap: toggle, lockFirstRow: toggle, lockFirstColumn: toggle };
 const gridSel: GridSelection = { active: { row: 0, col: 0 }, anchor: { row: 0, col: 0 } } as GridSelection;
 const csv = (target: CsvGridMenuArgs['target'], copied: CsvGridMenuArgs['copied']): MenuAction[] =>
   csvGridMenu({
@@ -248,11 +251,12 @@ const csv = (target: CsvGridMenuArgs['target'], copied: CsvGridMenuArgs['copied'
     copied,
     keybindings: ALL_BOUND,
     cellDialogAvailable: true,
-    // Every action present, Open in Editor and Print… included.
+    toggles: GRID_TOGGLES,
+    // Every action present.
     actions: new Proxy({} as CsvGridMenuArgs['actions'], { get: () => noop }),
   });
 const sheet = (target: CsvGridMenuArgs['target']): MenuAction[] =>
-  spreadsheetMenu({ target, keybindings: ALL_BOUND, actions: { copy: noop, selectAll: noop, goToRow: noop, columnWidth: noop, resetWidth: noop, print: noop } });
+  spreadsheetMenu({ target, keybindings: ALL_BOUND, toggles: GRID_TOGGLES, actions: { copy: noop, selectAll: noop, goToRow: noop, columnWidth: noop, resetWidth: noop } });
 
 const MENUS: readonly { name: string; build: () => MenuAction[] }[] = [
   { name: 'Explorer file', build: () => explorer('file', 'src/app.ts') },
@@ -261,20 +265,35 @@ const MENUS: readonly { name: string; build: () => MenuAction[] }[] = [
   { name: 'Editor', build: () => editor(false) },
   { name: 'Editor', build: () => editor(true) },
   { name: 'Panel header', build: () => header({}) },
-  { name: 'Panel header', build: () => header({ panel: panel({ kind: 'editor' }), editor: { dirty: true, hasFilePath: true }, openPreview: AFFORDANCE, syncScroll: true }) },
+  {
+    name: 'Panel header',
+    build: () =>
+      header({ panel: panel({ kind: 'editor' }), editor: { dirty: true, hasFilePath: true }, openPreview: AFFORDANCE, syncScroll: true, copyPath: FORMS, editorFormat: EDITOR_FORMAT }),
+  },
   { name: 'Panel header', build: () => header({ panel: panel({ kind: 'editor' }), editor: { dirty: true, hasFilePath: true }, maximise: { maximised: true, toggle: noop } }) },
-  { name: 'Panel header', build: () => header({ panel: panel({ kind: 'terminal' }) }) },
+  {
+    name: 'Panel header',
+    build: () =>
+      header({
+        panel: panel({ kind: 'terminal' }),
+        terminalToggles: [{ label: 'Remember Command', icon: 'rememberCommand', on: true, chord: bound('terminal.toggleRememberCommand'), toggle: noop }],
+      }),
+  },
   { name: 'Panel header', build: () => header({ panel: panel({ kind: 'findInFiles' }) }) },
-  { name: 'Panel header', build: () => header({ panel: PREVIEW_PANEL, preview: { providerKind: 'text', parented: true, scrollSync: true, printable: true, hasFilePath: true }, syncScroll: true }) },
+  {
+    name: 'Panel header',
+    build: () => header({ panel: PREVIEW_PANEL, preview: { providerKind: 'text', parented: true, scrollSync: true, printable: true, hasFilePath: true }, syncScroll: true, copyPath: FORMS }),
+  },
   {
     name: 'Panel header',
     build: () =>
       header({
         panel: PREVIEW_PANEL,
-        preview: { providerKind: 'grid', parented: false, goTo: 'row', printable: true, hasFilePath: true, cellDialog: { on: true }, wrap: { on: true }, lockFirstRow: { on: true }, lockFirstColumn: { on: true } },
+        // The CSV Preview Editor: a text provider that edits its file, so Save and Save As… are drawn.
+        preview: { providerKind: 'text', parented: false, scrollSync: true, printable: true, hasFilePath: true, cellDialog: { on: true }, editable: true },
       }),
   },
-  { name: 'Panel header', build: () => header({ panel: PREVIEW_PANEL, preview: { providerKind: 'binary', parented: false, goTo: 'page', printable: true } }) },
+  { name: 'Panel header', build: () => header({ panel: PREVIEW_PANEL, preview: { providerKind: 'binary', parented: false, printable: true } }) },
   {
     name: 'Tab',
     build: () =>
@@ -287,18 +306,14 @@ const MENUS: readonly { name: string; build: () => MenuAction[] }[] = [
         actions: { rename: noop, destroyTab: noop, destroyOthers: noop },
       }),
   },
-  { name: 'Placeholder', build: () => placeholderContentMenu(split) },
   { name: 'Split button', build: () => splitMenuItems('p1', ALL_BOUND, noop) },
   {
     name: 'Terminal',
     build: () =>
       terminalContentMenu({
-        split,
         selection: 'ls',
-        redrawChord: bound('terminal.redraw'),
-        startFailure: true,
-        actions: { copySelection: noop, paste: noop, redraw: noop, tryAgain: noop, copyDetails: noop, clearPanelType: noop },
-        toggles: [{ label: 'Remember Command', icon: 'rememberCommand', on: true, chord: bound('terminal.toggleRememberCommand'), toggle: noop }],
+        findChord: bound('search.find'),
+        actions: { copySelection: noop, paste: noop, find: noop },
       }),
   },
   {
@@ -402,6 +417,8 @@ const SEARCH_SCOPE =
 const TERMINAL_COPY = 'Ctrl+C is the shell’s interrupt: a terminal has no copy chord (#142)';
 const NEXT_MARKED = 'focus.nextMarkedPanel walks every project; this row walks this project alone (057 FR-106)';
 const CELL_DIALOG = 'F2 and Enter edit in the cell; no key opens the dialog';
+const GRID_TOGGLE = 'a per-panel view toggle with no command in Key Bindings (073 FR-013, FR-039a)';
+const GRID_MENUS = ['CSV cell', 'CSV row header', 'CSV column header', 'CSV corner', 'Spreadsheet cell', 'Spreadsheet column header', 'Spreadsheet corner'];
 
 /**
  * Every row no key performs, by its path from the menu's name. A path ending `› *` covers every row beneath that
@@ -445,14 +462,15 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Explorer root › Collapse All Children': NONE,
   'Explorer root › Expand All Children': NONE,
   'Explorer root › Properties': NONE,
-  'Editor › Set Language… (Markdown)': NONE,
-  'Editor › Reset Language': NONE,
-  'Editor › Encoding (UTF-8) › UTF-8': PICK,
-  'Editor › Encoding (UTF-8) › UTF-8 with BOM': PICK,
-  'Editor › Encoding (UTF-8) › UTF-16 LE': PICK,
-  'Editor › Encoding (UTF-8) › UTF-16 BE': PICK,
-  'Editor › Encoding (UTF-8) › Windows Code Pages › *': PICK,
-  'Editor › Line Endings (LF) › Mixed': NONE,
+  'Panel header › Set Language… (Markdown)': NONE,
+  'Panel header › Reset Language': NONE,
+  'Panel header › Encoding (UTF-8) › UTF-8': PICK,
+  'Panel header › Encoding (UTF-8) › UTF-8 with BOM': PICK,
+  'Panel header › Encoding (UTF-8) › UTF-16 LE': PICK,
+  'Panel header › Encoding (UTF-8) › UTF-16 BE': PICK,
+  'Panel header › Encoding (UTF-8) › Windows Code Pages › *': PICK,
+  'Panel header › Line Endings (LF) › Mixed': NONE,
+  'Panel header › Copy Path › *': PICK,
   'Panel header › Send to Tab › *': PICK,
   'Panel header › Sync to › *': PICK,
   'Panel header › Revert': NONE,
@@ -467,16 +485,10 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Panel header › Open in Editor': NONE,
   'Panel header › Refresh': NONE,
   'Panel header › Edit Long Cells in Dialog': NONE,
-  'Panel header › Wrap': NONE,
-  'Panel header › Lock First Row': NONE,
-  'Panel header › Lock First Column': NONE,
   'Tab › Sync to › *': PICK,
   'Tab › Destroy Tab': NONE,
   'Tab › Destroy other tabs': NONE,
   'Terminal › Copy': TERMINAL_COPY,
-  'Terminal › Try again': NONE,
-  'Terminal › Copy details': NONE,
-  'Terminal › Clear panel type': NONE,
   'Cog › Key Bindings': NONE,
   'Cog › Themes': NONE,
   'Cog › Open Logs Folder': NONE,
@@ -491,8 +503,6 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Find in Files › Collapse all': NONE,
   'Find in Files › Expand all': NONE,
   'Preview body › Copy as › *': PICK,
-  'Preview body › Copy Path › *': PICK,
-  'Preview body › Open in Editor': NONE,
   'Preview body › Copy Diagram as Image': NONE,
   'Preview body › Single Page': PICK,
   'Preview body › Two Pages': PICK,
@@ -501,19 +511,15 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'CSV cell › Copy as › *': PICK,
   'CSV cell › Edit in Dialog…': CELL_DIALOG,
   'CSV cell › Column Width…': NONE,
-  'CSV cell › Open in Editor': NONE,
   'CSV row header › Copy as › *': PICK,
   'CSV row header › Insert › Copied Rows Above': NONE,
   'CSV row header › Insert › Copied Rows Below': NONE,
-  'CSV row header › Open in Editor': NONE,
   'CSV column header › Copy as › *': PICK,
   'CSV column header › Insert › Copied Columns Left': NONE,
   'CSV column header › Insert › Copied Columns Right': NONE,
   'CSV column header › Column Width…': NONE,
   'CSV column header › Reset Column Width': NONE,
-  'CSV column header › Open in Editor': NONE,
   'CSV corner › Copy as › *': PICK,
-  'CSV corner › Open in Editor': NONE,
   'Spreadsheet cell › Copy as › *': PICK,
   'Spreadsheet column header › Copy as › *': PICK,
   'Spreadsheet column header › Column Width…': NONE,
@@ -543,6 +549,9 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Notification › Open File': NONE,
   'Link › Find in File Explorer': NONE,
   'Link › Copy Link to Clipboard': NONE,
+  ...Object.fromEntries(
+    GRID_MENUS.flatMap((m) => ['Wrap', 'Lock First Row', 'Lock First Column'].map((t) => [`${m} › ${t}`, GRID_TOGGLE])),
+  ),
 };
 
 /* ── The sweep ────────────────────────────────────────────────────────────────────────────────────── */

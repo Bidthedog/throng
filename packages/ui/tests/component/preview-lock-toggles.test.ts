@@ -4,6 +4,10 @@
  * on the preview's status bar and a checked item in its header menu, each reaching one persisted per-panel choice, and
  * the availability rule (the panel's own choice, else the provider's setting).
  *
+ * v1 review (#732, amending FR-013 and FR-039a): Wrap and the two locks change how the grid shows its cells, so they
+ * left the header menu for the grid's own body menus. The panel hands the body each one as `gridToggles` (its value
+ * and the status bar's flip), and `gridViewToggleRows` draws them; the cell dialog toggle stays on the header menu.
+ *
  * Layer: component — the toggles' state, keyboard reach and persistence need the real status bar, panel and workspace
  * store; the rule is unit-tested in core (`csv-cell-text.test.ts`). Mounted through the real `PanelPlaceholder` with
  * TEST providers that declare `lockToggles` / `wrapToggle` / `cellDialog`, so the chrome is shown to name no provider.
@@ -13,7 +17,8 @@ import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_KEYBINDINGS, PREVIEW_KIND, collectPanels, createPreviewProviderRegistry, type Panel } from '@throng/core';
-import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
+import type { GridViewToggles, PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
+import { gridViewToggleRows } from '../../src/renderer/grid/grid-menu-items.js';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import { panelHeaderMenu, type PanelHeaderMenuActions } from '../../src/renderer/workspace/panel-header-menu.js';
 import { mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
@@ -57,7 +62,10 @@ const registry = createPreviewProviderRegistry([
 
 /** What the body was handed, so a test can read the choices the panel passes down. */
 const seen: Record<string, boolean | undefined> = {};
-function FakeBody({ panelId, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, cellDialogChoice }: PreviewBodyProps): ReactElement {
+/** The grid toggles the body was last handed (v1 review, #732). */
+const handed: { toggles: GridViewToggles | undefined } = { toggles: undefined };
+function FakeBody({ panelId, wrapChoice, lockFirstRowChoice, lockFirstColumnChoice, cellDialogChoice, gridToggles }: PreviewBodyProps): ReactElement {
+  handed.toggles = gridToggles;
   seen.wrapChoice = wrapChoice;
   seen.lockFirstRowChoice = lockFirstRowChoice;
   seen.lockFirstColumnChoice = lockFirstColumnChoice;
@@ -81,6 +89,7 @@ afterEach(() => {
   m?.unmount();
   m = undefined;
   for (const key of Object.keys(seen)) seen[key] = undefined;
+  handed.toggles = undefined;
   document.body.replaceChildren();
 });
 
@@ -219,7 +228,7 @@ for (const k of KINDS) {
     });
   });
 
-  describe(`the ${k.menu} header menu item (every panel action has a menu item)`, () => {
+  if (k.provider === 'testCell') describe(`the ${k.menu} header menu item (every panel action has a menu item)`, () => {
     const panel = (): Panel => ({
       type: 'panel',
       id: 'p1',
@@ -267,6 +276,39 @@ for (const k of KINDS) {
       expect(entry).toHaveAttribute('aria-checked', String(!start));
       fireEvent.click(entry);
       await waitFor(() => expect(panelConfig(win)).toMatchObject({ [k.configKey]: start }));
+    });
+  });
+
+  if (k.provider !== 'testCell') describe(`the ${k.menu} grid body menu item (v1 review, #732)`, () => {
+    const key = k.previewKey as keyof GridViewToggles;
+
+    it('is no longer on the mounted panel\'s header menu', async () => {
+      const win = await mountGrid(k, { setting: start });
+      fireEvent.contextMenu(screen.getByTestId(`panel-handle-${win.id}`), { clientX: 10, clientY: 10 });
+      await screen.findByTestId('menu-item-Send to Tab');
+      expect(screen.queryByTestId(`menu-item-${k.menu}`)).toBeNull();
+    });
+
+    it('offers a checked toggle in View & state with its icon, checked exactly while it is on, and runs the flip', () => {
+      const run = vi.fn();
+      const row = (on: boolean): MenuAction | undefined =>
+        gridViewToggleRows({ [key]: { on, onToggle: run } }).find((i) => i.testId === `menu-item-${k.menu}`);
+      expect(row(true)).toMatchObject({ checked: true, section: 'viewState', icon: k.icon });
+      expect(row(false)).toMatchObject({ checked: false });
+      row(false)?.onClick?.();
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it('is absent for a provider that does not declare it', () => {
+      expect(gridViewToggleRows({}).find((i) => i.testId === `menu-item-${k.menu}`)).toBeUndefined();
+    });
+
+    it('the panel hands the body its own choice, and the flip saves it with the panel', async () => {
+      const win = await mountGrid(k, { setting: start, config: { [k.configKey]: !start } });
+      await waitFor(() => expect(handed.toggles?.[key]?.on).toBe(!start));
+      handed.toggles![key]!.onToggle();
+      await waitFor(() => expect(panelConfig(win)).toMatchObject({ [k.configKey]: start }));
+      await waitFor(() => expect(handed.toggles?.[key]?.on).toBe(start));
     });
   });
 }

@@ -336,17 +336,14 @@ describe('Find… on the preview\'s menus (T028)', () => {
     }
   });
 
-  it('the header menu offers Find… beside Back/Forward, with the same chord', async () => {
+  // v1 review (#732): Find… acts on the content, so the body menu holds it and the title menu does not.
+  it('the header menu leaves Find… to the body menu', async () => {
     const mounted = await mountMarkdownPreview(README_TEXT);
     try {
       await screen.findByTestId(`preview-body-${mounted.id}`, {}, COLD);
       fireEvent.contextMenu(screen.getByTestId(`panel-handle-${mounted.id}`), { clientX: 10, clientY: 10 });
-
-      const item = await screen.findByTestId('menu-item-Find…');
-      expect(item).toHaveTextContent('Ctrl+F');
-
-      fireEvent.click(item);
-      await waitFor(() => expect(screen.getByTestId(`find-bar-${mounted.id}`)).toBeVisible());
+      await screen.findByTestId('menu-item-Back');
+      expect(screen.queryByTestId('menu-item-Find…')).toBeNull();
     } finally {
       mounted.unmount();
     }

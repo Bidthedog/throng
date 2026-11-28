@@ -337,22 +337,13 @@ describe('terminalContentMenu — carries no link row at all any more (FR-169)',
   const menu = (selection = ''): MenuAction[] =>
     terminalContentMenu({
       selection,
-      redrawChord: 'Ctrl+Shift+R',
-      startFailure: false,
-      actions: {
-        copySelection: noop,
-        paste: noop,
-        redraw: noop,
-        tryAgain: noop,
-        copyDetails: noop,
-        clearPanelType: noop,
-      },
+      actions: { copySelection: noop, paste: noop, find: noop },
     });
 
-  it('is exactly Copy, Paste, Refresh / redraw terminal — the ordinary menu, unchanged, with or without a selection', () => {
+  it('is exactly Copy, Paste, Find — the ordinary menu (v1 review, #732), with or without a selection', () => {
     // An exact list, so neither Open Link nor Copy Link to Clipboard can be drawn.
     for (const selection of ['', 'some output']) {
-      expect(labels(menu(selection)), `selection "${selection}"`).toEqual(['Copy', 'Paste', 'Refresh / redraw terminal']);
+      expect(labels(menu(selection)), `selection "${selection}"`).toEqual(['Copy', 'Paste', 'Find']);
     }
   });
 });

@@ -24,7 +24,6 @@ import { __resetColumnWidthCache } from '../../src/renderer/preview/providers/cs
 import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { PREVIEW_LOADING_CLASS } from '../../src/renderer/preview/loading-placeholder.js';
-import { PRINT_UNAVAILABLE } from '../../src/renderer/preview/print/print-command.js';
 import { gridPrintable } from '../../src/renderer/grid/grid-print.js';
 import { __resetPreviewStore, applyPreviewUpdate } from '../../src/renderer/preview/preview-store.js';
 import { getEditorActions } from '../../src/renderer/editor/editor-actions.js';
@@ -248,22 +247,47 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     ['a cell', () => cellAt(0, 0)],
     ['a row header', () => rowHead(0)],
     ['a column header', () => colHead(0)],
-  ])('the menu of %s offers Print…, which runs the chrome\'s Print… (075 FR-063, FR-075b)', (_name, target) => {
-    const onPrint = vi.fn();
-    mount('a,b\n1,2\n', { onPrint });
+    ['the corner', () => document.querySelector<HTMLElement>('[data-grid-corner]')!],
+  ])('the menu of %s carries no Print…, Save, Save As… or Open in Editor: the title menu holds them (v1 review, #732)', (_name, target) => {
+    mount('a,b\n1,2\n', { onOpenInEditor: () => {} });
     fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
-    const print = screen.getByTestId('menu-item-Print…');
-    expect(print.getAttribute('aria-disabled')).not.toBe('true');
-    fireEvent.click(print);
-    expect(onPrint).toHaveBeenCalledTimes(1);
+    for (const absent of ['Print…', 'Save', 'Save As…', 'Open in Editor']) {
+      expect(screen.queryByTestId(`menu-item-${absent}`), absent).toBeNull();
+    }
   });
 
-  it('without the chrome\'s Print… route, the row is drawn disabled with the reason (075 FR-062)', () => {
+  it.each([
+    ['a cell', () => cellAt(0, 0)],
+    ['a row header', () => rowHead(0)],
+    ['a column header', () => colHead(0)],
+    ['the corner', () => document.querySelector<HTMLElement>('[data-grid-corner]')!],
+  ])('the menu of %s offers Wrap and both locks as checked toggles, each running its flip (v1 review, #732)', (_name, target) => {
+    const wrap = vi.fn();
+    const row = vi.fn();
+    const col = vi.fn();
+    mount('a,b\n1,2\n', {
+      gridToggles: {
+        wrap: { on: true, onToggle: wrap },
+        lockFirstRow: { on: false, onToggle: row },
+        lockFirstColumn: { on: true, onToggle: col },
+      },
+    });
+    fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
+    expect(screen.getByTestId('menu-item-Wrap')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('menu-item-Lock First Row')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('menu-item-Lock First Column')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByTestId('menu-item-Lock First Row'));
+    expect(row).toHaveBeenCalledTimes(1);
+    expect(wrap).not.toHaveBeenCalled();
+    expect(col).not.toHaveBeenCalled();
+  });
+
+  it('draws no view toggle the body was not given', () => {
     mount('a,b\n1,2\n');
     fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
-    const print = screen.getByTestId('menu-item-Print…');
-    expect(print.getAttribute('aria-disabled')).toBe('true');
-    expect(print.getAttribute('title')).toBe(PRINT_UNAVAILABLE);
+    for (const absent of ['Wrap', 'Lock First Row', 'Lock First Column']) {
+      expect(screen.queryByTestId(`menu-item-${absent}`), absent).toBeNull();
+    }
   });
 
   it('prints every row as a table, not the rows in view; Lock first row makes the first row the repeated header (075 FR-075b)', async () => {
@@ -369,14 +393,6 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     expect(cellAt(1, 1).textContent).toBe('2');
   });
 
-  it('names the editor route Open in Editor, linked to an editor or not (T089, T17)', () => {
-    const onOpenInEditor = vi.fn();
-    mount('a,b\n1,2\n', { onOpenInEditor });
-    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
-    expect(screen.queryByTestId('menu-item-Go to Editor')).toBeNull();
-    fireEvent.click(screen.getByTestId('menu-item-Open in Editor'));
-    expect(onOpenInEditor).toHaveBeenCalledTimes(1);
-  });
 
   const topLevel = (): string[] =>
     [...document.querySelectorAll('[data-testid="context-menu"] > [role="menuitem"]')].map((el) =>
@@ -384,11 +400,11 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     );
   const corner = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-corner]')!;
 
-  it('the corner menu offers only what acts on every cell and on the file (T13)', () => {
+  it('the corner menu offers only what acts on every cell (T13)', () => {
     mount('a,b\n1,2\n', { onOpenInEditor: () => {}, providerSettings: { enabled: true, editLongCellsInDialog: true, longCellThreshold: 1 } });
     fireEvent.contextMenu(corner(), { clientX: 5, clientY: 5 });
-    expect(topLevel()).toEqual(expect.arrayContaining(['Cut', 'Copy', 'Copy as', 'Clear Cells', 'Undo', 'Redo', 'Save', 'Save As…', 'Go to Row…', 'Open in Editor', 'Print…']));
-    for (const absent of ['Paste', 'Select All', 'Insert', 'Edit in Dialog…', 'Column Width…']) {
+    expect(topLevel()).toEqual(expect.arrayContaining(['Cut', 'Copy', 'Copy as', 'Clear Cells', 'Undo', 'Redo', 'Go to Row…']));
+    for (const absent of ['Paste', 'Select All', 'Insert', 'Edit in Dialog…', 'Column Width…', 'Save', 'Save As…', 'Open in Editor', 'Print…']) {
       expect(screen.queryByTestId(`menu-item-${absent}`), absent).toBeNull();
     }
   });
@@ -903,8 +919,6 @@ describe('CsvBody menu icons (FR-037g)', () => {
       Copy: 'copy',
       Paste: 'paste',
       'Select All': 'selectAll',
-      Save: 'save',
-      'Save As…': 'saveAs',
       'Edit in Dialog…': 'cellDialog',
       'Go to Row…': 'goToRow',
       // 073 T109 — a clearing action, drawn as the editor's Reset Language is.
@@ -923,10 +937,17 @@ describe('CsvBody menu icons (FR-037g)', () => {
     expect(screen.queryByTestId('menu-item-Select Column')).toBeNull();
   });
 
-  it('draws the copy picture on both Copy as items, and the editor picture on Open in Editor (T088)', () => {
+  it('draws the copy picture on both Copy as items (T088)', () => {
     mount('a,b\n1,2\n', { onOpenInEditor: () => {} });
     menuWithSubmenu(cellAt(0, 0), 'Copy as');
-    expectIcons({ 'Copy as Rich Text': 'copy', 'Copy as Plain Text': 'copy', 'Open in Editor': 'editorPanel' });
+    expectIcons({ 'Copy as Rich Text': 'copy', 'Copy as Plain Text': 'copy' });
+  });
+
+  it('draws the view toggles with their status-bar pictures (v1 review, #732)', () => {
+    const t = { on: false, onToggle: () => {} };
+    mount('a,b\n1,2\n', { gridToggles: { wrap: t, lockFirstRow: t, lockFirstColumn: t } });
+    fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
+    expectIcons({ Wrap: 'wrapCells', 'Lock First Row': 'lockFirstRow', 'Lock First Column': 'lockFirstColumn' });
   });
 
   it('draws them on the row-header menu', () => {
@@ -1157,13 +1178,11 @@ describe('CsvBody Save As (FR-035a)', () => {
     expect(bridge.gridSave).toHaveBeenCalledWith('p1');
   });
 
-  it('the grid\'s right-click menu offers Save As next to Save', () => {
+  it('the grid\'s right-click menu leaves Save and Save As… to the panel\'s title menu (v1 review, #732)', () => {
     mount('a,b\n1,2\n');
     fireEvent.contextMenu(cellAt(0, 0), { clientX: 5, clientY: 5 });
-    const labels = [...document.querySelectorAll('[role="menuitem"]')].map((el) => el.getAttribute('data-testid'));
-    expect(labels).toEqual(expect.arrayContaining(['menu-item-Save', 'menu-item-Save As…']));
-    fireEvent.click(screen.getByTestId('menu-item-Save As…'));
-    expect(choose).toHaveBeenCalled();
+    expect(screen.queryByTestId('menu-item-Save')).toBeNull();
+    expect(screen.queryByTestId('menu-item-Save As…')).toBeNull();
   });
 });
 

@@ -132,12 +132,14 @@ describe('an Image Preview (FR-020, FR-022, FR-030)', () => {
     expect(fit.getAttribute('title') ?? '').toMatch(/^Fit picture/);
   });
 
-  // 074 convergence T062 — FR-028 (and FR-068a for a PDF): the body menu offers Copy Path, in the four forms the File
-  // Explorer offers, alongside Copy Image.
-  it('offers Copy Path in the body menu, and copies the form picked', async () => {
+  // 074 convergence T062 — FR-028 (and FR-068a for a PDF): Copy Path, in the four forms the File Explorer offers.
+  // v1 review (#732): it names the panel's file, so the TITLE menu offers it and the body menu does not.
+  it('offers Copy Path in the title menu, not the body menu, and copies the form picked', async () => {
     pv = await mountMarkdownPreview('', `${ROOT}/shot.png`, { providerId: 'image', attach: { content: resource } });
     await waitFor(() => expect(frame()?.querySelector('image')).toBeTruthy(), COLD);
     fireEvent.contextMenu(screen.getByTestId(`preview-image-${pv.id}`), { clientX: 5, clientY: 5 });
+    expect(screen.queryByRole('menuitem', { name: /^Copy Path/ })).toBeNull();
+    fireEvent.contextMenu(screen.getByTestId(`panel-handle-${pv.id}`), { clientX: 5, clientY: 5 });
     await waitFor(() => expect(screen.getAllByRole('menuitem').map((el) => el.textContent?.trim())).toContain('Copy Path'));
     fireEvent.click(screen.getByRole('menuitem', { name: /^Copy Path/ }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /^Absolute \(POSIX\)/ }));

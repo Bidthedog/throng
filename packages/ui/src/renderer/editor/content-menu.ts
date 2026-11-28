@@ -3,16 +3,12 @@ import type { EditorView } from '@codemirror/view';
 import {
   ENCODING_CHOICES,
   encodingLabel,
-  supportsScrollSync,
-  previewIconOf,
   lineEndingLabel,
   type EncodingId,
   type HeadingRecord,
   type LineEndingId,
-  type PreviewAffordance,
 } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
-import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
 import { requestLanguagePicker } from './picker-request.js';
@@ -34,9 +30,100 @@ import { outliningSubmenu, type OutliningArgs, type OutliningChords } from '../c
 
 const win = (): typeof window.throng | undefined => window.throng;
 
+/**
+ * The document-format rows (v1 review, #732): Set Language…, Reset Language, Encoding ▸ and Line Endings ▸. They
+ * describe the panel's file rather than the text under the pointer, so the panel TITLE menu draws them
+ * (`panel-header-menu.ts`); the body menu no longer does. Read at menu-open time by the editor that owns them.
+ */
+export interface EditorFormatMenuArgs {
+  panelId: string;
+  /** The document's effective language NAME, shown on the Set Language item so the menu states the
+   *  current value as well as offering to change it (024 US1 follow-up). */
+  languageName?: string;
+  /** 055 FR-024b — Reset Language; `enabled` while the document has a manual override. Absent draws none. */
+  resetLanguage?: { enabled: boolean; reset: () => void };
+  /**
+   * 059 FR-058 — the Encoding item, beside Set Language: the encoding indicator's own list as a submenu, and
+   * `editor.changeEncoding`'s chord on the item. Absent draws none.
+   */
+  encoding?: EncodingMenuArgs & { changeChord?: string };
+  /**
+   * 059 FR-058, FR-061 — the Line Endings item after it: the indicator's list plus Insert Line Break (LF) /
+   * (CR) / (CRLF). Absent draws none.
+   */
+  lineEndings?: LineEndingMenuArgs & { insert: InsertLineBreakArgs };
+}
+
+/**
+ * The format rows in View & state, in the order the body menu drew them before the v1 review moved them to the title
+ * menu. `section` and `group` are the caller's: the title menu files them with the rows only an editor has.
+ */
+export function editorFormatItems(args: EditorFormatMenuArgs, group?: string): MenuAction[] {
+  const placed = group !== undefined ? { section: 'viewState' as const, group } : { section: 'viewState' as const };
+  return [
+    {
+      // FR-010's second entry point; the status strip is the other, and both open the SAME picker. No keyboard
+      // shortcut. The label NAMES the current language, because with the status bar hidden this menu is the only
+      // place the answer appears. The test id is pinned to the bare label so it survives the language changing.
+      label: args.languageName ? `Set Language… (${args.languageName})` : 'Set Language…',
+      testId: 'menu-item-Set Language…',
+      icon: 'language' as const,
+      ...placed,
+      onClick: () => requestLanguagePicker(args.panelId),
+    },
+    /*
+     * 055 FR-024b — the menu route to the status strip's reset control, so it survives a hidden status bar.
+     * DISABLED while the document has no override: an item that appears and vanishes would move everything below it.
+     */
+    ...(args.resetLanguage !== undefined
+      ? [
+          {
+            label: 'Reset Language',
+            testId: 'menu-item-Reset Language',
+            icon: 'destroy' as const,
+            ...placed,
+            disabled: !args.resetLanguage.enabled,
+            onClick: () => args.resetLanguage?.reset(),
+          },
+        ]
+      : []),
+    /*
+     * 059 FR-058 — Encoding and Line Endings, each naming the current state as Set Language names the language, and
+     * each holding its indicator's own list. Test ids pinned to the bare labels, so they survive the state changing.
+     */
+    ...(args.encoding
+      ? [
+          {
+            label: `Encoding (${encodingLabel(args.encoding.current.encoding, args.encoding.current.hasBom)})`,
+            testId: 'menu-item-Encoding',
+            ...placed,
+            shortcut: args.encoding.changeChord,
+            submenu: encodingMenuItems(args.encoding),
+          },
+        ]
+      : []),
+    ...(args.lineEndings
+      ? [
+          {
+            label: `Line Endings (${lineEndingLabel(args.lineEndings.lineEnding, args.lineEndings.mixed)})`,
+            testId: 'menu-item-Line Endings',
+            ...placed,
+            submenu: [...lineEndingMenuItems(args.lineEndings), ...insertLineBreakItems(args.lineEndings.insert)],
+          },
+        ]
+      : []),
+  ];
+}
+
+/** v1 review (#732) — the editor's search rows, moved from the title menu (043 FR-015) to the body. */
+export interface EditorSearchMenuArgs {
+  find: () => void;
+  replace: () => void;
+  replaceAll: () => void;
+  chords?: { find?: string; replace?: string; replaceAll?: string };
+}
+
 export interface ContentMenuArgs {
-  /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
-  split?: SplitMenuArgs;
   view: EditorView;
   panelId: string;
   /** THIS view — undo is per document, but the cursors it restores go to the view that asked. */
@@ -58,36 +145,14 @@ export interface ContentMenuArgs {
    */
   gotoLine: { open: () => void; chord?: string };
   /**
-   * 044 FR-002 — Open Preview: core's affordance for this editor's file, the `preview.open` action and
-   * its chord, all read at menu-open time like Go To Line's. Omitted (or `absent`) draws no item.
+   * v1 review (#732), superseding 043 FR-015's placement — Find, Replace and Replace All act on the text, so the body
+   * menu offers them. Absent draws none (a builder test that does not care).
    */
-  openPreview?: { affordance: PreviewAffordance; open: () => void; chord?: string };
-  /**
-   * 044 FR-122b — Synchronise Scrolling: the setting's current value, the toggle (`toggleSyncScroll`) and
-   * `preview.toggleSyncScroll`'s chord, read at menu-open time. Drawn only where Open Preview is drawn
-   * (FR-122a) — the affordance above decides that, so this is omitted or ignored everywhere else.
+  search?: EditorSearchMenuArgs;
+  /*
+   * v1 review (#732) — Split, Open Preview, Print…, Synchronise Scrolling and the format rows are about the panel or its
+   * file, so they are the TITLE menu's alone (`panel-header-menu.ts`); this menu no longer takes them.
    */
-  syncScroll?: { on: boolean; toggle: () => void; chord?: string };
-  /**
-   * 075 FR-064a — Print… (`editor.print`), the command the header row and the chord run, and its chord read at
-   * menu-open time. Absent draws none.
-   */
-  print?: { run: () => void; chord?: string };
-  /** The document's effective language NAME, shown on the Set Language item so the menu states the
-   *  current value as well as offering to change it (024 US1 follow-up). */
-  languageName?: string;
-  /** 055 FR-024b — Reset Language; `enabled` while the document has a manual override. Absent draws none. */
-  resetLanguage?: { enabled: boolean; reset: () => void };
-  /**
-   * 059 FR-058 — the Encoding item, beside Set Language: the encoding indicator's own list as a submenu, and
-   * `editor.changeEncoding`'s chord on the item. Absent draws none.
-   */
-  encoding?: EncodingMenuArgs & { changeChord?: string };
-  /**
-   * 059 FR-058, FR-061 — the Line Endings item after it: the indicator's list plus Insert Line Break (LF) /
-   * (CR) / (CRLF). Absent draws none.
-   */
-  lineEndings?: LineEndingMenuArgs & { insert: InsertLineBreakArgs };
   /**
    * 047 US3 (FR-036, contracts "Editor body menu") — the four fold rows, present only for a
    * Markdown document; `undefined` draws none of them. `section` is the innermost section
@@ -298,7 +363,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
   // shortcuts shown here are the native bindings the editor is wired to (Mod-x/c/v/a, and Mod-z / Mod-y,
   // Mod-Shift-z on macOS, in use-editor.ts), in this platform's form (`fixedShortcut`: Cmd on macOS).
   // v1 review (#732): the clipboard rows are one group and Undo / Redo the next, the order every content menu uses.
-  return withSplit([
+  const items: MenuAction[] = [
     // Never disabled for want of a selection (FR-012b): with none, they act on the caret's whole
     // line. A greyed-out Copy on the line the user just right-clicked is a refusal to do the
     // obvious thing.
@@ -364,6 +429,39 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       shortcut: fixedShortcut('redo'),
       onClick: () => win()?.editor?.redo({ panelId, viewId }),
     },
+    /*
+     * v1 review (#732), superseding 043 FR-015's placement — Find, Replace and Replace All, in Content because all
+     * three act on the text: Find moves the caret through it and Replace rewrites it. A group of their own below
+     * Undo / Redo. Each shows the chord it is bound to now.
+     */
+    ...(args.search !== undefined
+      ? [
+          {
+            label: 'Find',
+            icon: 'search' as const,
+            section: 'content' as const,
+            group: 'search',
+            shortcut: args.search.chords?.find,
+            onClick: () => args.search?.find(),
+          },
+          {
+            label: 'Replace',
+            icon: 'replace' as const,
+            section: 'content' as const,
+            group: 'search',
+            shortcut: args.search.chords?.replace,
+            onClick: () => args.search?.replace(),
+          },
+          {
+            label: 'Replace All',
+            icon: 'replaceAll' as const,
+            section: 'content' as const,
+            group: 'search',
+            shortcut: args.search.chords?.replaceAll,
+            onClick: () => args.search?.replaceAll(),
+          },
+        ]
+      : []),
     {
       // 033 US2 (FR-027) — the menu route to Go To Line, showing the chord it is bound to right now.
       //
@@ -376,98 +474,6 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       shortcut: args.gotoLine.chord,
       onClick: () => args.gotoLine.open(),
     },
-    /*
-     * 044 FR-002 — Open Preview, in Navigate immediately after Go To Line… (contracts/menus-and-controls.md
-     * §3). It moves the user to a rendering of this file rather than changing the file, which is what
-     * puts it beside Go To Line. Absent where a preview means nothing (no provider, no file, outside the
-     * project — FR-001, FR-004); DISABLED only while the provider is off (FR-062). v1 review (#732): ENABLED
-     * while the file already has its one preview (FR-012), where `preview.open` focuses that preview. Every
-     * panel action has a menu item: this is the one for the status-bar button.
-     */
-    ...(args.openPreview !== undefined && args.openPreview.affordance.state !== 'absent'
-      ? [
-          {
-            label: 'Open Preview',
-            // 074 FR-103 — the provider's own preview icon.
-            icon: previewIconOf(args.openPreview.affordance.provider),
-            section: 'navigate' as const,
-            shortcut: args.openPreview.chord,
-            disabled: args.openPreview.affordance.state === 'disabled' && args.openPreview.affordance.reason === 'provider-disabled',
-            onClick: () => args.openPreview?.open(),
-          },
-        ]
-      : []),
-    // 075 FR-064a, FR-063 — Print…, with the other ways out of the document, as a preview's body menu has it.
-    ...(args.print !== undefined
-      ? [
-          {
-            label: 'Print…',
-            icon: 'print' as const,
-            section: 'navigate' as const,
-            group: 'print',
-            shortcut: args.print.chord,
-            onClick: () => args.print?.run(),
-          },
-        ]
-      : []),
-    {
-      // The second of the two entry points FR-010 asks for; the status strip is the other, and both
-      // open the SAME picker. No keyboard shortcut — it is reachable only from the two menus.
-      //
-      // The label NAMES the current language, because with the status bar hidden this menu is the
-      // only place the answer appears — and "what did the editor decide this file is?" is half the
-      // reason the item exists (FR-010). The test id is pinned to the bare label so it survives the
-      // language changing, exactly as the Word Wrap item pins its own.
-      label: args.languageName ? `Set Language… (${args.languageName})` : 'Set Language…',
-      testId: 'menu-item-Set Language…',
-      icon: 'language' as const,
-      section: 'viewState',
-      onClick: () => requestLanguagePicker(panelId),
-    },
-    /*
-     * 055 FR-024b — the menu route to the status strip's reset control, so it survives a hidden status bar.
-     * Present whenever the caller supplies it, DISABLED while the document has no override (the Open Preview
-     * precedent): an item that appears and vanishes would move everything below it.
-     */
-    ...(args.resetLanguage !== undefined
-      ? [
-          {
-            label: 'Reset Language',
-            testId: 'menu-item-Reset Language',
-            icon: 'destroy' as const,
-            section: 'viewState' as const,
-            disabled: !args.resetLanguage.enabled,
-            onClick: () => args.resetLanguage?.reset(),
-          },
-        ]
-      : []),
-    /*
-     * 059 FR-058 — Encoding and Line Endings, beside Set Language in View State, each naming the current state
-     * as Set Language names the language, and each holding its indicator's own list. With the status bar
-     * hidden these are the route (FR-033); the indicators are accelerators over them. Test ids pinned to the
-     * bare labels, so they survive the state changing.
-     */
-    ...(args.encoding
-      ? [
-          {
-            label: `Encoding (${encodingLabel(args.encoding.current.encoding, args.encoding.current.hasBom)})`,
-            testId: 'menu-item-Encoding',
-            section: 'viewState' as const,
-            shortcut: args.encoding.changeChord,
-            submenu: encodingMenuItems(args.encoding),
-          },
-        ]
-      : []),
-    ...(args.lineEndings
-      ? [
-          {
-            label: `Line Endings (${lineEndingLabel(args.lineEndings.lineEnding, args.lineEndings.mixed)})`,
-            testId: 'menu-item-Line Endings',
-            section: 'viewState' as const,
-            submenu: [...lineEndingMenuItems(args.lineEndings), ...insertLineBreakItems(args.lineEndings.insert)],
-          },
-        ]
-      : []),
     {
       // 024 US1 (#152) / Principle VI: every panel action has a menu item, even one also on the
       // status bar — so it survives a hidden status bar. The checked mark renders the current state.
@@ -495,35 +501,13 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
         ]
       : []),
     /*
-     * 044 FR-122b — Synchronise Scrolling, after Word Wrap and in its idiom (contracts/menus-and-controls.md
-     * §3, §10). Present exactly where Open Preview is — ENABLED even while that item is disabled, because
-     * the setting applies whether or not a preview can be opened right now (FR-122a). Every panel action
-     * has a menu item: this is the one for the status-bar toggle, so a hidden bar strands nothing.
-     */
-    ...(args.syncScroll !== undefined &&
-    args.openPreview !== undefined &&
-    args.openPreview.affordance.state !== 'absent' &&
-    // 054 — none for a source whose preview is one picture (a Mermaid file).
-    supportsScrollSync(args.openPreview.affordance.provider)
-      ? [
-          {
-            label: 'Synchronise Scrolling',
-            checked: args.syncScroll.on,
-            testId: 'menu-item-Synchronise Scrolling',
-            icon: 'syncScroll' as const,
-            section: 'viewState' as const,
-            shortcut: args.syncScroll.chord,
-            onClick: () => args.syncScroll?.toggle(),
-          },
-        ]
-      : []),
-    /*
      * 054 FR-010 (superseding 047 FR-036's placement) — every fold row in ONE Outlining submenu,
      * Markdown documents only (FR-014), built by the builder the preview's menu uses too, so the two
      * cannot drift.
      */
     ...(args.markdownFold ? [outliningSubmenu(args.markdownFold)] : []),
-  ], args.split);
+  ];
+  return items;
 }
 
 /**

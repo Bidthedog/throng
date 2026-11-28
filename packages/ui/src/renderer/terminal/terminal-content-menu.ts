@@ -5,13 +5,9 @@
  * table of fixtures, and a menu assembled inside a `useCallback` cannot be driven at all. The
  * extraction moves code without altering a label, an icon, an action or a condition (N6).
  *
- * **One visible change**, and it is deliberate: the separator that used to sit between *Refresh /
- * redraw terminal* and *Try again* is gone. Both are View & state, and FR-050 permits a divider only
- * at a real section boundary.
- *
- * *Why the failure trio is View & state* (adjudicated once, applied in both menus that carry it):
- * each of the three acts on the panel's FAILED STATE — retry it, report it, discard it — rather than
- * on the content. *Copy details* copies a description of that state, not the panel's content.
+ * v1 review (#732): the body menu holds what acts on the terminal's text: Copy, Paste and Find. Split, Refresh / redraw
+ * terminal, the per-terminal toggles and the start failure's three commands are about the panel, so they are the
+ * TITLE menu's (`workspace/panel-header-menu.ts`).
  *
  * ══ THIS MENU NO LONGER CARRIES ANY LINK ROW (045 round four, FR-169 – FR-171) ══
  *
@@ -24,15 +20,12 @@
 import type { IconKey } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { fixedShortcut } from '../common/fixed-shortcut.js';
-import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 
 export interface TerminalContentMenuActions {
   copySelection: () => void;
   paste: () => void;
-  redraw: () => void;
-  tryAgain: () => void;
-  copyDetails: () => void;
-  clearPanelType: () => void;
+  /** v1 review (#732) — open this terminal's find bar (`search.find`). Absent draws no Find row. */
+  find?: () => void;
 }
 
 /** 076 FR-005 — one status-bar toggle as its menu item: the label, the resolved value, the chord and the flip. */
@@ -46,21 +39,15 @@ export interface TerminalMenuToggle {
 }
 
 export interface TerminalContentMenuArgs {
-  /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
-  split?: SplitMenuArgs;
   /** The xterm selection captured when the user right-clicked — the menu acts on that, not on later. */
   selection: string;
-  /** The chord `terminal.redraw` is bound to right now, or undefined when it is unbound. */
-  redrawChord?: string;
-  /** Whether a start failure is live — the only state in which its three commands are meaningful. */
-  startFailure: boolean;
+  /** The chord `search.find` is bound to right now, or undefined when it is unbound. */
+  findChord?: string;
   actions: TerminalContentMenuActions;
-  /** 076 FR-005 — the panel's toggles, in status-bar order; always present, whether or not the bar is shown. */
-  toggles?: readonly TerminalMenuToggle[];
 }
 
 export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[] {
-  const { selection, redrawChord, startFailure, actions } = args;
+  const { selection, actions } = args;
 
   const items: MenuAction[] = [];
 
@@ -86,77 +73,21 @@ export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[]
     onClick: () => actions.paste(),
   });
 
-  items.push({
-    // 028 (issue 163) — the deliberate version of the divider nudge users discovered by
-    // accident. It asks the running program to redraw: no content, scrollback, selection,
-    // cursor, focus or layout changes, and nothing is typed at the shell.
-    label: 'Refresh / redraw terminal',
-    testId: 'menu-item-Refresh / redraw terminal',
-    section: 'viewState',
-    shortcut: redrawChord,
-    onClick: () => actions.redraw(),
-  });
-
   /*
-   * 076 FR-005 (constitution VI, "Every panel action is reachable") — the status-bar toggles as checkable items,
-   * in the editor's Word Wrap idiom: the check renders the panel's resolved value, and choosing one runs exactly
-   * the toggle's flip. Present whether or not `terminals.showStatusBar` hides the bar, and in a failed state too.
+   * v1 review (#732), superseding 043 FR-015's placement — Find, in Content with Copy and Paste because it acts on the
+   * terminal's text. A terminal has Find alone: its find is read-only (FR-013).
    */
-  for (const t of args.toggles ?? []) {
+  if (actions.find !== undefined) {
+    const find = actions.find;
     items.push({
-      label: t.label,
-      icon: t.icon,
-      checked: t.on,
-      settingToggle: true,
-      testId: `menu-item-${t.label}`,
-      section: 'viewState',
-      shortcut: t.chord,
-      onClick: () => t.toggle(),
+      label: 'Find',
+      icon: 'search',
+      section: 'content',
+      group: 'search',
+      shortcut: args.findChord,
+      onClick: () => find(),
     });
   }
 
-  /*
-   * 029 FR-004d — Retry and Clear as MENU ITEMS, not only as icons on the failure badge.
-   *
-   * The Constitution binds a feature that adds a panel action to add its menu item in the same
-   * increment, and FR-004a makes clearing a panel user-invoked for the first time: until now
-   * `clearPanelType` only ever ran automatically, as a side effect of a terminal ending. An
-   * action reachable solely by an icon on a transient badge is exactly the invisibility that
-   * rule exists to prevent.
-   *
-   * Shown only while a start failure is live, because that is the only state in which either
-   * is meaningful — offering "Try again" to a healthy terminal would be noise. The menu itself
-   * IS reachable in that state: its `onContextMenu` sits on a div rendered unconditionally, and
-   * the failure badge is a sibling of that div rather than a cover.
-   */
-  if (startFailure) {
-    items.push({
-      label: 'Try again',
-      testId: 'menu-item-Try again',
-      section: 'viewState',
-      /*
-       * The SAME retry the banner's control runs (030 FR-042c) — and it goes THROUGH the banner
-       * rather than calling `retryStart()` beside it. Calling `retryStart()` directly re-ran the
-       * attach correctly and never touched the banner's retry state, so a menu retry that failed
-       * left the banner standing and silent. Same command now means the same call.
-       */
-      onClick: () => actions.tryAgain(),
-    });
-    items.push({
-      // 030 FR-042c — the banner's THIRD command, in the menu beside the other two. Same text,
-      // same assembly, read through a ref so the menu copies the failure as it stands when it OPENS.
-      label: 'Copy details',
-      testId: 'menu-item-Copy details',
-      section: 'viewState',
-      onClick: () => actions.copyDetails(),
-    });
-    items.push({
-      label: 'Clear panel type',
-      testId: 'menu-item-Clear panel type',
-      section: 'viewState',
-      onClick: () => actions.clearPanelType(),
-    });
-  }
-
-  return withSplit(items, args.split);
+  return items;
 }

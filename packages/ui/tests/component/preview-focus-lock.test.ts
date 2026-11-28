@@ -1,7 +1,8 @@
 /**
  * 054 FR-074 (manual test change request, 2026-10-11) — while an inline diagram of a preview is maximised
  * over it, the preview's document is covered, so its Find, Go to Heading, Copy, Select All, Synchronise
- * Scrolling, Outlining and Split are drawn disabled and their keys do nothing.
+ * Scrolling and Outlining are drawn disabled and their keys do nothing. v1 review (#732): Split and Synchronise
+ * Scrolling are the title menu's now; the title menu draws Synchronise Scrolling disabled while covered.
  *
  * Layer: component — the claim is about what the REAL preview panel's body menu draws and what its key
  * handlers do, in a mounted window; the section target is registered the way `DiagramFrame` registers one
@@ -31,19 +32,29 @@ async function mountCovered(): Promise<{ body: HTMLElement; tabId: string }> {
   return { body, tabId };
 }
 
-const LOCKED_ROWS = ['Find…', 'Go to Heading…', 'Select All', 'Synchronise Scrolling', 'Outlining', 'Split'];
+const LOCKED_ROWS = ['Find…', 'Go to Heading…', 'Select All', 'Outlining'];
 
 function menuRow(label: string): HTMLElement {
   return screen.getByTestId(`menu-item-${label}`);
 }
 
 describe('a preview under its own maximised diagram (FR-074)', () => {
-  it('draws Find, Go to Heading, Select All, Synchronise Scrolling, Outlining and Split disabled in the body menu', async () => {
+  it('draws Find, Go to Heading, Select All and Outlining disabled in the body menu', async () => {
     const { body } = await mountCovered();
     fireEvent.contextMenu(body, { clientX: 5, clientY: 5 });
     await screen.findByTestId('menu-item-Find…');
     for (const label of LOCKED_ROWS) expect(menuRow(label), label).toHaveAttribute('aria-disabled', 'true');
     expect(menuRow('Copy'), 'Copy').toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('draws the title menu’s Synchronise Scrolling disabled, and enabled once the diagram is minimised', async () => {
+    const { tabId } = await mountCovered();
+    fireEvent.contextMenu(screen.getByTestId('panel-handle-p1'), { clientX: 5, clientY: 5 });
+    expect(await screen.findByTestId('menu-item-Synchronise Scrolling')).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    act(() => restoreAll(tabId));
+    fireEvent.contextMenu(screen.getByTestId('panel-handle-p1'), { clientX: 5, clientY: 5 });
+    expect(await screen.findByTestId('menu-item-Synchronise Scrolling')).toHaveAttribute('aria-disabled', 'false');
   });
 
   it('enables them again once the diagram is minimised', async () => {

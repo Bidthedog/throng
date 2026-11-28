@@ -8,8 +8,12 @@
  * | Section    | Items                                                               | When                                   |
  * |------------|---------------------------------------------------------------------|----------------------------------------|
  * | Content    | Copy · Copy as ▸ (Rich Text · Plain Text) · Select All              | the provider draws selectable text (Select All: a flowing document or a page, FR-085a) |
- * | Navigate   | Open in Editor                                                      | a text provider (never binary, FR-015e) |
- * | View & state | Synchronise Scrolling *(its chord)*, checked while on             | a text provider, whatever is under the pointer (FR-122b) |
+ * | Navigate   | Find…, Go to Heading… / Go to Page…                                 | text to find; somewhere to go (FR-062b) |
+ * | View & state | the page layouts, Outlining ▸                                     | a paged body; a Markdown document      |
+ *
+ * v1 review (#732): Split, Open in Editor, Copy Path ▸, Print… and Synchronise Scrolling are about the panel or its
+ * file, so the TITLE menu holds them (`workspace/panel-header-menu.ts`) and this menu no longer does. An inline
+ * element keeps the rows that act on it alone (Copy Image, Copy Diagram as Image, the diagram's own Focus Mode).
  *
  * ══ THIS MENU NO LONGER CARRIES ANY LINK ROW (045 round four, FR-169 – FR-171) ══
  *
@@ -28,15 +32,11 @@
  * selecting text is what enables them. Select All is never disabled. Copy and Select All show the native
  * chords the body answers (Ctrl+C is the intercepted copy gesture, Ctrl+A the body's scoped select-all);
  * like the editor's, they are fixed and not on the rebindable command list.
- *
- * **Navigate.** The mirror of an editor's Open Preview, in the section it occupies there (FR-015b).
  */
 import type { IconKey, PreviewCopyFormat, PreviewGoToKind, PreviewLink } from '@throng/core';
 import type { PageLayout } from './provider-view.js';
 import type { MenuAction } from '../workspace/context-menu.js';
-import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 import { outliningSubmenu, type OutliningArgs } from '../common/outlining-menu.js';
-import { copyPathSubmenu, type PathForms } from '../common/copy-path-menu.js';
 import { fixedShortcut } from '../common/fixed-shortcut.js';
 import { copyAsSubmenu } from '../common/copy-as-menu.js';
 
@@ -55,33 +55,11 @@ export interface PreviewContentSection {
   pageSelectAll?: boolean;
 }
 
-/** The Navigate section's route back to the source: present for a text provider only (FR-015e). */
-export interface PreviewEditorRouteItem {
-  /** *Open in Editor*: focuses the parent or an editor of the file, else places one (`runPreviewEditorRoute`). */
-  run: () => void;
-  /** 050 R26 — the file moved to another project: the row is drawn disabled. */
-  disabled?: boolean;
-}
-
 export interface PreviewContentMenuArgs {
-  /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
-  split?: SplitMenuArgs;
-  /**
-   * 074 FR-028, FR-068a — the previewed file's path in the File Explorer's four forms: Copy Path is offered. Omitted or
-   * `null` (a file outside the project): no Copy Path.
-   */
-  copyPath?: PathForms | null;
   /** Whether the body's selection was collapsed when the menu was asked for. */
   selectionEmpty: boolean;
   /** Omitted or `null`: no Content section (a provider without selectable text). */
   content?: PreviewContentSection | null;
-  /** Omitted or `null`: no Navigate section (a binary provider). */
-  editorRoute?: PreviewEditorRouteItem | null;
-  /**
-   * 044 FR-122b — the View & state section's Synchronise Scrolling: the setting's value, the toggle and its
-   * chord. Omitted or `null`: no such section (a binary provider, FR-122a).
-   */
-  syncScroll?: { on: boolean; toggle: () => void; chord?: string } | null;
   /**
    * 047 US1 (FR-007, contracts/menus-commands-controls.md "Preview body menu") — always present,
    * whatever the provider or what is under the pointer: every preview offers `search.find` from its
@@ -103,11 +81,6 @@ export interface PreviewContentMenuArgs {
    */
   goToHeading: { run: () => void; chord?: string; kind?: PreviewGoToKind };
   /**
-   * 075 FR-062, FR-063 — Print…, always drawn. `unavailable` is the hover of a provider that cannot print, whose
-   * row is drawn disabled. Omitted: no row (a builder caller predating 075).
-   */
-  print?: { run: () => void; chord?: string; unavailable?: string };
-  /**
    * 047 US3 (FR-036, contract "Preview body menu") — the fold rows, present only for a Markdown
    * document; omitted or `null` draws none of them. Mirrors the editor's own `markdownFold` arg
    * (`editor/content-menu.ts`) exactly: `section` is the innermost section containing the point the
@@ -118,7 +91,7 @@ export interface PreviewContentMenuArgs {
   fold?: OutliningArgs | null;
   /**
    * 054 FR-074 — an inline diagram of this panel is maximised over it: the document is covered, so Find,
-   * Go to Heading, Copy, Select All, Synchronise Scrolling and Outlining are drawn disabled (Principle VI).
+   * Go to Heading, Copy, Select All and Outlining are drawn disabled (Principle VI).
    */
   focusLocked?: boolean;
   /**
@@ -166,7 +139,7 @@ export function linkAddress(link: PreviewLink, docPath: string): string {
 }
 
 export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
-  const { selectionEmpty, content, editorRoute, syncScroll, find, goToHeading, fold } = args;
+  const { selectionEmpty, content, find, goToHeading, fold } = args;
   const locked = args.focusLocked === true;
   const flowing = args.flowingDocument !== false;
   const lockedOut = locked ? { disabled: true } : {};
@@ -231,18 +204,6 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
     });
   }
 
-  if (args.copyPath) items.push(copyPathSubmenu(args.copyPath, 'navigate'));
-
-  if (editorRoute) {
-    items.push({
-      label: 'Open in Editor',
-      icon: 'editorPanel',
-      section: 'navigate',
-      disabled: editorRoute.disabled === true,
-      onClick: () => editorRoute.run(),
-    });
-  }
-
   if (args.pageLayout) {
     const pageLayout = args.pageLayout;
     for (const row of PAGE_LAYOUT_ROWS) {
@@ -256,19 +217,6 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
     }
   }
 
-  if (syncScroll) {
-    items.push({
-      label: 'Synchronise Scrolling',
-      checked: syncScroll.on,
-      testId: 'menu-item-Synchronise Scrolling',
-      icon: 'syncScroll',
-      section: 'viewState',
-      ...(syncScroll.chord !== undefined ? { shortcut: syncScroll.chord } : {}),
-      ...lockedOut,
-      onClick: () => syncScroll.toggle(),
-    });
-  }
-
   /*
    * 047 US3 (FR-036, contracts "Preview body menu") — the fold rows, Markdown documents only. Exactly
    * one of Collapse/Expand This Section is drawn (never both — `section.collapsed` decides which),
@@ -279,19 +227,5 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
   // editor's menu uses too, so the two menus cannot drift (R3).
   if (fold) items.push({ ...outliningSubmenu(fold), ...lockedOut });
 
-  // 075 FR-063 — Print…, with the other ways out of the panel's document.
-  if (args.print) {
-    const print = args.print;
-    items.push({
-      label: 'Print…',
-      icon: 'print',
-      section: 'navigate',
-      group: 'print',
-      ...(print.chord !== undefined ? { shortcut: print.chord } : {}),
-      ...(print.unavailable !== undefined ? { disabled: true, title: print.unavailable } : locked ? { disabled: true } : {}),
-      onClick: () => print.run(),
-    });
-  }
-
-  return withSplit(items, args.split);
+  return items;
 }

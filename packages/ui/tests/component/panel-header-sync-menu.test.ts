@@ -228,16 +228,12 @@ describe('a mounted editor (panel-placeholder.tsx, use-editor.ts)', () => {
     expect(writePatch.mock.calls[0]?.[1]).toEqual(PATCH);
   });
 
-  it('the body item is checked from the settings and writes the one key once', async () => {
+  it('the body menu carries no Synchronise Scrolling: it is the title menu\'s (v1 review, #732)', async () => {
     const h = await mountEditorPanel();
     await screen.findByTestId(`editor-sync-scroll-${PANEL}`, {}, COLD);
-    const writePatch = spyPatches();
     fireEvent.contextMenu(h.content(), { clientX: 10, clientY: 10 });
-    const item = await screen.findByTestId(SYNC);
-    expect(item).toHaveAttribute('aria-checked', 'true');
-    fireEvent.click(item);
-    await waitFor(() => expect(writePatch).toHaveBeenCalledTimes(1));
-    expect(writePatch.mock.calls[0]?.[1]).toEqual(PATCH);
+    await screen.findByTestId('menu-item-Word Wrap');
+    expect(screen.queryByTestId(SYNC)).toBeNull();
   });
 
   it('offers neither item on an editor whose file no provider claims', async () => {
@@ -251,14 +247,11 @@ describe('a mounted editor (panel-placeholder.tsx, use-editor.ts)', () => {
     expect(screen.queryByTestId(SYNC)).toBeNull();
   });
 
-  it('G1 — with the status bar hidden, both menu items are still offered, enabled', async () => {
-    const h = await mountEditorPanel({ settings: { editor: { showStatusBar: false } } });
+  it('G1 — with the status bar hidden, the title menu item is still offered, enabled', async () => {
+    await mountEditorPanel({ settings: { editor: { showStatusBar: false } } });
     expect(screen.queryByTestId(`editor-status-strip-${PANEL}`)).toBeNull();
     fireEvent.contextMenu(screen.getByTestId(`panel-handle-${PANEL}`), { clientX: 10, clientY: 10 });
     await waitFor(() => expect(screen.getByTestId(SYNC)).toHaveAttribute('aria-disabled', 'false'));
-    fireEvent.contextMenu(h.content(), { clientX: 10, clientY: 10 });
-    await screen.findByTestId('menu-item-Word Wrap');
-    expect(screen.getByTestId(SYNC)).toHaveAttribute('aria-disabled', 'false');
   });
 
   it('G2 — the status-bar button goes with the whole bar, and only with it', async () => {

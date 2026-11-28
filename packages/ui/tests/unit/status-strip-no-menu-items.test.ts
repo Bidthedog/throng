@@ -29,7 +29,7 @@ import type { EditorView } from '@codemirror/view';
 import { describe, expect, it } from 'vitest';
 import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
 
-/** The menu as an open editor would build it, with wrap on and a language resolved. */
+/** The menu as an open editor would build it, with wrap on. */
 function menu() {
   return editorContentMenu({
     view: {} as EditorView,
@@ -38,7 +38,6 @@ function menu() {
     lineEnding: () => 'lf',
     wordWrap: { on: true, toggle: () => {}, chord: 'Ctrl+Alt+W' },
     gotoLine: { open: () => {}, chord: 'Ctrl+G' },
-    languageName: 'Rust',
   });
 }
 
@@ -60,7 +59,8 @@ describe('the readouts are readouts, not actions (FR-009)', () => {
   it('leaves the menu exactly as 016, 024 and 033 left it', () => {
     /*
      * The menu's item list is pinned, so an addition of ANY kind (a readout item, which has nothing to invoke)
-     * fails here. It also keeps the two items that ARE actions on the bar, Word Wrap and Set Language (FR-009).
+     * fails here. It also keeps Word Wrap, an action on the bar (FR-009); Set Language… moved to the title menu with
+     * the other format rows (v1 review, #732).
      */
     expect(menu().map((item) => `${item.label}${item.checked ? ' ✓' : ''}`)).toEqual([
       'Cut',
@@ -70,7 +70,6 @@ describe('the readouts are readouts, not actions (FR-009)', () => {
       'Undo',
       'Redo',
       'Go To Line…',
-      'Set Language… (Rust)',
       'Word Wrap ✓',
     ]);
   });

@@ -1,5 +1,7 @@
 /**
- * 048 US2 — a Split submenu on the panel header menu and on the content (right-click) menu.
+ * 048 US2 — a Split submenu on the panel header menu. v1 review (#732, amending 048 FR-015): Split acts on the panel,
+ * so it is the TITLE menu's alone. The body menus no longer carry it, and the untyped placeholder's and a dormant
+ * terminal's bodies, whose only row it was, open no menu at all.
  *
  * `unit/menu-sections.test.ts` pins where the row sits and what it holds; this file drives the real
  * menus: right-click the untyped placeholder (which had NO content menu before 048), right-click a
@@ -121,18 +123,15 @@ afterEach(() => {
   Reflect.deleteProperty(window, 'throng');
 });
 
-describe('the untyped placeholder gains a content menu carrying Split alone (FR-015)', () => {
-  it('right-clicking inside it opens Split, and Split ▸ Split Down splits that panel', async () => {
+describe('the untyped placeholder’s body opens no menu (v1 review, #732)', () => {
+  it('right-clicking inside it opens nothing; its title menu’s Split ▸ Split Down splits that panel', async () => {
     const user = userEvent.setup({ delay: null });
     mountTabGroup();
     await user.pointer({ keys: '[MouseRight]', target: await screen.findByTestId('panel-body-p1') });
+    expect(menu(), 'the body opened a menu').toBeNull();
 
-    const root = await screen.findByTestId('context-menu');
-    const rows = [...root.querySelectorAll(':scope > [role="menuitem"] > .context-menu__label')].map((el) => el.textContent);
-    expect(rows, 'Split is the only item').toEqual(['Split']);
-    expect(root.querySelector('[role="separator"]'), 'one section, so no divider').toBeNull();
-
-    await user.click(screen.getByTestId('menu-item-Split'));
+    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId('panel-handle-p1') });
+    await user.click(await screen.findByTestId('menu-item-Split'));
     await user.click(await screen.findByTestId('menu-item-Split Down'));
 
     await waitFor(() => expect(idsIn('t1')).toHaveLength(2));
@@ -146,8 +145,8 @@ describe('the untyped placeholder gains a content menu carrying Split alone (FR-
   });
 });
 
-describe('a DORMANT terminal’s body has a content menu carrying Split (FR-015, T062)', () => {
-  it('right-clicking inside the dormant placeholder opens Split, and Split ▸ Split Right splits that panel', async () => {
+describe('a DORMANT terminal’s body opens no menu (v1 review, #732)', () => {
+  it('right-clicking inside the dormant placeholder opens nothing', async () => {
     const user = userEvent.setup({ delay: null });
     mountTabGroup();
     await screen.findByTestId('panel-body-p1');
@@ -159,20 +158,7 @@ describe('a DORMANT terminal’s body has a content menu carrying Split (FR-015,
     });
     await screen.findByTestId('terminal-dormant-p1');
     await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId('terminal-dormant-p1') });
-
-    const root = await screen.findByTestId('context-menu');
-    const rows = [...root.querySelectorAll(':scope > [role="menuitem"] > .context-menu__label')].map((el) => el.textContent);
-    expect(rows, 'Split is the only item').toEqual(['Split']);
-
-    await user.click(screen.getByTestId('menu-item-Split'));
-    await user.click(await screen.findByTestId('menu-item-Split Right'));
-    await waitFor(() => expect(idsIn('t1')).toHaveLength(2));
-    const tree = live().layout!.tabs[0]!.root;
-    expect(tree.type).toBe('split');
-    if (tree.type === 'split') {
-      expect(tree.orientation).toBe('row');
-      expect(tree.children[0]).toMatchObject({ id: 'p1' });
-    }
+    expect(menu(), 'the dormant body opened a menu').toBeNull();
   });
 });
 
@@ -226,9 +212,8 @@ describe('the header menu offers Split, reachable and chosen from the keyboard (
   });
 });
 
-describe('an editor’s content menu offers Split and splits that editor (FR-015)', () => {
-  it('right-click inside the document → Split ▸ Split Right', async () => {
-    const user = userEvent.setup({ delay: null });
+describe('an editor’s content menu carries no Split (v1 review, #732)', () => {
+  it('right-click inside the document opens the body menu without a Split row', async () => {
     const holder: { ws: ReturnType<typeof useWorkspace> | null } = { ws: null };
     const EditorProbe = (): null => {
       holder.ws = useWorkspace();
@@ -248,16 +233,10 @@ describe('an editor’s content menu offers Split and splits that editor (FR-015
       await act(async () => {
         fireEvent.contextMenu(content, { clientX: 20, clientY: 10 });
       });
-      const root = await screen.findByTestId('context-menu');
-      expect(root.textContent).toContain('Split');
-
-      await user.click(screen.getByTestId('menu-item-Split'));
-      await user.click(await screen.findByTestId('menu-item-Split Right'));
-
-      await waitFor(() => {
-        const layout = holder.ws!.layout!;
-        expect(collectPanels(layout.tabs[0]!.root)).toHaveLength(2);
-      });
+      await screen.findByTestId('context-menu');
+      expect(screen.getByTestId('menu-item-Cut')).toBeTruthy();
+      expect(screen.queryByTestId('menu-item-Split')).toBeNull();
+      expect(collectPanels(holder.ws!.layout!.tabs[0]!.root)).toHaveLength(1);
     } finally {
       mounted.unmount();
     }

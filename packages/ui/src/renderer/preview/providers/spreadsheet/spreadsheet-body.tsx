@@ -87,7 +87,7 @@ function parseOffThread(bytes: ArrayBuffer, id: number): Promise<WorkbookRead> {
 }
 
 export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
-  const { panelId, content, filePath, providerSettings, registerGoTo, navigationSeq, onDrawn, onBodyFailure, onViewStateCapture, readSource, onCopyCapped, onPrint, zoom = 1 } = props;
+  const { panelId, content, filePath, providerSettings, registerGoTo, navigationSeq, onDrawn, onBodyFailure, onViewStateCapture, readSource, onCopyCapped, gridToggles, zoom = 1 } = props;
   const source = content.kind === 'resource' ? content.url : '';
   const firstRowHeader = providerSettings.firstRowHeader === true;
   const settings = useAppSettings();
@@ -240,18 +240,18 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
       const items = spreadsheetMenu({
         target,
         keybindings,
+        ...(gridToggles !== undefined ? { toggles: gridToggles } : {}),
         actions: {
           copy: (format) => copy(range, format),
           selectAll: () => grid.selectAll(),
           goToRow: goTo.open,
           columnWidth: (col) => setWidthPrompt({ col, value: String(sheetWidths[col] ?? GRID_DEFAULT_COLUMN_WIDTH) }),
           resetWidth,
-          ...(onPrint !== undefined ? { print: onPrint } : {}),
         },
       });
       openMenu(point.x, point.y, items);
     },
-    [colCount, copy, goTo.open, keybindings, onPrint, openMenu, resetWidth, sheetWidths],
+    [colCount, copy, goTo.open, gridToggles, keybindings, openMenu, resetWidth, sheetWidths],
   );
 
   // 075 FR-075b — what Print… prints: the sheet on screen, every row, read when it runs; with First row is header on,
