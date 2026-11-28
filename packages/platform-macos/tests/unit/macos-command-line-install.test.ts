@@ -84,7 +84,8 @@ describe.skipIf(skipOnWindows('installs a POSIX symlink into a real temporary pr
       (error: Error) => error.message,
     );
     expect(failure).toBe(`The 'throng' command could not be installed: ln: ${linkPath}: Permission denied.`);
-    expect(failure).not.toMatch(/\bE[A-Z]{3,}\b|execution error|\(1\)|at stack/);
+    // The temp folder's random suffix can itself read as an errno ("ESZJEN"), so the path is taken out first.
+    expect(failure.replace(linkPath, '<link>')).not.toMatch(/\bE[A-Z]{3,}\b|execution error|\(1\)|at stack/);
   });
 
   it('refuses to replace another program in words the notice can show as they are', async () => {
