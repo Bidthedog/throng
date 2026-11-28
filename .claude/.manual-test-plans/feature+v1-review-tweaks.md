@@ -24,6 +24,10 @@ Spec: `specs/081-v1-fixes-and-tweaks/spec.md`
 | MT-18 | Body menus hold the content, title menus the panel | untested | | | |
 | MT-19 | Ctrl+Shift+N makes a folder in the File Explorer | untested | | | |
 | MT-20 | Markdown outlining from the keyboard and the "…" | untested | | | |
+| MT-21 | Unflag a marked panel; Wrap cell contents | untested | | | |
+| MT-22 | Rename above New File in the File Explorer | untested | | | |
+| MT-23 | Copy as is the only copy row on preview and grid menus | untested | | | |
+| MT-24 | A preview's Outlining rows show no keys | untested | | | |
 
 ## MT-01: Menu order and the panel title menu's groups
 
@@ -279,3 +283,53 @@ Paths: `packages/ui/src/renderer/editor/markdown-fold.ts`, `packages/core/src/co
 ### Negative cases
 - In an editor of any other language, Ctrl+M keeps the editor's own meaning and folds nothing.
 - On a config folder from before this build that never rebound the outlining keys, the four new keys work after the upgrade; a key you set yourself is kept.
+
+## MT-21: Unflag a marked panel; Wrap cell contents
+
+Paths: `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/core/src/attention/attention-model.ts`, `packages/ui/src/main/attention-service.ts`, `packages/ui/src/preload/preload.cts`, `packages/core/src/icons/default-set/unflag.svg`, `packages/ui/src/renderer/grid/grid-menu-items.ts`
+
+### Steps
+1. Open a panel's title menu and choose **Flag**. The panel is marked.
+2. Open the same menu again. The row now reads **Unflag**, with a crossed-out flag icon.
+3. Choose **Unflag**. The mark goes at once, from the panel, its tab and its project.
+4. Let a terminal raise a mark of its own (a bell or a failed command), then open its title menu: it offers **Unflag**, and choosing it clears that mark too.
+5. Right-click a cell in a CSV preview. The toggle row reads **Wrap cell contents**; the status bar's toggle still reads **Wrap**.
+
+### Negative cases
+- An unmarked panel's menu shows **Flag**, never **Unflag**.
+
+## MT-22: Rename above New File in the File Explorer
+
+Paths: `packages/ui/src/renderer/explorer/context-menu-items.ts`
+
+### Steps
+1. Right-click a file in the File Explorer. The rows run Cut, Copy, Paste, then Undo, Redo, then **Rename**, New File, New Folder, with a divider above Rename.
+2. Right-click a folder. Same order.
+3. Choose **Rename**. The row's name box opens.
+
+### Negative cases
+- Right-click the empty space below the tree (the root): there is no Rename.
+
+## MT-23: Copy as is the only copy row on preview and grid menus
+
+Paths: `packages/ui/src/renderer/common/copy-as-menu.ts`, `packages/ui/src/renderer/preview/content-menu.ts`, `packages/ui/src/renderer/preview/providers/csv/csv-menu.ts`, `packages/ui/src/renderer/preview/providers/spreadsheet/spreadsheet-menu.ts`, `packages/ui/src/renderer/grid/grid-menu-items.ts`
+
+### Steps
+1. Open a Markdown preview, select some text and right-click it. There is no plain **Copy** row; **Copy as** opens to **Rich Text** and **Plain Text**, and **Rich Text** shows **Ctrl+C**.
+2. Choose **Plain Text** and paste into a rich target (a mail draft or a document): no formatting.
+3. In **Cog › Settings › Editor › Previews**, set the copy format to Plain text. Right-click the selection again: now **Plain Text** shows **Ctrl+C**.
+4. Right-click a cell in a CSV preview, then a column header and a row header. Each menu has **Copy as** and no plain **Copy**; the leaf for the setting's format shows **Ctrl+C**.
+5. Do the same in a spreadsheet preview (.xlsx).
+6. Press **Ctrl+C** on a preview selection and on a grid selection: both copy in the setting's format, as before.
+
+### Negative cases
+- An editor's and a terminal's menus still show a plain **Copy** (they have no Copy as).
+
+## MT-24: A preview's Outlining rows show no keys
+
+Paths: `packages/ui/src/renderer/preview/preview-panel.tsx`
+
+### Steps
+1. Open a Markdown preview with a few headings and right-click a heading. **Outlining** lists its rows with no keys beside them.
+2. Choose **Collapse This H2** from it. The section collapses.
+3. Right-click the same heading in the Markdown editor. Its Outlining rows show their keys.
