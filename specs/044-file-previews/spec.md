@@ -1021,7 +1021,9 @@ restart; Back again. Repeat in a preview by following links.
     as Plain Text**, each copying in its named format whatever the setting — the same pattern #394
     uses for a default action with explicit alternatives in the menu. All three MUST be disabled
     while nothing is selected. *(Amended maintainer's v1 review, 2026-11-27: the two variants sit in one **Copy as ▸** submenu, rows
-    **Rich Text** and **Plain Text**, straight after Copy, as every menu in the app now offers them.)*
+    **Rich Text** and **Plain Text**, straight after Copy, as every menu in the app now offers them.)* *(Amended 2026-11-28, maintainer's v1 review, constitution 8.3.0: **Copy as ▸** replaces the plain **Copy** row
+    rather than sitting beside it. The leaf in the format the preview copy format setting picks shows the copy key,
+    which copies in that format; the other leaf shows none.)*
 
 #### Dirty state
 

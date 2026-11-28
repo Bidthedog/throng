@@ -44,7 +44,7 @@ describe('a preview under its own maximised diagram (FR-074)', () => {
     fireEvent.contextMenu(body, { clientX: 5, clientY: 5 });
     await screen.findByTestId('menu-item-Find…');
     for (const label of LOCKED_ROWS) expect(menuRow(label), label).toHaveAttribute('aria-disabled', 'true');
-    expect(menuRow('Copy'), 'Copy').toHaveAttribute('aria-disabled', 'true');
+    expect(menuRow('Copy as'), 'Copy as').toHaveAttribute('aria-disabled', 'true');
   });
 
   it('draws the title menu’s Synchronise Scrolling disabled, and enabled once the diagram is minimised', async () => {

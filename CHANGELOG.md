@@ -50,8 +50,8 @@ What changed in each release of throng, written for someone deciding whether to 
 ### Changed
 
 - On preview and grid menus, **Copy as** replaces the separate **Copy** row. The format the copy format setting picks shows **Ctrl+C**. ([guide](https://throng-ide.com/guide/previews/#copy-from-a-preview))
-- The File Explorer menu puts **Rename** above **New File**.
-- A preview's **Outlining** rows no longer show keys, because the outlining keys work in the editor only.
+- The File Explorer menu puts **Rename** above **New File**. ([guide](https://throng-ide.com/guide/files/#create-rename-and-delete-files-and-folders))
+- A preview's **Outlining** rows no longer show keys, because the outlining keys work in the editor only. ([guide](https://throng-ide.com/guide/editing/#fold-markdown-sections))
 - Every row of a Markdown editor's **Outlining** menu has a key: **Ctrl+M,E** expands the section, **Ctrl+M,X**
   expands all, and **Ctrl+M,Shift+S** / **Ctrl+M,Shift+E** collapse or expand everything inside the section. An install
   that left them unbound takes the new keys. ([guide](https://throng-ide.com/guide/editing/#fold-markdown-sections), [#732](https://github.com/Bidthedog/throng/issues/732))

@@ -183,16 +183,10 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
   });
 
   if (content) {
-    items.push({
-      label: 'Copy',
-      icon: 'copy',
-      section: 'content',
-      group: 'clipboard',
-      shortcut: fixedShortcut('copy'),
-      disabled: locked || selectionEmpty,
-      onClick: () => content.copy(content.copyFormat),
-    });
-    items.push(copyAsSubmenu({ section: 'content', group: 'clipboard', disabled: locked || selectionEmpty, copy: content.copy }));
+    // v1 review (2026-11-28): Copy as ▸ is the only copy row; the preference's format shows the copy key.
+    items.push(
+      copyAsSubmenu({ section: 'content', group: 'clipboard', disabled: locked || selectionEmpty, copy: content.copy, preferred: content.copyFormat }),
+    );
     if (flowing || content.pageSelectAll === true) items.push({
       label: 'Select All',
       icon: 'selectAll',

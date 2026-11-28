@@ -593,6 +593,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       const range = rangeOf(sel, colCount);
       const items = csvGridMenu({
         target,
+        copyFormat,
         sel,
         range,
         rowCount,
@@ -621,7 +622,7 @@ export function CsvBody(props: PreviewBodyProps): ReactElement {
       });
       openMenu(point.x, point.y, items);
     },
-    [askInsertMany, cellDialogAvailable, goTo.open, clearRange, colCount, copy, cut, deleteColumns, deleteRows, gridToggles, history, insertColumn, insertRows, keybindings, openCellDialog, openMenu, pasteFromMenu, resetWidth, rowCount, widths],
+    [askInsertMany, cellDialogAvailable, goTo.open, clearRange, colCount, copy, copyFormat, cut, deleteColumns, deleteRows, gridToggles, history, insertColumn, insertRows, keybindings, openCellDialog, openMenu, pasteFromMenu, resetWidth, rowCount, widths],
   );
 
   // FR-038a — a header menu adds Insert Copied Rows / Columns while whole rows / columns are what the clipboard

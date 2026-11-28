@@ -281,8 +281,7 @@ describe('previewContentMenu carries no Contextual section any more (FR-169)', (
     expect(items.map((i) => i.section)).toEqual([
       'navigate',
       'navigate',
-      // Copy, Copy as ▸, Select All (#732: the two formats live in the submenu).
-      'content',
+      // Copy as ▸, Select All (#732: the two formats live in the submenu; v1 review: it replaces the plain Copy).
       'content',
       'content',
     ]);

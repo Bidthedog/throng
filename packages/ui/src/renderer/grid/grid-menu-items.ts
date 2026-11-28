@@ -16,9 +16,9 @@ import type { GridViewToggles } from '../preview/provider-view.js';
 /** What the grid shows beside Clear Cells: the Delete key, which the grid handles itself. */
 export const CLEAR_CELLS_SHORTCUT = 'Del';
 
-/** The grid's Copy as ▸, after Copy in the clipboard group. */
-export function gridCopyAs(copy: (format: PreviewCopyFormat) => void): MenuAction {
-  return copyAsSubmenu({ section: 'content', group: 'clipboard', copy });
+/** The grid's Copy as ▸, its only copy row, in the clipboard group; `preferred`'s leaf shows the copy key. */
+export function gridCopyAs(copy: (format: PreviewCopyFormat) => void, preferred?: PreviewCopyFormat): MenuAction {
+  return copyAsSubmenu({ section: 'content', group: 'clipboard', copy, ...(preferred !== undefined ? { preferred } : {}) });
 }
 
 /**

@@ -245,11 +245,11 @@ describe('SpreadsheetBody', () => {
     });
 
     // FR-037g (convergence T104) — both grids: each Copy variant carries the copy icon, as the CSV grid's do.
-    it('draws the copy icon on Copy, Copy as Rich Text and Copy as Plain Text', async () => {
+    it('draws the copy icon on Copy as, Copy as Rich Text and Copy as Plain Text', async () => {
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
       menuWithSubmenu(document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!, 'Copy as');
-      for (const label of ['Copy', 'Copy as', 'Copy as Rich Text', 'Copy as Plain Text']) {
+      for (const label of ['Copy as', 'Copy as Rich Text', 'Copy as Plain Text']) {
         expect(drawnIcon(screen.getByTestId(`menu-item-${label}`)), label).toBe(iconMarkup('copy' as IconKey));
       }
     });
@@ -266,7 +266,7 @@ describe('SpreadsheetBody', () => {
 
 
     // T18 (2026-11-27), superseding 073 FR-050c: a workbook stays read-only, so the menus draw no editing row at all.
-    it('every grid menu offers Copy and Copy as, and draws no Cut, Paste, Clear Cells, delete or insert (T18)', async () => {
+    it('every grid menu offers Copy as (no plain Copy, v1 review), and draws no Cut, Paste, Clear Cells, delete or insert (T18)', async () => {
       mount('throng-preview://source/s1?rev=1');
       await waitFor(() => expect(cell(0, 0)).toBe('h1'));
       const cellEl = (): HTMLElement => document.querySelector<HTMLElement>('[data-grid-cell][data-row="0"][data-col="0"]')!;
@@ -289,16 +289,16 @@ describe('SpreadsheetBody', () => {
       ];
       const menus: [string, () => HTMLElement, string[]][] = [
         // v1 review (#732): Print… is the panel's title menu's, so no grid menu draws it.
-        ['cell', cellEl, ['Copy', 'Copy as', 'Select All', 'Go to Row…']],
-        ['row header', () => rowHead(0), ['Copy', 'Copy as', 'Select All', 'Go to Row…']],
-        ['column header', () => colHead(0), ['Copy', 'Copy as', 'Column Width…', 'Reset Column Width']],
-        ['corner', corner, ['Copy', 'Copy as', 'Go to Row…']],
+        ['cell', cellEl, ['Copy as', 'Select All', 'Go to Row…']],
+        ['row header', () => rowHead(0), ['Copy as', 'Select All', 'Go to Row…']],
+        ['column header', () => colHead(0), ['Copy as', 'Column Width…', 'Reset Column Width']],
+        ['corner', corner, ['Copy as', 'Go to Row…']],
       ];
       for (const [name, target, expected] of menus) {
         fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
         expect([...topLevel()].sort(), name).toEqual([...expected].sort());
         for (const label of editing) expect(screen.queryByTestId(`menu-item-${label}`), `${name}: ${label}`).toBeNull();
-        expect(screen.getByTestId('menu-item-Copy').getAttribute('aria-disabled'), name).not.toBe('true');
+        expect(screen.getByTestId('menu-item-Copy as').getAttribute('aria-disabled'), name).not.toBe('true');
         fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       }
     });
@@ -337,15 +337,15 @@ describe('SpreadsheetBody', () => {
         }
       };
       fireEvent.contextMenu(colHead(0), { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Copy as': 'copy', 'Reset Column Width': 'resetColumnWidth' });
+      expectIcons({ 'Copy as': 'copy', 'Reset Column Width': 'resetColumnWidth' });
       expect(screen.queryByTestId('menu-item-Select Column')).toBeNull();
       expect(iconOf('Column Width…')).toBeUndefined();
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       fireEvent.contextMenu(rowHead(0), { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Copy as': 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
+      expectIcons({ 'Copy as': 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
       fireEvent.contextMenu(document.querySelector('[data-grid-cell][data-row="0"][data-col="0"]')!, { clientX: 5, clientY: 5 });
-      expectIcons({ Copy: 'copy', 'Copy as': 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
+      expectIcons({ 'Copy as': 'copy', 'Select All': 'selectAll', 'Go to Row…': 'goToRow' });
     });
 
     it('Go to Row… opens the shared dialog for the sheet rows, and the chord claim opens the same one (FR-043a)', async () => {

@@ -1,5 +1,5 @@
 /**
- * 074 FR-085a — an HTML page's body menu: Find…, Copy, Copy as ▸ (Rich Text, Plain Text) and Select All, as a
+ * 074 FR-085a — an HTML page's body menu: Find…, Copy as ▸ (Rich Text, Plain Text) and Select All, as a
  * Markdown preview's body menu offers them (Split is the title menu's since the v1 review, #732) — though the page is not a flowing document (no Go to Heading, no
  * Synchronise Scrolling, FR-087).
  *
@@ -8,6 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { previewContentMenu, type PreviewContentMenuArgs } from '../../src/renderer/preview/content-menu.js';
+import { fixedShortcut } from '../../src/renderer/common/fixed-shortcut.js';
 
 const page = (over: Partial<PreviewContentMenuArgs> = {}): PreviewContentMenuArgs => ({
   selectionEmpty: false,
@@ -19,11 +20,16 @@ const page = (over: Partial<PreviewContentMenuArgs> = {}): PreviewContentMenuArg
 });
 
 describe('an HTML page’s body menu (FR-085a)', () => {
-  it('offers Find…, Copy, Copy as ▸ with both formats and Select All — and no Go to Heading or Split', () => {
+  it('offers Find…, Copy as ▸ with both formats and Select All — and no plain Copy, Go to Heading or Split', () => {
     const rows = previewContentMenu(page());
     const labels = rows.map((m) => m.label);
-    expect(labels).toEqual(expect.arrayContaining(['Find…', 'Copy', 'Copy as', 'Select All']));
-    expect(rows.find((r) => r.label === 'Copy as')?.submenu?.map((m) => m.label)).toEqual(['Rich Text', 'Plain Text']);
+    expect(labels).toEqual(expect.arrayContaining(['Find…', 'Copy as', 'Select All']));
+    expect(labels).not.toContain('Copy');
+    // The page prefers plain text: that leaf shows the copy key, and Rich Text shows none (v1 review).
+    expect(rows.find((r) => r.label === 'Copy as')?.submenu?.map((m) => [m.label, m.shortcut])).toEqual([
+      ['Rich Text', undefined],
+      ['Plain Text', fixedShortcut('copy')],
+    ]);
     expect(labels).not.toContain('Go to Heading…');
     expect(labels).not.toContain('Split');
   });
@@ -32,8 +38,9 @@ describe('an HTML page’s body menu (FR-085a)', () => {
     const args = page();
     const rows = previewContentMenu(args);
     rows.find((r) => r.label === 'Select All')!.onClick!();
-    rows.find((r) => r.label === 'Copy as')!.submenu!.find((r) => r.label === 'Rich Text')!.onClick!();
-    rows.find((r) => r.label === 'Copy')!.onClick!();
+    const leaves = rows.find((r) => r.label === 'Copy as')!.submenu!;
+    leaves.find((r) => r.label === 'Rich Text')!.onClick!();
+    leaves.find((r) => r.label === 'Plain Text')!.onClick!();
     expect(args.content!.selectAll).toHaveBeenCalled();
     expect(vi.mocked(args.content!.copy).mock.calls).toEqual([['rich'], ['plain']]);
   });

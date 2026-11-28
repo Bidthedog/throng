@@ -66,7 +66,8 @@ You can paste rendered content into another program, keeping its formatting, or 
 and diagrams copy as images.
 
 1. Select what you want, then right-click.
-2. Choose **Copy**, or **Copy as** › **Rich Text** or **Plain Text**.
+2. Choose **Copy as** › **Rich Text** or **Plain Text**. The one marked **Ctrl+C** is the format the copy format
+   setting picks, and the one **Ctrl+C** copies in.
 3. For pictures and diagrams, choose **Copy Image**.
 4. To copy the file's path, open the panel header's menu and choose **Copy Path**.
 

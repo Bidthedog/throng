@@ -428,6 +428,9 @@ starting state; repeat with a diagram's Full Pane.
   Expand This H*n*, Collapse All Inside This H*n*, Expand All Inside This H*n*, Collapse All, Expand
   All. No fold row remains at the top level. The editor and the preview MUST show identical submenus.
   The submenu uses the same submenu mechanism as the existing *Split* and *Open in* submenus.
+  *(Amended 2026-11-28, v1 review, #732: in a Markdown **preview** the rows show no keys, because the outlining
+  chords do not act there; the rows and their commands stay. The editor's rows show their chords as before. "Identical"
+  now means the same rows in the same order.)*
 - **FR-011**: **Collapse All Inside This H*n*** MUST collapse the innermost section at the point the
   menu was opened and every section nested beneath it, each individually (as 047 FR-037a does for the
   whole document); **Expand All Inside This H*n*** MUST expand the same set. Sections outside it MUST be

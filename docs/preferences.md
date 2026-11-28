@@ -1561,7 +1561,7 @@ An HTML page is shown as its static markup in a sandboxed frame, with the styles
 beside it in the project: no script runs and the page cannot navigate. A link follows only on Ctrl+click. The
 page fills its panel at every zoom; a click in it makes the panel active, and the zoom chords, Ctrl+wheel and
 the app's other shortcuts work while it has the keyboard. An edit updates the page in place, keeping where you
-were scrolled. Find searches the page, and a right-click offers Copy, Copy as (rich or plain text) and Select All.
+were scrolled. Find searches the page, and a right-click offers Copy as (rich or plain text) and Select All.
 
 Nothing is fetched from the network except stylesheets, fonts and images from a **safe source**: one listed in
 **HTML: Safe preview sources** below, which applies to every project, or in the project's own list in

@@ -20,6 +20,8 @@ import type { MenuAction } from '../../../workspace/context-menu.js';
 export interface SpreadsheetMenuArgs {
   target: GridMenuTarget;
   keybindings: Keybindings;
+  /** The preference's copy format (`editor.previews.copyFormat`): the copy key copies in it. */
+  copyFormat?: PreviewCopyFormat;
   /** The panel's Wrap and lock toggles; absent draws none. */
   toggles?: GridViewToggles;
   actions: {
@@ -35,10 +37,8 @@ export interface SpreadsheetMenuArgs {
 
 export function spreadsheetMenu(args: SpreadsheetMenuArgs): MenuAction[] {
   const { target, keybindings, actions: a } = args;
-  const copies: MenuAction[] = [
-    { label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', shortcut: fixedShortcut('copy'), onClick: () => a.copy() },
-    gridCopyAs((format) => a.copy(format)),
-  ];
+  // v1 review (2026-11-28): Copy as ▸ is the only copy row; the preference's format shows the copy key.
+  const copies: MenuAction[] = [gridCopyAs((format) => a.copy(format), args.copyFormat)];
   const goToRow: MenuAction = { label: 'Go to Row…', icon: 'goToRow', section: 'navigate', onClick: a.goToRow, shortcut: firstBinding(keybindings, 'preview.goToHeading') };
   const items: MenuAction[] =
     target.kind === 'column'

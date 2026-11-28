@@ -1400,18 +1400,6 @@ export function PreviewPanel({
    * the status-bar toggle, both built from the SAME `foldState`/`onFoldChange`/`headingsRef` this
    * panel already holds (never a second original, Principle XI).
    */
-  const foldMenuChords = useMemo(
-    () => ({
-      collapseSection: firstBinding(keybindings, 'markdown.collapseSection'),
-      expandSection: firstBinding(keybindings, 'markdown.expandSection'),
-      collapseAllInside: firstBinding(keybindings, 'markdown.collapseAllInside'),
-      expandAllInside: firstBinding(keybindings, 'markdown.expandAllInside'),
-      collapseAll: firstBinding(keybindings, 'markdown.collapseAll'),
-      expandAll: firstBinding(keybindings, 'markdown.expandAll'),
-    }),
-    [keybindings],
-  );
-
   /**
    * `target` is the DOM node the body menu opened AT (the real contextmenu event's own `e.target`);
    * `null` when the caller has none (the Link-menu path, whose event carries a synthetic point with
@@ -1451,10 +1439,11 @@ export function PreviewPanel({
         },
         collapseAll: () => onFoldChange(foldCollapseAll(foldState)),
         expandAll: () => onFoldChange(foldExpandAll(foldState)),
-        chords: foldMenuChords,
+        // No chords on these rows (v1 review, 2026-11-28): the outlining keys do not reach a preview, so its menu
+        // shows none (constitution VI, "A menu row shows its key"). The commands stay, on the menu and below.
       };
     },
-    [isFoldableProvider, foldState, onFoldChange, foldMenuChords],
+    [isFoldableProvider, foldState, onFoldChange],
   );
 
   /**

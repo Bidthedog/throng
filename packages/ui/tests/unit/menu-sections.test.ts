@@ -1641,7 +1641,6 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
   // v1 review (#732) — Open in Editor and Synchronise Scrolling are the title menu's now.
   it('with text selected: Content (the copies and Select All), then Navigate (Find…, Go to Heading…)', () => {
     expect(labelsOf(previewBodyMenu({ route: 'standalone' }))).toEqual([
-      'Copy',
       'Copy as',
       'Select All',
       '—',
@@ -1652,7 +1651,6 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
 
   it('with nothing selected: the same rows, Content drawn disabled', () => {
     expect(labelsOf(previewBodyMenu({ selectionEmpty: true, route: 'parented' }))).toEqual([
-      'Copy',
       'Copy as',
       'Select All',
       '—',
@@ -1661,10 +1659,9 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     ]);
   });
 
-  it('Copy and Copy as, with both its formats, are disabled while nothing is selected; Select All never is', () => {
+  it('Copy as, with both its formats, is disabled while nothing is selected; Select All never is', () => {
     const items = previewBodyMenu({ selectionEmpty: true, route: 'standalone' });
     const state = (label: string): boolean | undefined => items.find((i) => i.label === label)?.disabled;
-    expect(state('Copy')).toBe(true);
     expect(state('Copy as')).toBe(true);
     expect(items.find((i) => i.label === 'Copy as')?.submenu?.map((leaf) => leaf.disabled)).toEqual([true, true]);
     expect(state('Select All') ?? false).toBe(false);
@@ -1681,7 +1678,6 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     expect(items.map((i) => [i.label, i.icon])).toEqual([
       ['Find…', 'search'],
       ['Go to Heading…', undefined],
-      ['Copy', 'copy'],
       ['Copy as', 'copy'],
       ['Select All', 'selectAll'],
     ]);
@@ -2346,9 +2342,13 @@ describe('Undo and Redo sit in their own group, immediately below the clipboard 
     expect(contentRun(explorerRoot())).toEqual(tail);
   });
 
-  it('the preview body menu, which has no history: Copy, Copy as ▸ straight after it, then Select All, one group', () => {
+  it('the preview body menu, which has no history: Copy as ▸ (its only copy row, v1 review), then Select All, one group', () => {
     const items = previewBodyMenu({ route: 'standalone' });
-    expect(contentRun(items)).toEqual(['clipboard:Copy', 'clipboard:Copy as', 'clipboard:Select All']);
-    expect(items.find((i) => i.label === 'Copy as')?.submenu?.map((leaf) => leaf.label)).toEqual(['Rich Text', 'Plain Text']);
+    expect(contentRun(items)).toEqual(['clipboard:Copy as', 'clipboard:Select All']);
+    // The fixture prefers rich text: that leaf shows the copy key, Plain Text none.
+    expect(items.find((i) => i.label === 'Copy as')?.submenu?.map((leaf) => [leaf.label, leaf.shortcut])).toEqual([
+      ['Rich Text', 'Ctrl+C'],
+      ['Plain Text', undefined],
+    ]);
   });
 });

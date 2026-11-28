@@ -823,7 +823,9 @@ Markdown and Mermaid pattern, each setting working as labelled.
   submenu and the copy variants in one **Copy as ▸** submenu straight after **Copy**. **Undo** and **Redo** MUST
   sit on every CSV grid menu, in a group of their own directly below the clipboard group, the place every
   context menu in the app gives them. **Clear Cells** MUST show **Del**, the key the grid clears with; it is the
-  grid's own key, not a rebindable command. Both grids, where the row exists.
+  grid's own key, not a rebindable command. Both grids, where the row exists. *(Amended 2026-11-28, maintainer's v1 review, constitution 8.3.0: **Copy as ▸** replaces the plain **Copy** row
+  rather than sitting beside it. The leaf in the format the preview copy format setting picks shows the copy key,
+  which copies in that format; the other leaf shows none.)*
 - **FR-037h** *(Q23, 2026-11-19)*: The row header and column header menus MUST NOT offer **Select Row** or
   **Select Column**: opening either menu has already selected the row or column. Both grids.
 - **FR-038**: A row header's right-click menu MUST offer **Insert Row Above** and **Insert Row Below**; a

@@ -6,10 +6,10 @@
  *
  * *Rich text* puts the selection's plain text AND its HTML on the clipboard in one write
  * (`clipboard.writeRich`), so a mail composer keeps headings, lists and links while an editor or terminal
- * pastes plain text. *Plain text* puts the text alone (`clipboard.write`). Copy — the menu item, and the
- * platform copy gesture, which is intercepted so the two cannot diverge — uses `editor.previews.copyFormat`,
- * read live; Copy as ▸ Rich Text and Plain Text ignore it (the #394 pattern: a default action with
- * explicit alternatives beside it). Copy and Copy as are disabled while nothing is selected.
+ * pastes plain text. *Plain text* puts the text alone (`clipboard.write`). The platform copy gesture, which is
+ * intercepted, uses `editor.previews.copyFormat`, read live; the menu's one copy row is Copy as ▸ Rich Text and
+ * Plain Text, each copying in its own format, and the leaf the setting picks shows the copy key (v1 review: Copy as
+ * replaces the plain Copy). Copy as is disabled while nothing is selected.
  *
  * ══ THE EXPORT PROFILE ══
  *
@@ -37,6 +37,7 @@ rasterise.mockImplementation(() => Promise.resolve(PNG));
 import { createPreviewProviderRegistry } from '@throng/core';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
 import { applyTableLayout } from '../../src/renderer/preview/table-layout.js';
+import { fixedShortcut } from '../../src/renderer/common/fixed-shortcut.js';
 import { COLD, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
 const DOC = [
@@ -99,27 +100,28 @@ afterEach(() => {
 });
 
 describe('the body menu’s Content section (FR-035, FR-035c)', () => {
-  it('offers Copy, Copy as ▸ (Rich Text, Plain Text) and Select All', async () => {
+  it('offers Copy as ▸ (Rich Text, Plain Text) and Select All, and no plain Copy (v1 review)', async () => {
     await mountDoc();
     selectWhole(markdown());
     await openBodyMenu();
 
-    for (const label of ['Copy', 'Copy as', 'Select All']) {
+    for (const label of ['Copy as', 'Select All']) {
       expect(item(label)).toBeInTheDocument();
     }
+    expect(screen.queryByTestId('menu-item-Copy')).toBeNull();
     expect(copyAs('Rich Text')).toHaveAttribute('aria-disabled', 'false');
     expect(item('Copy as Plain Text')).toHaveAttribute('aria-disabled', 'false');
-    expect(item('Copy')).toHaveAttribute('aria-disabled', 'false');
+    // The shipped copyFormat is rich: Rich Text shows the copy key, Plain Text none.
+    expect(screen.getByTestId('menu-shortcut-Rich Text')).toHaveTextContent(fixedShortcut('copy'));
+    expect(screen.queryByTestId('menu-shortcut-Plain Text')).toBeNull();
   });
 
-  it('disables Copy and Copy as while nothing is selected; Select All stays enabled', async () => {
+  it('disables Copy as while nothing is selected; Select All stays enabled', async () => {
     await mountDoc();
     clearSelection();
     await openBodyMenu();
 
-    for (const label of ['Copy', 'Copy as']) {
-      expect(item(label)).toHaveAttribute('aria-disabled', 'true');
-    }
+    expect(item('Copy as')).toHaveAttribute('aria-disabled', 'true');
     expect(item('Select All')).toHaveAttribute('aria-disabled', 'false');
   });
 
@@ -155,12 +157,12 @@ describe('the body menu’s Content section (FR-035, FR-035c)', () => {
 });
 
 describe('rich text: plain text and export-profile HTML in one write (FR-035a)', () => {
-  it('Copy (default rich) writes {text, html} through writeRich, and nothing through write', async () => {
+  it('Copy as Rich Text (the default copyFormat) writes {text, html} through writeRich, and nothing through write', async () => {
     await mountDoc();
     selectWhole(markdown());
     await openBodyMenu();
 
-    fireEvent.click(item('Copy'));
+    fireEvent.click(copyAs('Rich Text'));
 
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalledTimes(1));
     expect(m!.clipboardWrite).not.toHaveBeenCalled();
@@ -249,13 +251,16 @@ describe('plain text: the text alone (FR-035a)', () => {
   });
 });
 
-describe('Copy and the copy gesture follow editor.previews.copyFormat; the named items ignore it (FR-035b, FR-035c)', () => {
-  it('copyFormat plain: Copy writes plain text', async () => {
+describe('the copy gesture, and the leaf showing its key, follow editor.previews.copyFormat; the leaves copy in their own format (FR-035b, FR-035c)', () => {
+  it('copyFormat plain: Plain Text shows the copy key and writes plain text', async () => {
     await mountDoc({ editor: { previews: { copyFormat: 'plain' } } });
     selectWhole(markdown());
     await openBodyMenu();
 
-    fireEvent.click(item('Copy'));
+    const leaf = copyAs('Plain Text');
+    expect(screen.getByTestId('menu-shortcut-Plain Text')).toHaveTextContent(fixedShortcut('copy'));
+    expect(screen.queryByTestId('menu-shortcut-Rich Text')).toBeNull();
+    fireEvent.click(leaf);
 
     await waitFor(() => expect(m!.clipboardWrite).toHaveBeenCalledTimes(1));
     expect(m!.writeRich).not.toHaveBeenCalled();
@@ -333,6 +338,7 @@ describe('the body menu’s Navigate section (FR-015b, FR-015e)', () => {
     expect(screen.queryByTestId('menu-item-Open in Editor')).toBeNull();
     expect(screen.queryByTestId('menu-item-Go to Editor')).toBeNull();
     expect(screen.queryByTestId('menu-item-Copy')).toBeNull();
+    expect(screen.queryByTestId('menu-item-Copy as')).toBeNull();
     expect(screen.queryByTestId('menu-item-Select All')).toBeNull();
   });
 });

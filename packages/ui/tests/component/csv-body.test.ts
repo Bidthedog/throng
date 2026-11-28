@@ -14,6 +14,7 @@ import userEvent from '@testing-library/user-event';
 import type { IconKey } from '@throng/core';
 import { drawnIcon, iconMarkup } from './helpers/icon-markup.js';
 import { menuWithSubmenu, openSubmenu } from './helpers/expand-submenus.js';
+import { fixedShortcut } from '../../src/renderer/common/fixed-shortcut.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseCsv } from '@throng/core';
 import { CsvBody, CSV_WORKER_THRESHOLD } from '../../src/renderer/preview/providers/csv/csv-body.js';
@@ -237,10 +238,15 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
     ['a cell', () => cellAt(0, 0)],
     ['a row header', () => rowHead(0)],
     ['a column header', () => colHead(0)],
-  ])('the menu of %s offers Cut, Copy and Paste', (_name, target) => {
+  ])('the menu of %s offers Cut, Copy as and Paste, and no plain Copy (v1 review)', (_name, target) => {
     mount('a,b\n1,2\n');
     fireEvent.contextMenu(target(), { clientX: 5, clientY: 5 });
-    expect(labels()).toEqual(expect.arrayContaining(['Cut', 'Copy', 'Paste']));
+    expect(labels()).toEqual(expect.arrayContaining(['Cut', 'Copy as', 'Paste']));
+    expect(labels()).not.toContain('Copy');
+    // The shipped copyFormat is rich: Rich Text shows the copy key, Plain Text none.
+    openSubmenu('Copy as');
+    expect(screen.getByTestId('menu-shortcut-Rich Text')).toHaveTextContent(fixedShortcut('copy'));
+    expect(screen.queryByTestId('menu-shortcut-Plain Text')).toBeNull();
   });
 
   it.each([
@@ -403,8 +409,8 @@ describe('CsvBody menus and paste target (FR-037e, FR-037f, FR-006a)', () => {
   it('the corner menu offers only what acts on every cell (T13)', () => {
     mount('a,b\n1,2\n', { onOpenInEditor: () => {}, providerSettings: { enabled: true, editLongCellsInDialog: true, longCellThreshold: 1 } });
     fireEvent.contextMenu(corner(), { clientX: 5, clientY: 5 });
-    expect(topLevel()).toEqual(expect.arrayContaining(['Cut', 'Copy', 'Copy as', 'Clear Cells', 'Undo', 'Redo', 'Go to Row…']));
-    for (const absent of ['Paste', 'Select All', 'Insert', 'Edit in Dialog…', 'Column Width…', 'Save', 'Save As…', 'Open in Editor', 'Print…']) {
+    expect(topLevel()).toEqual(expect.arrayContaining(['Cut', 'Copy as', 'Clear Cells', 'Undo', 'Redo', 'Go to Row…']));
+    for (const absent of ['Copy', 'Paste', 'Select All', 'Insert', 'Edit in Dialog…', 'Column Width…', 'Save', 'Save As…', 'Open in Editor', 'Print…']) {
       expect(screen.queryByTestId(`menu-item-${absent}`), absent).toBeNull();
     }
   });
@@ -505,10 +511,14 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
     fireEvent.click(await screen.findByTestId('menu-item-Insert'));
   }
 
-  /** Right-click `target` and choose Copy / Cut, waiting for the clipboard write to land. */
-  async function chooseFrom(target: HTMLElement, label: string): Promise<void> {
+  /**
+   * Right-click `target` and choose Cut, or Copy as ▸ Rich Text (the shipped copyFormat, what the copy key copies),
+   * waiting for the clipboard write to land.
+   */
+  async function chooseFrom(target: HTMLElement, label: 'Cut' | 'Copy'): Promise<void> {
     fireEvent.contextMenu(target, { clientX: 5, clientY: 5 });
-    fireEvent.click(await screen.findByTestId(`menu-item-${label}`));
+    if (label === 'Copy') fireEvent.click(await screen.findByTestId('menu-item-Copy as'));
+    fireEvent.click(await screen.findByTestId(label === 'Copy' ? 'menu-item-Copy as Rich Text' : 'menu-item-Cut'));
     await waitFor(() => expect(clipText).not.toBe(''));
   }
 
@@ -530,9 +540,7 @@ describe('CsvBody Insert Copied Rows / Columns (FR-038a)', () => {
     fireEvent.mouseDown(rowHead(0), { button: 0 });
     fireEvent.mouseDown(rowHead(1), { button: 0, shiftKey: true });
     fireEvent.mouseUp(window);
-    fireEvent.contextMenu(rowHead(1), { clientX: 5, clientY: 5 });
-    fireEvent.click(await screen.findByTestId('menu-item-Copy'));
-    await waitFor(() => expect(clipText).not.toBe(''));
+    await chooseFrom(rowHead(1), 'Copy');
     await openInsert(rowHead(2));
     fireEvent.click(await screen.findByTestId('menu-item-Insert Copied Rows Above'));
     await waitFor(() => expect(bridge.gridEdit).toHaveBeenCalledTimes(1));
@@ -916,7 +924,6 @@ describe('CsvBody menu icons (FR-037g)', () => {
       Undo: 'undo',
       Redo: 'redo',
       Cut: 'cut',
-      Copy: 'copy',
       Paste: 'paste',
       'Select All': 'selectAll',
       'Edit in Dialog…': 'cellDialog',
@@ -955,7 +962,7 @@ describe('CsvBody menu icons (FR-037g)', () => {
     fireEvent.contextMenu(head('rowheader', 1), { clientX: 5, clientY: 5 });
     expectIcons({
       Cut: 'cut',
-      Copy: 'copy',
+      'Copy as': 'copy',
       Paste: 'paste',
       'Go to Row…': 'goToRow',
     });
@@ -968,7 +975,7 @@ describe('CsvBody menu icons (FR-037g)', () => {
     fireEvent.contextMenu(head('columnheader', 1), { clientX: 5, clientY: 5 });
     expectIcons({
       Cut: 'cut',
-      Copy: 'copy',
+      'Copy as': 'copy',
       Paste: 'paste',
       'Reset Column Width': 'resetColumnWidth',
     });

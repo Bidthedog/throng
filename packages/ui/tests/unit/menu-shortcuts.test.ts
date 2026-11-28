@@ -54,14 +54,17 @@ const TERMINAL_COPY = 'Ctrl+C is the shell’s interrupt: a terminal has no copy
 const NEXT_MARKED = 'focus.nextMarkedPanel walks every project; this row walks this project alone (057 FR-106)';
 const CELL_DIALOG = 'F2 and Enter edit in the cell; no key opens the dialog';
 const GRID_TOGGLE = 'a per-panel view toggle with no command in Key Bindings (073 FR-013, FR-039a)';
+const PREVIEW_OUTLINE = 'the outlining keys do not reach a preview: its Outlining rows keep the commands and show no key (v1 review)';
+const COPY_OTHER_FORMAT = 'the copy key copies in the preferred format; the other format has no key of its own';
 const GRID_MENUS = ['CSV cell', 'CSV row header', 'CSV column header', 'CSV corner', 'Spreadsheet cell', 'Spreadsheet column header', 'Spreadsheet corner'];
 
 /**
  * Every row no key performs, by its path from the menu's name. A path ending `› *` covers every row beneath that
- * submenu: kept for pick lists (encodings, path forms, Copy as formats, targets), where a new entry is one more item
+ * submenu: kept for pick lists (encodings, path forms, targets), where a new entry is one more item
  * of the same list rather than a new command.
  */
 const NO_KEY: Readonly<Record<string, string>> = {
+  'Preview body › Outlining › *': PREVIEW_OUTLINE,
   'Explorer file › New File': NONE,
   'Explorer file › Open In › OS File Explorer': NONE,
   'Explorer file › Open In › Open in OS Default Program': NONE,
@@ -114,8 +117,6 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Panel header › Try again': NONE,
   'Panel header › Copy details': NONE,
   'Panel header › Clear panel type': NONE,
-  'Panel header › Flag': NONE,
-  'Panel header › Unflag': NONE,
   'Panel header › Open in Editor': NONE,
   'Panel header › Refresh': NONE,
   'Panel header › Edit Long Cells in Dialog': NONE,
@@ -136,29 +137,29 @@ const NO_KEY: Readonly<Record<string, string>> = {
   'Find in Files › Exclude from Find in Files in this project': NONE,
   'Find in Files › Collapse all': NONE,
   'Find in Files › Expand all': NONE,
-  'Preview body › Copy as › *': PICK,
+  'Preview body › Copy as › Plain Text': COPY_OTHER_FORMAT,
   'Preview body › Copy Diagram as Image': NONE,
   'Preview body › Single Page': PICK,
   'Preview body › Two Pages': PICK,
   'Preview body › Pages Side by Side': PICK,
   'Preview body › Copy Image': NONE,
-  'CSV cell › Copy as › *': PICK,
+  'CSV cell › Copy as › Plain Text': COPY_OTHER_FORMAT,
   'CSV cell › Edit in Dialog…': CELL_DIALOG,
   'CSV cell › Column Width…': NONE,
-  'CSV row header › Copy as › *': PICK,
+  'CSV row header › Copy as › Plain Text': COPY_OTHER_FORMAT,
   'CSV row header › Insert › Copied Rows Above': NONE,
   'CSV row header › Insert › Copied Rows Below': NONE,
-  'CSV column header › Copy as › *': PICK,
+  'CSV column header › Copy as › Plain Text': COPY_OTHER_FORMAT,
   'CSV column header › Insert › Copied Columns Left': NONE,
   'CSV column header › Insert › Copied Columns Right': NONE,
   'CSV column header › Column Width…': NONE,
   'CSV column header › Reset Column Width': NONE,
-  'CSV corner › Copy as › *': PICK,
-  'Spreadsheet cell › Copy as › *': PICK,
-  'Spreadsheet column header › Copy as › *': PICK,
+  'CSV corner › Copy as › Plain Text': COPY_OTHER_FORMAT,
+  'Spreadsheet cell › Copy as › Plain Text': COPY_OTHER_FORMAT,
+  'Spreadsheet column header › Copy as › Plain Text': COPY_OTHER_FORMAT,
   'Spreadsheet column header › Column Width…': NONE,
   'Spreadsheet column header › Reset Column Width': NONE,
-  'Spreadsheet corner › Copy as › *': PICK,
+  'Spreadsheet corner › Copy as › Plain Text': COPY_OTHER_FORMAT,
   'Project › Edit': NONE,
   'Project › Rename': NONE,
   'Project › Remove': NONE,

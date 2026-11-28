@@ -103,6 +103,8 @@ export interface CsvGridMenuArgs {
   /** FR-038a — whole rows or whole columns the clipboard still holds, for Insert Copied Rows / Columns. */
   copied: CopiedBlock | null;
   keybindings: Keybindings;
+  /** The preference's copy format (`editor.previews.copyFormat`): the copy key copies in it. */
+  copyFormat?: PreviewCopyFormat;
   cellDialogAvailable: boolean;
   /** The panel's Wrap and lock toggles; absent draws none. */
   toggles?: GridViewToggles;
@@ -153,10 +155,8 @@ export function csvGridMenu(args: CsvGridMenuArgs): MenuAction[] {
   // FR-037e — every menu offers the clipboard for the selection the right-click leaves; T15 — the copy variants in
   // Copy as ▸ after Copy. T16 — Undo and Redo, in a group of their own straight below it, on every menu.
   const cutItem = (rows: boolean): MenuAction => ({ label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', shortcut: fixedShortcut('cut'), onClick: () => a.cut(rows ? { ...sel, rows: true } : sel, range) });
-  const copyItems: MenuAction[] = [
-    { label: 'Copy', icon: 'copy', section: 'content', group: 'clipboard', shortcut: fixedShortcut('copy'), onClick: () => a.copy(range) },
-    gridCopyAs((format) => a.copy(range, format)),
-  ];
+  // v1 review (2026-11-28): Copy as ▸ is the only copy row; the preference's format shows the copy key.
+  const copyItems: MenuAction[] = [gridCopyAs((format) => a.copy(range, format), args.copyFormat)];
   const pasteItem: MenuAction = { label: 'Paste', icon: 'paste', section: 'content', group: 'clipboard', shortcut: fixedShortcut('paste'), onClick: a.paste };
   const historyItems: MenuAction[] = [
     { label: 'Undo', icon: 'undo', section: 'content', group: 'history', shortcut: fixedShortcut('undo'), onClick: () => a.history('undo') },

@@ -67,7 +67,8 @@ and Excel or LibreOffice.
 2. Paste where you want them.
 3. To empty a selection, press **Delete** or choose **Clear Cells**.
 
-**Copy as** on the same menu copies as rich text or plain text, whatever the copy format setting says. Undo and
+To copy from the menu, choose **Copy as** › **Rich Text** or **Plain Text**. The one marked **Ctrl+C** is the copy
+format setting's choice. Undo and
 Redo sit just below the clipboard rows. Right-click the corner where the row numbers meet the column letters for
 the menu of the whole table.
 

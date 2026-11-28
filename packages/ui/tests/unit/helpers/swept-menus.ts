@@ -119,6 +119,9 @@ export const fold = (collapsed: boolean) => ({
   },
 });
 
+/** A preview's Outlining rows carry no chords: the keys do not reach a preview (v1 review). */
+export const previewFold = (collapsed: boolean) => ({ ...fold(collapsed), chords: {} });
+
 export const editor = (collapsed: boolean): MenuAction[] =>
   editorContentMenu({
     view: {} as EditorView,
@@ -213,13 +216,14 @@ export const csv = (target: CsvGridMenuArgs['target'], copied: CsvGridMenuArgs['
     colCount: 5,
     copied,
     keybindings: ALL_BOUND,
+    copyFormat: 'rich',
     cellDialogAvailable: true,
     toggles: GRID_TOGGLES,
     // Every action present.
     actions: new Proxy({} as CsvGridMenuArgs['actions'], { get: () => noop }),
   });
 export const sheet = (target: CsvGridMenuArgs['target']): MenuAction[] =>
-  spreadsheetMenu({ target, keybindings: ALL_BOUND, toggles: GRID_TOGGLES, actions: { copy: noop, selectAll: noop, goToRow: noop, columnWidth: noop, resetWidth: noop } });
+  spreadsheetMenu({ target, keybindings: ALL_BOUND, copyFormat: 'rich', toggles: GRID_TOGGLES, actions: { copy: noop, selectAll: noop, goToRow: noop, columnWidth: noop, resetWidth: noop } });
 
 export const MENUS: readonly { name: string; build: () => MenuAction[] }[] = [
   { name: 'Explorer file', build: () => explorer('file', 'src/app.ts') },
@@ -300,8 +304,8 @@ export const MENUS: readonly { name: string; build: () => MenuAction[] }[] = [
         },
       }),
   },
-  { name: 'Preview body', build: () => preview({ fold: fold(false) }) },
-  { name: 'Preview body', build: () => preview({ fold: fold(true) }) },
+  { name: 'Preview body', build: () => preview({ fold: previewFold(false) }) },
+  { name: 'Preview body', build: () => preview({ fold: previewFold(true) }) },
   {
     name: 'Preview body',
     build: () =>

@@ -239,6 +239,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
       const range = rangeOf(sel, colCount);
       const items = spreadsheetMenu({
         target,
+        copyFormat,
         keybindings,
         ...(gridToggles !== undefined ? { toggles: gridToggles } : {}),
         actions: {
@@ -251,7 +252,7 @@ export function SpreadsheetBody(props: PreviewBodyProps): ReactElement {
       });
       openMenu(point.x, point.y, items);
     },
-    [colCount, copy, goTo.open, gridToggles, keybindings, openMenu, resetWidth, sheetWidths],
+    [colCount, copy, copyFormat, goTo.open, gridToggles, keybindings, openMenu, resetWidth, sheetWidths],
   );
 
   // 075 FR-075b — what Print… prints: the sheet on screen, every row, read when it runs; with First row is header on,

@@ -190,9 +190,11 @@ test('a right-click in the HTML page opens the body menu for the selection there
     return { x: r.left + 10, y: r.top + r.height / 2 };
   });
   await frame.click({ button: 'right', position: point });
-  for (const label of ['Find…', 'Copy', 'Copy as', 'Select All']) {
+  for (const label of ['Find…', 'Copy as', 'Select All']) {
     await expect(win.getByTestId(`menu-item-${label}`), label).toBeVisible();
   }
+  // v1 review — Copy as ▸ replaces the plain Copy on a preview's body menu.
+  await expect(win.getByTestId('menu-item-Copy')).toHaveCount(0);
   // v1 review (#732) — Split acts on the panel, so only its title menu offers it.
   await expect(win.getByTestId('menu-item-Split')).toHaveCount(0);
   // A selection in the page reached the panel: the copy rows are live, not the empty-selection state. The formats
