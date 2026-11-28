@@ -971,8 +971,8 @@ export const V29_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deep
 
 /**
  * The v1 review's version-41 guard source (#732): the four outlining commands every version up to 41 wrote unbound. A
- * frozen COPY, for {@link V13_KEYBINDINGS}'s reason. A saved `[]` cannot tell "never bound" from "unbound on purpose",
- * but none of the four ever shipped a chord to unbind, so an empty array reads as the default.
+ * frozen COPY, for {@link V13_KEYBINDINGS}'s reason. A saved `[]` cannot tell a row nobody touched apart from one
+ * the user cleared, but none of the four ever shipped a chord to clear, so an empty array reads as the default.
  */
 export const V41_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deepFreeze({
   'markdown.expandSection': [],

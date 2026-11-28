@@ -85,21 +85,11 @@ function WhenSettingsAreLive({ children }: { children: ReactNode }): ReactNode {
   return useConfigLoaded() ? children : null;
 }
 
-/** The shipped chord as a keydown carries it. */
-function chordEvent(): KeyboardEventInit {
-  const token = DEFAULT_KEYBINDINGS.bindings['panel.toggleFlag'][0]!;
-  const parts = token.split('+');
-  const key = parts.pop()!;
-  return {
-    key: key.toLowerCase(),
-    code: `Key${key.toUpperCase()}`,
-    ctrlKey: parts.includes('Ctrl'),
-    shiftKey: parts.includes('Shift'),
-    altKey: parts.includes('Alt'),
-    bubbles: true,
-    cancelable: true,
-  };
-}
+/**
+ * The shipped chord, Ctrl+Alt+G, as a keydown carries it. Spelled out on one line, because
+ * `window-chord-manifest.test.ts` holds this file to pressing exactly these modifiers (COVERED_IN_COMPONENT).
+ */
+const FLAG_PRESS = { key: 'G', code: 'KeyG', ctrlKey: true, altKey: true, bubbles: true, cancelable: true };
 
 const flag = vi.fn();
 const unflag = vi.fn();
@@ -175,7 +165,7 @@ function pressInPanel(id: string): boolean {
   body.focus();
   let notTaken = true;
   act(() => {
-    notTaken = fireEvent.keyDown(body, chordEvent());
+    notTaken = fireEvent.keyDown(body, FLAG_PRESS);
   });
   return !notTaken;
 }
