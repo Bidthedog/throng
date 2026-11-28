@@ -3,12 +3,12 @@
  * suffix → not collected by Playwright's testMatch). New E2E specs import these
  * helpers instead of duplicating ~90 lines of daemon/app boilerplate.
  */
-import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, execFileSync, type ChildProcess } from 'node:child_process';
 import { connect } from 'node:net';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { copyFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Locator, Page } from '@playwright/test';
@@ -1237,8 +1237,18 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
       if (process.platform === 'darwin') {
         try {
           const file = join(test.info().outputDir, `shutdown-stall-${pid}.sample.txt`);
-          execFileSync('/usr/bin/sample', [String(pid), '2', '-mayDie', '-file', file], { stdio: 'ignore', timeout: 5_000 });
-          console.warn(`[teardown] the stalled app's thread stacks: ${file}`);
+          mkdirSync(dirname(file), { recursive: true });
+          // A hosted runner's Electron can refuse `sample` its task port, which `sample` reports on stderr and still
+          // exits 0, writing nothing: the 2026-11-28 stall said "thread stacks: <file>" and uploaded no file. Run it as
+          // root where sudo needs no password (CI), and keep what it printed beside the stacks either way.
+          const args = [String(pid), '2', '-mayDie', '-file', file];
+          const run = (cmd: string, argv: string[]): string => {
+            const r = spawnSync(cmd, argv, { encoding: 'utf8', timeout: 8_000 });
+            return `$ ${cmd} ${argv.join(' ')}\nexit ${r.status ?? r.signal}\n${r.stdout ?? ''}${r.stderr ?? ''}`;
+          };
+          const printed = process.env.CI ? run('sudo', ['-n', '/usr/bin/sample', ...args]) : run('/usr/bin/sample', args);
+          writeFileSync(`${file}.log`, printed);
+          console.warn(`[teardown] the stalled app's thread stacks: ${existsSync(file) ? file : `none written; see ${file}.log`}`);
         } catch {
           /* best-effort: outside a test, or the process went while sampling */
         }
