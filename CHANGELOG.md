@@ -61,6 +61,10 @@ What changed in each release of throng, written for someone deciding whether to 
   group directly below Cut, Copy and Paste in the editor, File Explorer and grid menus. ([guide](https://throng-ide.com/guide/previews/#copy-from-a-preview))
 - **Open Preview** stays available while the file's preview is open, and goes to it. A preview's way back is always
   called **Open in Editor**, and goes to the editor that is already open. ([guide](https://throng-ide.com/guide/previews/#open-a-preview-of-a-file))
+- A panel's title menu holds what acts on the panel and its file: Split, Copy Path, Print…, Synchronise Scrolling,
+  an editor's language, encoding and line endings, a CSV file's Save, and a terminal's Remember and Notifications
+  toggles. Right-clicking inside the panel offers what acts on the content there: Find and Replace, Go to Row…, and a
+  grid's Wrap and Lock rows. ([guide](https://throng-ide.com/guide/layout/#read-a-panels-header), [#732](https://github.com/Bidthedog/throng/issues/732))
 - A spreadsheet preview draws its values in a muted colour and its menus offer only what a read-only workbook can
   do: copy, select and go to a row. ([guide](https://throng-ide.com/guide/csv-and-spreadsheets/#read-a-spreadsheet))
 

@@ -84,7 +84,7 @@ It stays marked, with no notification, until you have left it and come back to i
 
 A chatty terminal can stop raising marks and notices on its own, while every other terminal carries on.
 
-1. Click **Terminal notifications** on the terminal's status bar (or turn it off in the panel's menu).
+1. Click **Terminal notifications** on the terminal's status bar (or turn it off in the panel header's menu).
 2. It greys out with a line through it. That terminal no longer raises marks or notices.
 
 ## Read and act on notifications

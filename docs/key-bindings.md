@@ -574,7 +574,7 @@ Jump to a heading in a preview; in a PDF, Go to Page; in a CSV or spreadsheet, G
 
 **Default:** `Ctrl+G` · **Scope:** Preview
 
-Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. In a CSV or workbook grid it is Go to Row: it opens the Go to dialog for rows (also **Go to Row…** on the panel header menu and the cell and row-number menus): Enter makes that row the active cell in the active column and scrolls it to the top. In a PDF preview, Go to Page: type a page number (the dialog names the current page and how many there are, and takes only a page that exists) and press Enter.
+Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. In a CSV or workbook grid it is Go to Row: it opens the Go to dialog for rows (also **Go to Row…** on the cell, row-number and corner menus): Enter makes that row the active cell in the active column and scrolls it to the top. In a PDF preview, Go to Page: type a page number (the dialog names the current page and how many there are, and takes only a page that exists) and press Enter.
 
 ### Print…
 

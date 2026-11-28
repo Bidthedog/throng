@@ -188,6 +188,9 @@ A panel's header names what it is and shows whether it needs you.
 2. Look for the file it shows, an unsaved dot, an attention mark and, for an elevated terminal, **ADMIN**.
 3. On an editor or a preview, the first two buttons open the file in your system's default program and find it in
    the File Explorer. They are greyed out, with the reason on hover, while the document has no file.
+4. Right-click the header for the panel's menu: its file, its layout and its links to other panels, such as Split,
+   Copy Path, Encoding and Print. Right-click inside the panel for what acts on the content you point at, such as
+   Copy, Find and Wrap.
 
 On a narrow panel the less important controls give way first; every one stays on the panel's menu.
 

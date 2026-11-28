@@ -66,8 +66,9 @@ You can paste rendered content into another program, keeping its formatting, or 
 and diagrams copy as images.
 
 1. Select what you want, then right-click.
-2. Choose **Copy**, or **Copy as** › **Rich Text** or **Plain Text**, or **Copy Path**.
+2. Choose **Copy**, or **Copy as** › **Rich Text** or **Plain Text**.
 3. For pictures and diagrams, choose **Copy Image**.
+4. To copy the file's path, open the panel header's menu and choose **Copy Path**.
 
 ## Print a preview or save it as a PDF
 

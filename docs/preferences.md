@@ -1000,7 +1000,7 @@ Keep a preview and its editor scrolled to the same place, in both directions.
 
 **Default:** on · **Values:** on · off
 
-Scrolling either panel scrolls the other, block by block, so the paragraph you are editing stays in view in the preview. Also switched from either panel's right-click menu, the **Synchronise Scrolling** status-bar button, or the [`preview.toggleSyncScroll`](key-bindings.md#editor) command.
+Scrolling either panel scrolls the other, block by block, so the paragraph you are editing stays in view in the preview. Also switched from either panel's header menu, the **Synchronise Scrolling** status-bar button, or the [`preview.toggleSyncScroll`](key-bindings.md#editor) command.
 
 #### Scroll-sync highlight duration
 
@@ -1561,7 +1561,7 @@ An HTML page is shown as its static markup in a sandboxed frame, with the styles
 beside it in the project: no script runs and the page cannot navigate. A link follows only on Ctrl+click. The
 page fills its panel at every zoom; a click in it makes the panel active, and the zoom chords, Ctrl+wheel and
 the app's other shortcuts work while it has the keyboard. An edit updates the page in place, keeping where you
-were scrolled. Find searches the page, and a right-click offers Copy, Copy as (rich or plain text), Select All and Split.
+were scrolled. Find searches the page, and a right-click offers Copy, Copy as (rich or plain text) and Select All.
 
 Nothing is fetched from the network except stylesheets, fonts and images from a **safe source**: one listed in
 **HTML: Safe preview sources** below, which applies to every project, or in the project's own list in
@@ -1916,7 +1916,7 @@ Show the status bar along the bottom of each terminal panel.
 
 The bar names the terminal's shell, shows where a link under the pointer leads, and holds the panel's
 toggles: **Remember the last running command**, **Reopen in the last directory** and **Terminal
-notifications**. Off hides it in every terminal, and the same toggles stay on the terminal's right-click
+notifications**. Off hides it in every terminal, and the same toggles stay on the terminal's header
 menu. Editors and previews have a bar of their own: **Show panel status bar**, under [Editor](#editor).
 
 ### Shell integration
