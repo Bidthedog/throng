@@ -178,8 +178,6 @@ export function buildContextMenuItems(args: {
    */
   const items: MenuAction[] = [];
   if (!isRoot) {
-    // Rename shares the clipboard rows' group, so the one divider inside Content is the one above Undo (#732).
-    items.push({ label: 'Rename', icon: 'rename', section: 'content', group: 'clipboard', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
     // 023 (#127): the clipboard actions now have their own theme tokens (cut/copy/paste), so the
     // reserved icon column finally renders a glyph rather than sitting blank.
     items.push({ label: 'Cut', icon: 'cut', section: 'content', group: 'clipboard', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
@@ -209,7 +207,11 @@ export function buildContextMenuItems(args: {
     onClick: () => ops.redoFileOp(),
   });
 
-  // Create section.
+  // Create section. Rename heads it, below Redo and above New File: it names the item as New File and New Folder
+  // name the one they make (v1 review, 2026-11-28). The root has no Rename (004 FR-023).
+  if (!isRoot) {
+    items.push({ label: 'Rename', icon: 'rename', section: 'create', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
+  }
   items.push({ label: 'New File', icon: 'add', section: 'create', onClick: () => ops.newFile(node) });
   items.push({ label: 'New Folder', icon: 'newFolder', section: 'create', shortcut: sc('file.newFolder'), onClick: () => ops.newFolder(node) });
 

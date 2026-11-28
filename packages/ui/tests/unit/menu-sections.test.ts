@@ -701,8 +701,8 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
    * the boundaries are now after Redo, after New Folder, after Copy Path and before Delete. #732 adds one between Paste
    * and Undo: the history rows are their own group below the clipboard rows.
    */
-  it('a file row: five dividers, at 4, 7, 10, 13 and 16 (Undo / Redo their own group, #732; Properties joins View & state, 067 FR-128; Delete is last)', () => {
-    expect(separatorIndices(explorerFile())).toEqual([4, 7, 10, 13, 16]);
+  it('a file row: five dividers, at 3, 6, 10, 13 and 16 (Undo / Redo their own group, #732; Rename heads Create, v1 review; Properties joins View & state, 067 FR-128; Delete is last)', () => {
+    expect(separatorIndices(explorerFile())).toEqual([3, 6, 10, 13, 16]);
   });
 
   it('the empty space (root): three dividers, at 1, 4 and 7 — no Destroy, no Hide, no leading divider', () => {
@@ -753,7 +753,6 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
     // 043 FR-090 — nineteen rows until round five, when the top-level Find in Files row MOVED into
     // Open In → Search. The dividers do not move: it sat inside Navigate, so no boundary went with it.
     expect(shapeOf(explorerFolder())).toEqual([
-      'Rename',
       'Cut',
       'Copy',
       'Paste',
@@ -761,6 +760,8 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
       'Undo',
       'Redo',
       '—',
+      // v1 review (2026-11-28): Rename heads Create, above New File.
+      'Rename',
       'New File',
       'New Folder',
       '—',
@@ -884,7 +885,7 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
       explorerAffordance({ path: 'D:/project/notes.txt' }),
     ].map((a) => shapeOf(explorerFileWithPreview(a)));
     for (const shape of shapes) expect(shape).toEqual(shapes[0]);
-    expect(separatorIndices(explorerFileWithPreview(explorerAffordance()))).toEqual([4, 7, 10, 13, 16]);
+    expect(separatorIndices(explorerFileWithPreview(explorerAffordance()))).toEqual([3, 6, 10, 13, 16]);
   });
 });
 
@@ -2338,10 +2339,10 @@ describe('Undo and Redo sit in their own group, immediately below the clipboard 
     ]);
   });
 
-  it('the Files & Folders menu: Rename and the clipboard rows, then Undo, Redo — on a file, a folder and the root', () => {
+  it('the Files & Folders menu: the clipboard rows, then Undo, Redo — on a file, a folder and the root', () => {
     const tail = ['clipboard:Paste', 'history:Undo', 'history:Redo'];
-    expect(contentRun(explorerFile())).toEqual(['clipboard:Rename', 'clipboard:Cut', 'clipboard:Copy', ...tail]);
-    expect(contentRun(explorerFolder())).toEqual(['clipboard:Rename', 'clipboard:Cut', 'clipboard:Copy', ...tail]);
+    expect(contentRun(explorerFile())).toEqual(['clipboard:Cut', 'clipboard:Copy', ...tail]);
+    expect(contentRun(explorerFolder())).toEqual(['clipboard:Cut', 'clipboard:Copy', ...tail]);
     expect(contentRun(explorerRoot())).toEqual(tail);
   });
 

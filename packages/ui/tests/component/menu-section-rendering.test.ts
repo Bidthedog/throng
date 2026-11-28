@@ -151,7 +151,7 @@ const labels = (testId = 'context-menu'): string[] =>
     .map((el) => el.querySelector('.context-menu__label')?.textContent ?? '');
 
 describe('a section boundary is DRAWN as a rule, at the boundary and nowhere else (FR-018a/FR-050)', () => {
-  it('a file row draws five rules, at rows 4, 7, 10, 13 and 15 (Undo / Redo their own group, #732; Delete closes the menu: v1 review T1)', () => {
+  it('a file row draws five rules, at rows 3, 6, 10, 13 and 15 (Undo / Redo their own group, #732; Delete closes the menu: v1 review T1)', () => {
     /*
      * The same indices `menu-sections.test.ts` pins on `withDividers` — asked here of the
      * ELEMENTS the component actually put in the list. That the two agree is the point: the pure
@@ -160,7 +160,7 @@ describe('a section boundary is DRAWN as a rule, at the boundary and nowhere els
     open(explorerFile());
 
     // Content (clipboard · history) · Create · Navigate · Hide · Delete, the Destroy section last (v1 review T1, #732).
-    expect(separatorIndices()).toEqual([4, 7, 10, 13, 15]);
+    expect(separatorIndices()).toEqual([3, 6, 10, 13, 15]);
     // Every action reached the DOM: one row per file-row action, plus the five rules.
     expect(rows()).toHaveLength(explorerFile().length + 5);
   });

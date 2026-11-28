@@ -51,6 +51,9 @@ menu that offers them, so a divider now separates Paste or Select All from Undo.
 Rename in the clipboard group. Copy variants sit in one **Copy as ▸** submenu after Copy. Supersedes the single
 undivided Content group in §3.1 and the editor body row below.)*
 
+*(Amended 2026-11-28, v1 review: the Files & Folders menu's **Rename** leaves the clipboard group and heads
+Create, below Redo and above New File. It names the item, as New File and New Folder name the one they make.)*
+
 `✓` = the item is already in this position; `→` = it moves between sections (permitted — FR-053 protects
 order *within* a section); **bold** = added by this feature.
 
@@ -58,8 +61,8 @@ order *within* a section); **bold** = added by this feature.
 
 | Section | Items | |
 |---|---|---|
-| Content | Rename, Cut, Copy, Paste, Undo, Redo | ✓ |
-| Create | New File, New Folder | ✓ |
+| Content | Cut, Copy, Paste, Undo, Redo | ✓ |
+| Create | Rename *(file and folder; since 2026-11-28)*, New File, New Folder | ✓ |
 | Navigate | Open In *(+ **Terminal** in its submenu)*, Copy Path, **Collapse All Children**, **Expand All Children** | ✓ |
 | View & state | Hide in this project | ✓ |
 | Destroy | Delete | ✓ *(last since 2026-11-27)* |
