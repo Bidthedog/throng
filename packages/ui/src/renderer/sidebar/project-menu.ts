@@ -88,13 +88,14 @@ export function projectMenu(args: ProjectMenuArgs): MenuAction[] {
     // is the shared builder, absolute forms only. Never disabled — neither needs the project loaded.
     { label: 'Open in OS Explorer', icon: 'folderOpen', section: 'navigate', onClick: onOpenInOsExplorer },
     copyAbsolutePathSubmenu(pathForms(rootFolder, ''), 'navigate', copyPath),
-    // Takes you somewhere, so `navigate`; shown only while the project has a marked panel (FR-106). No
-    // glyph: the flag icon was retired by round 13 (FR-139).
+    // Takes you somewhere, so `navigate`; shown only while the project has a marked panel (FR-106). It wears the
+    // `flag` icon, Flag's own (057 FR-139, amended by the v1 review).
     ...(nextMarked === undefined
       ? []
       : [
           {
             label: 'Go to Next Marked Panel',
+            icon: 'flag' as const,
             section: 'navigate' as const,
             onClick: nextMarked.run,
           },

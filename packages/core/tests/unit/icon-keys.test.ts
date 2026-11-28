@@ -44,6 +44,8 @@ const EXPECTED_KEYS = [
   'wcagConformant',
   // 081 FR-040 — the title-bar Open in OS Default Program and Find in File Explorer.
   'openInDefaultProgram', 'findInFileExplorer',
+  // #732 — the Flag rows' icon.
+  'flag',
 ];
 
 describe('icon keys (069 FR-010 to FR-012)', () => {
@@ -55,9 +57,10 @@ describe('icon keys (069 FR-010 to FR-012)', () => {
   // 075 FR-024 added the thirteen callout icons, FR-063 `print`, and FR-068a `pagePrevious` and `pageNext`.
   // 078 FR-013 added `wcagConformant`, the Themes picker's mark for a theme that meets WCAG AA.
   // 081 FR-040 added `openInDefaultProgram` and `findInFileExplorer`, a panel's own-file buttons.
-  it('is the 196 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076, thirteen from 073 (the CSV cell dialog toggle, the grid menu icons, the CSV and Spreadsheet preview icons and the workbook Read-only marker), nine from 074, sixteen from 075, one from 078, one from 080 (Open in browser) and two from 081 (the title-bar file buttons)', () => {
+  // #732 added `flag`, the Flag rows' icon.
+  it('is the 197 keys: the 110 of 068, without the dead `notifications`, plus forty-two from 069, three from 076, thirteen from 073 (the CSV cell dialog toggle, the grid menu icons, the CSV and Spreadsheet preview icons and the workbook Read-only marker), nine from 074, sixteen from 075, one from 078, one from 080 (Open in browser) two from 081 (the title-bar file buttons) and one from the v1 review (Flag)', () => {
     expect([...ICON_KEYS]).toEqual(EXPECTED_KEYS);
-    expect(ICON_KEYS).toHaveLength(196);
+    expect(ICON_KEYS).toHaveLength(197);
     expect(ICON_KEYS).not.toContain('notifications');
   });
 

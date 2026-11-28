@@ -208,6 +208,8 @@ export const ICON_KEYS = [
   // 081 FR-040, FR-042 — a panel's own file, handed to the OS or found in File Explorer.
   'openInDefaultProgram',
   'findInFileExplorer',
+  // #732 — Flag and Go to Next Marked Panel, which round 13 had left without a glyph.
+  'flag',
 ] as const;
 
 export type IconKey = (typeof ICON_KEYS)[number];
@@ -603,6 +605,7 @@ export const ICON_KEY_DESCRIPTIONS: Readonly<Record<IconKey, string>> = {
     'The icon on the Open in OS Default Program button in an editor’s or preview’s title bar, and on the Open in OS Default Program menu rows, which open the file in the program your operating system uses for it.',
   findInFileExplorer:
     'The icon on the Find in File Explorer button in an editor’s or preview’s title bar, and on the Find in File Explorer menu rows, which select the file in the File Explorer tree and open its folders to show it.',
+  flag: 'The icon on Flag in a panel’s title menu, which marks the panel for attention, and on Go to Next Marked Panel.',
 };
 
 /** Is `value` one of the icon keys? */

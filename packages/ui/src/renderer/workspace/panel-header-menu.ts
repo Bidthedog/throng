@@ -750,8 +750,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * 057 FR-125 — Flag: raise an Attention mark on this panel from the user, whatever kind it is. A plain
    * item with no command id and no chord (the failure banner's items above are the precedent), in View &
    * state because it sets the panel's state. On a panel already marked main changes nothing, so it is
-   * never disabled: the user is not told "no", the mark is simply already there. No glyph: the flag icon
-   * was retired by round 13 (FR-139).
+   * never disabled: the user is not told "no", the mark is simply already there. Round 13 (FR-139) retired
+   * the mark's own icons; the row wears the `flag` icon (057 FR-139, amended by the v1 review).
    *
    * Amended 2026-11-07: a blank panel (no type chosen yet) has nothing to draw attention to, so it offers
    * no Flag — absent, not greyed (constitution VI), like the untyped placeholder's Zoom commands.
@@ -759,6 +759,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   if (panel.kind !== undefined) {
     panelRows.push({
       label: 'Flag',
+      icon: 'flag' as const,
       section: 'viewState',
       onClick: () => actions.flag(),
     });

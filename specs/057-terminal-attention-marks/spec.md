@@ -1012,7 +1012,9 @@ lands on a marked panel and clears it.
 - **FR-139** *(2026-10-24, round 13; supersedes R11's mark tokens)*: The `attention` and `attentionFailed` icon
   tokens and the `attentionFailedMark` colour token MUST leave the theme. A theme or icon pack that still carries
   them loads without error, the entries dropped, as `goToPanel` was in round 12. The Flag and Go to Next Marked
-  Panel menu rows keep their labels without a glyph *[derived]*.
+  Panel menu rows keep their labels without a glyph *[derived]*. *(Amended 2026-11-28, v1 review, #732: both rows
+  wear a `flag` icon, a menu icon of its own in the icon set. The mark's tokens stay retired; the mark is still the
+  numbered circle.)*
 
 #### C. Notifications
 
